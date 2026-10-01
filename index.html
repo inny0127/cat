@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#fffbfa" />
+  <meta name="color-scheme" content="light" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="고양이" />
+  <meta name="description" content="화면 너머에 사는 고양이. 쓰다듬고, 밥을 주고, 믿음을 쌓아가세요." />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="icon" type="image/png" href="./icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
+  <title>창가의 고양이</title>
+  <style>
+    :root {
+      --paper: #fffbfa;
+      --ink: rgba(92, 70, 58, 0.62);
+    }
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: var(--paper);
+      overflow: hidden;
+      overscroll-behavior: none;
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-touch-callout: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #stage {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      touch-action: none;
+      cursor: default;
+    }
+    #hint {
+      position: fixed;
+      left: 16px;
+      right: 16px;
+      bottom: calc(28px + env(safe-area-inset-bottom));
+      text-align: center;
+      font: 400 13px/1.5 -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
+      letter-spacing: 0.02em;
+      color: var(--ink);
+      opacity: 0;
+      transition: opacity 1.6s ease;
+      pointer-events: none;
+    }
+    #hint.on { opacity: 1; }
+    noscript, #fallback {
+      position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+      font: 14px/1.6 -apple-system, "Apple SD Gothic Neo", sans-serif; color: var(--ink); text-align: center; padding: 24px;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="stage" aria-label="잠든 고양이. 손가락으로 쓰다듬을 수 있어요." role="img"></canvas>
+  <div id="hint" aria-live="polite"></div>
+  <noscript>고양이를 보려면 자바스크립트를 켜 주세요.</noscript>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
