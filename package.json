@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "shots": "node tools/shots.mjs",
-    "cap:sync": "npm run build && cap sync"
+    "cap:sync": "npm run build && cap sync",
+    "artifact": "node tools/artifact.mjs artifact-dist"
   },
   "dependencies": {
     "@capacitor/app": "^8.1.1",
