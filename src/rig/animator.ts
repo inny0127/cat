@@ -76,7 +76,8 @@ export class Animator {
   private kneadAmt = new Smooth(0, 0.4);
   private earSwivel = { l: 0, r: 0 };
   // whole-cat moves
-  private exit: { t: number; dir: number; dur: number; onDone?: () => void } | null = null;
+  private exit: { t: number; dir: number; dur: number; calm: boolean; onDone?: () => void } | null = null;
+  private fade: { t: number; dur: number; onDone?: () => void } | null = null;
   private enter: { t: number; dur: number; onDone?: () => void } | null = null;
   hidden = false;
 
@@ -113,10 +114,14 @@ export class Animator {
   sigh() {
     if (this.sighT < 0) this.sighT = 0;
   }
-  /** bolt out of the window. dir: -1 left, 1 right */
-  bolt(dir: number, onDone?: () => void) {
+  /** leave the window. dir: -1 left, 1 right. calm: gets up and goes rather than bolting */
+  bolt(dir: number, onDone?: () => void, calm = false) {
     if (this.exit || this.hidden) return;
-    this.exit = { t: 0, dir, dur: 0.62, onDone };
+    this.exit = { t: 0, dir, dur: calm ? 1.25 : 0.62, calm, onDone };
+  }
+  /** a body that slowly isn't there any more */
+  fadeAway(onDone?: () => void) {
+    this.fade = { t: 0, dur: 4.5, onDone };
   }
   /** come back into view (a slow focus-in, as if the window had misted over) */
   arrive(onDone?: () => void) {
@@ -208,9 +213,9 @@ export class Animator {
     const nX = fbm1(this.t * 0.11 + 7.7) * 1.2 * drift;
     const nY = fbm1(this.t * 0.09 + 1.3) * 1.0 * drift;
     const lift = this.headLift;
-    const headA = lift * 11 * DEG - this.headRecoil * 4 * DEG + nA + this.headLean.y * -0.006;
+    const headA = lift * 8 * DEG - this.headRecoil * 4 * DEG + nA + this.headLean.y * -0.006;
     const headX = -lift * 3 + this.headLean.x + this.headRecoil * 5 + nX;
-    const headY = -lift * 7 + this.headLean.y * 0.5 - this.headRecoil * 4 + nY;
+    const headY = -lift * 5 + this.headLean.y * 0.5 - this.headRecoil * 4 + nY;
     const ht = this.headRecoil > 0.3 ? 0.12 : lerp(0.45, 0.9, this.sleep);
     p.headAngle = this.sHeadA.to(headA, dt, ht) + this.wHead.step(dt) * 0.05;
     p.headX = this.sHeadX.to(headX, dt, ht);
@@ -289,22 +294,40 @@ export class Animator {
   private updateWhole(dt: number) {
     const p = this.pose;
     p.blurX = 0; p.blurY = 0; p.focus = 0; p.stretch = 0; p.gAngle = 0;
+    if (this.fade) {
+      const f = this.fade;
+      f.t += dt;
+      const k = clamp(f.t / f.dur);
+      p.gx = 0; p.gy = 0;
+      p.alpha = 1 - smoothstep(0, 1, k);
+      p.focus = k * 6;
+      p.shadow = 1 - k;
+      if (k >= 1) {
+        this.fade = null;
+        this.hidden = true;
+        f.onDone?.();
+      }
+      return;
+    }
     if (this.exit) {
       const e = this.exit;
       e.t += dt;
       const t = e.t;
       // crouch, spring, gone: ease-in acceleration out of the frame
-      const crouch = smoothstep(0, 0.12, t) * (1 - smoothstep(0.12, 0.2, t));
-      const k = smoothstep(0.12, e.dur, t);
-      const travel = k * k * 900;
+      const lead = e.calm ? 0.35 : 0.12;
+      const crouch = smoothstep(0, lead, t) * (1 - smoothstep(lead, lead + 0.1, t));
+      const k = smoothstep(lead, e.dur, t);
+      const travel = k * k * (e.calm ? 760 : 900);
       const prevTravel = this.lastTravel;
       this.lastTravel = travel;
       const v = (travel - prevTravel) / Math.max(dt, 1e-3);
       p.gx = e.dir * travel;
-      p.gy = -crouch * -3 - Math.sin(k * Math.PI) * 14;
+      // calm: rises first (the body lifts off its bed), then walks off with a bob
+      const rise = e.calm ? smoothstep(0, lead + 0.15, t) * 10 : 0;
+      p.gy = crouch * 3 - Math.sin(k * Math.PI) * (e.calm ? 6 : 14) - rise + (e.calm ? Math.sin(t * 15) * 1.5 * k : 0);
       p.stretchDirX = e.dir; p.stretchDirY = 0;
-      p.stretch = -crouch * 0.03 + Math.min(0.18, v / 9000);
-      p.blurX = e.dir * Math.min(140, v * 0.03);
+      p.stretch = -crouch * 0.03 + Math.min(e.calm ? 0.08 : 0.18, v / 9000);
+      p.blurX = e.dir * Math.min(e.calm ? 70 : 140, v * (e.calm ? 0.022 : 0.03));
       p.gAngle = -e.dir * k * 0.08;
       p.shadow = 1 - k;
       p.alpha = 1 - smoothstep(0.8, 1, t / e.dur);

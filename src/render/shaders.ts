@@ -6,6 +6,7 @@ layout(location = 0) in vec2 aRest;
 layout(location = 1) in vec4 aWa;     // head, earL, earR, tail
 layout(location = 2) in vec4 aWb;     // breath, paw, back, rim
 layout(location = 3) in vec2 aNormal; // outward silhouette normal
+layout(location = 4) in float aOcc;   // fur normally hidden under the head (body layer)
 
 uniform vec4 uView;        // clip = P * xy + zw
 uniform vec4 uLayer;       // layer origin (xy) and size (zw) in P
@@ -28,6 +29,7 @@ uniform vec2 uStretchDir;
 out vec2 vUv;
 out float vShade;
 out float vRuffle;
+out float vOcc;
 
 vec2 rot(vec2 v, float a) { float c = cos(a), s = sin(a); return vec2(c * v.x - s * v.y, s * v.x + c * v.y); }
 float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
@@ -56,6 +58,7 @@ void main() {
   p += f.xy;
   vShade = f.z;
   vRuffle = f.w;
+  vOcc = aOcc;
 
   vec2 g = p - uGlobalPivot;
   g += uStretchDir * dot(g, uStretchDir) * uGlobal.z;
@@ -70,7 +73,10 @@ precision highp float;
 in vec2 vUv;
 in float vShade;
 in float vRuffle;
+in float vOcc;
 uniform sampler2D uTex;
+uniform float uOcc;     // how far the head is lifted off what it was lying on
+uniform vec4 uCoat;     // saturation, tint rgb: the same painting as a different cat
 uniform vec3 uBlur;     // motion blur vector in uv (xy), samples (z)
 uniform vec2 uTexel;
 uniform vec4 uGrade;    // desaturate, dim, warmth, alpha
@@ -105,6 +111,7 @@ void main() {
     c = texture(uTex, uv);
   }
   c.rgb *= 1.0 - 0.2 * clamp(vShade, 0.0, 1.0);
+  c.rgb *= 1.0 - 0.5 * vOcc * uOcc;
   c.rgb += c.a * vec3(0.05, 0.045, 0.03) * vRuffle;
   float l = dot(c.rgb, vec3(0.299, 0.587, 0.114));
   c.rgb = mix(c.rgb, vec3(l), uGrade.x);

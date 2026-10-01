@@ -2,7 +2,7 @@ import { FloatTexture, Program, compile, imageTexture, type GL } from './gl';
 import * as S from './shaders';
 import { Silhouette, vertexWeights, type LayerName, type RigData } from '../rig/rig';
 import { globalPoint, headPoint, type Pose } from './pose';
-import { clamp } from '../util/math';
+import { clamp, pointInPoly, polylineDist, smoothstep } from '../util/math';
 
 interface LayerMesh {
   name: LayerName;
@@ -59,6 +59,7 @@ export class Renderer {
   readonly field: FloatTexture;
   private paper: [number, number, number];
   private eyeAxes: { A: EyeFrame; B: EyeFrame };
+  private coat = { sat: 1, tint: [1, 1, 1] as [number, number, number], irisIn: [0.66, 0.63, 0.27], irisOut: [0.86, 0.6, 0.2] };
 
   constructor(
     readonly canvas: HTMLCanvasElement,
@@ -117,7 +118,7 @@ export class Renderer {
     const step = name === 'body' ? 4 : name === 'head' ? 3 : 2.5;
     const nx = Math.max(2, Math.ceil(info.w / step) + 1);
     const ny = Math.max(2, Math.ceil(info.h / step) + 1);
-    const data = new Float32Array(nx * ny * 12);
+    const data = new Float32Array(nx * ny * 13);
     let k = 0;
     for (let j = 0; j < ny; j++) {
       for (let i = 0; i < nx; i++) {
@@ -125,8 +126,8 @@ export class Renderer {
         const y = info.y + (info.h * j) / (ny - 1);
         const w = vertexWeights(this.rig, this.sil, name, x, y);
         const [nxl, nyl] = this.sil.normal(x, y);
-        data.set([x, y, ...w, nxl, nyl], k);
-        k += 12;
+        data.set([x, y, ...w, nxl, nyl, name === 'body' ? underHead(this.rig, x, y) : 0], k);
+        k += 13;
       }
     }
     const idx = new Uint16Array((nx - 1) * (ny - 1) * 6);
@@ -144,13 +145,16 @@ export class Renderer {
     gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
     const F = 4;
     gl.enableVertexAttribArray(0);
-    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 12 * F, 0);
+    const S = 13 * F;
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, S, 0);
     gl.enableVertexAttribArray(1);
-    gl.vertexAttribPointer(1, 4, gl.FLOAT, false, 12 * F, 2 * F);
+    gl.vertexAttribPointer(1, 4, gl.FLOAT, false, S, 2 * F);
     gl.enableVertexAttribArray(2);
-    gl.vertexAttribPointer(2, 4, gl.FLOAT, false, 12 * F, 6 * F);
+    gl.vertexAttribPointer(2, 4, gl.FLOAT, false, S, 6 * F);
     gl.enableVertexAttribArray(3);
-    gl.vertexAttribPointer(3, 2, gl.FLOAT, false, 12 * F, 10 * F);
+    gl.vertexAttribPointer(3, 2, gl.FLOAT, false, S, 10 * F);
+    gl.enableVertexAttribArray(4);
+    gl.vertexAttribPointer(4, 1, gl.FLOAT, false, S, 12 * F);
     const ib = gl.createBuffer()!;
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib);
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idx, gl.STATIC_DRAW);
@@ -184,6 +188,17 @@ export class Renderer {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     return t;
+  }
+
+  /** later generations are differently coloured cats painted from the same picture */
+  setCoat(coat: 'ginger' | 'cream' | 'silver' | 'smoke') {
+    const C = {
+      ginger: { sat: 1, tint: [1, 1, 1], irisIn: [0.66, 0.63, 0.27], irisOut: [0.86, 0.6, 0.2] },
+      cream: { sat: 0.42, tint: [1.1, 1.05, 0.96], irisIn: [0.72, 0.5, 0.22], irisOut: [0.84, 0.48, 0.16] },
+      silver: { sat: 0.07, tint: [0.97, 1.0, 1.05], irisIn: [0.45, 0.62, 0.3], irisOut: [0.58, 0.7, 0.32] },
+      smoke: { sat: 0.12, tint: [0.66, 0.65, 0.66], irisIn: [0.72, 0.58, 0.2], irisOut: [0.82, 0.62, 0.18] },
+    }[coat];
+    this.coat = C as typeof this.coat;
   }
 
   resize() {
@@ -271,6 +286,8 @@ export class Renderer {
     lp.f2('uPawCenter', A.pawL[0], A.pawL[1]);
     lp.f4('uRipple', pose.rippleAmp, pose.ripplePhase, 0.075, 0);
     lp.f1('uPuff', pose.puff);
+    lp.f4('uCoat', this.coat.sat, this.coat.tint[0], this.coat.tint[1], this.coat.tint[2]);
+    lp.f1('uOcc', clamp(Math.max(0, pose.headAngle) * 5 + Math.max(0, -pose.headY) * 0.08));
     lp.f4('uGlobal', pose.gx, pose.gy, pose.stretch, pose.gAngle);
     lp.f2('uGlobalPivot', A.body[0], A.body[1]);
     lp.f2('uStretchDir', pose.stretchDirX, pose.stretchDirY);
@@ -338,8 +355,8 @@ export class Renderer {
       const l = c[0] * 0.3 + c[1] * 0.59 + c[2] * 0.11;
       return c.map((x) => x + (l - x) * des) as [number, number, number];
     };
-    ep.f3('uIrisIn', ...mixc([0.66, 0.63, 0.27]));
-    ep.f3('uIrisOut', ...mixc([0.86, 0.6, 0.2]));
+    ep.f3('uIrisIn', ...mixc(this.coat.irisIn));
+    ep.f3('uIrisOut', ...mixc(this.coat.irisOut));
     ep.f1('uWet', 1 - pose.dim * 0.8 - des * 0.5);
     gl.bindVertexArray(this.eyeVao);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
@@ -415,3 +432,10 @@ function blur(src: Float32Array, n: number, sigma: number) {
 }
 
 const clampI = (v: number, n: number) => (v < 0 ? 0 : v >= n ? n - 1 : v);
+
+/** 1 deep inside the area the head covers at rest, fading to 0 at its edge. */
+function underHead(rig: RigData, x: number, y: number) {
+  const poly = rig.polys.head;
+  if (!pointInPoly(x, y, poly)) return 0;
+  return smoothstep(0, 9, polylineDist(x, y, [...poly, poly[0]]));
+}

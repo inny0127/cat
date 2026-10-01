@@ -238,10 +238,14 @@ def main():
     # masks at working scale
     m_head = poly_mask(HEAD, UP, N, feather=0.8 * UP / 2)
     m_head_hard = poly_mask(HEAD, UP, N) > 0.5
-    m_earL = poly_mask(EAR_L, UP, N, feather=0.6 * UP / 2, grow=3 * UP)
     m_earR = poly_mask(EAR_R, UP, N, feather=0.6 * UP / 2)
     m_earR_hard = poly_mask(EAR_R, UP, N) > 0.5
-    m_earL_hard = poly_mask(EAR_L, UP, N, grow=3 * UP) > 0.5
+    # the left ear sits on the silhouette: its outline strokes run a few px past the polygon,
+    # so on the background side only, the ear layer reaches further out
+    m_earL_core = poly_mask(EAR_L, UP, N) > 0.5
+    near_bg = ndi.distance_transform_edt(alpha > 0.3) < 4 * UP
+    m_earL_hard = m_earL_core | (poly_mask(EAR_L, UP, N, grow=8 * UP) > 0.5) & near_bg
+    m_earL = cv2.GaussianBlur(m_earL_hard.astype(np.float32), (0, 0), 0.6 * UP / 2)
     m_under_earL = poly_mask(HEAD_UNDER_EAR_L, UP, N, feather=1.0 * UP)
     m_tail = poly_mask(TAIL, UP, N, feather=0.6 * UP / 2)
     m_tail_hard = poly_mask(TAIL, UP, N) > 0.5
@@ -281,15 +285,12 @@ def main():
     body_rgb, body_alpha = underlay(body_rgb, body_alpha, fill_body4, 1.0 * (alpha > 0.5), m_tail_hard)
 
     # ---- head layer: fur under the right ear; under the left ear only the skull, not a ghost ear
-    # (the left ear layer is cut 3px wider to keep its fur wisps; that rim stays in the head layer too)
-    m_earL_core = poly_mask(EAR_L, UP, N) > 0.5
     head_rgb, head_alpha = underlay(fg, alpha, fill_head4, np.ones_like(alpha), m_earR_hard)
     head_rgb, head_alpha = underlay(head_rgb, head_alpha, fill_head4, m_under_earL, m_earL_core)
-    # soft ear wisps in that rim belong to the ear layer only (else they composite twice)
-    # (the ear's own outline strokes along the background side; forehead fur in the rim stays)
-    rim = m_earL_hard & ~m_earL_core
-    near_bg = ndi.distance_transform_edt(alpha > 0.3) < 4 * UP
-    head_alpha = np.where(rim & near_bg, 0.0, head_alpha)
+    # the ear's outline strokes beyond the polygon belong to the ear layer only
+    head_alpha = np.where(m_earL_hard & ~m_earL_core, 0.0, head_alpha)
+    # ...and so does the outline kept just inside the polygon edge where it meets the background
+    head_alpha = np.where(m_earL_core & near_bg & (m_under_earL < 0.5), 0.0, head_alpha)
     head_alpha = np.clip(head_alpha * m_head, 0, 1)
 
     layers = {}
