@@ -18,10 +18,12 @@
     "@capacitor/app": "^8.1.1",
     "@capacitor/core": "^8.5.2",
     "@capacitor/haptics": "^8.0.2",
-    "@capacitor/local-notifications": "^8.3.1"
+    "@capacitor/local-notifications": "^8.3.1",
+    "three": "^0.180.0"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.5.2",
+    "@types/three": "^0.180.0",
     "playwright-core": "1.56.1",
     "typescript": "^7.0.2",
     "vite": "^8.3.1",
