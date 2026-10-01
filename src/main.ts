@@ -1,4 +1,5 @@
 import { App } from './app';
+import { Capacitor } from '@capacitor/core';
 
 const canvas = document.getElementById('stage') as HTMLCanvasElement;
 const hint = document.getElementById('hint') as HTMLDivElement;
@@ -10,3 +11,10 @@ App.create(canvas, hint).catch((err) => {
   d.textContent = '이 기기에서는 고양이를 그릴 수 없어요. (WebGL2 필요)';
   document.body.appendChild(d);
 });
+
+// offline support and notification clicks for the installable web version
+if ('serviceWorker' in navigator && import.meta.env.PROD && !Capacitor.isNativePlatform() && location.protocol === 'https:') {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+  });
+}

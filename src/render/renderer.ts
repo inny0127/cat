@@ -349,7 +349,9 @@ export class Renderer {
     ep.f1('uShade', (which === 'B' ? 0.16 : 0.0) + env.night * 0.25 + pose.dim * 0.5);
     ep.f1('uFore', which === 'B' ? 0.78 : 1.0);
     ep.f1('uPx', 1 / (f.hw * this.view.scale * this.view.dpr));
-    ep.f1('uAlpha', e.alpha * pose.alpha);
+    // painted eyes must not stay crisp on a blurred or defocused body
+    const blur = Math.hypot(pose.blurX, pose.blurY);
+    ep.f1('uAlpha', e.alpha * pose.alpha * (1 - smoothstep(3, 22, blur)) * (1 - smoothstep(0.6, 3.5, pose.focus)));
     const des = pose.desat;
     const mixc = (c: number[]) => {
       const l = c[0] * 0.3 + c[1] * 0.59 + c[2] * 0.11;

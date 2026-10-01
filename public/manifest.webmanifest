@@ -1,0 +1,17 @@
+{
+  "name": "창가의 고양이",
+  "short_name": "고양이",
+  "description": "화면 너머에 사는 고양이. 쓰다듬고, 밥을 주고, 믿음을 쌓아가세요.",
+  "lang": "ko",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#fffbfa",
+  "theme_color": "#fffbfa",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

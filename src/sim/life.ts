@@ -11,15 +11,15 @@ export interface LifeEvent {
 const H = 3600_000;
 const MIN = 60_000;
 
-/** Per-hour rates. A full bowl lasts about a day; complete neglect kills in roughly four. */
+/** Per-hour rates. A full bowl lasts about a day; with no care at all it is sick after ~2 days and dies after ~4. */
 export const RATES = {
   hungerPerH: 1 / 9,
   thirstPerH: 1 / 14,
   bladderPerH: 1 / 6.5,
   lonelyPerH: 1 / 10,
   waterEvaporatePerH: 0.018,
-  starvePerH: 1 / 72,
-  dehydratePerH: 1 / 48,
+  starvePerH: 1 / 200,
+  dehydratePerH: 1 / 150,
   filthPerH: 1 / 400,
   healPerH: 1 / 20,
 };
@@ -95,14 +95,13 @@ export function stepLife(s: CatState, ms: number, selfDirected: boolean): LifeEv
     let dh = 0;
     if (s.hunger > 0.97) dh -= RATES.starvePerH * h;
     if (s.thirst > 0.97) dh -= RATES.dehydratePerH * h;
+    if (s.hunger < 0.6 && s.thirst < 0.6) dh += RATES.healPerH * h;
     if (s.litter > THRESH.litterRefuse) dh -= RATES.filthPerH * h;
-    if (dh === 0 && s.hunger < 0.6 && s.thirst < 0.6) dh = RATES.healPerH * h;
     s.health = clamp(s.health + dh);
     // neglect is noticed
     if (s.hunger > 0.9 || s.thirst > 0.9) s.trust = clamp(s.trust - 0.006 * h, -1, 1);
     if (s.litter > THRESH.litterRefuse) s.trust = clamp(s.trust - 0.002 * h, -1, 1);
 
-    if (!wasSick && s.health < THRESH.sick) ev.push({ kind: 'sick', at: t });
     if (s.health <= 0) {
       s.alive = false;
       s.diedAt = t;
@@ -113,21 +112,20 @@ export function stepLife(s: CatState, ms: number, selfDirected: boolean): LifeEv
       return ev;
     }
 
-    if (!selfDirected) continue;
-
-    if (s.where === 'away') {
-      if (t >= s.awayUntil) {
-        s.where = 'bed';
-        s.awayReason = null;
-        ev.push({ kind: 'return', at: t });
+    if (selfDirected) {
+      if (s.where === 'away') {
+        if (t >= s.awayUntil) {
+          s.where = 'bed';
+          s.awayReason = null;
+          ev.push({ kind: 'return', at: t });
+        }
+      } else {
+        // errands, most urgent first
+        const errand = chooseErrand(s, t);
+        if (errand) ev.push(...runErrand(s, errand, t));
       }
-      continue;
     }
-    // errands, most urgent first
-    const errand = chooseErrand(s, t);
-    if (errand) {
-      ev.push(...runErrand(s, errand, t));
-    }
+    if (!wasSick && s.health < THRESH.sick) ev.push({ kind: 'sick', at: t });
   }
   return ev;
 }

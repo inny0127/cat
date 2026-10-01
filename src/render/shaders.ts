@@ -113,6 +113,8 @@ void main() {
   c.rgb *= 1.0 - 0.2 * clamp(vShade, 0.0, 1.0);
   c.rgb *= 1.0 - 0.5 * vOcc * uOcc;
   c.rgb += c.a * vec3(0.05, 0.045, 0.03) * vRuffle;
+  float l0 = dot(c.rgb, vec3(0.299, 0.587, 0.114));
+  c.rgb = min(mix(vec3(l0), c.rgb, uCoat.x) * uCoat.yzw, vec3(c.a));
   float l = dot(c.rgb, vec3(0.299, 0.587, 0.114));
   c.rgb = mix(c.rgb, vec3(l), uGrade.x);
   c.rgb *= vec3(1.0, 1.0 - 0.05 * uGrade.z, 1.0 - 0.1 * uGrade.z);

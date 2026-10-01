@@ -127,12 +127,16 @@ export class Animator {
   arrive(onDone?: () => void) {
     this.hidden = false;
     this.exit = null;
+    this.fade = null;
     this.enter = { t: 0, dur: 2.2, onDone };
   }
   setHidden(h: boolean) {
     this.hidden = h;
-    if (h) this.exit = null;
-    this.enter = null;
+    this.fade = null;
+    if (h) {
+      this.exit = null;
+      this.enter = null;
+    }
   }
   get busy() {
     return !!this.exit || !!this.enter;
