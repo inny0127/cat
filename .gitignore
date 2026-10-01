@@ -7,3 +7,4 @@ dist/
 test-results/
 shots/
 artifact-dist/
+__pycache__/
