@@ -103,8 +103,8 @@ for x in (1, -1):
 TOES = [(-0.0112, -0.004), (-0.0038, 0.0), (0.0038, 0.0), (0.0112, -0.004)]
 for s, x in (('L', 1), ('R', -1)):
     ell('scap' + s, (x * 0.036, 0.205, 0.075), (0.022, 0.050, 0.034), k=0.02)
-    cone('arm' + s, pos('arm' + s), pos('fore' + s), 0.024, 0.018, k=0.014)
-    cone('fore' + s, pos('fore' + s), pos('wrist' + s), 0.016, 0.012, k=0.008)
+    cone('arm' + s, pos('arm' + s), pos('fore' + s), 0.026, 0.0195, k=0.014)
+    cone('fore' + s, pos('fore' + s), pos('wrist' + s), 0.0175, 0.0128, k=0.008)
     cone('wrist' + s, pos('wrist' + s), pos('hand' + s), 0.012, 0.0115, k=0.006)
     ell('hand' + s, (x * 0.039, 0.0115, 0.106), (0.0172, 0.0112, 0.019), k=0.006)
     for tx, tz in TOES:
@@ -361,12 +361,13 @@ def quat_mat(q):
                      [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
                      [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)]])
 
-def posed_prims(bones_posed, pose_name=None):
+def posed_prims(bones_posed, pose_name=None, skip=()):
     """the sculpt with every primitive carried by its bone: bones_posed[name] = (R, t)"""
     out = []
     for c, r, k in POSE_SCULPT.get(pose_name, {}).get('extra', []):
         out.append(dict(t='ell', b='spine2', c=P(*c), r=P(*r), k=k, R=None))
     for pr in PRIMS:
+        if pr['b'] in skip: continue
         R, t = bones_posed[pr['b']]
         rest = pos(pr['b'])
         M = lambda x: R @ (x - rest) + t
@@ -410,7 +411,9 @@ def correctives(verts, normals, j, w, names, posed_path):
         Rs = [quat_mat(b['q']) for b in P]
         ts = [np.array(b['p']) for b in P]
         bones_posed = {n: (Rs[i], ts[i]) for i, n in enumerate(names)}
-        prims = posed_prims(bones_posed, name)
+        # the tail swings with its own physics: wherever it lay when the poses were dumped is not
+        # where it will be, so it must not pull the paws and flank it passes onto its surface
+        prims = posed_prims(bones_posed, name, skip=[f'tail{i}' for i in range(1, TAIL_N)])
         floor = POSE_SCULPT.get(name, {}).get('floor')
         # linear blend skinning of the rest mesh
         A = np.zeros((len(verts), 3, 3)); x = np.zeros_like(verts)
@@ -428,12 +431,15 @@ def correctives(verts, normals, j, w, names, posed_path):
             x = x + step * np.minimum(1, 0.006 / np.maximum(n_, 1e-9))
         delta = x - lbs
         far = np.linalg.norm(delta, axis=1)
-        trust = np.clip((0.045 - far) / 0.015, 0, 1) * keep
-        delta *= trust[:, None]
         g = sdf_grad(x, prims, floor=floor)
         npos = g / np.maximum(np.linalg.norm(g, axis=1, keepdims=True), 1e-9)
         nl = np.einsum('nij,nj->ni', np.linalg.inv(A), npos)
         nl /= np.maximum(np.linalg.norm(nl, axis=1, keepdims=True), 1e-9)
+        # a vertex that landed on a surface facing away from its own was snapped onto something
+        # else (a neighbouring limb): leave it skinned
+        facing = np.sum(nl * normals, 1)
+        trust = np.clip((0.045 - far) / 0.015, 0, 1) * np.clip((facing + 0.2) / 0.4, 0, 1) * keep
+        delta *= trust[:, None]
         nl = normals + (nl - normals) * trust[:, None]
         dp = np.einsum('nij,nj->ni', np.linalg.inv(A), delta)
         dn = nl - normals

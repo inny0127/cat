@@ -591,7 +591,7 @@ void main() {
     // furnishings: long cream hairs, mostly from the inner edge and the lower half
     if (uShell > 0.001) col = lin(vec3(0.95, 0.85, 0.7)) * strandShade;
   }
-  col = mix(lin(vec3(0.06, 0.035, 0.025)), col, smoothstep(0.02, 0.075, lidE));   // dark lid margin
+  col = mix(lin(vec3(0.08, 0.045, 0.03)), col, smoothstep(0.015, 0.05, lidE));   // dark lid margin
 
   vec3 N = normalize(vN), V = normalize(vView), T = normalize(vT + hairJit * smoothstep(0.1, 0.6, vH));
   // locks are little ridges: tilt the normal across the flow so they catch the light in streaks

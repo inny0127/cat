@@ -58,7 +58,7 @@ const BASE: Pose = {
   pastern: 0.35, hindFlat: 0,
   tailLift: 0.25, tailSide: 0, tailCurve: -0.5, tailCurl: 0.3, tailSag: 0,
   earFwd: 0.2, earOut: 0, earFlat: 0,
-  eyeOpen: 0.95, squint: 0.03, pupil: 0.42, whisker: 0, jaw: 0,
+  eyeOpen: 0.95, squint: 0.03, pupil: 0.22, whisker: 0, jaw: 0,
   breath: 0.6, puff: 0,
 };
 
