@@ -33,7 +33,9 @@ export class Body {
   /** where each paw actually ended up */
   readonly reached: Record<Leg, THREE.Vector3> = { LF: v(), RF: v(), LH: v(), RH: v() };
 
-  private readonly t = { a: v(), b: v(), c: v(), d: v(), e: v(), f: v(), g: v(), q1: q(), q2: q(), q3: q() };
+  private readonly t = { a: v(), b: v(), c: v(), d: v(), e: v(), f: v(), g: v(), q1: q(), q2: q(), q3: q(), q4: q() };
+  private readonly m = new THREE.Matrix4();
+  private readonly qI = new THREE.Quaternion();
 
   constructor(kin: Kin) {
     this.kin = kin;
@@ -121,30 +123,43 @@ export class Body {
    * Turn the head to look at a model-space point, sharing the turn down the neck. `weight` 0..1.
    * Yaw is limited to what a cat can do without moving its shoulders.
    */
-  look(target: THREE.Vector3, weight: number) {
+  look(target: THREE.Vector3, weight: number, roll = 0) {
     if (weight <= 0.001) return;
     const { kin, I } = this;
-    const chain: [number, number][] = [[I.neck1, 0.3], [I.neck2, 0.45], [I.head, 1]];
-    const eye = this.t.a, dir = this.t.b, fwd = this.t.c, Pi = this.t.q2, Q = this.t.q1;
+    // each joint takes a share of what is left of the turn; the head finishes it
+    const chain: [number, number][] = [[I.neck1, 0.25], [I.neck2, 0.35], [I.head, 1]];
+    const eye = this.t.a, D = this.t.b, up = this.t.c, x = this.t.d;
+    const Qt = this.t.q1, Qh = this.t.q2, Dq = this.t.q3;
+    const chestFwd = this.t.e.set(0, 0, 1).applyQuaternion(kin.wq[I.chest]);
+    const chestYaw = Math.atan2(chestFwd.x, chestFwd.z);
     for (const [b, f] of chain) {
       this.eyes(eye);
-      dir.copy(target).sub(eye).normalize();
-      fwd.set(0, 0, 1).applyQuaternion(kin.wq[I.head]);
-      Pi.copy(kin.wq[kin.parent[b]]).invert();
-      dir.applyQuaternion(Pi);
-      fwd.applyQuaternion(Pi);
-      const yawD = Math.atan2(dir.x, dir.z), pitchD = Math.atan2(dir.y, Math.hypot(dir.x, dir.z));
-      const yawC = Math.atan2(fwd.x, fwd.z), pitchC = Math.atan2(fwd.y, Math.hypot(fwd.x, fwd.z));
-      let dy = yawD - yawC;
-      if (dy > Math.PI) dy -= 2 * Math.PI;
-      if (dy < -Math.PI) dy += 2 * Math.PI;
-      dy = Math.max(-1.2, Math.min(1.2, dy));
-      const dp = Math.max(-0.9, Math.min(0.9, pitchD - pitchC));
-      euler(dp * f * weight, dy * f * weight, 0, Q);
-      kin.local[b].premultiply(Q);
+      D.copy(target).sub(eye);
+      if (D.lengthSq() < 1e-8) return;
+      D.normalize();
+      // a cat turns its head about so far before it would have to turn its body
+      let yaw = Math.atan2(D.x, D.z) - chestYaw;
+      yaw = Math.atan2(Math.sin(yaw), Math.cos(yaw));
+      yaw = Math.max(-1.5, Math.min(1.5, yaw)) + chestYaw;
+      const pitch = Math.max(-0.9, Math.min(0.9, Math.asin(Math.max(-1, Math.min(1, D.y)))));
+      D.set(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch));
+      // looking along D with the eyes level (cats keep their head upright), plus any deliberate tilt
+      up.set(0, 1, 0).addScaledVector(D, -D.y).normalize();
+      x.crossVectors(up, D).normalize();
+      this.m.makeBasis(x, up, D);
+      Qt.setFromRotationMatrix(this.m);
+      if (roll) Qt.multiply(Dq.setFromAxisAngle(AZ, roll));
+      Qh.copy(kin.wq[I.head]);
+      this.t.q4.copy(Qt);
+      Qt.copy(Qh).slerp(this.t.q4, weight);
+      // the share of the remaining turn this joint makes, applied in the world frame
+      Dq.copy(Qt).multiply(Qh.invert());
+      Dq.slerp(this.qI, 1 - f);
+      kin.setWorld(b, this.t.q4.copy(Dq).multiply(kin.wq[b]));
       kin.fkAll();
     }
   }
+
 
   /** foot target of a pose for one leg, model space (needs the trunk solved) */
   footTarget(p: Pose, leg: Leg, out: THREE.Vector3) {

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { Correctives } from './load';
+import { LID_GLSL } from './eye';
 
 /**
  * Shell fur. The same skinned body is drawn N times, each shell pushed out along the skinned
@@ -11,7 +12,7 @@ import type { Correctives } from './load';
 /** capsules used for the body's ambient occlusion */
 export const NCAPS = 20;
 /** guard hairs are this much longer than the coat's nominal length */
-const GUARD_LEN = 1.22;
+const GUARD_LEN = 1.45;
 
 const COMMON = /* glsl */ `
 float hash13(vec3 p) { p = fract(p * 0.1031); p += dot(p, p.zyx + 31.32); return fract((p.x + p.y) * p.z); }
@@ -41,7 +42,7 @@ float sdTriIso(vec2 p, vec2 q) {   // apex at the origin, base at y = q.y (iq)
 
 // --- where on the body are we (rest pose, metres; +z forward, +y up); anatomy defines come from the asset
 const vec3 HC = HEAD_C;
-const vec3 EYE = vec3(0.0156, 0.005, 0.037);   // socket centre, relative to HC (x mirrored)
+const vec3 EYE = vec3(0.0156, 0.005, 0.039);   // socket centre, relative to HC (x mirrored)
 float eyeDist(vec3 h) { return length((h - vec3(sign(h.x) * EYE.x, EYE.y, EYE.z)) * vec3(0.85, 1.15, 1.0)); }
 // head-local coordinates in the head's own units (the sculpt draws the head HEADS times larger)
 vec3 hl(vec3 p) { return (p - HC) / HEADS; }
@@ -57,7 +58,7 @@ float isLeg(vec3 p) { return smoothstep(LEGTOP, LEGTOP - 0.03, p.y) * (1.0 - isT
 float isFace(vec3 p) { vec3 h = hl(p); return isHead(p) * smoothstep(0.012, 0.03, h.z); }
 
 // nose leather: a rounded triangle pointing down, seen from the front
-float noseSD(vec3 h) { return sdTriIso(vec2(h.x, h.y + 0.0158), vec2(0.0056, 0.0076)) - 0.0011; }
+float noseSD(vec3 h) { return sdTriIso(vec2(h.x, h.y + 0.0163), vec2(0.0063, 0.0082)) - 0.0011; }
 float lipY(float ax) { return -0.0212 - 0.85 * ax + 26.0 * ax * ax; }
 
 // eyelids: the skin sphere round each eyeball is part of the body; the opening is cut here.
@@ -68,25 +69,25 @@ uniform vec3 uEyeCL;  // eyeball centres, rest pose
 uniform vec3 uEyeCR;
 uniform mat3 uEyeML;  // rest space -> eye frame
 uniform mat3 uEyeMR;
+${LID_GLSL}
 float lidEdge(vec3 d, float side) {
   if (d.z < 0.0) return 1.0;
   vec2 ul = side > 0.0 ? uLids.xy : uLids.zw;
-  float xo = d.x * side;
-  float up = ul.x - 0.8 * d.x * d.x + 0.04 * xo;
-  float lo = ul.y + 0.7 * d.x * d.x + 0.08 * xo;
-  float a = d.y - up, b = lo - d.y;
+  vec2 c = lidCurves(d.x, d.x * side, ul);
+  float a = d.y - c.x, b = c.y - d.y;
   // never open past the front of the eyeball
   b = max(b, 0.42 - d.z);
-  float k = 0.12;
+  float k = 0.06;
   float hk = clamp(0.5 + 0.5 * (a - b) / k, 0.0, 1.0);
-  return mix(b, a, hk) + k * hk * (1.0 - hk);
+  float e = mix(b, a, hk) + k * hk * (1.0 - hk);
+  return max(e, abs(d.x) - LID_XC);
 }
 // for a point on the body: x = lid edge distance (1 away from the eyes), y = distance to the eyeball centre
 vec2 lidAt(vec3 p) {
   float side = sign(p.x);
   vec3 o = p - (side > 0.0 ? uEyeCL : uEyeCR);
   float r = length(o);
-  if (r > 0.016 * HEADS) return vec2(1.0, r / HEADS);
+  if (r > EYER * 1.6 * HEADS) return vec2(1.0, r / HEADS);
   vec3 d = (side > 0.0 ? uEyeML : uEyeMR) * (o / r);
   return vec2(lidEdge(d, side), r / HEADS);
 }
@@ -99,37 +100,38 @@ float faceBare(vec3 p) {
 
 // how much the hair lies down along the skin (0 standing .. 1 flat)
 float lie(vec3 p) {
-  float l = 0.45;
+  float l = 0.62;
   l = mix(l, 0.8, isHead(p));
   l = mix(l, 0.65, isLeg(p));
   l = mix(l, 0.3, isTail(p));
   return l;
 }
 
-float furLength(vec3 p, float reg) {
-  if (reg > 0.5) return reg > 1.5 ? 0.0034 : 0.0068;   // outer ear; long furnishings inside
+float furLength(vec3 p, float reg, vec3 aux) {
+  // outer ear: short; inside: long furnishings growing from the edge nearer the midline and low down
+  if (reg > 0.5) return reg > 1.5 ? 0.0032 : 0.0085 * (0.15 + 0.85 * smoothstep(0.3, -0.7, aux.y)) * smoothstep(0.9, 0.45, aux.x);
   vec3 h = hl(p);
-  float L = 0.0072;
-  L = mix(L, 0.0045, isHead(p));                                             // crown, back of the head
+  float L = 0.0056;
+  L = mix(L, 0.0042, isHead(p));                                             // crown, back of the head
   L = mix(L, 0.0032, isFace(p));                                             // short and sleek on the face
-  L = mix(L, 0.0058, isFace(p) * smoothstep(0.028, 0.042, abs(h.x)) * smoothstep(0.01, -0.012, h.y)); // cheek ruff
+  L = mix(L, 0.005, isFace(p) * smoothstep(0.024, 0.034, abs(h.x)) * smoothstep(0.01, -0.012, h.y)); // cheek ruff
   L = mix(L, 0.0015, smoothstep(0.009, 0.005, abs(h.x)) * smoothstep(0.012, 0.004, h.y) * smoothstep(-0.012, -0.006, h.y) * step(0.028, h.z)); // nose bridge
   L = mix(L, 0.0026, smoothstep(0.015, 0.009, length((h - vec3(0.0, -0.030, 0.032)) * vec3(0.8, 1.0, 1.0)))); // chin
   L = mix(L, 0.0045, isLeg(p));
   L = mix(L, 0.0030, smoothstep(0.035, 0.02, p.y));          // paws
-  L = mix(L, 0.0100, isTail(p));
+  L = mix(L, 0.0072, isTail(p));
   L = mix(L, 0.0105, smoothstep(0.03, 0.0, length((p - (BIB + vec3(0.0, -0.008, 0.004))) * vec3(1.0, 0.8, 1.3)) - 0.03)); // chest ruff
   L = mix(L, 0.0020, smoothstep(0.017, 0.009, length((h - vec3(0.0, -0.017, 0.043)) * vec3(0.8, 1.0, 1.0))));  // muzzle
   L *= 1.0 - faceBare(p);
   // lids: very short fur that starts a little way back from the bare margin
   vec2 la = lidAt(p);
-  L = mix(L, 0.0016 * smoothstep(0.05, 0.22, la.x), smoothstep(0.0158, 0.0124, la.y));
+  L = mix(L, 0.0016 * smoothstep(0.05, 0.22, la.x), smoothstep(EYER * 1.45, EYER * 1.12, la.y));
   return L;
 }
 
 vec3 combDir(vec3 p, float reg) {
   vec3 h = hl(p);
-  if (reg > 0.5) return normalize(vec3(sign(p.x) * 0.45, 1.0, -0.15));    // ears: toward the tip
+  if (reg > 0.5) return normalize(vec3(sign(p.x) * (reg < 1.5 ? 1.0 : 0.45), reg < 1.5 ? 0.8 : 1.0, reg < 1.5 ? 0.3 : -0.15));    // ears: furnishings out across the opening; outside toward the tip
   // body: neck to tail; legs: down; tail: along it
   vec3 d = vec3(0.0, -0.35, -1.0);
   d = mix(d, vec3(0.0, -1.0, -0.15), isLeg(p));
@@ -143,7 +145,7 @@ vec3 combDir(vec3 p, float reg) {
   // lids: away from the opening, up over the upper lid and down under the lower one
   vec2 la = lidAt(p);
   float eh = h.y - 0.005;
-  d = mix(d, normalize(d + vec3(sign(h.x) * 0.5, 0.25 * clamp(eh / 0.004, -1.0, 1.0), -0.2)), smoothstep(0.0158, 0.0124, la.y));
+  d = mix(d, normalize(d + vec3(sign(h.x) * 0.5, 0.25 * clamp(eh / 0.004, -1.0, 1.0), -0.2)), smoothstep(EYER * 1.45, EYER * 1.12, la.y));
   // hair never lies perfectly parallel: let the flow wander a little, more on the body than the face
   vec3 wander = vec3(vnoise(p * 70.0), vnoise(p * 70.0 + 19.1), vnoise(p * 70.0 + 37.3)) - 0.5;
   d = normalize(d) + wander * mix(0.55, 0.2, isFace(p));
@@ -154,9 +156,9 @@ float whiteMask(vec3 p) {
   float w = 0.0;
   w = max(w, smoothstep(0.034, 0.018, length((p - BIB - vec3(0.0, 0.03, 0.0)) * vec3(1.15, 0.6, 1.0))) * 0.75);   // bib
   w = max(w, smoothstep(BELLYY - 0.002, BELLYY - 0.02, p.y) * smoothstep(-0.14, -0.08, p.z) * smoothstep(0.034, 0.022, abs(p.x)) * (1.0 - isLeg(p))); // belly
-  w = max(w, smoothstep(0.034, 0.022, p.y));                                                           // paws
+  w = max(w, smoothstep(0.03, 0.018, p.y) * 0.45);                                                     // pale toes
   vec3 h = hl(p);
-  w = max(w, smoothstep(0.011, 0.004, length((h - vec3(0.0, -0.033, 0.030)) * vec3(0.8, 1.1, 1.0))) * 0.7); // chin
+  w = max(w, smoothstep(0.008, 0.003, length((h - vec3(0.0, -0.031, 0.030)) * vec3(0.8, 1.1, 1.0))) * 0.6); // chin
   w = max(w, smoothstep(0.0025, 0.001, abs(h.y - lipY(abs(h.x)) + 0.0014)) * smoothstep(0.011, 0.007, abs(h.x)) * step(0.03, h.z) * 0.35); // pale lips
 
   return clamp(w, 0.0, 1.0);
@@ -164,9 +166,9 @@ float whiteMask(vec3 p) {
 
 vec3 coat(vec3 p, float reg) {
   // ginger tabby, written in sRGB; sampled from reference photographs
-  vec3 ginger = vec3(0.86, 0.55, 0.33);
-  vec3 cream = vec3(0.96, 0.82, 0.66);
-  vec3 rust = vec3(0.66, 0.33, 0.14);
+  vec3 ginger = vec3(0.93, 0.65, 0.4);
+  vec3 cream = vec3(0.98, 0.87, 0.72);
+  vec3 rust = vec3(0.6, 0.23, 0.06);
   vec3 white = vec3(0.95, 0.93, 0.9);
   vec3 h = hl(p);
   float n = fbm(p * 18.0);
@@ -175,37 +177,45 @@ vec3 coat(vec3 p, float reg) {
   base = mix(base, ginger * vec3(0.92, 0.82, 0.75), smoothstep(BACKY - 0.06, BACKY - 0.025, p.y) * (1.0 - isHead(p)) * 0.6);
   // mackerel stripes down the flanks from the spine
   float body = (1.0 - isHead(p)) * (1.0 - isLeg(p)) * (1.0 - isTail(p));
-  vec3 wp = p + (vec3(fbm(p * 9.0), fbm(p * 9.0 + 5.2), fbm(p * 9.0 + 9.7)) - 0.5) * 0.03;
-  float s = sin(wp.z * 128.0 + fbm(wp * 14.0) * 5.0 + abs(wp.x) * 24.0 - (BACKY - 0.03 - wp.y) * 36.0);
-  float breakup = smoothstep(0.3, 0.6, fbm(p * 24.0 + 3.0));
-  float stripe = smoothstep(0.1, 0.7, s) * smoothstep(BELLYY - 0.02, BACKY - 0.08, p.y) * body * (0.72 + 0.28 * breakup);
-  stripe = max(stripe, smoothstep(0.014, 0.004, abs(wp.x)) * smoothstep(BACKY - 0.035, BACKY - 0.005, p.y) * body * 0.7); // dorsal line
+  // mackerel stripes: narrow, wavy lines running down the flanks from the spine, ~3 cm apart,
+  // broken into dashes and blotches, softest low on the side
+  vec3 wp = p + (vec3(fbm(p * 9.0), fbm(p * 9.0 + 5.2), fbm(p * 9.0 + 9.7)) - 0.5) * 0.022;
+  float phase = wp.z * 205.0 + fbm(wp * 16.0) * 4.0 + abs(wp.x) * 30.0 - (BACKY - 0.03 - wp.y) * 48.0;
+  float s = sin(phase);
+  float width = 0.3 + 0.32 * fbm(p * 21.0 + 7.0);               // wider in places
+  float breakup = smoothstep(0.32, 0.58, fbm(p * 30.0 + 3.0));   // and broken into dashes
+  float onSide = smoothstep(BELLYY - 0.015, BACKY - 0.075, p.y);
+  float stripe = smoothstep(width, width + 0.38, s) * onSide * body * breakup;
+  // a darker saddle of fused stripes along the spine
+  float spine = smoothstep(0.016, 0.005, abs(wp.x)) * smoothstep(BACKY - 0.04, BACKY - 0.008, p.y);
+  stripe = max(stripe, (spine * 0.8 + smoothstep(0.02, 0.008, abs(wp.x)) * smoothstep(BACKY - 0.05, BACKY - 0.01, p.y) * s * 0.3) * body);
   // rings round the legs and the tail
-  float legR = smoothstep(0.3, 0.85, sin(p.y * 150.0 + n * 3.0)) * isLeg(p) * smoothstep(0.035, 0.06, p.y);
+  float legR = smoothstep(0.55, 0.92, sin(p.y * 170.0 + n * 3.0)) * isLeg(p) * smoothstep(0.035, 0.07, p.y) * smoothstep(0.3, 0.55, fbm(p * 40.0));
   float tailR = smoothstep(0.2, 0.85, sin(tailT(p) * 27.0 + n * 2.0)) * isTail(p);
   // forehead: thin lines fanning back from between the eyes over the crown (the "M")
   // forehead "M": thin broken lines that start over the eyes and run back over the crown, the
   // inner ones converging toward the nose; measured as an angle up and over the skull
   float th = atan(h.y - 0.004, h.z + 0.012);
   float ax = abs(h.x) + (fbm(p * 70.0) - 0.5) * 0.0018;
-  float lw = 0.0019 + 0.0007 * fbm(p * 50.0);
+  float lw = 0.0023 + 0.0008 * fbm(p * 50.0);
   float m0 = smoothstep(lw * 0.8, lw * 0.25, ax) * smoothstep(0.42, 0.6, th);
   float m1 = smoothstep(lw, lw * 0.3, abs(ax - (0.0048 + 0.0022 * max(th - 0.25, 0.0)))) * smoothstep(0.22, 0.34, th);
   float m2 = smoothstep(lw * 1.1, lw * 0.3, abs(ax - (0.0098 + 0.0035 * max(th - 0.22, 0.0)))) * smoothstep(0.2, 0.3, th) * smoothstep(1.9, 1.3, th);
-  float brow = smoothstep(0.0013, 0.0004, abs(eyeDist(h) - 0.0158)) * step(EYE.y + 0.003, h.y) * smoothstep(0.024, 0.016, abs(h.x)) * step(0.02, h.z);
-  float fore = max(max(m0 * 0.75, m1), max(m2 * 0.85, brow * 0.75));
-  fore *= isHead(p) * (0.6 + 0.4 * smoothstep(0.35, 0.65, fbm(p * 45.0 + 2.0))) * smoothstep(2.7, 1.9, th);
+  float brow = smoothstep(0.0013, 0.0004, abs(eyeDist(h) - 0.0128)) * step(EYE.y + 0.003, h.y) * smoothstep(0.024, 0.016, abs(h.x)) * step(0.02, h.z);
+  float m3 = smoothstep(lw * 1.1, lw * 0.3, abs(ax - (0.0145 + 0.004 * max(th - 0.5, 0.0)))) * smoothstep(0.7, 0.9, th) * smoothstep(2.2, 1.6, th);
+  float fore = max(max(m0 * 0.9, m1), max(max(m2, m3 * 0.8), brow * 0.8));
+  fore *= isHead(p) * smoothstep(0.25, 0.55, fbm(p * 38.0 + 2.0) + 0.15) * smoothstep(2.7, 1.9, th);
   // mascara line back from the outer corner of each eye, and a second line lower on the cheek
   float wob = (fbm(p * 120.0) - 0.5) * 0.0018;
-  float c1 = smoothstep(0.0018, 0.0006, abs(h.y - 0.003 - 0.25 * (0.03 - h.z) + wob));
-  float c2 = smoothstep(0.0022, 0.0007, abs(h.y + 0.012 + 0.55 * (0.028 - h.z) - 40.0 * (0.028 - h.z) * (0.028 - h.z) + wob));
-  float cheek = max(c1, c2 * 0.85) * smoothstep(0.021, 0.028, abs(h.x)) * smoothstep(0.034, 0.024, h.z) * smoothstep(-0.02, 0.0, h.z) * isHead(p);
+  float c1 = smoothstep(0.0012, 0.0004, abs(h.y - 0.0052 + 0.12 * (0.034 - h.z) + wob)) * smoothstep(0.035, 0.03, h.z);
+  float c2 = smoothstep(0.0014, 0.0005, abs(h.y + 0.012 + 0.55 * (0.028 - h.z) - 40.0 * (0.028 - h.z) * (0.028 - h.z) + wob)) * smoothstep(0.03, 0.022, h.z);
+  float cheek = max(c1, c2 * 0.8) * smoothstep(0.02, 0.026, abs(h.x)) * smoothstep(-0.02, 0.0, h.z) * isHead(p);
   // pale spectacles round the eyes and a pale muzzle
-  float spect = smoothstep(0.0148, 0.0126, eyeDist(h)) * isHead(p);
-  float muzzle = smoothstep(0.016, 0.008, length((h - vec3(sign(h.x) * 0.0075, -0.0195, 0.041)) * vec3(0.95, 1.15, 1.0))) * smoothstep(-0.009, -0.013, h.y);
+  float spect = smoothstep(0.0118, 0.0088, eyeDist(h)) * isHead(p);
+  float muzzle = smoothstep(0.011, 0.006, length((h - vec3(sign(h.x) * 0.0072, -0.021, 0.042)) * vec3(1.0, 1.2, 1.0))) * smoothstep(-0.011, -0.015, h.y);
   // a dark tear line from the inner corner of each eye down beside the nose
   float tear = smoothstep(0.0013, 0.0004, abs(abs(h.x) - (0.0088 + 0.33 * h.y))) * smoothstep(0.001, -0.002, h.y) * smoothstep(-0.013, -0.008, h.y) * step(0.025, h.z);
-  float darkAmt = max(max(stripe * 0.92, legR * 0.85), max(tailR, max(fore, max(cheek, tear * 0.8))));
+  float darkAmt = max(max(stripe * 0.8, legR * 0.6), max(tailR * 0.75, max(fore, max(cheek, tear * 0.8))));
   // rows of dark follicles on the whisker pads
   {
     vec3 q = h - vec3(sign(h.x) * 0.0092, -0.0192, 0.0415);
@@ -214,17 +224,19 @@ vec3 coat(vec3 p, float reg) {
     float dots = smoothstep(0.26, 0.12, length(cell)) * smoothstep(0.009, 0.005, length(q * vec3(0.8, 1.3, 1.0))) * step(0.035, h.z);
     darkAmt = max(darkAmt, dots * 0.55);
   }
-  vec3 c = mix(base, cream, spect * 0.3);
-  c = mix(c, white * vec3(1.0, 0.97, 0.92), muzzle * 0.8);
+  // pale spectacles, and a pale band under each eye above the whisker pads
+  float underEye = smoothstep(0.012, 0.004, length((h - vec3(sign(h.x) * 0.014, -0.006, 0.034)) * vec3(0.8, 1.4, 1.0)));
+  vec3 c = mix(base, cream, max(spect * 0.6, underEye * 0.45));
+  c = mix(c, white * vec3(1.0, 0.95, 0.88), muzzle * 0.75);
   c = mix(c, rust, darkAmt);
   c = mix(c, white, whiteMask(p));
   // nose leather with nostrils, the groove below it and the mouth
   if (h.z > 0.036) {
     float nd = noseSD(h);
     float nose = smoothstep(0.0004, -0.0003, nd);
-    vec3 leather = mix(vec3(0.8, 0.46, 0.4), vec3(0.55, 0.28, 0.22), smoothstep(-0.0025, 0.0, nd));
+    vec3 leather = mix(vec3(0.8, 0.44, 0.37), vec3(0.5, 0.24, 0.19), smoothstep(-0.002, 0.0, nd));
     // the freckles ginger cats get on the nose
-    leather = mix(leather, vec3(0.32, 0.16, 0.12), smoothstep(0.82, 0.9, vnoise(h * 2600.0)) * smoothstep(-0.0005, -0.003, nd));
+    leather = mix(leather, vec3(0.36, 0.18, 0.14), smoothstep(0.9, 0.95, vnoise(h * 3200.0)) * smoothstep(-0.0008, -0.003, nd) * 0.7);
     vec2 q = vec2(abs(h.x) - 0.0024, h.y + 0.0128);
     q = mat2(0.82, -0.57, 0.57, 0.82) * q;
     float nostril = smoothstep(1.15, 0.8, length(q / vec2(0.0015, 0.00055)));
@@ -246,6 +258,7 @@ const VERT = /* glsl */ `
 #include <common>
 #include <skinning_pars_vertex>
 attribute float reg;
+attribute vec3 aux;
 uniform highp sampler2D uCorr;      // pose correctives (see load.ts)
 uniform float uCorrW[NCORR];
 uniform float uBreath;    // ribcage expansion, metres
@@ -264,6 +277,7 @@ varying float vH;
 varying float vReg;
 varying float vL;
 varying float vAO;
+varying vec3 vAux;
 ${COMMON}
 // ambient occlusion from the body's own limbs and trunk (as capsules) and from the floor
 float capsuleAO(vec3 p, vec3 n) {
@@ -276,8 +290,8 @@ float capsuleAO(vec3 p, vec3 n) {
     vec3 d = A.xyz + ab * t - p;
     float l2 = max(dot(d, d), 1e-6);
     float cosT = dot(n, d) * inversesqrt(l2);
-    float occ = clamp(cosT, 0.0, 1.0) * clamp(A.w * A.w / l2, 0.0, 1.0);
-    vis *= 1.0 - 0.75 * occ;
+    float occ = clamp(cosT, 0.0, 1.0) * clamp(pow(A.w * A.w / l2, 0.75), 0.0, 1.0);
+    vis *= 1.0 - 0.9 * occ;
   }
   float hgt = max(p.y, 0.0);
   vis *= 1.0 - 0.55 * clamp(0.5 - 0.5 * n.y, 0.0, 1.0) * exp(-hgt / 0.035);
@@ -309,7 +323,7 @@ void main() {
   #include <skinning_vertex>
   vec3 n = normalize(objectNormal);
   float puff = uPuff * (1.0 - isFace(position)) * (reg < 0.5 ? 1.0 : 0.3);
-  float L = furLength(position, reg) * (1.0 + puff * (0.7 + 1.1 * isTail(position))) * GUARD;
+  float L = furLength(position, reg, aux) * (1.0 + puff * (0.7 + 1.1 * isTail(position))) * GUARD;
   vec3 comb = combDir(position, reg);
   float lay = lie(position) * (1.0 - puff * 0.75);
   #ifdef USE_SKINNING
@@ -325,6 +339,7 @@ void main() {
   vec4 wp = modelMatrix * vec4(transformed, 1.0);
   vRest = position;
   vRestN = normal;
+  vAux = aux;
   vN = normalize(mat3(modelMatrix) * n);
   vT = normalize(mat3(modelMatrix) * tang);
   vWorld = wp.xyz;
@@ -367,6 +382,7 @@ varying float vH;
 varying float vReg;
 varying float vL;
 varying float vAO;
+varying vec3 vAux;
 ${COMMON}
 
 // nearest jittered point of a 3D grid (searching the 8 cells round the sample)
@@ -384,6 +400,30 @@ vec3 nearestSeed(vec3 x) {
     if (dd < best) { best = dd; bp = i + pt; }
   }
   return bp;
+}
+
+// One population of hairs with roots on a jittered 3D grid. Each hair is a dot drawn out along the
+// flow and shrinking toward its tip; the shells' copies of it join into one stroke.
+struct Hair { float cov; float t; float guard; vec3 cell; };
+Hair hairPop(vec3 rest, vec3 comb, float density, float stretch, float rScale, float guardFrac, float shortLen, float h, float fwRest) {
+  Hair o;
+  vec3 qr = rest * density;
+  o.cell = floor(qr);
+  vec3 jit = hash33(o.cell);
+  vec3 off = fract(qr) - (0.2 + jit * 0.6);
+  off -= comb * dot(off, comb) * stretch;
+  float d = length(off);
+  o.guard = step(1.0 - guardFrac, jit.y);
+  float own = o.guard > 0.5 ? 1.0 : (shortLen + 0.25 * jit.z) / GUARD;
+  o.t = h / own;
+  if (o.t > 1.0) { o.cov = 0.0; return o; }
+  float r = rScale * pow(1.0 - o.t, 0.35) * (0.75 + 0.5 * jit.z) * (o.guard > 0.5 ? 0.6 : 1.0);
+  // anti-aliased edge; once hairs are smaller than a pixel, their average coverage instead
+  float fw = fwRest * density;
+  float cov = smoothstep(r + 0.6 * fw, r - 0.6 * fw, d);
+  float avg = clamp(3.1416 * r * r * 0.9, 0.0, 1.0);
+  o.cov = mix(cov, avg, smoothstep(0.6, 1.6, fw));
+  return o;
 }
 
 const vec2 POISSON[12] = vec2[](
@@ -448,6 +488,7 @@ vec3 hairLight(vec3 T, vec3 N, vec3 V, vec3 L, vec3 base, float rough, float sha
 }
 
 void main() {
+  float fwRest = length(fwidth(vRest));
   // the eye opening is cut out of the lids
   float lidE = vReg < 0.5 ? lidAt(vRest).x : 1.0;
   if (lidE < 0.0) discard;
@@ -483,33 +524,27 @@ void main() {
     vec3 dc = (cx - cc) / uClumpDensity;
     dc -= rn * dot(dc, rn);
     float kc = uClump * smoothstep(0.15, 1.0, vH) * (innerEar ? 0.2 : 1.0) * smoothstep(0.002, 0.005, vL);
-    vec3 qr = (vRest + dc * (kc / (1.0 - kc))) * uDensity;
-    vec3 q = vRest * uDensity;
-    vec3 cell = floor(qr);
-    vec3 jit = hash33(cell);
-    // a hair seen from above is a dash along the flow: stretch its cross-section that way so the
-    // shells' copies of it join into one stroke
-    vec3 o = fract(qr) - (0.2 + jit * 0.6);
-    o -= comb * dot(o, comb) * 0.62;
-    float d = length(o);
-    // a third of the hairs are long guard hairs; the rest is undercoat ending short of the shells' reach
-    guard = step(0.67, jit.y);
-    float own = guard > 0.5 ? 1.0 : (0.82 + 0.25 * jit.z) / GUARD;
-    float hh = vH / own;
-    if (hh > 1.0) discard;
-    hairT = hh;
-    float r = 0.56 * pow(1.0 - hh, 0.35) * (0.75 + 0.5 * jit.z) * (guard > 0.5 ? 0.85 : 1.0);
-    if (innerEar) r *= step(jit.y, 0.3) * 0.7;
-    // anti-aliased edge; once hairs are smaller than a pixel, their average coverage instead
-    float fw = length(fwidth(q));
-    float cov = smoothstep(r + 0.6 * fw, r - 0.6 * fw, d);
-    float avg = clamp(3.1416 * r * r * 0.9, 0.0, 1.0);
-    alpha = mix(cov, avg, smoothstep(0.6, 1.6, fw));
+    // two populations: coarse guard and awn hairs, thinner where the coat is short, and a fine
+    // down three times denser that carries the texture close up
+    vec3 restA = vRest + dc * (kc / (1.0 - kc));
+    vec3 restB = vRest + dc * (0.5 * kc / (1.0 - 0.5 * kc));
+    float shortCoat = smoothstep(0.0075, 0.0035, vL);
+    Hair A = hairPop(restA, comb, uDensity, 0.62, mix(0.56, 0.3, shortCoat), 0.2, 0.82, vH, fwRest);
+    Hair B = hairPop(restB, comb, uDensity * 3.0, 0.8, mix(0.36, 0.46, shortCoat), 0.0, 0.7, vH, fwRest);
+    if (innerEar) { A.cov *= step(hash33(A.cell).y, 0.5) * 0.9; B.cov *= 0.45; }
+    alpha = 1.0 - (1.0 - A.cov) * (1.0 - B.cov);
     if (alpha < 0.02) discard;
-    // each hair and each lock catches the light a little differently
-    strandShade = 0.72 + 0.56 * jit.x * jit.x;
-    hairJit = (hash33(cell + 17.0) - 0.5) * 0.5;
-    paleHair = step(0.7, hash13(cell + 3.0));
+    bool useA = A.cov >= B.cov;
+    vec3 cell = useA ? A.cell : B.cell + 1000.0;
+    vec3 jit = hash33(cell);
+    guard = useA ? A.guard : 0.0;
+    hairT = useA ? A.t : B.t;
+    // each hair and each lock catches the light a little differently; once hairs are smaller than
+    // a pixel their differences average out rather than sparkle
+    float resolved = 1.0 - smoothstep(0.5, 1.4, fwRest * (useA ? uDensity : uDensity * 3.0));
+    strandShade = mix(1.0, 0.72 + 0.56 * jit.x * jit.x, resolved);
+    hairJit = (hash33(cell + 17.0) - 0.5) * 0.5 * resolved;
+    paleHair = mix(0.3, step(0.7, hash13(cell + 3.0)), resolved);
   }
 
   // --- colour: the coat at the tips, paler undercoat at the roots, clump-to-clump variation
@@ -522,15 +557,23 @@ void main() {
   col = mix(col, max(col, creamL * dot(col, vec3(0.5, 0.35, 0.15)) * 1.6), guard * smoothstep(0.65, 1.0, hairT) * 0.4);
   col = mix(mix(tip, under, 0.6), col, smoothstep(0.0, 0.3, vH));
   // ginger coats mix deep orange hairs with paler cream ones
-  col = mix(col, max(col, creamL * dot(col, vec3(0.5, 0.35, 0.15)) * 1.5), paleHair * 0.3 * smoothstep(0.2, 0.7, vH));
-  col *= strandShade * (0.72 + 0.42 * seed.x + 0.16 * seed.y) * (1.0 - 0.55 * seed.z * (1.0 - 0.5 * vH));
-  if (innerEar && uShell > 0.001) col = lin(vec3(0.96, 0.91, 0.84)) * strandShade;
-  col = mix(lin(vec3(0.16, 0.09, 0.06)), col, smoothstep(0.02, 0.06, lidE));   // dark lid margin
+  col = mix(col, max(col, creamL * dot(col, vec3(0.5, 0.35, 0.15)) * 1.5), paleHair * (0.3 + 0.35 * isFace(vRest)) * smoothstep(0.2, 0.7, vH));
+  col *= strandShade * (0.68 + 0.5 * seed.x + 0.18 * seed.y) * (1.0 - 0.55 * seed.z * (1.0 - 0.5 * vH));
+  float earCup = 1.0;
+  if (innerEar) {
+    // skin: pink, deepening into shadow down in the funnel and toward the middle
+    float deep = (1.0 - smoothstep(0.0, 0.55, vAux.x)) * (1.0 - abs(vAux.y));
+    col = mix(lin(vec3(0.86, 0.6, 0.53)), lin(vec3(0.5, 0.27, 0.24)), deep);
+    earCup = mix(1.0, 0.3, deep);
+    // furnishings: long cream hairs, mostly from the inner edge and the lower half
+    if (uShell > 0.001) col = lin(vec3(0.96, 0.9, 0.8)) * strandShade;
+  }
+  col = mix(lin(vec3(0.06, 0.035, 0.025)), col, smoothstep(0.02, 0.075, lidE));   // dark lid margin
 
   vec3 N = normalize(vN), V = normalize(vView), T = normalize(vT + hairJit * smoothstep(0.1, 0.6, vH));
   // locks are little ridges: tilt the normal across the flow so they catch the light in streaks
   vec3 Bn = normalize(cross(N, T) + 1e-5);
-  N = normalize(N + Bn * lockTilt * 0.6 * smoothstep(0.0015, 0.004, vL));
+  N = normalize(N + Bn * lockTilt * 0.3 * smoothstep(0.0015, 0.004, vL));
   // light reaching into the coat: deeper hairs see less of it
   float depthL = mix(0.48, 1.0, pow(vH, 0.55));
   float furDepth = mix(1.0, depthL, smoothstep(0.0006, 0.0025, vL));
@@ -549,7 +592,13 @@ void main() {
   // sky and floor bounce
   vec3 amb = mix(uGroundCol, uSkyCol, clamp(N.y * 0.5 + 0.5, 0.0, 1.0));
   c += amb * col * (0.8 + 0.2 * vH);
-  c *= furDepth * vAO;
+  c *= furDepth * vAO * earCup;
+  // ears are thin: light from behind glows through them
+  if (vReg > 0.5) {
+    float thin = 1.0 - 0.7 * smoothstep(0.0, 0.5, 1.0 - vAux.x) * (1.0 - abs(vAux.y));
+    float back = max(dot(-N, uKeyDir), 0.0);
+    c += uKeyCol * sh * lin(vec3(0.95, 0.45, 0.32)) * back * thin * 0.15;
+  }
 
   if (uDebug > 0.5) {
     if (uDebug < 1.5) c = vec3(vL / 0.008);
@@ -574,6 +623,7 @@ export interface FurOptions {
 
 export interface Anatomy {
   headScale?: number;
+  eyeRadius: number;
   head: number[]; tailBase: number[]; tailVec: number[]; legTop: number; backY: number; bellyY: number; bib: number[]; ribs: number[];
 }
 
@@ -585,6 +635,7 @@ export function makeFurMaterials(opts: FurOptions, an: Anatomy, corr: Corrective
     CORRW: corr ? corr.width : 1,
     CORRROWS: corr ? corr.rows : 1,
     GUARD: GUARD_LEN.toFixed(3),
+    EYER: (an.eyeRadius / (an.headScale ?? 1)).toFixed(5),
     HEADS: (an.headScale ?? 1).toFixed(4),
     HEAD_C: v3(an.head), TAIL0: v3(an.tailBase), TAILV: v3(an.tailVec),
     LEGTOP: an.legTop.toFixed(4), BACKY: an.backY.toFixed(4), BELLYY: an.bellyY.toFixed(4), BIB: v3(an.bib), RIBS: v3(an.ribs),
@@ -603,8 +654,8 @@ export function makeFurMaterials(opts: FurOptions, an: Anatomy, corr: Corrective
     uDensity: { value: opts.density },
     uClumpDensity: { value: 260 },
     uClump: { value: 0.7 },
-    uRough: { value: 0.34 },
-    uSpec: { value: 0.35 },
+    uRough: { value: 0.46 },
+    uSpec: { value: 0.55 },
     uDebug: { value: 0 },
     uBreath: { value: 0 },
     uPuff: { value: 0 },
@@ -628,7 +679,9 @@ export function makeFurMaterials(opts: FurOptions, an: Anatomy, corr: Corrective
       vertexShader: VERT,
       fragmentShader: FRAG,
       side: i === 0 ? THREE.FrontSide : THREE.DoubleSide,
-      alphaToCoverage: i > 0,
+      // shells are blended in order, skin first: soft where hairs are finer than a pixel
+      transparent: i > 0,
+      depthWrite: i === 0,
       defines,
     });
     mats.push(m);

@@ -157,7 +157,7 @@ export class Cat3D {
     }
     if (motor.lookW > 0.01) {
       const target = tmp.a.copy(motor.gaze).applyMatrix4(this.inv);
-      body.look(target, motor.lookW);
+      body.look(target, motor.lookW, p.headRoll);
     }
     // paws: where the pose wants them, then the stepper's say for planted ones
     for (const l of LEGS) {
