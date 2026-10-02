@@ -260,7 +260,7 @@ def ear_mesh(side, names):
     for the coat shader."""
     x = 1 if side == 'L' else -1
     base = pos('ear' + side)
-    H_, W_ = 0.034 * HS, 0.031 * HS
+    H_, W_ = 0.031 * HS, 0.029 * HS
     nu, nv = 24, 18
     # ear frame: up, outward tilt, facing forward and a bit out
     tilt, turn = np.radians(30), np.radians(24)

@@ -155,7 +155,12 @@ vec3 combDir(vec3 p, float reg) {
 
 float whiteMask(vec3 p) {
   float w = 0.0;
-  w = max(w, smoothstep(0.034, 0.018, length((p - BIB - vec3(0.0, 0.03, 0.0)) * vec3(1.15, 0.6, 1.0))) * 0.75);   // bib
+  // bib: from the chin down the throat to the chest between the forelegs
+  vec3 A = HC + vec3(0.0, -0.034, 0.024) * HEADS, B = BIB + vec3(0.0, -0.02, -0.012);
+  vec3 ab = B - A;
+  vec3 q = A + ab * clamp(dot(p - A, ab) / dot(ab, ab), 0.0, 1.0);
+  w = max(w, smoothstep(0.03, 0.016, length((p - q) * vec3(1.0, 1.25, 1.0))) * 0.85);
+  w = max(w, smoothstep(0.034, 0.018, length((p - BIB - vec3(0.0, 0.03, 0.0)) * vec3(1.15, 0.6, 1.0))) * 0.75);
   w = max(w, smoothstep(BELLYY - 0.002, BELLYY - 0.02, p.y) * smoothstep(-0.14, -0.08, p.z) * smoothstep(0.034, 0.022, abs(p.x)) * (1.0 - isLeg(p))); // belly
   w = max(w, smoothstep(0.03, 0.018, p.y) * 0.45);                                                     // pale toes
   vec3 h = hl(p);
@@ -167,7 +172,7 @@ float whiteMask(vec3 p) {
 
 vec3 coat(vec3 p, float reg) {
   // ginger tabby, written in sRGB; sampled from reference photographs
-  vec3 ginger = vec3(0.93, 0.65, 0.4);
+  vec3 ginger = vec3(0.89, 0.58, 0.33);
   vec3 cream = vec3(0.98, 0.87, 0.72);
   vec3 rust = vec3(0.6, 0.23, 0.06);
   vec3 white = vec3(0.95, 0.93, 0.9);
@@ -176,20 +181,27 @@ vec3 coat(vec3 p, float reg) {
   // countershading: paler underneath, a warmer saddle along the back
   vec3 base = mix(ginger, cream, clamp(smoothstep(BACKY - 0.07, BELLYY - 0.01, p.y) * 0.75 + (n - 0.5) * 0.35, 0.0, 1.0));
   base = mix(base, ginger * vec3(0.92, 0.82, 0.75), smoothstep(BACKY - 0.06, BACKY - 0.025, p.y) * (1.0 - isHead(p)) * 0.6);
-  // mackerel stripes down the flanks from the spine
   float body = (1.0 - isHead(p)) * (1.0 - isLeg(p)) * (1.0 - isTail(p));
-  // mackerel stripes: narrow, wavy lines running down the flanks from the spine, ~3 cm apart,
-  // broken into dashes and blotches, softest low on the side
-  vec3 wp = p + (vec3(fbm(p * 9.0), fbm(p * 9.0 + 5.2), fbm(p * 9.0 + 9.7)) - 0.5) * 0.022;
-  float phase = wp.z * 205.0 + fbm(wp * 16.0) * 4.0 + abs(wp.x) * 30.0 - (BACKY - 0.03 - wp.y) * 48.0;
-  float s = sin(phase);
-  float width = 0.12 + 0.36 * fbm(p * 21.0 + 7.0);              // wider in places
-  float breakup = smoothstep(0.32, 0.58, fbm(p * 30.0 + 3.0));   // and broken into dashes
-  float onSide = smoothstep(BELLYY - 0.015, BACKY - 0.075, p.y);
-  float stripe = smoothstep(width - 0.1, width + 0.62, s) * onSide * body * (0.45 + 0.55 * breakup);
-  // a darker saddle of fused stripes along the spine
-  float spine = smoothstep(0.016, 0.005, abs(wp.x)) * smoothstep(BACKY - 0.04, BACKY - 0.008, p.y);
-  stripe = max(stripe, (spine * 0.8 + smoothstep(0.02, 0.008, abs(wp.x)) * smoothstep(BACKY - 0.05, BACKY - 0.01, p.y) * s * 0.3) * body);
+  // mackerel stripes: wavy lines about 2.5 cm apart running down the flanks from the spine,
+  // unevenly spaced, thick and thin, breaking into dashes low on the side
+  vec3 wp = p + (vec3(fbm(p * 7.0), fbm(p * 7.0 + 5.2), fbm(p * 7.0 + 9.7)) - 0.5) * 0.03;
+  float phase = wp.z * 250.0 + fbm(wp * 4.0) * 7.0 + abs(wp.x) * 25.0 - (BACKY - 0.03 - wp.y) * 40.0;
+  float s = cos(phase);
+  float width = 0.18 + 0.5 * fbm(p * 15.0 + 7.0);
+  float onSide = smoothstep(BELLYY - 0.01, BACKY - 0.08, p.y);
+  float breakup = smoothstep(0.3, 0.55, fbm(p * 28.0 + 3.0) + 0.25 * onSide);
+  // soft bands rather than painted lines: the dark band takes up nearly half of each period
+  float stripe = smoothstep(0.25 - 0.6 * width, 0.75, s) * onSide * body * (0.45 + 0.55 * breakup);
+  // necklaces: broken bands round the front of the chest and throat
+  vec3 nk = p - vec3(0.0, 0.205, 0.06);
+  float tN = dot(nk, vec3(0.0, 0.33, 0.944)) + (fbm(p * 22.0) - 0.5) * 0.012;
+  float under = smoothstep(0.012, -0.012, dot(nk, vec3(0.0, 0.944, -0.33)));
+  float neckl = smoothstep(0.2, 0.8, cos(tN * 270.0)) * smoothstep(0.02, 0.034, tN) * smoothstep(0.1, 0.075, tN) * under
+              * (1.0 - isHead(p)) * smoothstep(0.3, 0.5, fbm(p * 30.0 + 11.0) + 0.15);
+  // a darker line of fused stripes down the spine (on the back only, not the throat below it)
+  float dorsal = smoothstep(BACKY - 0.04 + 0.45 * max(p.z - 0.04, 0.0), BACKY - 0.008 + 0.45 * max(p.z - 0.04, 0.0), p.y);
+  float spine = smoothstep(0.016, 0.005, abs(wp.x)) * dorsal;
+  stripe = max(stripe, (spine * 0.8 + smoothstep(0.022, 0.008, abs(wp.x)) * dorsal * max(s, 0.0) * 0.35) * body);
   // rings round the legs and the tail
   float legR = smoothstep(0.62, 0.95, sin(p.y * 190.0 + n * 3.0)) * isLeg(p) * smoothstep(0.035, 0.07, p.y) * smoothstep(0.3, 0.55, fbm(p * 40.0));
   float tailR = smoothstep(0.2, 0.85, sin(tailT(p) * 27.0 + n * 2.0)) * isTail(p);
@@ -216,7 +228,7 @@ vec3 coat(vec3 p, float reg) {
   float muzzle = smoothstep(0.012, 0.006, length((h - vec3(sign(h.x) * 0.0075, -0.0205, 0.040)) * vec3(1.0, 1.15, 1.0))) * smoothstep(-0.011, -0.015, h.y);
   // a dark tear line from the inner corner of each eye down beside the nose
   float tear = smoothstep(0.0009, 0.0002, abs(abs(h.x) - (0.0082 + 0.33 * h.y))) * smoothstep(0.001, -0.002, h.y) * smoothstep(-0.013, -0.008, h.y) * step(0.025, h.z);
-  float darkAmt = max(max(stripe * 0.8, legR * 0.5), max(tailR * 0.75, max(fore * 0.9, max(cheek * 0.9, tear * 0.45))));
+  float darkAmt = max(legR * 0.5, max(tailR * 0.7, max(fore * 0.9, max(cheek * 0.9, tear * 0.45))));
   // rows of dark follicles on the whisker pads
   {
     vec3 q = h - vec3(sign(h.x) * 0.0092, -0.0192, 0.0415);
@@ -229,8 +241,12 @@ vec3 coat(vec3 p, float reg) {
   float underEye = smoothstep(0.012, 0.004, length((h - vec3(sign(h.x) * 0.014, -0.006, 0.034)) * vec3(0.8, 1.4, 1.0)));
   vec3 c = mix(base, cream, max(max(spect * 0.75, underEye * 0.35), bridge * 0.8));
   c = mix(c, white * vec3(1.0, 0.95, 0.88), muzzle * 0.6);
+  // the coat's own stripes are a deeper ginger, not a different colour
+  vec3 deep = vec3(0.74, 0.37, 0.13);
+  c = mix(c, deep, stripe * 0.85);
   c = mix(c, rust, darkAmt);
   c = mix(c, white, whiteMask(p));
+  c = mix(c, deep * vec3(1.05, 1.1, 1.2), neckl * 0.55);
   // nose leather with nostrils, the groove below it and the mouth
   if (h.z > 0.036) {
     float nd = noseSD(h);

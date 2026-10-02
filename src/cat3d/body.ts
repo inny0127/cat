@@ -35,7 +35,6 @@ export class Body {
 
   private readonly t = { a: v(), b: v(), c: v(), d: v(), e: v(), f: v(), g: v(), q1: q(), q2: q(), q3: q(), q4: q() };
   private readonly m = new THREE.Matrix4();
-  private readonly qI = new THREE.Quaternion();
 
   constructor(kin: Kin) {
     this.kin = kin;
@@ -126,13 +125,16 @@ export class Body {
   look(target: THREE.Vector3, weight: number, roll = 0) {
     if (weight <= 0.001) return;
     const { kin, I } = this;
-    // each joint takes a share of what is left of the turn; the head finishes it
-    const chain: [number, number][] = [[I.neck1, 0.34], [I.neck2, 0.5], [I.head, 1]];
+    // each joint takes a share of what is left of the turn and the head finishes it. The neck
+    // carries much of a turn to the side, but looking up or down is mostly the head's own work,
+    // so a cat lying low keeps its neck low while it looks up at you.
+    const chain: [number, number, number][] = [[I.neck1, 0.34, 0.12], [I.neck2, 0.5, 0.25], [I.head, 1, 1]];
     const eye = this.t.a, D = this.t.b, up = this.t.c, x = this.t.d;
     const Qt = this.t.q1, Qh = this.t.q2, Dq = this.t.q3;
     const chestFwd = this.t.e.set(0, 0, 1).applyQuaternion(kin.wq[I.chest]);
     const chestYaw = Math.atan2(chestFwd.x, chestFwd.z);
-    for (const [b, f] of chain) {
+    const F = this.lookF;
+    for (const [b, fy, fp] of chain) {
       this.eyes(eye);
       D.copy(target).sub(eye);
       if (D.lengthSq() < 1e-8) return;
@@ -142,7 +144,12 @@ export class Body {
       yaw = Math.atan2(Math.sin(yaw), Math.cos(yaw));
       yaw = Math.max(-1.5, Math.min(1.5, yaw)) + chestYaw;
       const pitch = Math.max(-0.9, Math.min(0.9, Math.asin(Math.max(-1, Math.min(1, D.y)))));
-      D.set(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch));
+      // this joint's share of the yaw and of the pitch, from where the head points now
+      F.set(0, 0, 1).applyQuaternion(kin.wq[I.head]);
+      const yawC = Math.atan2(F.x, F.z), pitchC = Math.asin(Math.max(-1, Math.min(1, F.y)));
+      const dy = Math.atan2(Math.sin(yaw - yawC), Math.cos(yaw - yawC));
+      const yj = yawC + dy * fy, pj = pitchC + (pitch - pitchC) * fp;
+      D.set(Math.sin(yj) * Math.cos(pj), Math.sin(pj), Math.cos(yj) * Math.cos(pj));
       // looking along D with the eyes level (cats keep their head upright), plus any deliberate tilt
       up.set(0, 1, 0).addScaledVector(D, -D.y).normalize();
       x.crossVectors(up, D).normalize();
@@ -152,13 +159,13 @@ export class Body {
       Qh.copy(kin.wq[I.head]);
       this.t.q4.copy(Qt);
       Qt.copy(Qh).slerp(this.t.q4, weight);
-      // the share of the remaining turn this joint makes, applied in the world frame
+      // the turn this joint makes, applied in the world frame
       Dq.copy(Qt).multiply(Qh.invert());
-      Dq.slerp(this.qI, 1 - f);
       kin.setWorld(b, this.t.q4.copy(Dq).multiply(kin.wq[b]));
       kin.fkAll();
     }
   }
+  private readonly lookF = new THREE.Vector3();
 
 
   /** foot target of a pose for one leg, model space (needs the trunk solved) */

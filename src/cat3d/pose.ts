@@ -80,7 +80,7 @@ export const POSES = {
   sit: make({
     hipY: 0.064, hipZ: -0.12, hipPitch: 0.72,
     lumbarPitch: 0.5, chestPitch: -0.97,
-    neckPitch: 0.25, headPitch: -0.5,
+    neckPitch: 0.0, headPitch: -0.32,
     LF: foot(0.036, 0.012, 0.068), RF: foot(0.036, 0.012, 0.068),
     LH: foot(0.04, 0.012, -0.064, 0, 1, 0), RH: foot(0.04, 0.012, -0.064, 0, 1, 0),
     pastern: 0.38, hindFlat: 1,
@@ -92,11 +92,11 @@ export const POSES = {
   loaf: make({
     hipY: 0.07, hipZ: -0.142, hipPitch: 0.1,
     lumbarPitch: -0.04, chestPitch: -0.16,
-    neckPitch: -0.25, headPitch: 0.3,
+    neckPitch: -0.45, headPitch: 0.45,
     LF: foot(0.028, 0.014, 0.075, 0, 0, 1), RF: foot(0.028, 0.014, 0.075, 0, 0, 1),
     LH: foot(0.044, 0.013, -0.1, 0, 0, 0), RH: foot(0.044, 0.013, -0.1, 0, 0, 0),
     pastern: 0.2, hindFlat: 1,
-    tailLift: -0.5, tailSide: -1.0, tailCurve: 0.5, tailCurl: -1.8, tailSag: 0.8,
+    tailLift: -0.5, tailSide: 1.5, tailCurve: 0.3, tailCurl: 2.2, tailSag: 0.8,
     eyeOpen: 0.92, squint: 0.05, earFwd: 0.2, breath: 0.5,
   }),
 
