@@ -11,6 +11,7 @@ export interface Landmarks {
   eyeL: [number, number, number];
   eyeR: [number, number, number];
   eyeRadius: number;
+  headScale?: number;
   eyeEulerL: [number, number, number];
   eyeEulerR: [number, number, number];
   tailBase: number[];
@@ -25,11 +26,22 @@ export interface Landmarks {
   padR: [number, number, number];
 }
 
+export interface Correctives {
+  poses: string[];
+  /** RGBA half-float texture: for pose k, rows [2k*rows, (2k+1)*rows) hold position deltas and the next block normal deltas */
+  texture: THREE.DataTexture;
+  width: number;
+  rows: number;
+}
+
 export interface CatAsset {
   landmarks: Landmarks;
   bones: BoneDef[];
   meshes: Record<string, THREE.BufferGeometry>;
+  correctives: Correctives | null;
 }
+
+export const CORR_WIDTH = 1024;
 
 /** Reads the binary written by tools/cat3d/model.py: u32 header length, JSON header, arrays. */
 export async function loadCatAsset(url: string): Promise<CatAsset> {
@@ -52,7 +64,25 @@ export async function loadCatAsset(url: string): Promise<CatAsset> {
     g.computeBoundingSphere();
     meshes[m.name] = g;
   }
-  return { landmarks: head.landmarks, bones: head.bones, meshes };
+  let correctives: Correctives | null = null;
+  if (head.correctives) {
+    const c = head.correctives;
+    const n = c.count as number;
+    const P = c.poses.length as number;
+    const src = new Uint16Array(buf, base + c.data, P * 2 * n * 3);
+    const rows = Math.ceil(n / CORR_WIDTH);
+    const tex = new Uint16Array(CORR_WIDTH * rows * 2 * P * 4);
+    for (let k = 0; k < P * 2; k++) {
+      for (let v = 0; v < n; v++) {
+        const o = (k * rows * CORR_WIDTH + v) * 4, i = (k * n + v) * 3;
+        tex[o] = src[i]; tex[o + 1] = src[i + 1]; tex[o + 2] = src[i + 2]; tex[o + 3] = 0;
+      }
+    }
+    const texture = new THREE.DataTexture(tex, CORR_WIDTH, rows * 2 * P, THREE.RGBAFormat, THREE.HalfFloatType);
+    texture.needsUpdate = true;
+    correctives = { poses: c.poses, texture, width: CORR_WIDTH, rows };
+  }
+  return { landmarks: head.landmarks, bones: head.bones, meshes, correctives };
 }
 
 /** Bones with identity rest rotations, positioned at their joints (world-aligned rest frame). */

@@ -58,7 +58,7 @@ const BASE: Pose = {
   pastern: 0.35, hindFlat: 0,
   tailLift: 0.25, tailSide: 0, tailCurve: -0.5, tailCurl: 0.3, tailSag: 0,
   earFwd: 0.2, earOut: 0, earFlat: 0,
-  eyeOpen: 0.72, squint: 0.12, pupil: 0.28, whisker: 0, jaw: 0,
+  eyeOpen: 0.86, squint: 0.08, pupil: 0.5, whisker: 0, jaw: 0,
   breath: 0.6, puff: 0,
 };
 
@@ -80,31 +80,31 @@ export const POSES = {
   sit: make({
     hipY: 0.064, hipZ: -0.12, hipPitch: 0.72,
     lumbarPitch: 0.5, chestPitch: -0.97,
-    neckPitch: 0.85, headPitch: -1.15,
-    LF: foot(0.03, 0.012, 0.072), RF: foot(0.03, 0.012, 0.072),
-    LH: foot(0.036, 0.012, -0.068, 0, 1, 0), RH: foot(0.036, 0.012, -0.068, 0, 1, 0),
-    pastern: 0.25, hindFlat: 1,
+    neckPitch: 0.22, headPitch: -0.45,
+    LF: foot(0.03, 0.012, 0.056), RF: foot(0.03, 0.012, 0.056),
+    LH: foot(0.04, 0.012, -0.064, 0, 1, 0), RH: foot(0.04, 0.012, -0.064, 0, 1, 0),
+    pastern: 0.38, hindFlat: 1,
     tailLift: -0.9, tailSide: 0.7, tailCurve: 1.1, tailCurl: 0.4, tailSag: 0.5,
-    eyeOpen: 0.85, breath: 0.5,
+    breath: 0.5,
   }),
 
   /** bread loaf: all four paws tucked under, chin level */
   loaf: make({
-    hipY: 0.112, hipZ: -0.142, hipPitch: 0.12,
-    lumbarPitch: -0.06, chestPitch: -0.2,
-    neckPitch: 0.42, headPitch: -0.32,
-    LF: foot(-0.006, -0.052, -0.035, 1, 0, 1), RF: foot(-0.006, -0.052, -0.035, 1, 0, 1),
-    LH: foot(0.044, 0.013, -0.085, 0, 0, 0), RH: foot(0.044, 0.013, -0.085, 0, 0, 0),
+    hipY: 0.07, hipZ: -0.142, hipPitch: 0.1,
+    lumbarPitch: -0.04, chestPitch: -0.16,
+    neckPitch: -0.25, headPitch: 0.3,
+    LF: foot(0.028, 0.014, 0.075, 0, 0, 1), RF: foot(0.028, 0.014, 0.075, 0, 0, 1),
+    LH: foot(0.044, 0.013, -0.1, 0, 0, 0), RH: foot(0.044, 0.013, -0.1, 0, 0, 0),
     pastern: 0.2, hindFlat: 1,
-    tailLift: -0.6, tailSide: 0.9, tailCurve: 1.3, tailCurl: 0.2, tailSag: 0.7,
-    eyeOpen: 0.6, squint: 0.3, earFwd: 0.1, breath: 0.5,
+    tailLift: -0.5, tailSide: -1.5, tailCurve: 0.6, tailCurl: -1.2, tailSag: 0.8,
+    eyeOpen: 0.92, squint: 0.05, earFwd: 0.2, breath: 0.5,
   }),
 
   /** lying on the chest with the forelegs out in front, head up */
   sphinx: make({
-    hipY: 0.108, hipZ: -0.142, hipPitch: 0.1,
-    lumbarPitch: -0.04, chestPitch: -0.1,
-    neckPitch: 0.45, headPitch: -0.38,
+    hipY: 0.072, hipZ: -0.142, hipPitch: 0.1,
+    lumbarPitch: -0.04, chestPitch: -0.06,
+    neckPitch: 0.62, headPitch: -0.45,
     LF: foot(0.03, 0.012, 0.19, 0, 0, 0), RF: foot(0.03, 0.012, 0.19, 0, 0, 0),
     LH: foot(0.042, 0.013, -0.06, 0, 0, 0), RH: foot(0.042, 0.013, -0.06, 0, 0, 0),
     pastern: 1.3, hindFlat: 1,

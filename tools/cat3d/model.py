@@ -24,9 +24,10 @@ bone('neck1', 'chest', (0, 0.226, 0.088))
 bone('neck2', 'neck1', (0, 0.246, 0.116))
 bone('head', 'neck2', (0, 0.266, 0.136))
 HC = P(0, 0.276, 0.159)      # centre of the head
-bone('jaw', 'head', tuple(HC + P(0, -0.014, -0.004)))
+HS = 1.12                     # the whole head (skull, face, eyes, ears) is drawn at this scale
+bone('jaw', 'head', tuple(HC + P(0, -0.014, -0.004) * HS))
 for s, x in (('L', 1), ('R', -1)):
-    bone('ear' + s, 'head', tuple(HC + P(x * 0.042, 0.021, -0.009)))
+    bone('ear' + s, 'head', tuple(HC + P(x * 0.034, 0.031, -0.010) * HS))
     bone('scap' + s, 'chest', (x * 0.030, 0.240, 0.066))
     bone('arm' + s, 'scap' + s, (x * 0.040, 0.178, 0.104))
     bone('fore' + s, 'arm' + s, (x * 0.045, 0.112, 0.070))
@@ -45,9 +46,9 @@ for i in range(TAIL_N):
 
 def pos(name): return BONES[name][1]
 
-EYE_R = 0.0102
+EYE_R = 0.0108 * HS
 EYE_EULER = (-0.12, 0.22, 0.08)          # three.js XYZ order, left eye; the right one is mirrored
-def eye_centre(x): return HC + P(x * 0.018, 0.005, 0.029)
+def eye_centre(x): return HC + P(x * 0.0156, 0.005, 0.0300) * HS
 def euler_xyz(a, b, c):
     ca, sa, cb, sb, cc, sc = np.cos(a), np.sin(a), np.cos(b), np.sin(b), np.cos(c), np.sin(c)
     rx = np.array([[1, 0, 0], [0, ca, -sa], [0, sa, ca]])
@@ -59,43 +60,43 @@ def eye_rot(x): return euler_xyz(EYE_EULER[0], x * EYE_EULER[1], x * EYE_EULER[2
 # ------------------------------------------------------------------ SDF primitives
 PRIMS = []
 def ell(bone_, c, r, k=0.02, rot=None):
-    PRIMS.append(dict(t='ell', b=bone_, c=P(*c), r=P(*r), k=k, rot=rot))
+    sc = HS if bone_ in ('head', 'jaw') else 1.0
+    PRIMS.append(dict(t='ell', b=bone_, c=P(*c), r=P(*r) * sc, k=k * sc, rot=rot))
 def cone(bone_, a, b, ra, rb, k=0.012):
     PRIMS.append(dict(t='cone', b=bone_, a=P(*a), bb=P(*b), ra=ra, rb=rb, k=k))
 def sub(bone_, c, r, k=0.006):
     PRIMS.append(dict(t='sub', b=bone_, c=P(*c), r=P(*r), k=k))
-def H(*o): return tuple(HC + P(*o))
+def H(*o): return tuple(HC + P(*o) * HS)
 
 # torso: deep ribcage down to the sternum between the elbows, waist tucked up, rounded rump
-ell('chest', (0, 0.192, 0.048), (0.050, 0.068, 0.070), k=0.03)
+ell('chest', (0, 0.192, 0.048), (0.052, 0.068, 0.070), k=0.03)
 ell('chest', (0, 0.168, 0.092), (0.038, 0.050, 0.036), k=0.03)      # brisket
-ell('spine2', (0, 0.204, -0.022), (0.049, 0.062, 0.060), k=0.035)
-ell('spine1', (0, 0.206, -0.088), (0.044, 0.058, 0.050), k=0.035)
-ell('hips', (0, 0.210, -0.150), (0.047, 0.055, 0.050), k=0.03)
+ell('spine2', (0, 0.202, -0.022), (0.055, 0.064, 0.060), k=0.035)
+ell('spine1', (0, 0.204, -0.088), (0.053, 0.060, 0.052), k=0.035)
+ell('hips', (0, 0.208, -0.150), (0.050, 0.056, 0.050), k=0.03)
 # neck carrying the head a little above the back
-cone('neck1', (0, 0.218, 0.082), (0, 0.246, 0.116), 0.040, 0.035, k=0.03)
-cone('neck2', (0, 0.246, 0.116), (0, 0.266, 0.140), 0.035, 0.032, k=0.025)
+cone('neck1', (0, 0.218, 0.082), (0, 0.246, 0.116), 0.045, 0.041, k=0.03)
+cone('neck2', (0, 0.246, 0.116), (0, 0.266, 0.140), 0.041, 0.037, k=0.025)
 # head: a wide, low cranium over full cheeks; the muzzle drops well below the eyes, nose leather in front
 ell('head', H(0, 0.008, -0.008), (0.041, 0.035, 0.041), k=0.012)        # cranium
 ell('head', H(0, 0.024, 0.0), (0.039, 0.021, 0.033), k=0.012)          # broad flat forehead
 ell('head', H(0, 0.012, 0.016), (0.034, 0.018, 0.024), k=0.010)         # brow
 for x in (1, -1):
-    ell('head', H(x * 0.018, 0.0155, 0.030), (0.0125, 0.0055, 0.0100), k=0.006)  # brow ridge over each eye
-    ell('head', H(x * 0.02, -0.0078, 0.030), (0.012, 0.0052, 0.0090), k=0.006)   # cheekbone under it
+    ell('head', H(x * 0.016, 0.0185, 0.021), (0.0122, 0.0055, 0.0095), k=0.006)  # brow ridge, framing the eye from above
 for x in (1, -1):
-    ell('head', H(x * 0.023, -0.011, 0.009), (0.029, 0.024, 0.026), k=0.014)   # cheeks: a wide face
-    ell('head', H(x * 0.0085, -0.0265, 0.0415), (0.0108, 0.0088, 0.0094), k=0.004)  # whisker pads
-ell('head', H(0, -0.023, 0.033), (0.019, 0.014, 0.016), k=0.007)        # muzzle
-ell('head', H(0, -0.0085, 0.036), (0.0085, 0.0150, 0.0125), k=0.008)    # nose bridge
-ell('head', H(0, -0.0190, 0.0450), (0.0060, 0.0048, 0.0052), k=0.003)   # nose leather
-ell('head', H(0, -0.0222, 0.0458), (0.0034, 0.0030, 0.0042), k=0.003)   # point of the nose
-ell('jaw', H(0, -0.0368, 0.031), (0.0120, 0.0075, 0.0120), k=0.006)     # chin
+    ell('head', H(x * 0.02, -0.007, 0.006), (0.0245, 0.02, 0.022), k=0.014)   # cheeks
+    ell('head', H(x * 0.0082, -0.0192, 0.0405), (0.0102, 0.0082, 0.0092), k=0.004)  # whisker pads
+ell('head', H(0, -0.0165, 0.032), (0.018, 0.013, 0.016), k=0.007)       # muzzle
+ell('head', H(0, -0.0045, 0.0355), (0.0082, 0.0118, 0.0125), k=0.008)  # nose bridge
+ell('head', H(0, -0.0118, 0.0440), (0.0058, 0.0046, 0.0052), k=0.003)   # nose leather
+ell('head', H(0, -0.0150, 0.0448), (0.0033, 0.0029, 0.0042), k=0.003)   # point of the nose
+ell('jaw', H(0, -0.0285, 0.029), (0.0102, 0.0066, 0.0102), k=0.006)     # chin
 # eyes: a socket round each eyeball, filled by the lids (a skin sphere just outside the ball;
 # the shader cuts the opening). The ball itself is a separate mesh.
 for x in (1, -1):
     c = tuple(eye_centre(x))
-    sub('head', c, (0.0122, 0.0122, 0.0122), k=0.003)
-    PRIMS.append(dict(t='ell', b='head', c=P(*c), r=P(0.011, 0.011, 0.011), k=0.0025, rot=None))
+    sub('head', c, (0.0126 * HS,) * 3, k=0.003)
+    PRIMS.append(dict(t='ell', b='head', c=P(*c), r=P(0.0113, 0.0113, 0.0113) * HS, k=0.004, rot=None))
 # legs, with round paws and four toes each
 TOES = [(-0.0112, -0.004), (-0.0038, 0.0), (0.0038, 0.0), (0.0112, -0.004)]
 for s, x in (('L', 1), ('R', -1)):
@@ -133,7 +134,10 @@ def d_cone(p, a, b, ra, rb):
     return np.linalg.norm(pa - h[..., None] * ba, axis=-1) - r
 
 def prim_d(pr, p):
-    if pr['t'] in ('ell', 'sub'): return d_ell(p, pr['c'], pr['r'])
+    if pr['t'] in ('ell', 'sub'):
+        if pr.get('R') is not None:
+            return d_ell((p - pr['c']) @ pr['R'], 0.0, pr['r'])
+        return d_ell(p, pr['c'], pr['r'])
     return d_cone(p, pr['a'], pr['bb'], pr['ra'], pr['rb'])
 
 def smin(a, b, k):
@@ -143,9 +147,9 @@ def smin(a, b, k):
 def smax(a, b, k):
     return -smin(-a, -b, k)
 
-def sdf(p):
+def sdf(p, prims=None):
     d = np.full(p.shape[:-1], 1e3)
-    for pr in PRIMS:
+    for pr in (PRIMS if prims is None else prims):
         if pr['t'] == 'sub':
             d = smax(d, -prim_d(pr, p), pr['k'])
         else:
@@ -199,7 +203,7 @@ def skin_weights(verts, faces=None, iters=30):
     w4 /= w4.sum(1, keepdims=True)
     return order.astype(np.uint16), w4.astype(np.float32), names
 
-def export_bin(out, meshes, names):
+def export_bin(out, meshes, names, corr=None):
     """Binary layout: header json (bones, mesh ranges) + float/uint arrays, read by src/cat3d/load.ts"""
     blobs, desc, off = [], [], 0
     def add(arr):
@@ -222,10 +226,15 @@ def export_bin(out, meshes, names):
                  eyeEulerL=list(EYE_EULER), eyeEulerR=[EYE_EULER[0], -EYE_EULER[1], -EYE_EULER[2]],
                  tailBase=TAIL_BASE.round(5).tolist(), tailVec=TAIL_VEC.round(5).tolist(),
                  legTop=0.132, backY=0.262, bellyY=0.15, bib=[0, 0.168, 0.096], ribs=[0, 0.19, -0.01],
-                 nose=(HC + P(0, -0.019, 0.050)).round(5).tolist(),
-                 padL=(HC + P(0.011, -0.0245, 0.0480)).round(5).tolist(), padR=(HC + P(-0.011, -0.0245, 0.0480)).round(5).tolist())
+                 nose=(HC + P(0, -0.012, 0.049) * HS).round(5).tolist(), headScale=HS,
+                 padL=(HC + P(0.0105, -0.0175, 0.0470) * HS).round(5).tolist(), padR=(HC + P(-0.0105, -0.0175, 0.0470) * HS).round(5).tolist())
+    corr_desc = None
+    if corr:
+        # half floats: [pose][pos|normal][vertex][xyz]
+        arr = np.stack([np.stack([dp, dn]) for dp, dn in corr]).astype(np.float16)
+        corr_desc = dict(poses=CORRECT, count=int(arr.shape[2]), data=add(arr))
     head = json.dumps(dict(landmarks=marks, bones=[{'name': nm, 'parent': BONES[nm][0], 'pos': BONES[nm][1].round(5).tolist()} for nm in names],
-                           meshes=desc)).encode()
+                           meshes=desc, correctives=corr_desc)).encode()
     head += b' ' * ((-len(head)) % 4)
     with open(out, 'wb') as fh:
         fh.write(np.array([len(head)], np.uint32).tobytes())
@@ -238,10 +247,10 @@ def ear_mesh(side, names):
     """A cupped triangular shell, thin, skinned to its ear bone (blending into the head at the base)."""
     x = 1 if side == 'L' else -1
     base = pos('ear' + side)
-    H_, W_, T_ = 0.047, 0.044, 0.0032
+    H_, W_, T_ = 0.043 * HS, 0.042 * HS, 0.0032
     nu, nv = 18, 14
     # ear frame: up, outward tilt, facing forward and a bit out
-    tilt, turn = np.radians(33), np.radians(16)
+    tilt, turn = np.radians(32), np.radians(22)
     up = np.array([x * np.sin(tilt), np.cos(tilt), 0.0])
     fwd = np.array([x * np.sin(turn), 0.0, np.cos(turn)])
     fwd -= up * (fwd @ up); fwd /= np.linalg.norm(fwd)
@@ -302,6 +311,118 @@ def ear_mesh(side, names):
     w[:, 0] = we; w[:, 1] = 1 - we
     return ('ear' + side, verts, faces, normals, j, w, np.array(regs))
 
+
+# ------------------------------------------------------------------ pose correctives
+# Linear blend skinning creases joints and leaves body parts as separate lumps. For each posture
+# the cat can hold, the same primitives are posed with their bones and smooth-unioned again, and
+# every skinned vertex is moved onto that surface. The difference, taken back into bind space, is
+# a corrective the renderer adds in proportion to how much of that posture the cat is in.
+CORRECT = ['sit', 'loaf', 'sphinx', 'side', 'curl', 'crouch', 'arch', 'stretch']
+
+# Extra sculpting that only exists in one posture, in that posture's own model space (floor at
+# y = 0): the soft mass that hides folded legs in a loaf, the haunch of a sitting cat, and a floor
+# the body flattens against when it lies down.
+POSE_SCULPT = {
+    'loaf': dict(floor=0.003, extra=[
+        ((0, 0.078, -0.06), (0.071, 0.088, 0.152), 0.04),       # the loaf: one rounded mound
+        ((0, 0.05, 0.072), (0.06, 0.052, 0.05), 0.03),           # chest over the tucked forearms
+    ]),
+    'sphinx': dict(floor=0.003, extra=[
+        ((0, 0.066, -0.085), (0.068, 0.07, 0.13), 0.035),
+    ]),
+    'sit': dict(floor=0.003, extra=[
+        ((0.034, 0.052, -0.09), (0.036, 0.05, 0.06), 0.03),     # haunches
+        ((-0.034, 0.052, -0.09), (0.036, 0.05, 0.06), 0.03),
+    ]),
+    'side': dict(floor=0.003, extra=[]),
+    'curl': dict(floor=0.003, extra=[]),
+}
+
+def quat_mat(q):
+    x, y, z, w = q
+    return np.array([[1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
+                     [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+                     [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)]])
+
+def posed_prims(bones_posed, pose_name=None):
+    """the sculpt with every primitive carried by its bone: bones_posed[name] = (R, t)"""
+    out = []
+    for c, r, k in POSE_SCULPT.get(pose_name, {}).get('extra', []):
+        out.append(dict(t='ell', b='spine2', c=P(*c), r=P(*r), k=k, R=None))
+    for pr in PRIMS:
+        R, t = bones_posed[pr['b']]
+        rest = pos(pr['b'])
+        M = lambda x: R @ (x - rest) + t
+        q = dict(pr)
+        if pr['t'] in ('ell', 'sub'):
+            q['c'] = M(pr['c'])
+            q['R'] = R
+        else:
+            q['a'] = M(pr['a']); q['bb'] = M(pr['bb'])
+        out.append(q)
+    # unions first, carved sockets last
+    return [q for q in out if q['t'] != 'sub'] + [q for q in out if q['t'] == 'sub']
+
+def sdf_posed(p, prims, floor=None):
+    d = sdf(p, prims)
+    if floor is not None:
+        d = smax(d, -(p[..., 1] - floor), 0.008)
+    return d
+
+def sdf_grad(p, prims, h=0.0004, floor=None):
+    g = np.zeros_like(p)
+    for i in range(3):
+        e = np.zeros(3); e[i] = h
+        g[:, i] = (sdf_posed(p + e, prims, floor) - sdf_posed(p - e, prims, floor)) / (2 * h)
+    return g
+
+def correctives(verts, normals, j, w, names, posed_path):
+    data = json.load(open(posed_path))
+    assert data['names'] == names, 'poses.json was made for another skeleton'
+    idx = {n: i for i, n in enumerate(names)}
+    # dynamic parts (gaze, tail physics) stay plain-skinned
+    free = np.zeros(len(verts))
+    for b in ['head', 'jaw'] + [f'tail{i}' for i in range(TAIL_N)]:
+        free += (w * (j == idx[b])).sum(1)
+    for b in ['neck2']:
+        free += 0.5 * (w * (j == idx[b])).sum(1)
+    keep = np.clip(1 - free, 0, 1)
+    planes = []
+    for name in CORRECT:
+        P = data['poses'][name]
+        Rs = [quat_mat(b['q']) for b in P]
+        ts = [np.array(b['p']) for b in P]
+        bones_posed = {n: (Rs[i], ts[i]) for i, n in enumerate(names)}
+        prims = posed_prims(bones_posed, name)
+        floor = POSE_SCULPT.get(name, {}).get('floor')
+        # linear blend skinning of the rest mesh
+        A = np.zeros((len(verts), 3, 3)); x = np.zeros_like(verts)
+        for k in range(4):
+            jk = j[:, k]; wk = w[:, k][:, None]
+            Rk = np.stack([Rs[i] for i in jk]); tk = np.stack([ts[i] for i in jk]); rk = np.stack([pos(names[i]) for i in jk])
+            x += wk * (np.einsum('nij,nj->ni', Rk, verts - rk) + tk)
+            A += wk[:, :, None] * Rk
+        lbs = x.copy()
+        for it in range(10):
+            d = sdf_posed(x, prims, floor)
+            g = sdf_grad(x, prims, floor=floor)
+            step = -(d / np.maximum((g * g).sum(1), 1e-8))[:, None] * g
+            n_ = np.linalg.norm(step, axis=1, keepdims=True)
+            x = x + step * np.minimum(1, 0.006 / np.maximum(n_, 1e-9))
+        delta = x - lbs
+        far = np.linalg.norm(delta, axis=1)
+        trust = np.clip((0.045 - far) / 0.015, 0, 1) * keep
+        delta *= trust[:, None]
+        g = sdf_grad(x, prims, floor=floor)
+        npos = g / np.maximum(np.linalg.norm(g, axis=1, keepdims=True), 1e-9)
+        nl = np.einsum('nij,nj->ni', np.linalg.inv(A), npos)
+        nl /= np.maximum(np.linalg.norm(nl, axis=1, keepdims=True), 1e-9)
+        nl = normals + (nl - normals) * trust[:, None]
+        dp = np.einsum('nij,nj->ni', np.linalg.inv(A), delta)
+        dn = nl - normals
+        print(f'  corrective {name:8s} mean {np.mean(far) * 1000:.2f} mm  max {np.max(far * trust) * 1000:.1f} mm  untrusted {np.mean(trust < 0.5) * 100:.1f}%')
+        planes.append((dp.astype(np.float32), dn.astype(np.float32)))
+    return planes
 
 # ------------------------------------------------------------------ eyelids
 def lid_mesh(side, names):
@@ -364,7 +485,10 @@ def main():
     j, w, names = skin_weights(np.asarray(m.vertices), np.asarray(m.faces))
     body = ('body', np.asarray(m.vertices), np.asarray(m.faces), vn, j, w, np.zeros(len(m.vertices)))
     meshes = [body, ear_mesh('L', names), ear_mesh('R', names)]
-    export_bin(out + '.cat', meshes, names)
+    corr = None
+    if os.environ.get('CAT_POSES'):
+        corr = correctives(np.asarray(m.vertices), vn, j, w, names, os.environ['CAT_POSES'])
+    export_bin(out + '.cat', meshes, names, corr)
     # static preview with ears
     allm = [trimesh.Trimesh(mm[1], mm[2], process=False) for mm in meshes]
     trimesh.util.concatenate(allm).export(out + '.glb')

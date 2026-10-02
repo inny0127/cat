@@ -61,7 +61,11 @@ export class Tail {
    * Step the springs. `groupQ`/`groupP` place the model in the world; `floor` is the world height
    * of the floor.
    */
-  update(dt: number, p: Pose, groupQ: THREE.Quaternion, groupP: THREE.Vector3, floor = 0) {
+  /**
+   * colliders: capsules in world space as pairs of vec4 (a.xyz + radius, b.xyz) - the body the
+   * tail lies against instead of passing through.
+   */
+  update(dt: number, p: Pose, groupQ: THREE.Quaternion, groupP: THREE.Vector3, floor = 0, colliders: THREE.Vector4[] = [], ncol = 0) {
     const { kin, idx, n, t } = this;
     const parentW = t.p.copy(groupQ).multiply(kin.wq[this.hips]);
     if (!this.ready) {
@@ -109,10 +113,33 @@ export class Tail {
         // lose the velocity going into the floor
         this.w[i].multiplyScalar(0.6);
       }
+      // and outside the body: the tail wraps round the flank instead of sinking into it
+      if (i >= 2) {
+        for (let c = 0; c < ncol; c++) {
+          const A = colliders[2 * c], B = colliders[2 * c + 1];
+          const dd = t.b.copy(this.seg[i]).applyQuaternion(this.q[i]);
+          const end = this.tc.e.copy(pos).add(dd);
+          const ab = this.tc.ab.set(B.x - A.x, B.y - A.y, B.z - A.z);
+          const tt = Math.max(0, Math.min(1, (ab.dot(this.tc.ap.set(end.x - A.x, end.y - A.y, end.z - A.z))) / Math.max(ab.lengthSq(), 1e-9)));
+          const cp = this.tc.cp.set(A.x, A.y, A.z).addScaledVector(ab, tt);
+          const off = this.tc.off.copy(end).sub(cp);
+          const R = A.w + this.radius[Math.min(n - 1, i + 1)] * 0.8;
+          const dist = off.length();
+          if (dist < R && dist > 1e-6) {
+            const target = off.multiplyScalar(R / dist).add(cp).sub(pos);
+            const len = dd.length();
+            target.setLength(len);
+            this.q[i].premultiply(t.q.setFromUnitVectors(dd.normalize(), target.normalize()));
+            this.w[i].multiplyScalar(0.7);
+          }
+        }
+      }
       kin.setWorld(idx[i], t.q.copy(inv).multiply(this.q[i]));
       pos.add(t.b.copy(this.seg[i]).applyQuaternion(this.q[i]));
     }
   }
+
+  private readonly tc = { e: new THREE.Vector3(), ab: new THREE.Vector3(), ap: new THREE.Vector3(), cp: new THREE.Vector3(), off: new THREE.Vector3() };
 
   reset() {
     this.ready = false;

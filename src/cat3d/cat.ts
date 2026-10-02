@@ -34,6 +34,8 @@ const CAPS: Cap[] = [
   ['hockL', [0, 0, 0], 'footL', [0, -0.002, 0.022], 0.013], ['hockR', [0, 0, 0], 'footR', [0, -0.002, 0.022], 0.013],
   ['tail0', [0, 0, 0], 'tail4', [0, 0, 0], 0.016], ['tail4', [0, 0, 0], 'tail9', [0, 0, 0], 0.012],
 ];
+/** the capsules before the tail's own two */
+const TRUNK_CAPS = CAPS.length - 2;
 
 /**
  * The whole 3D cat: furred skinned body, eyes, whiskers, and the motor/body/tail/stepper chain
@@ -62,6 +64,7 @@ export class Cat3D {
   private readonly inv = new THREE.Matrix4();
   private readonly tmp = { a: v(), b: v(), q: new THREE.Quaternion() };
   private breathT = 0;
+  private readonly corrPoses: string[];
 
   static async load(url: string, opts: CatOptions = {}) {
     return new Cat3D(await loadCatAsset(url), opts);
@@ -78,7 +81,8 @@ export class Cat3D {
 
     const shells = opts.shells ?? 24;
     const LMa = asset.landmarks;
-    const { mats, shared } = makeFurMaterials({ shells, density: opts.density ?? 2400 }, { ...LMa, head: LMa.head });
+    const { mats, shared } = makeFurMaterials({ shells, density: opts.density ?? 2400 }, { ...LMa, head: LMa.head }, asset.correctives);
+    this.corrPoses = asset.correctives?.poses ?? [];
     this.shared = shared;
     for (const [name, geo] of Object.entries(asset.meshes)) {
       const n = name === 'body' ? shells : Math.max(4, Math.round(shells / 2));
@@ -174,9 +178,11 @@ export class Cat3D {
     body.legsTo(p, this.targ, this.flex, this.ground);
     body.face(p, motor.twitch);
     for (let i = 0; i < this.tail.n; i++) this.tail.wave[i] = motor.tailWaveAt(i, this.tail.n);
-    this.tail.update(dt, p, tmp.q.setFromEuler(group.rotation), group.position, 0);
-    kin.apply(this.bones);
+    // body capsules first: the tail lies against them
     this.updateCaps();
+    this.tail.update(dt, p, tmp.q.setFromEuler(group.rotation), group.position, 0, this.shared.uCaps.value, TRUNK_CAPS);
+    this.updateCaps();
+    kin.apply(this.bones);
 
     // face
     const open = p.eyeOpen * (1 - motor.blink);
@@ -186,6 +192,13 @@ export class Cat3D {
     }
     this.aimEyes();
     this.whiskers.setSpread(p.whisker);
+    // how much of each sculpted posture the body is in
+    const cw = this.shared.uCorrW.value;
+    cw.fill(0);
+    for (const [name, wgt] of motor.postureWeights()) {
+      const k = this.corrPoses.indexOf(name);
+      if (k >= 0) cw[k] += wgt;
+    }
     this.breathT += dt * (0.55 + 0.25 * (1 - p.breath));
     this.shared.uBreath.value = 0.0022 * p.breath * Math.sin(this.breathT * Math.PI * 2);
     this.shared.uPuff.value = p.puff;

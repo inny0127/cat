@@ -52,9 +52,9 @@ vec3 env(vec3 r) {
   if (dk > 0.0) {
     vec2 q = vec2(dot(r, u), dot(r, w)) / dk;
     // a soft box with rounded corners
-    vec2 bq = max(abs(q) - vec2(0.3, 0.2), 0.0);
-    float box = smoothstep(0.12, 0.0, length(bq)) * smoothstep(0.5, 0.3, abs(q.x)) * smoothstep(0.38, 0.22, abs(q.y));
-    c += uKeyCol * 14.0 * box;
+    vec2 bq = max(abs(q) - vec2(0.16, 0.11), 0.0);
+    float box = smoothstep(0.07, 0.0, length(bq));
+    c += uKeyCol * 9.0 * box;
   }
   c += uFillCol * 6.0 * smoothstep(0.95, 0.98, dot(r, normalize(uFillDir)));
   return c;
@@ -87,14 +87,14 @@ void main() {
   // pupil: a slit in bright light, opening to a disc
   vec2 pr = vec2(0.045 + 0.55 * uPupil, 0.74 - 0.12 * uPupil);
   float pd = length(ip / pr);
-  col = mix(col, vec3(0.004), smoothstep(1.12, 0.9, pd));
+  col = mix(col, vec3(0.012, 0.01, 0.008), smoothstep(1.1, 0.92, pd));
 
   vec3 N = normalize(vN), V = normalize(vView);
   // light inside the eye: soft, from the room, shaded by the lids
   vec3 dl = uGaze * d;
   float xo = dl.x * uSide;
-  float up = uUpper - 0.9 * dl.x * dl.x + 0.12 * xo;
-  float lo = uLower + 0.95 * dl.x * dl.x + 0.16 * xo;
+  float up = uUpper - 0.8 * dl.x * dl.x + 0.04 * xo;
+  float lo = uLower + 0.7 * dl.x * dl.x + 0.08 * xo;
   float shade = mix(0.12, 1.0, smoothstep(0.0, 0.35, up - dl.y)) * mix(0.5, 1.0, smoothstep(0.0, 0.14, dl.y - lo));
   vec3 lightIn = uKeyCol * (0.35 + 0.65 * max(dot(N, uKeyDir), 0.0)) * 0.55 + uSkyCol * 0.6;
   col *= lightIn * shade;
@@ -129,9 +129,9 @@ export function makeEye(radius: number, side: 1 | -1, lights: EyeLights): CatEye
   const eyeMat = new THREE.ShaderMaterial({
     uniforms: {
       uPupil: { value: 0.15 },
-      uIrisA: { value: srgb(0.78, 0.72, 0.34) },
-      uIrisB: { value: srgb(0.82, 0.58, 0.22) },
-      uIrisC: { value: srgb(0.56, 0.36, 0.13) },
+      uIrisA: { value: srgb(0.66, 0.58, 0.28) },
+      uIrisB: { value: srgb(0.56, 0.5, 0.24) },
+      uIrisC: { value: srgb(0.42, 0.36, 0.16) },
       ...lights,
       uRadius: { value: radius },
       uGaze: { value: new THREE.Matrix3() },
@@ -153,7 +153,7 @@ export function makeEye(radius: number, side: 1 | -1, lights: EyeLights): CatEye
 export function setLids(e: CatEye, lids: THREE.Vector4, open: number, squint = 0) {
   const o = Math.max(0, Math.min(1, open));
   // the lower lid rises a little as the eye shuts; the upper one comes down to meet it
-  const lower = -0.52 + 0.35 * Math.max(0, Math.min(1, squint)) + 0.18 * (1 - o);
+  const lower = -0.56 + 0.35 * Math.max(0, Math.min(1, squint)) + 0.2 * (1 - o);
   const upper = lower - 0.04 + (0.66 - lower + 0.04) * o;
   e.eyeMat.uniforms.uLower.value = lower;
   e.eyeMat.uniforms.uUpper.value = upper;

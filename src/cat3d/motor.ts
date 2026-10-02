@@ -130,7 +130,7 @@ export class Motor {
 
   /** jump straight into a posture (tests, restoring a saved state) */
   snap(name: PoseName) {
-    this.posture = this.target = name;
+    this.posture = this.target = this.fromName = name;
     this.path = [];
     copyPose(this.base, POSES[name]);
     copyPose(this.from, POSES[name]);
@@ -142,9 +142,19 @@ export class Motor {
     return this.posture;
   }
 
+  /** postures the body is between right now, with weights summing to 1 */
+  postureWeights(): [PoseName, number][] {
+    if (this.tt >= 1) return [[this.posture, 1]];
+    const k = this.prog.hips ?? 0;
+    return [[this.fromName, 1 - k], [this.posture, k]];
+  }
+  private fromName: PoseName = 'stand';
+
   private advance() {
     const next = this.path.shift();
     if (!next) return;
+    // a transition interrupted part-way starts from wherever the body is; call that the old posture
+    this.fromName = this.tt < 1 && this.prog.hips < 0.5 ? this.fromName : this.posture;
     copyPose(this.from, this.base);
     copyPose(this.to, POSES[next]);
     this.tdur = edgeTime(this.posture, next) * (0.9 + Math.random() * 0.2);
