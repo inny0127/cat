@@ -46,9 +46,9 @@ for i in range(TAIL_N):
 
 def pos(name): return BONES[name][1]
 
-EYE_R = 0.0092 * HS
+EYE_R = 0.0068 * HS
 EYE_EULER = (-0.12, 0.22, 0.08)          # three.js XYZ order, left eye; the right one is mirrored
-def eye_centre(x): return HC + P(x * 0.0146, 0.005, 0.0275) * HS
+def eye_centre(x): return HC + P(x * 0.0146, 0.005, 0.0299) * HS
 def euler_xyz(a, b, c):
     ca, sa, cb, sb, cc, sc = np.cos(a), np.sin(a), np.cos(b), np.sin(b), np.cos(c), np.sin(c)
     rx = np.array([[1, 0, 0], [0, ca, -sa], [0, sa, ca]])
@@ -86,19 +86,20 @@ for x in (1, -1):
     ell('head', H(x * 0.0155, 0.0162, 0.025), (0.0122, 0.0054, 0.0086), k=0.006)  # brow ridge
     ell('head', H(x * 0.0172, -0.0068, 0.025), (0.0116, 0.005, 0.0082), k=0.006)  # cheekbone
 for x in (1, -1):
-    ell('head', H(x * 0.016, -0.008, 0.007), (0.0155, 0.018, 0.019), k=0.014)   # cheeks
-    ell('head', H(x * 0.0082, -0.0194, 0.0398), (0.0094, 0.0078, 0.0086), k=0.006)  # whisker pads
-ell('head', H(0, -0.0162, 0.032), (0.0165, 0.0122, 0.0152), k=0.007)    # muzzle
-ell('head', H(0, -0.0045, 0.0355), (0.0072, 0.0118, 0.0125), k=0.008)  # nose bridge
-ell('head', H(0, -0.0120, 0.0440), (0.0066, 0.0050, 0.0055), k=0.003)   # nose leather
-ell('head', H(0, -0.0154, 0.0448), (0.0036, 0.0030, 0.0042), k=0.003)   # point of the nose
-ell('jaw', H(0, -0.0272, 0.0315), (0.0094, 0.006, 0.0094), k=0.006)     # chin
+    # the face is widest across the cheeks, below the eyes, and stays broad down to the mouth
+    ell('head', H(x * 0.0185, -0.008, 0.006), (0.0165, 0.020, 0.0195), k=0.014)   # cheeks
+    ell('head', H(x * 0.0080, -0.0194, 0.0386), (0.0090, 0.0076, 0.0084), k=0.006)  # whisker pads
+ell('head', H(0, -0.0162, 0.032), (0.0150, 0.0118, 0.0150), k=0.007)    # muzzle
+ell('head', H(0, -0.0050, 0.0355), (0.0082, 0.0120, 0.0125), k=0.008)  # nose bridge
+ell('head', H(0, -0.0132, 0.0437), (0.0058, 0.0042, 0.0052), k=0.003)   # nose leather
+ell('head', H(0, -0.0158, 0.0442), (0.0032, 0.0026, 0.0038), k=0.003)   # point of the nose
+ell('jaw', H(0, -0.0270, 0.0300), (0.0085, 0.0058, 0.0090), k=0.006)     # chin
 # eyes: a socket round each eyeball, filled by the lids (a skin sphere just outside the ball;
 # the shader cuts the opening). The ball itself is a separate mesh.
 for x in (1, -1):
     c = tuple(eye_centre(x))
-    sub('head', c, (0.0108 * HS,) * 3, k=0.003)
-    PRIMS.append(dict(t='ell', b='head', c=P(*c), r=P(0.0096, 0.0096, 0.0096) * HS, k=0.004, rot=None))
+    sub('head', c, (0.0080 * HS,) * 3, k=0.003)
+    PRIMS.append(dict(t='ell', b='head', c=P(*c), r=P(0.0071, 0.0071, 0.0071) * HS, k=0.004, rot=None))
 # legs, with round paws and four toes each
 TOES = [(-0.0112, -0.004), (-0.0038, 0.0), (0.0038, 0.0), (0.0112, -0.004)]
 for s, x in (('L', 1), ('R', -1)):
@@ -237,10 +238,11 @@ def export_bin(out, meshes, names, corr=None, strands=None):
         corr_desc = dict(poses=CORRECT, count=int(arr.shape[2]), data=add(arr))
     strand_desc = None
     if strands is not None:
-        spos, snrm, sj, sw, sidx, sseed = strands
+        spos, snrm, sj, sw, sidx, sseed, sreg, saux = strands
         strand_desc = dict(count=int(len(spos)), pos=add(spos.astype(np.float32)), nrm=add(snrm.astype(np.float32)),
                            jnt=add(sj.astype(np.uint16)), wgt=add(sw.astype(np.float32)),
-                           vid=add(sidx.astype(np.float32)), seed=add(sseed.astype(np.float32)))
+                           vid=add(sidx.astype(np.float32)), seed=add(sseed.astype(np.float32)),
+                           reg=add(sreg.astype(np.float32)), aux=add(saux.astype(np.float32)))
     head = json.dumps(dict(landmarks=marks, bones=[{'name': nm, 'parent': BONES[nm][0], 'pos': BONES[nm][1].round(5).tolist()} for nm in names],
                            meshes=desc, correctives=corr_desc, strands=strand_desc)).encode()
     head += b' ' * ((-len(head)) % 4)
@@ -258,7 +260,7 @@ def ear_mesh(side, names):
     for the coat shader."""
     x = 1 if side == 'L' else -1
     base = pos('ear' + side)
-    H_, W_ = 0.036 * HS, 0.037 * HS
+    H_, W_ = 0.034 * HS, 0.031 * HS
     nu, nv = 24, 18
     # ear frame: up, outward tilt, facing forward and a bit out
     tilt, turn = np.radians(30), np.radians(24)
@@ -320,6 +322,11 @@ def ear_mesh(side, names):
     import trimesh
     m = trimesh.Trimesh(verts, faces, process=False)
     normals = np.asarray(m.vertex_normals)
+    # the inner sheet must face out of the cup (the left and right ears mirror the winding)
+    if np.mean(normals[:(nu + 1) * row] @ fwd) < 0:
+        faces = faces[:, ::-1].copy()
+        m = trimesh.Trimesh(verts, faces, process=False)
+        normals = np.asarray(m.vertex_normals)
     names_idx = {n: i for i, n in enumerate(names)}
     j = np.zeros((len(verts), 4), np.uint16); w = np.zeros((len(verts), 4), np.float32)
     hgt = ((verts - base) @ up) / H_
@@ -465,6 +472,36 @@ def strand_roots(verts, faces, normals, count, seed=11):
     near = f[np.arange(count), np.argmax(bc, 1)]
     return pos, nrm, near, rng.random(count)
 
+def ear_strand_roots(ear, count, seed=5, rim=False):
+    """The furnishings inside the ear: long pale hairs rooted on the inner sheet, thickest along the
+    edge nearer the midline and low in the cup, sweeping out across the opening. With rim=True,
+    the short ginger hairs on the back of the ear instead, crowded toward its edges so the ear's
+    outline is furred rather than cut."""
+    name, verts, faces, normals, j, w, reg, aux = ear
+    rng = np.random.default_rng(seed)
+    tri = verts[faces]
+    area = 0.5 * np.linalg.norm(np.cross(tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0]), axis=1)
+    fa = aux[faces].mean(1)
+    if rim:
+        back = (aux[faces][:, :, 2] > 0.5).all(1)
+        bias = 0.15 + np.clip((np.abs(fa[:, 1]) - 0.55) / 0.35, 0, 1) + 0.5 * np.clip((fa[:, 0] - 0.75) / 0.2, 0, 1)
+        pw = area * bias * back
+    else:
+        inner = (reg[faces] < 1.5).all(1) & (aux[faces][:, :, 2] < 0.5).all(1)
+        bias = (1 - fa[:, 0]) ** 0.7 * (0.5 + 1.5 * np.clip(0.4 - fa[:, 1], 0, 1.4))
+        pw = area * bias * inner
+    pick = rng.choice(len(faces), size=count, p=pw / pw.sum())
+    r1, r2 = rng.random(count), rng.random(count)
+    s1 = np.sqrt(r1)
+    bc = np.stack([1 - s1, s1 * (1 - r2), s1 * r2], 1)
+    f = faces[pick]
+    pos = np.einsum('nk,nkd->nd', bc, verts[f])
+    nrm = np.einsum('nk,nkd->nd', bc, normals[f])
+    nrm /= np.linalg.norm(nrm, axis=1, keepdims=True)
+    ax = np.einsum('nk,nkd->nd', bc, aux[f])
+    near = f[np.arange(count), np.argmax(bc, 1)]
+    return pos, nrm, j[near], w[near], np.full(count, -1.0), rng.random(count), np.full(count, 2.0 if rim else 1.0), ax
+
 # ------------------------------------------------------------------ eyelids
 def lid_mesh(side, names):
     """A sphere of skin just outside the eyeball; the shader cuts the opening and furs the rest.
@@ -497,6 +534,74 @@ def lid_mesh(side, names):
     return ('lid' + side, verts, faces, normals, j, w, np.full(len(verts), 3.0), dirs)
 
 
+def detail_weight(v):
+    """per-vertex weight for the collapse error: the lids most, then the rest of the face"""
+    w = np.ones(len(v))
+    for x in (1, -1):
+        d = np.linalg.norm(v - eye_centre(x), axis=1) / EYE_R
+        w += 80 * np.clip((2.4 - d) / 0.8, 0, 1)
+    h = (v - HC) / HS
+    front = np.clip((0.062 - np.linalg.norm(h * (1, 1, 0.9), axis=1)) / 0.02, 0, 1) * np.clip((h[:, 2] - 0.0) / 0.02, 0, 1)
+    return w + 12 * front
+
+def refine_lids(ms, edge=0.0007):
+    """The lids carry the eye opening's edge, so they need far finer triangles than the body: split
+    them round each eye and lay every vertex there exactly on the sculpt."""
+    import pymeshlab
+    for x in (1, -1):
+        c = eye_centre(x)
+        r = 1.9 * EYE_R
+        ms.compute_selection_by_condition_per_vertex(
+            condselect=f'((x-({c[0]}))^2+(y-({c[1]}))^2+(z-({c[2]}))^2) < {r * r}')
+        ms.compute_selection_transfer_vertex_to_face(inclusive=False)
+        ms.meshing_surface_subdivision_midpoint(iterations=4, threshold=pymeshlab.PureValue(edge), selected=True)
+        ms.set_selection_none()
+    cur = ms.current_mesh()
+    v = cur.vertex_matrix().copy()
+    near = np.zeros(len(v), bool)
+    for x in (1, -1):
+        near |= np.linalg.norm(v - eye_centre(x), axis=1) < 2.1 * EYE_R
+    q = v[near]
+    for _ in range(6):
+        d = sdf(q)
+        g = np.zeros_like(q)
+        for i in range(3):
+            e = np.zeros(3); e[i] = 1e-5
+            g[:, i] = (sdf(q + e) - sdf(q - e)) / 2e-5
+        q = q - (d / np.maximum((g * g).sum(1), 1e-12))[:, None] * g
+    v[near] = q
+    v = hug_lids(v)
+    ms.add_mesh(__import__('pymeshlab').Mesh(v, cur.face_matrix()))
+    print('lids refined:', int(near.sum()), 'vertices on the sculpt round the eyes')
+
+# the eye opening, as the shaders cut it (eye.ts LID_GLSL): directions from the eyeball centre in
+# the eye's frame; ul = heights of the upper and lower lid at the middle
+LID_XC = 0.75
+def lid_edge(dl, side, ul=(0.72, -0.54)):
+    u = dl[:, 0] * side / LID_XC
+    cy = -0.02 + 0.08 * u
+    e = np.maximum(0, 1 - u * u)
+    inner = np.maximum(-u, 0)
+    up = cy + (ul[0] + 0.03) * e ** (0.45 + 0.35 * inner) * (1 + 0.06 * u)
+    lo = cy + (ul[1] + 0.03) * e ** (0.5 + 0.45 * inner)
+    return np.maximum(np.maximum(dl[:, 1] - up, lo - dl[:, 1]), np.abs(dl[:, 0]) - LID_XC)
+
+def hug_lids(v):
+    """Lay the skin round the opening on the eyeball (just outside it), so wherever the lids part
+    the eye shows right up to their edge, and ease it back into the face beyond."""
+    v = v.copy()
+    for x in (1, -1):
+        c = eye_centre(x)
+        o = v - c
+        r = np.maximum(np.linalg.norm(o, axis=1), 1e-9)
+        dl = (o / r[:, None]) @ eye_rot(x)
+        w = np.clip((0.4 - lid_edge(dl, x)) / 0.3, 0, 1)
+        w = w * w * (3 - 2 * w)
+        w *= np.clip((dl[:, 2] - 0.1) / 0.3, 0, 1) * np.clip((1.9 * EYE_R - r) / (0.4 * EYE_R), 0, 1)
+        v += (o / r[:, None]) * ((1.045 * EYE_R - r) * w)[:, None]
+    return v
+
+
 def main():
     import trimesh
     import pymeshlab
@@ -507,10 +612,15 @@ def main():
     ms.add_mesh(pymeshlab.Mesh(v, f[:, ::-1].copy()))   # skimage winds inward for our sign
     ms.meshing_remove_duplicate_vertices()
     ms.apply_coord_taubin_smoothing(lambda_=0.5, mu=-0.53, stepsmoothnum=12)
-    # quadric collapse keeps detail where the surface bends (face, paws) and never opens holes
+    # quadric collapse keeps detail where the surface bends (face, paws) and never opens holes; the
+    # face is weighted so it keeps its detail most of all
+    cur = ms.current_mesh()
+    ms.add_mesh(pymeshlab.Mesh(cur.vertex_matrix(), cur.face_matrix(), v_scalar_array=detail_weight(cur.vertex_matrix())))
     ms.meshing_decimation_quadric_edge_collapse(targetfacenum=target, qualitythr=0.6, preservetopology=True,
-                                                 optimalplacement=True, planarquadric=True, preservenormal=True)
+                                                 optimalplacement=True, planarquadric=True, preservenormal=True,
+                                                 qualityweight=True)
     ms.meshing_remove_unreferenced_vertices()
+    refine_lids(ms)
     mm = ms.current_mesh()
     m = trimesh.Trimesh(mm.vertex_matrix(), mm.face_matrix(), process=True)
     parts = m.split(only_watertight=False)
@@ -531,7 +641,12 @@ def main():
         corr = correctives(np.asarray(m.vertices), vn, j, w, names, os.environ['CAT_POSES'])
     nstr = int(os.environ.get('CAT_STRANDS', '60000'))
     spos, snrm, snear, sseed = strand_roots(np.asarray(m.vertices), np.asarray(m.faces), vn, nstr)
-    strands = (spos, snrm, j[snear], w[snear], snear, sseed)
+    # ear furnishings come first, so a reduced strand count thins the body's hairs, not the ears'
+    ne = int(os.environ.get('CAT_EAR_STRANDS', '1400'))
+    ears = [ear_strand_roots(e, ne, seed=5 + k) for k, e in enumerate(meshes[1:3])]
+    ears += [ear_strand_roots(e, ne // 2, seed=9 + k, rim=True) for k, e in enumerate(meshes[1:3])]
+    body_s = (spos, snrm, j[snear], w[snear], snear.astype(float), sseed, np.zeros(nstr), np.zeros((nstr, 3)))
+    strands = tuple(np.concatenate([e[i] for e in ears] + [body_s[i]]) for i in range(8))
     export_bin(out + '.cat', meshes, names, corr, strands)
     # static preview with ears
     allm = [trimesh.Trimesh(mm[1], mm[2], process=False) for mm in meshes]

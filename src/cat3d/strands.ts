@@ -22,6 +22,8 @@ attribute vec3 rootPos;
 attribute vec3 rootNrm;
 attribute float rootVid;
 attribute float rootSeed;
+attribute float rootReg;
+attribute vec3 rootAux;
 uniform highp sampler2D uCorr;
 uniform float uCorrW[NCORR];
 uniform vec3 uGravity;
@@ -48,22 +50,24 @@ void main() {
   ivec2 tc = ivec2(vid % CORRW, vid / CORRW);
   for (int k = 0; k < NCORR; k++) {
     float wk = uCorrW[k];
-    if (wk > 0.002) {
+    if (wk > 0.002 && rootVid >= 0.0) {
       corrP += wk * texelFetch(uCorr, tc + ivec2(0, 2 * k * CORRROWS), 0).xyz;
       corrN += wk * texelFetch(uCorr, tc + ivec2(0, (2 * k + 1) * CORRROWS), 0).xyz;
     }
   }
   #endif
   float r1 = fract(rootSeed * 7.31), r2 = fract(rootSeed * 13.7), r3 = fract(rootSeed * 31.3);
-  float puff = uPuff * (1.0 - isFace(p0));
-  float L = furLength(p0, 0.0, vec3(0.0)) * GUARD * uStrandLen * (0.7 + 0.6 * r1) * (1.0 + puff * (0.7 + 1.1 * isTail(p0)));
+  // ear furnishings (rootReg 1) grow from the inner skin of the ear, across its opening
+  bool ear = rootReg > 0.5;
+  float puff = ear ? 0.0 : uPuff * (1.0 - isFace(p0));
+  float L = furLength(p0, rootReg, rootAux) * (ear ? (rootReg < 1.5 ? 1.45 : 1.6) : GUARD) * uStrandLen * (0.7 + 0.6 * r1) * (1.0 + puff * (0.7 + 1.1 * isTail(p0)));
   vec3 n = normalize(rootNrm + corrN);
-  vec3 comb = combDir(p0, 0.0);
+  vec3 comb = combDir(p0, rootReg);
   comb = normalize(comb - n * dot(comb, n));
   // each guard hair leans its own way a little, and stands a little prouder than the coat
   vec3 jb = normalize(cross(n, comb));
   comb = normalize(comb + jb * (r2 - 0.5) * 0.7);
-  float lay = lie(p0) * (0.6 + 0.4 * r3) * (1.0 - puff * 0.75);
+  float lay = ear ? (rootReg < 1.5 ? 0.3 + 0.35 * r3 : 0.45 + 0.3 * r3) : lie(p0) * (0.6 + 0.4 * r3) * (1.0 - puff * 0.75);
   float s = strandU;
   vec3 rise = n * (1.0 - 0.6 * lay);
   vec3 pos = p0 + corrP + (rise * s + comb * (lay * 0.9 * s + 0.7 * s * s)) * L;
@@ -88,7 +92,7 @@ void main() {
   vAlpha = (w / ww) * step(0.0004, L);
   wp += side * strandSide * ww * 0.5;
 
-  vec3 col = coat(p0, 0.0);
+  vec3 col = (ear && rootReg < 1.5 ? lin(vec3(0.97, 0.91, 0.8)) : coat(p0, rootReg)) * (ear ? 0.7 + 0.45 * r2 : 1.0);
   vCol = mix(col, min(col * vec3(1.32, 1.36, 1.3), vec3(1.0)), smoothstep(0.35, 1.0, s) * 0.55) * (0.82 + 0.36 * r2);
   vT = wt;
   vN = wn;
@@ -157,6 +161,8 @@ export function makeStrands(roots: StrandRoots, shared: Record<string, { value: 
   base.setAttribute('skinWeight', new THREE.InstancedBufferAttribute(roots.wgt, 4));
   base.setAttribute('rootVid', new THREE.InstancedBufferAttribute(roots.vid, 1));
   base.setAttribute('rootSeed', new THREE.InstancedBufferAttribute(roots.seed, 1));
+  base.setAttribute('rootReg', new THREE.InstancedBufferAttribute(roots.reg, 1));
+  base.setAttribute('rootAux', new THREE.InstancedBufferAttribute(roots.aux, 3));
   base.instanceCount = roots.count;
   base.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0.15, 0), 0.6);
 

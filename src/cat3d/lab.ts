@@ -45,7 +45,8 @@ async function main() {
 
   const pose = q.get('pose') as PoseName | null;
   if (pose) cat.snap(pose);
-  if (q.has('look')) cat.motor.lookAt(cam.position, 1);
+  // ?look: the cat looks into the lens, wherever the posture has carried its head (and the camera)
+  const lookCam = q.has('look');
 
   // lights are set relative to the camera like a photographer's: key up and to one side, fill opposite
   const keyAz = +(q.get('keyAz') ?? -0.85), keyEl = +(q.get('keyEl') ?? 0.65);
@@ -63,7 +64,10 @@ async function main() {
   };
   /** advance the simulation by `sec` in fixed steps (deterministic for screenshots) */
   const step = (sec: number, dt = 1 / 60) => {
-    for (let t = 0; t < sec - 1e-9; t += dt) cat.update(dt);
+    for (let t = 0; t < sec - 1e-9; t += dt) {
+      if (lookCam) { placeCam(); cat.motor.lookAt(cam.position, 1); }
+      cat.update(dt);
+    }
   };
   step(+(q.get('t') || 0.05));
 
@@ -78,6 +82,7 @@ async function main() {
   let last = performance.now();
   const loop = () => {
     const now = performance.now();
+    if (lookCam) cat.motor.lookAt(cam.position, 1);
     cat.update(Math.min(0.05, (now - last) / 1000));
     last = now;
     draw();

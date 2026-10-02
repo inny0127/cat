@@ -12,11 +12,16 @@ import * as THREE from 'three';
  * the eyeball (for lid shadows) and the coat shader (which cuts the opening in the lids).
  */
 export const LID_GLSL = /* glsl */ `
-const float LID_XC = 0.7;
+const float LID_XC = 0.75;
 vec2 lidCurves(float x, float xo, vec2 ul) {
-  float cy = -0.05 + 0.06 * xo / LID_XC;
-  float f = pow(max(0.0, 1.0 - x * x / (LID_XC * LID_XC)), 0.5);
-  return vec2(cy + (ul.x + 0.03) * f, cy + (ul.y + 0.03) * f);
+  // a round eye whose inner corner draws out to a point, down toward the nose
+  float u = xo / LID_XC;
+  float cy = -0.02 + 0.08 * u;
+  float e = max(0.0, 1.0 - u * u);
+  float inner = max(-u, 0.0);
+  float fu = pow(e, 0.45 + 0.35 * inner) * (1.0 + 0.06 * u);
+  float fl = pow(e, 0.5 + 0.45 * inner);
+  return vec2(cy + (ul.x + 0.03) * fu, cy + (ul.y + 0.03) * fl);
 }
 `;
 
@@ -99,8 +104,8 @@ vec3 irisAt(vec2 ip) {
   c = mix(c, uFleck * 0.9, coll * 0.2 * smoothstep(0.35, 0.7, fbm2(dir * 9.0 + 3.0)));
   c *= 0.88 + 0.24 * fbm2(ip * 120.0 + 11.0);
   // the iris sinks toward its rim, darkening into the limbal ring
-  c *= mix(1.0, 0.55, smoothstep(0.7, 0.95, rr));
-  c = mix(c, vec3(0.03, 0.012, 0.004), smoothstep(0.9, 1.0, rr));
+  c *= mix(1.0, 0.6, smoothstep(0.8, 0.97, rr));
+  c = mix(c, vec3(0.05, 0.03, 0.01), smoothstep(0.94, 1.02, rr));
   return mix(c, vec3(0.045, 0.03, 0.02), smoothstep(1.0, 1.05, rr));
 }
 
@@ -127,9 +132,10 @@ void main() {
   vec3 dl = uGaze * d;
   float xo = dl.x * uSide;
   vec2 lc = lidCurves(dl.x, xo, vec2(uUpper, uLower));
-  float shade = mix(0.12, 1.0, smoothstep(0.0, 0.62, lc.x - dl.y)) * mix(0.5, 1.0, smoothstep(0.0, 0.16, dl.y - lc.y));
+  float shade = mix(0.35, 1.0, smoothstep(0.0, 0.45, lc.x - dl.y)) * mix(0.5, 1.0, smoothstep(0.0, 0.16, dl.y - lc.y));
   col = mix(col, vec3(0.05, 0.025, 0.02), smoothstep(-0.48, -0.7, xo));
-  vec3 lightIn = uKeyCol * (0.3 + 0.7 * max(dot(N, uKeyDir), 0.0)) * 0.42 + uSkyCol * 0.9;
+  // the iris sits in the shade of the lids and brow, behind the cornea
+  vec3 lightIn = uKeyCol * (0.3 + 0.7 * max(dot(N, uKeyDir), 0.0)) * 0.26 + uSkyCol * 0.6;
   col *= lightIn * shade;
   // the wet cornea mirrors the room
   vec3 R = reflect(-V, N);
@@ -165,10 +171,10 @@ export function makeEye(radius: number, side: 1 | -1, lights: EyeLights): CatEye
       // amber, sampled from a photograph of a ginger tabby's eye
       // golden amber, between the photographs' copper and hazel
       // olive gold, as in the photographs of ginger tabbies in daylight
-      uIrisA: { value: srgb(0.64, 0.6, 0.3) },
-      uIrisB: { value: srgb(0.56, 0.5, 0.22) },
-      uIrisC: { value: srgb(0.38, 0.33, 0.13) },
-      uFleck: { value: srgb(0.82, 0.76, 0.42) },
+      uIrisA: { value: srgb(0.7, 0.7, 0.46) },
+      uIrisB: { value: srgb(0.62, 0.62, 0.38) },
+      uIrisC: { value: srgb(0.44, 0.43, 0.24) },
+      uFleck: { value: srgb(0.8, 0.78, 0.55) },
       ...lights,
       uRadius: { value: radius },
       uGaze: { value: new THREE.Matrix3() },
@@ -190,8 +196,8 @@ export function makeEye(radius: number, side: 1 | -1, lights: EyeLights): CatEye
 export function setLids(e: CatEye, lids: THREE.Vector4, open: number, squint = 0) {
   const o = Math.max(0, Math.min(1, open));
   // the lower lid rises a little as the eye shuts; the upper one comes down to meet it
-  const lower = -0.5 + 0.35 * Math.max(0, Math.min(1, squint)) + 0.2 * (1 - o);
-  const upper = lower - 0.04 + (0.64 - lower + 0.04) * o;
+  const lower = -0.54 + 0.35 * Math.max(0, Math.min(1, squint)) + 0.2 * (1 - o);
+  const upper = lower - 0.04 + (0.72 - lower + 0.04) * o;
   e.eyeMat.uniforms.uLower.value = lower;
   e.eyeMat.uniforms.uUpper.value = upper;
   if (e.side > 0) { lids.x = upper; lids.y = lower; } else { lids.z = upper; lids.w = lower; }

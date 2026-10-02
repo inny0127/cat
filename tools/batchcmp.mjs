@@ -11,6 +11,7 @@ for (const job of jobs) {
   const [w, h] = execFileSync('python3', ['-c', `from PIL import Image; im=Image.open('${ref}'); print(im.size[0], im.size[1])`]).toString().trim().split(' ').map(Number);
   const page = await b.newPage({ viewport: { width: w, height: h } });
   page.on('pageerror', (e) => console.log('ERR', e.message));
+  page.on('console', (m) => { if (m.type() === 'error' || /shader|ERROR/.test(m.text())) console.log('CONSOLE', m.text().slice(0, 600)); });
   await page.goto('http://localhost:5173/lab.html?still&' + query);
   await page.waitForFunction(() => window.ready, null, { timeout: 180000 });
   if (setup) await page.evaluate(setup);

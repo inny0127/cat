@@ -44,6 +44,9 @@ export interface StrandRoots {
   /** nearest body vertex, for the posture correctives */
   vid: Float32Array;
   seed: Float32Array;
+  /** 0 body, 1 inside the ear; and the ear's own coordinates (see ear_mesh) */
+  reg: Float32Array;
+  aux: Float32Array;
 }
 
 export interface CatAsset {
@@ -107,6 +110,8 @@ export async function loadCatAsset(url: string): Promise<CatAsset> {
       wgt: new Float32Array(buf, base + t.wgt, n * 4),
       vid: new Float32Array(buf, base + t.vid, n),
       seed: new Float32Array(buf, base + t.seed, n),
+      reg: t.reg !== undefined ? new Float32Array(buf, base + t.reg, n) : new Float32Array(n),
+      aux: t.aux !== undefined ? new Float32Array(buf, base + t.aux, n * 3) : new Float32Array(n * 3),
     };
   }
   return { landmarks: head.landmarks, bones: head.bones, meshes, correctives, strands };
