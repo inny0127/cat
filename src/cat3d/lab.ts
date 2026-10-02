@@ -10,7 +10,7 @@ async function main() {
   const { renderer, scene, camera: cam } = stage;
   document.body.appendChild(renderer.domElement);
 
-  const cat = await Cat3D.load('./cat3d/cat.bin', { shells: +(q.get('shells') || 32), density: +(q.get('density') || 2600) });
+  const cat = await Cat3D.load('./cat3d/cat.bin', { shells: +(q.get('shells') || 32), density: +(q.get('density') || 2600), strands: q.get('strands') ? +q.get('strands')! : undefined });
   stage.add(cat);
 
   let skel: THREE.SkeletonHelper | null = null;

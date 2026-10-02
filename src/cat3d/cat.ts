@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { loadCatAsset, buildSkeleton, type CatAsset } from './load';
 import { makeFurMaterials, NCAPS } from './fur';
+import { makeStrands } from './strands';
 import { makeEye, setLids, type CatEye } from './eye';
 import { makeWhiskers, type Whiskers } from './whiskers';
 import { Kin } from './kin';
@@ -13,6 +14,8 @@ import { LEGS, type Leg } from './pose';
 export interface CatOptions {
   shells?: number;
   density?: number;
+  /** how many guard hairs to draw (0: none; default all in the asset) */
+  strands?: number;
 }
 
 const v = () => new THREE.Vector3();
@@ -66,6 +69,7 @@ export class Cat3D {
   private readonly tmp = { a: v(), b: v(), q: new THREE.Quaternion() };
   private breathT = 0;
   private readonly corrPoses: string[];
+  strandUniforms: { uPx: { value: number }; uStrandWidth: { value: number }; uStrandLen: { value: number }; uStrandAlpha: { value: number } } | null = null;
 
   static async load(url: string, opts: CatOptions = {}) {
     return new Cat3D(await loadCatAsset(url), opts);
@@ -82,7 +86,7 @@ export class Cat3D {
 
     const shells = opts.shells ?? 24;
     const LMa = asset.landmarks;
-    const { mats, shared } = makeFurMaterials({ shells, density: opts.density ?? 2400 }, { ...LMa, head: LMa.head }, asset.correctives);
+    const { mats, shared, defines } = makeFurMaterials({ shells, density: opts.density ?? 2400 }, { ...LMa, head: LMa.head }, asset.correctives);
     this.corrPoses = asset.correctives?.poses ?? [];
     this.shared = shared;
     for (const [name, geo] of Object.entries(asset.meshes)) {
@@ -96,6 +100,17 @@ export class Cat3D {
         this.group.add(m);
         this.meshes.push(m);
       }
+    }
+    // guard hairs, one by one, over the shell coat
+    if (asset.strands && opts.strands !== 0) {
+      const st = makeStrands(asset.strands, shared as unknown as Record<string, { value: unknown }>, defines);
+      if (opts.strands) st.geometry.instanceCount = Math.min(opts.strands, asset.strands.count);
+      const m = new THREE.SkinnedMesh(st.geometry, st.material);
+      m.bind(skeleton, new THREE.Matrix4());
+      m.frustumCulled = false;
+      m.renderOrder = shells + 1;
+      this.group.add(m);
+      this.strandUniforms = st.uniforms;
     }
     // eyes in the sockets and whiskers on the pads ride on the head bone
     const head = byName.get('head')!;
@@ -136,6 +151,7 @@ export class Cat3D {
   /** the camera's pixel size, for the whiskers */
   setPixel(px: number) {
     this.whiskers.setPixel(px);
+    if (this.strandUniforms) this.strandUniforms.uPx.value = px;
   }
 
   update(dt: number) {

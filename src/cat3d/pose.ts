@@ -96,7 +96,7 @@ export const POSES = {
     LF: foot(0.028, 0.014, 0.075, 0, 0, 1), RF: foot(0.028, 0.014, 0.075, 0, 0, 1),
     LH: foot(0.044, 0.013, -0.1, 0, 0, 0), RH: foot(0.044, 0.013, -0.1, 0, 0, 0),
     pastern: 0.2, hindFlat: 1,
-    tailLift: -0.5, tailSide: -1.5, tailCurve: 0.6, tailCurl: -1.2, tailSag: 0.8,
+    tailLift: -0.5, tailSide: -1.0, tailCurve: 0.5, tailCurl: -1.8, tailSag: 0.8,
     eyeOpen: 0.92, squint: 0.05, earFwd: 0.2, breath: 0.5,
   }),
 

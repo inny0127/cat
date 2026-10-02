@@ -34,11 +34,24 @@ export interface Correctives {
   rows: number;
 }
 
+/** roots of the individually drawn guard hairs */
+export interface StrandRoots {
+  count: number;
+  pos: Float32Array;
+  nrm: Float32Array;
+  jnt: Uint16Array;
+  wgt: Float32Array;
+  /** nearest body vertex, for the posture correctives */
+  vid: Float32Array;
+  seed: Float32Array;
+}
+
 export interface CatAsset {
   landmarks: Landmarks;
   bones: BoneDef[];
   meshes: Record<string, THREE.BufferGeometry>;
   correctives: Correctives | null;
+  strands: StrandRoots | null;
 }
 
 export const CORR_WIDTH = 1024;
@@ -82,7 +95,21 @@ export async function loadCatAsset(url: string): Promise<CatAsset> {
     texture.needsUpdate = true;
     correctives = { poses: c.poses, texture, width: CORR_WIDTH, rows };
   }
-  return { landmarks: head.landmarks, bones: head.bones, meshes, correctives };
+  let strands: StrandRoots | null = null;
+  if (head.strands) {
+    const t = head.strands;
+    const n = t.count as number;
+    strands = {
+      count: n,
+      pos: new Float32Array(buf, base + t.pos, n * 3),
+      nrm: new Float32Array(buf, base + t.nrm, n * 3),
+      jnt: new Uint16Array(buf, base + t.jnt, n * 4),
+      wgt: new Float32Array(buf, base + t.wgt, n * 4),
+      vid: new Float32Array(buf, base + t.vid, n),
+      seed: new Float32Array(buf, base + t.seed, n),
+    };
+  }
+  return { landmarks: head.landmarks, bones: head.bones, meshes, correctives, strands };
 }
 
 /** Bones with identity rest rotations, positioned at their joints (world-aligned rest frame). */

@@ -205,7 +205,7 @@ def skin_weights(verts, faces=None, iters=30):
     w4 /= w4.sum(1, keepdims=True)
     return order.astype(np.uint16), w4.astype(np.float32), names
 
-def export_bin(out, meshes, names, corr=None):
+def export_bin(out, meshes, names, corr=None, strands=None):
     """Binary layout: header json (bones, mesh ranges) + float/uint arrays, read by src/cat3d/load.ts"""
     blobs, desc, off = [], [], 0
     def add(arr):
@@ -235,8 +235,14 @@ def export_bin(out, meshes, names, corr=None):
         # half floats: [pose][pos|normal][vertex][xyz]
         arr = np.stack([np.stack([dp, dn]) for dp, dn in corr]).astype(np.float16)
         corr_desc = dict(poses=CORRECT, count=int(arr.shape[2]), data=add(arr))
+    strand_desc = None
+    if strands is not None:
+        spos, snrm, sj, sw, sidx, sseed = strands
+        strand_desc = dict(count=int(len(spos)), pos=add(spos.astype(np.float32)), nrm=add(snrm.astype(np.float32)),
+                           jnt=add(sj.astype(np.uint16)), wgt=add(sw.astype(np.float32)),
+                           vid=add(sidx.astype(np.float32)), seed=add(sseed.astype(np.float32)))
     head = json.dumps(dict(landmarks=marks, bones=[{'name': nm, 'parent': BONES[nm][0], 'pos': BONES[nm][1].round(5).tolist()} for nm in names],
-                           meshes=desc, correctives=corr_desc)).encode()
+                           meshes=desc, correctives=corr_desc, strands=strand_desc)).encode()
     head += b' ' * ((-len(head)) % 4)
     with open(out, 'wb') as fh:
         fh.write(np.array([len(head)], np.uint32).tobytes())
@@ -435,6 +441,24 @@ def correctives(verts, normals, j, w, names, posed_path):
         planes.append((dp.astype(np.float32), dn.astype(np.float32)))
     return planes
 
+# ------------------------------------------------------------------ guard-hair strands
+def strand_roots(verts, faces, normals, count, seed=11):
+    """Roots for individually drawn guard hairs: area-weighted points on the body, each carrying the
+    skin of its nearest vertex (and that vertex's index, for the pose correctives)."""
+    rng = np.random.default_rng(seed)
+    tri = verts[faces]
+    area = 0.5 * np.linalg.norm(np.cross(tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0]), axis=1)
+    pick = rng.choice(len(faces), size=count, p=area / area.sum())
+    r1, r2 = rng.random(count), rng.random(count)
+    s1 = np.sqrt(r1)
+    bc = np.stack([1 - s1, s1 * (1 - r2), s1 * r2], 1)
+    f = faces[pick]
+    pos = np.einsum('nk,nkd->nd', bc, verts[f])
+    nrm = np.einsum('nk,nkd->nd', bc, normals[f])
+    nrm /= np.linalg.norm(nrm, axis=1, keepdims=True)
+    near = f[np.arange(count), np.argmax(bc, 1)]
+    return pos, nrm, near, rng.random(count)
+
 # ------------------------------------------------------------------ eyelids
 def lid_mesh(side, names):
     """A sphere of skin just outside the eyeball; the shader cuts the opening and furs the rest.
@@ -499,7 +523,10 @@ def main():
     corr = None
     if os.environ.get('CAT_POSES'):
         corr = correctives(np.asarray(m.vertices), vn, j, w, names, os.environ['CAT_POSES'])
-    export_bin(out + '.cat', meshes, names, corr)
+    nstr = int(os.environ.get('CAT_STRANDS', '60000'))
+    spos, snrm, snear, sseed = strand_roots(np.asarray(m.vertices), np.asarray(m.faces), vn, nstr)
+    strands = (spos, snrm, j[snear], w[snear], snear, sseed)
+    export_bin(out + '.cat', meshes, names, corr, strands)
     # static preview with ears
     allm = [trimesh.Trimesh(mm[1], mm[2], process=False) for mm in meshes]
     trimesh.util.concatenate(allm).export(out + '.glb')

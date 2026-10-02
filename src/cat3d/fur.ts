@@ -14,7 +14,8 @@ export const NCAPS = 20;
 /** guard hairs are this much longer than the coat's nominal length */
 const GUARD_LEN = 1.45;
 
-const COMMON = /* glsl */ `
+/** where on the body, coat colour, fur length and flow: shared by the shells and the strands */
+export const COMMON = /* glsl */ `
 float hash13(vec3 p) { p = fract(p * 0.1031); p += dot(p, p.zyx + 31.32); return fract((p.x + p.y) * p.z); }
 vec3 hash33(vec3 p) {
   p = fract(p * vec3(0.1031, 0.1030, 0.0973));
@@ -182,10 +183,10 @@ vec3 coat(vec3 p, float reg) {
   vec3 wp = p + (vec3(fbm(p * 9.0), fbm(p * 9.0 + 5.2), fbm(p * 9.0 + 9.7)) - 0.5) * 0.022;
   float phase = wp.z * 205.0 + fbm(wp * 16.0) * 4.0 + abs(wp.x) * 30.0 - (BACKY - 0.03 - wp.y) * 48.0;
   float s = sin(phase);
-  float width = 0.3 + 0.32 * fbm(p * 21.0 + 7.0);               // wider in places
+  float width = 0.12 + 0.36 * fbm(p * 21.0 + 7.0);              // wider in places
   float breakup = smoothstep(0.32, 0.58, fbm(p * 30.0 + 3.0));   // and broken into dashes
   float onSide = smoothstep(BELLYY - 0.015, BACKY - 0.075, p.y);
-  float stripe = smoothstep(width, width + 0.38, s) * onSide * body * breakup;
+  float stripe = smoothstep(width - 0.1, width + 0.62, s) * onSide * body * (0.45 + 0.55 * breakup);
   // a darker saddle of fused stripes along the spine
   float spine = smoothstep(0.016, 0.005, abs(wp.x)) * smoothstep(BACKY - 0.04, BACKY - 0.008, p.y);
   stripe = max(stripe, (spine * 0.8 + smoothstep(0.02, 0.008, abs(wp.x)) * smoothstep(BACKY - 0.05, BACKY - 0.01, p.y) * s * 0.3) * body);
@@ -254,31 +255,9 @@ vec3 coat(vec3 p, float reg) {
 }
 `;
 
-const VERT = /* glsl */ `
-#include <common>
-#include <skinning_pars_vertex>
-attribute float reg;
-attribute vec3 aux;
-uniform highp sampler2D uCorr;      // pose correctives (see load.ts)
-uniform float uCorrW[NCORR];
-uniform float uBreath;    // ribcage expansion, metres
-uniform float uPuff;      // 0..1 fur on end
-uniform float uShell;     // 0 root .. 1 tip
-uniform vec3 uGravity;    // world space, scaled
-uniform vec3 uWind;
+/** ambient occlusion from capsules round the body and from the floor (world space) */
+export const AO_GLSL = /* glsl */ `
 uniform vec4 uCaps[${2 * NCAPS}];   // capsules round the body (world): a.xyz + radius, b.xyz
-varying vec3 vRest;
-varying vec3 vRestN;
-varying vec3 vN;
-varying vec3 vT;
-varying vec3 vView;
-varying vec3 vWorld;
-varying float vH;
-varying float vReg;
-varying float vL;
-varying float vAO;
-varying vec3 vAux;
-${COMMON}
 // ambient occlusion from the body's own limbs and trunk (as capsules) and from the floor
 float capsuleAO(vec3 p, vec3 n) {
   float vis = 1.0;
@@ -297,6 +276,103 @@ float capsuleAO(vec3 p, vec3 n) {
   vis *= 1.0 - 0.4 * clamp(0.5 - 0.5 * n.y, 0.0, 1.0) * exp(-hgt / 0.03);
   return vis;
 }
+`;
+
+/** the key light's soft shadow, and hair scattering */
+export const LIGHT_GLSL = /* glsl */ `
+uniform sampler2D uShadowMap;
+uniform mat4 uShadowMatrix;
+uniform float uShadowOn;
+uniform float uShadowSoft;
+const vec2 POISSON[12] = vec2[](
+  vec2(-0.326, -0.406), vec2(-0.840, -0.074), vec2(-0.696, 0.457), vec2(-0.203, 0.621),
+  vec2(0.962, -0.195), vec2(0.473, -0.480), vec2(0.519, 0.767), vec2(0.185, -0.893),
+  vec2(0.507, 0.064), vec2(0.896, 0.412), vec2(-0.322, -0.933), vec2(-0.792, -0.598));
+
+float keyShadow(vec3 wp, vec3 n) {
+  if (uShadowOn < 0.5) return 1.0;
+  vec4 sc = uShadowMatrix * vec4(wp + n * 0.003, 1.0);
+  sc.xyz /= sc.w;
+  if (sc.x < 0.0 || sc.x > 1.0 || sc.y < 0.0 || sc.y > 1.0 || sc.z > 1.0) return 1.0;
+  float ign = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
+  float sum = 0.0;
+  for (int i = 0; i < 16; i++) {
+    float fi = float(i);
+    float r = sqrt((fi + 0.5) / 16.0) * uShadowSoft;
+    float a = fi * 2.39996 + ign * 6.2832;
+    float d = unpackRGBAToDepth(texture2D(uShadowMap, sc.xy + vec2(cos(a), sin(a)) * r));
+    sum += smoothstep(sc.z - 0.003, sc.z - 0.0005, d);
+  }
+  return sum / 16.0;
+}
+
+// Marschner hair scattering, after Karis, "Physically Based Hair Shading in Unreal" (2016)
+float hairG(float B, float th) { return exp(-0.5 * th * th / (B * B)) / (2.5066283 * B); }
+float hairF(float c) { return 0.0465 + 0.9535 * pow(1.0 - c, 5.0); }
+vec3 hairLight(vec3 T, vec3 N, vec3 V, vec3 L, vec3 base, float rough, float shadow) {
+  float VoL = dot(V, L);
+  float sinL = clamp(dot(T, L), -1.0, 1.0);
+  float sinV = clamp(dot(T, V), -1.0, 1.0);
+  float cosThetaD = cos(0.5 * abs(asin(sinV) - asin(sinL)));
+  vec3 Lp = L - sinL * T;
+  vec3 Vp = V - sinV * T;
+  float cosPhi = dot(Lp, Vp) * inversesqrt(dot(Lp, Lp) * dot(Vp, Vp) + 1e-4);
+  float cosHalfPhi = sqrt(clamp(0.5 + 0.5 * cosPhi, 0.0, 1.0));
+  float B0 = max(rough * rough, 0.02);
+  const float sh = 0.035;
+  vec3 S = vec3(0.0);
+  // R: white cuticle highlight, shifted toward the root
+  float sa = sin(-2.0 * sh), ca = cos(-2.0 * sh);
+  float shift = 2.0 * sa * (ca * cosHalfPhi * sqrt(1.0 - sinV * sinV) + sa * sinV);
+  S += uSpec * vec3(hairG(B0 * 1.4142 * cosHalfPhi, sinL + sinV - shift) * 0.25 * cosHalfPhi * hairF(sqrt(clamp(0.5 + 0.5 * VoL, 0.0, 1.0))));
+  // TT: light through the hair, glows when lit from behind
+  float np = 1.19 / cosThetaD + 0.36 * cosThetaD;
+  float a = 1.0 / np;
+  float h = cosHalfPhi * (1.0 + a * (0.6 - 0.8 * cosPhi));
+  float f = hairF(cosThetaD * sqrt(clamp(1.0 - h * h, 0.0, 1.0)));
+  vec3 Tp = pow(base, vec3(0.5 * sqrt(clamp(1.0 - h * h * a * a, 0.0, 1.0)) / cosThetaD));
+  S += hairG(B0 * 0.5, sinL + sinV - sh) * exp(-3.65 * cosPhi - 3.98) * (1.0 - f) * (1.0 - f) * Tp;
+  // TRT: coloured second highlight toward the tip
+  float f2 = hairF(cosThetaD * 0.5);
+  S += hairG(B0 * 2.0, sinL + sinV - 4.0 * sh) * exp(17.0 * cosPhi - 16.78) * (1.0 - f2) * (1.0 - f2) * f2 * pow(base, vec3(0.8 / cosThetaD));
+  // multiple scattering between hairs: soft, bright, coloured. A coat scatters like a surface, so
+  // it follows the skin's normal (the form) more than any single hair's
+  float kajiya = 1.0 - abs(sinL);
+  vec3 fakeN = normalize(V - T * sinV);
+  vec3 Nm = normalize(mix(fakeN, N, 0.8));
+  float NoL = clamp((dot(Nm, L) + 0.35) / 1.82, 0.0, 1.0);
+  float luma = dot(base, vec3(0.3, 0.59, 0.11));
+  vec3 tint = pow(base / max(luma, 1e-4), vec3(1.0 - shadow));
+  S += sqrt(base) * (0.3183 * mix(NoL, kajiya * NoL * 1.5, 0.2)) * tint;
+  return S;
+}
+`;
+
+const VERT = /* glsl */ `
+#include <common>
+#include <skinning_pars_vertex>
+attribute float reg;
+attribute vec3 aux;
+uniform highp sampler2D uCorr;      // pose correctives (see load.ts)
+uniform float uCorrW[NCORR];
+uniform float uBreath;    // ribcage expansion, metres
+uniform float uPuff;      // 0..1 fur on end
+uniform float uShell;     // 0 root .. 1 tip
+uniform vec3 uGravity;    // world space, scaled
+uniform vec3 uWind;
+varying vec3 vRest;
+varying vec3 vRestN;
+varying vec3 vN;
+varying vec3 vT;
+varying vec3 vView;
+varying vec3 vWorld;
+varying float vH;
+varying float vReg;
+varying float vL;
+varying float vAO;
+varying vec3 vAux;
+${COMMON}
+${AO_GLSL}
 void main() {
   #include <beginnormal_vertex>
   // the posture's own sculpted shape, added to the bind pose before skinning (body only)
@@ -368,10 +444,6 @@ uniform float uClump;
 uniform float uRough;
 uniform float uSpec;
 uniform float uDebug;
-uniform sampler2D uShadowMap;
-uniform mat4 uShadowMatrix;
-uniform float uShadowOn;
-uniform float uShadowSoft;
 varying vec3 vRest;
 varying vec3 vRestN;
 varying vec3 vN;
@@ -426,68 +498,7 @@ Hair hairPop(vec3 rest, vec3 comb, float density, float stretch, float rScale, f
   return o;
 }
 
-const vec2 POISSON[12] = vec2[](
-  vec2(-0.326, -0.406), vec2(-0.840, -0.074), vec2(-0.696, 0.457), vec2(-0.203, 0.621),
-  vec2(0.962, -0.195), vec2(0.473, -0.480), vec2(0.519, 0.767), vec2(0.185, -0.893),
-  vec2(0.507, 0.064), vec2(0.896, 0.412), vec2(-0.322, -0.933), vec2(-0.792, -0.598));
-
-float keyShadow(vec3 wp, vec3 n) {
-  if (uShadowOn < 0.5) return 1.0;
-  vec4 sc = uShadowMatrix * vec4(wp + n * 0.003, 1.0);
-  sc.xyz /= sc.w;
-  if (sc.x < 0.0 || sc.x > 1.0 || sc.y < 0.0 || sc.y > 1.0 || sc.z > 1.0) return 1.0;
-  float ign = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
-  float sum = 0.0;
-  for (int i = 0; i < 16; i++) {
-    float fi = float(i);
-    float r = sqrt((fi + 0.5) / 16.0) * uShadowSoft;
-    float a = fi * 2.39996 + ign * 6.2832;
-    float d = unpackRGBAToDepth(texture2D(uShadowMap, sc.xy + vec2(cos(a), sin(a)) * r));
-    sum += smoothstep(sc.z - 0.003, sc.z - 0.0005, d);
-  }
-  return sum / 16.0;
-}
-
-// Marschner hair scattering, after Karis, "Physically Based Hair Shading in Unreal" (2016)
-float hairG(float B, float th) { return exp(-0.5 * th * th / (B * B)) / (2.5066283 * B); }
-float hairF(float c) { return 0.0465 + 0.9535 * pow(1.0 - c, 5.0); }
-vec3 hairLight(vec3 T, vec3 N, vec3 V, vec3 L, vec3 base, float rough, float shadow) {
-  float VoL = dot(V, L);
-  float sinL = clamp(dot(T, L), -1.0, 1.0);
-  float sinV = clamp(dot(T, V), -1.0, 1.0);
-  float cosThetaD = cos(0.5 * abs(asin(sinV) - asin(sinL)));
-  vec3 Lp = L - sinL * T;
-  vec3 Vp = V - sinV * T;
-  float cosPhi = dot(Lp, Vp) * inversesqrt(dot(Lp, Lp) * dot(Vp, Vp) + 1e-4);
-  float cosHalfPhi = sqrt(clamp(0.5 + 0.5 * cosPhi, 0.0, 1.0));
-  float B0 = max(rough * rough, 0.02);
-  const float sh = 0.035;
-  vec3 S = vec3(0.0);
-  // R: white cuticle highlight, shifted toward the root
-  float sa = sin(-2.0 * sh), ca = cos(-2.0 * sh);
-  float shift = 2.0 * sa * (ca * cosHalfPhi * sqrt(1.0 - sinV * sinV) + sa * sinV);
-  S += uSpec * vec3(hairG(B0 * 1.4142 * cosHalfPhi, sinL + sinV - shift) * 0.25 * cosHalfPhi * hairF(sqrt(clamp(0.5 + 0.5 * VoL, 0.0, 1.0))));
-  // TT: light through the hair, glows when lit from behind
-  float np = 1.19 / cosThetaD + 0.36 * cosThetaD;
-  float a = 1.0 / np;
-  float h = cosHalfPhi * (1.0 + a * (0.6 - 0.8 * cosPhi));
-  float f = hairF(cosThetaD * sqrt(clamp(1.0 - h * h, 0.0, 1.0)));
-  vec3 Tp = pow(base, vec3(0.5 * sqrt(clamp(1.0 - h * h * a * a, 0.0, 1.0)) / cosThetaD));
-  S += hairG(B0 * 0.5, sinL + sinV - sh) * exp(-3.65 * cosPhi - 3.98) * (1.0 - f) * (1.0 - f) * Tp;
-  // TRT: coloured second highlight toward the tip
-  float f2 = hairF(cosThetaD * 0.5);
-  S += hairG(B0 * 2.0, sinL + sinV - 4.0 * sh) * exp(17.0 * cosPhi - 16.78) * (1.0 - f2) * (1.0 - f2) * f2 * pow(base, vec3(0.8 / cosThetaD));
-  // multiple scattering between hairs: soft, bright, coloured. A coat scatters like a surface, so
-  // it follows the skin's normal (the form) more than any single hair's
-  float kajiya = 1.0 - abs(sinL);
-  vec3 fakeN = normalize(V - T * sinV);
-  vec3 Nm = normalize(mix(fakeN, N, 0.8));
-  float NoL = clamp((dot(Nm, L) + 0.35) / 1.82, 0.0, 1.0);
-  float luma = dot(base, vec3(0.3, 0.59, 0.11));
-  vec3 tint = pow(base / max(luma, 1e-4), vec3(1.0 - shadow));
-  S += sqrt(base) * (0.3183 * mix(NoL, kajiya * NoL * 1.5, 0.2)) * tint;
-  return S;
-}
+${LIGHT_GLSL}
 
 void main() {
   float fwRest = length(fwidth(vRest));
@@ -585,7 +596,10 @@ void main() {
   vec3 N = normalize(vN), V = normalize(vView), T = normalize(vT + hairJit * smoothstep(0.1, 0.6, vH));
   // locks are little ridges: tilt the normal across the flow so they catch the light in streaks
   vec3 Bn = normalize(cross(N, T) + 1e-5);
-  N = normalize(N + Bn * lockTilt * 0.45 * smoothstep(0.0015, 0.004, vL));
+  float lockAmt = smoothstep(0.0015, 0.004, vL);
+  N = normalize(N + Bn * lockTilt * 0.45 * lockAmt);
+  // each lock's hairs also point a little their own way, so the sheen breaks into streaks
+  T = normalize(T + (Bn * (seed.y - 0.5) * 0.9 + N * (seed.x - 0.5) * 0.7) * lockAmt);
   // light reaching into the coat: deeper hairs see less of it
   float depthL = mix(0.36, 1.0, pow(vH, 0.6));
   float furDepth = mix(1.0, depthL, smoothstep(0.0006, 0.0025, vL));
@@ -700,5 +714,5 @@ export function makeFurMaterials(opts: FurOptions, an: Anatomy, corr: Corrective
     });
     mats.push(m);
   }
-  return { mats, shared };
+  return { mats, shared, defines };
 }
