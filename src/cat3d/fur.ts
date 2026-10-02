@@ -101,10 +101,11 @@ float faceBare(vec3 p) {
 
 // how much the hair lies down along the skin (0 standing .. 1 flat)
 float lie(vec3 p) {
-  float l = 0.62;
-  l = mix(l, 0.8, isHead(p));
-  l = mix(l, 0.65, isLeg(p));
-  l = mix(l, 0.3, isTail(p));
+  // a cat's coat is long hair lying low: thick in volume, never standing up
+  float l = 0.8;
+  l = mix(l, 0.82, isHead(p));
+  l = mix(l, 0.75, isLeg(p));
+  l = mix(l, 0.5, isTail(p));
   return l;
 }
 
@@ -112,16 +113,17 @@ float furLength(vec3 p, float reg, vec3 aux) {
   // outer ear: short; inside: long furnishings growing from the edge nearer the midline and low down
   if (reg > 0.5) return reg > 1.5 ? 0.0032 : max(0.0105 * (0.25 + 0.75 * smoothstep(0.55, -0.6, aux.y)) * smoothstep(0.92, 0.4, aux.x), 0.0024);
   vec3 h = hl(p);
-  float L = 0.0056;
-  L = mix(L, 0.0042, isHead(p));                                             // crown, back of the head
-  L = mix(L, 0.0032, isFace(p));                                             // short and sleek on the face
-  L = mix(L, 0.005, isFace(p) * smoothstep(0.024, 0.034, abs(h.x)) * smoothstep(0.01, -0.012, h.y)); // cheek ruff
+  // lengths of the coat proper; guard hairs are GUARD times longer (a shorthair's back: ~2 cm)
+  float L = 0.0125;
+  L = mix(L, 0.0062, isHead(p));                                             // crown, back of the head
+  L = mix(L, 0.0036, isFace(p));                                             // short and sleek on the face
+  L = mix(L, 0.0075, isFace(p) * smoothstep(0.024, 0.034, abs(h.x)) * smoothstep(0.01, -0.012, h.y)); // cheek ruff
   L = mix(L, 0.0015, smoothstep(0.009, 0.005, abs(h.x)) * smoothstep(0.012, 0.004, h.y) * smoothstep(-0.012, -0.006, h.y) * step(0.028, h.z)); // nose bridge
   L = mix(L, 0.0026, smoothstep(0.015, 0.009, length((h - vec3(0.0, -0.030, 0.032)) * vec3(0.8, 1.0, 1.0)))); // chin
-  L = mix(L, 0.0045, isLeg(p));
-  L = mix(L, 0.0030, smoothstep(0.035, 0.02, p.y));          // paws
-  L = mix(L, 0.0072, isTail(p));
-  L = mix(L, 0.0105, smoothstep(0.03, 0.0, length((p - (BIB + vec3(0.0, -0.008, 0.004))) * vec3(1.0, 0.8, 1.3)) - 0.03)); // chest ruff
+  L = mix(L, 0.0068, isLeg(p));
+  L = mix(L, 0.0036, smoothstep(0.035, 0.02, p.y));          // paws
+  L = mix(L, 0.0125, isTail(p));
+  L = mix(L, 0.0165, smoothstep(0.03, 0.0, length((p - (BIB + vec3(0.0, -0.008, 0.004))) * vec3(1.0, 0.8, 1.3)) - 0.03)); // chest ruff
   L = mix(L, 0.0020, smoothstep(0.017, 0.009, length((h - vec3(0.0, -0.017, 0.043)) * vec3(0.8, 1.0, 1.0))));  // muzzle
   L *= 1.0 - faceBare(p);
   // lids: very short fur that starts a little way back from the bare margin
@@ -185,7 +187,7 @@ vec3 coat(vec3 p, float reg) {
   // mackerel stripes: wavy lines about 2.5 cm apart running down the flanks from the spine,
   // unevenly spaced, thick and thin, breaking into dashes low on the side
   vec3 wp = p + (vec3(fbm(p * 7.0), fbm(p * 7.0 + 5.2), fbm(p * 7.0 + 9.7)) - 0.5) * 0.03;
-  float phase = wp.z * 250.0 + fbm(wp * 4.0) * 7.0 + abs(wp.x) * 25.0 - (BACKY - 0.03 - wp.y) * 40.0;
+  float phase = wp.z * 230.0 * (0.8 + 0.4 * fbm(p * 3.0 + 1.7)) + fbm(wp * 4.0) * 7.0 + (fbm(wp * 13.0 + 2.3) - 0.5) * 5.0 + abs(wp.x) * 25.0 - (BACKY - 0.03 - wp.y) * 40.0;
   float s = cos(phase);
   float width = 0.18 + 0.5 * fbm(p * 15.0 + 7.0);
   float onSide = smoothstep(BELLYY - 0.01, BACKY - 0.08, p.y);
@@ -495,7 +497,11 @@ vec3 nearestSeed(vec3 x) {
 struct Hair { float cov; float t; float guard; vec3 cell; };
 Hair hairPop(vec3 rest, vec3 comb, float density, float stretch, float rScale, float guardFrac, float shortLen, float h, float fwRest) {
   Hair o;
+  // a lying hair crosses the coat at a shallow angle, moving far along the flow from one shell to
+  // the next: its cell is drawn out along the flow so each shell shows a dash long enough to join
+  // the next shell's, and the hair reads as a line rather than a row of dots
   vec3 qr = rest * density;
+  qr -= comb * dot(qr, comb) * (1.0 - 1.0 / HAIR_E);
   o.cell = floor(qr);
   vec3 jit = hash33(o.cell);
   vec3 off = fract(qr) - (0.2 + jit * 0.6);
@@ -532,6 +538,8 @@ void main() {
   float lockTilt = 0.0;
   float guard = 0.0;
   float hairT = 0.0;
+  float tuftShade = 1.0;
+  float tuftPale = 0.0;
   if (uShell > 0.001) {
     if (lidE < 0.05 || vL < 0.0002) discard;   // bare skin has no hair to draw
     // locks: hair of a lock shares its shade; the pattern is drawn out along the hair flow
@@ -556,10 +564,10 @@ void main() {
     // tuft this spot belongs to (cells drawn out along the flow) and undo the gathering in the skin's
     // plane to find which hair's root lands here.
     vec3 rn = normalize(vRestN);
-    vec3 cx = vRest * uClumpDensity;
+    vec3 cx = vRest * uClumpDensity * mix(0.6, 1.0, isFace(vRest));
     cx -= comb * dot(cx, comb) * 0.6;
     vec3 cc = nearestSeed(cx);
-    vec3 dc = (cx - cc) / uClumpDensity;
+    vec3 dc = (cx - cc) / (uClumpDensity * mix(0.6, 1.0, isFace(vRest)));
     dc -= rn * dot(dc, rn);
     float kc = uClump * smoothstep(0.15, 1.0, vH) * (innerEar ? 0.2 : 1.0) * smoothstep(0.002, 0.005, vL);
     // two populations: coarse guard and awn hairs, thinner where the coat is short, and a fine
@@ -571,7 +579,18 @@ void main() {
     Hair B = hairPop(restB, comb, uDensity * 3.0, 0.8, mix(0.36, 0.46, shortCoat), 0.0, 0.7, vH, fwRest);
     if (innerEar) { A.cov *= step(hash33(A.cell).y, 0.4) * 0.9; B.cov *= 0.12; }
     alpha = 1.0 - (1.0 - A.cov) * (1.0 - B.cov);
+    // hairs finer than a pixel are drawn as their average, but that average still gathers into
+    // tufts: each tuft narrows toward its tip, leaving gaps that show the shadowed coat below
+    float cdens = uClumpDensity * mix(0.6, 1.0, isFace(vRest));
+    float avgW = smoothstep(0.6, 1.6, fwRest * uDensity) * (innerEar ? 0.0 : 1.0);
+    float tuftR = (0.6 / cdens) * (1.0 - 0.8 * kc);
+    float tuftMask = smoothstep(tuftR + fwRest, tuftR - fwRest, length(dc));
+    alpha = mix(alpha, min(1.0, alpha / max(1.0 - 0.8 * kc, 0.25)) * tuftMask, avgW);
     if (alpha < 0.02) discard;
+    // each tuft has its own shade, and some tufts are bleached paler toward their tips
+    vec3 tj = hash33(cc + 71.0);
+    tuftShade = mix(1.0, 0.78 + 0.44 * tj.x, smoothstep(0.1, 0.6, vH) * (innerEar ? 0.0 : 1.0));
+    tuftPale = step(0.55, tj.y) * smoothstep(0.45, 0.95, vH) * (innerEar ? 0.0 : 1.0);
     bool useA = A.cov >= B.cov;
     vec3 cell = useA ? A.cell : B.cell + 1000.0;
     vec3 jit = hash33(cell);
@@ -579,7 +598,7 @@ void main() {
     hairT = useA ? A.t : B.t;
     // each hair and each lock catches the light a little differently; once hairs are smaller than
     // a pixel their differences average out rather than sparkle
-    float resolved = 1.0 - smoothstep(0.5, 1.4, fwRest * (useA ? uDensity : uDensity * 3.0));
+    float resolved = 1.0 - smoothstep(0.6, 1.8, fwRest * (useA ? uDensity : uDensity * 3.0));
     strandShade = mix(1.0, 0.72 + 0.56 * jit.x * jit.x, resolved);
     hairJit = (hash33(cell + 17.0) - 0.5) * 0.5 * resolved;
     paleHair = mix(0.3, step(0.7, hash13(cell + 3.0)), resolved);
@@ -597,7 +616,8 @@ void main() {
   col = mix(mix(tip, under, 0.6), col, smoothstep(0.0, 0.3, vH));
   // ginger coats mix deep orange hairs with paler cream ones
   col = mix(col, min(col * vec3(1.25, 1.32, 1.4), vec3(1.0)), paleHair * (0.3 + 0.5 * isFace(vRest)) * smoothstep(0.2, 0.7, vH));
-  col *= strandShade * (0.7 + 0.45 * seed.x + 0.15 * seed.y) * (1.0 - 0.45 * seed.z * (1.0 - 0.4 * vH));
+  col *= strandShade * tuftShade * (0.7 + 0.45 * seed.x + 0.15 * seed.y) * (1.0 - 0.45 * seed.z * (1.0 - 0.4 * vH));
+  col = mix(col, min(col * vec3(1.3, 1.42, 1.5), lin(vec3(0.99, 0.9, 0.7))), tuftPale * 0.75);
   float earCup = 1.0;
   if (innerEar) {
     // skin: pink, deepening into shadow down in the funnel and toward the middle
@@ -683,6 +703,7 @@ export function makeFurMaterials(opts: FurOptions, an: Anatomy, corr: Corrective
     CORRW: corr ? corr.width : 1,
     CORRROWS: corr ? corr.rows : 1,
     GUARD: GUARD_LEN.toFixed(3),
+    HAIR_E: '3.5',
     EYER: (an.eyeRadius / (an.headScale ?? 1)).toFixed(5),
     HEADS: (an.headScale ?? 1).toFixed(4),
     HEAD_C: v3(an.head), TAIL0: v3(an.tailBase), TAILV: v3(an.tailVec),

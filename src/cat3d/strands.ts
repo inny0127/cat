@@ -89,11 +89,15 @@ void main() {
   vec3 side = normalize(cross(wt, toCam) + 1e-6);
   float w = uStrandWidth * (1.0 - 0.8 * s);
   float ww = max(w, 0.55 * uPx * dist);
-  vAlpha = (w / ww) * step(0.0004, L);
+  // a guard hair is buried in the coat for the first half of its length: only the part that
+  // stands out of the coat is drawn (the shells draw the rest)
+  vAlpha = (w / ww) * step(0.0004, L) * (ear ? 1.0 : smoothstep(0.32, 0.6, s));
   wp += side * strandSide * ww * 0.5;
 
   vec3 col = (ear && rootReg < 1.5 ? lin(vec3(0.97, 0.91, 0.8)) : coat(p0, rootReg)) * (ear ? 0.7 + 0.45 * r2 : 1.0);
-  vCol = mix(col, min(col * vec3(1.32, 1.36, 1.3), vec3(1.0)), smoothstep(0.35, 1.0, s) * 0.55) * (0.82 + 0.36 * r2);
+  // what shows of a guard hair is its tip, bleached toward cream
+  vec3 paleTip = mix(min(col * vec3(1.35, 1.45, 1.5), vec3(1.0)), lin(vec3(0.98, 0.88, 0.66)), 0.35);
+  vCol = mix(col, paleTip, smoothstep(0.35, 0.95, s) * (0.55 + 0.45 * r3)) * (0.85 + 0.35 * r2);
   vT = wt;
   vN = wn;
   vWorld = wp;
@@ -137,7 +141,7 @@ void main() {
   vec3 amb = mix(uGroundCol, uSkyCol, clamp(N.y * 0.5 + 0.5, 0.0, 1.0));
   c += amb * vCol;
   // the root end sits down in the coat's shade
-  c *= vAO * mix(0.45, 1.0, smoothstep(0.0, 0.5, vU));
+  c *= vAO * mix(0.6, 1.0, smoothstep(0.3, 0.6, vU));
   gl_FragColor = vec4(c, a);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
@@ -170,7 +174,7 @@ export function makeStrands(roots: StrandRoots, shared: Record<string, { value: 
     uPx: { value: 0.001 },
     uStrandWidth: { value: 0.00009 },
     uStrandLen: { value: 1.0 },
-    uStrandAlpha: { value: 0.85 },
+    uStrandAlpha: { value: 1.0 },
   };
   const mat = new THREE.ShaderMaterial({
     uniforms: { ...shared, ...local },
