@@ -127,7 +127,7 @@ export class Body {
     if (weight <= 0.001) return;
     const { kin, I } = this;
     // each joint takes a share of what is left of the turn; the head finishes it
-    const chain: [number, number][] = [[I.neck1, 0.25], [I.neck2, 0.35], [I.head, 1]];
+    const chain: [number, number][] = [[I.neck1, 0.34], [I.neck2, 0.5], [I.head, 1]];
     const eye = this.t.a, D = this.t.b, up = this.t.c, x = this.t.d;
     const Qt = this.t.q1, Qh = this.t.q2, Dq = this.t.q3;
     const chestFwd = this.t.e.set(0, 0, 1).applyQuaternion(kin.wq[I.chest]);

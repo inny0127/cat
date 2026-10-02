@@ -58,7 +58,7 @@ const BASE: Pose = {
   pastern: 0.35, hindFlat: 0,
   tailLift: 0.25, tailSide: 0, tailCurve: -0.5, tailCurl: 0.3, tailSag: 0,
   earFwd: 0.2, earOut: 0, earFlat: 0,
-  eyeOpen: 0.85, squint: 0.06, pupil: 0.42, whisker: 0, jaw: 0,
+  eyeOpen: 0.95, squint: 0.03, pupil: 0.42, whisker: 0, jaw: 0,
   breath: 0.6, puff: 0,
 };
 
@@ -80,7 +80,7 @@ export const POSES = {
   sit: make({
     hipY: 0.064, hipZ: -0.12, hipPitch: 0.72,
     lumbarPitch: 0.5, chestPitch: -0.97,
-    neckPitch: 0.55, headPitch: -0.78,
+    neckPitch: 0.25, headPitch: -0.5,
     LF: foot(0.036, 0.012, 0.068), RF: foot(0.036, 0.012, 0.068),
     LH: foot(0.04, 0.012, -0.064, 0, 1, 0), RH: foot(0.04, 0.012, -0.064, 0, 1, 0),
     pastern: 0.38, hindFlat: 1,

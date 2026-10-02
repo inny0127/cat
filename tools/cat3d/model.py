@@ -27,7 +27,7 @@ HC = P(0, 0.276, 0.159)      # centre of the head
 HS = 1.2                      # the whole head (skull, face, eyes, ears) is drawn at this scale
 bone('jaw', 'head', tuple(HC + P(0, -0.014, -0.004) * HS))
 for s, x in (('L', 1), ('R', -1)):
-    bone('ear' + s, 'head', tuple(HC + P(x * 0.031, 0.022, -0.012) * HS))
+    bone('ear' + s, 'head', tuple(HC + P(x * 0.0245, 0.03, 0.004) * HS))
     bone('scap' + s, 'chest', (x * 0.030, 0.240, 0.066))
     bone('arm' + s, 'scap' + s, (x * 0.040, 0.178, 0.104))
     bone('fore' + s, 'arm' + s, (x * 0.045, 0.112, 0.070))
@@ -46,9 +46,9 @@ for i in range(TAIL_N):
 
 def pos(name): return BONES[name][1]
 
-EYE_R = 0.0098 * HS
+EYE_R = 0.0092 * HS
 EYE_EULER = (-0.12, 0.22, 0.08)          # three.js XYZ order, left eye; the right one is mirrored
-def eye_centre(x): return HC + P(x * 0.0156, 0.005, 0.0312) * HS
+def eye_centre(x): return HC + P(x * 0.0146, 0.005, 0.0275) * HS
 def euler_xyz(a, b, c):
     ca, sa, cb, sb, cc, sc = np.cos(a), np.sin(a), np.cos(b), np.sin(b), np.cos(c), np.sin(c)
     rx = np.array([[1, 0, 0], [0, ca, -sa], [0, sa, ca]])
@@ -75,28 +75,30 @@ ell('spine2', (0, 0.202, -0.022), (0.055, 0.064, 0.060), k=0.035)
 ell('spine1', (0, 0.204, -0.088), (0.053, 0.060, 0.052), k=0.035)
 ell('hips', (0, 0.208, -0.150), (0.050, 0.056, 0.050), k=0.03)
 # neck carrying the head a little above the back
-cone('neck1', (0, 0.218, 0.082), (0, 0.246, 0.116), 0.045, 0.041, k=0.03)
-cone('neck2', (0, 0.246, 0.116), (0, 0.266, 0.140), 0.041, 0.037, k=0.025)
+cone('neck1', (0, 0.218, 0.082), (0, 0.246, 0.116), 0.041, 0.036, k=0.03)
+cone('neck2', (0, 0.246, 0.116), (0, 0.266, 0.140), 0.036, 0.031, k=0.025)
 # head: a wide, low cranium over full cheeks; the muzzle drops well below the eyes, nose leather in front
-ell('head', H(0, 0.008, -0.009), (0.0295, 0.028, 0.037), k=0.012)       # cranium
+ell('head', H(0, 0.009, -0.003), (0.0305, 0.028, 0.031), k=0.012)       # cranium
 ell('head', H(0, 0.02, 0.002), (0.028, 0.0155, 0.03), k=0.012)         # broad flat forehead
 ell('head', H(0, 0.011, 0.016), (0.026, 0.016, 0.024), k=0.010)         # brow
 for x in (1, -1):
-    ell('head', H(x * 0.016, 0.0185, 0.021), (0.0122, 0.0055, 0.0095), k=0.006)  # brow ridge, framing the eye from above
+    # the orbit's rim: a brow over the eye and a cheekbone under it, as far forward as the cornea
+    ell('head', H(x * 0.0155, 0.0162, 0.025), (0.0122, 0.0054, 0.0086), k=0.006)  # brow ridge
+    ell('head', H(x * 0.0172, -0.0068, 0.025), (0.0116, 0.005, 0.0082), k=0.006)  # cheekbone
 for x in (1, -1):
-    ell('head', H(x * 0.017, -0.008, 0.007), (0.017, 0.019, 0.02), k=0.014)   # cheeks
+    ell('head', H(x * 0.016, -0.008, 0.007), (0.0155, 0.018, 0.019), k=0.014)   # cheeks
     ell('head', H(x * 0.0082, -0.0194, 0.0398), (0.0094, 0.0078, 0.0086), k=0.006)  # whisker pads
 ell('head', H(0, -0.0162, 0.032), (0.0165, 0.0122, 0.0152), k=0.007)    # muzzle
-ell('head', H(0, -0.0045, 0.0355), (0.0082, 0.0118, 0.0125), k=0.008)  # nose bridge
+ell('head', H(0, -0.0045, 0.0355), (0.0072, 0.0118, 0.0125), k=0.008)  # nose bridge
 ell('head', H(0, -0.0120, 0.0440), (0.0066, 0.0050, 0.0055), k=0.003)   # nose leather
 ell('head', H(0, -0.0154, 0.0448), (0.0036, 0.0030, 0.0042), k=0.003)   # point of the nose
-ell('jaw', H(0, -0.0272, 0.029), (0.0094, 0.006, 0.0094), k=0.006)      # chin
+ell('jaw', H(0, -0.0272, 0.0315), (0.0094, 0.006, 0.0094), k=0.006)     # chin
 # eyes: a socket round each eyeball, filled by the lids (a skin sphere just outside the ball;
 # the shader cuts the opening). The ball itself is a separate mesh.
 for x in (1, -1):
     c = tuple(eye_centre(x))
-    sub('head', c, (0.0115 * HS,) * 3, k=0.003)
-    PRIMS.append(dict(t='ell', b='head', c=P(*c), r=P(0.01025, 0.01025, 0.01025) * HS, k=0.004, rot=None))
+    sub('head', c, (0.0108 * HS,) * 3, k=0.003)
+    PRIMS.append(dict(t='ell', b='head', c=P(*c), r=P(0.0096, 0.0096, 0.0096) * HS, k=0.004, rot=None))
 # legs, with round paws and four toes each
 TOES = [(-0.0112, -0.004), (-0.0038, 0.0), (0.0038, 0.0), (0.0112, -0.004)]
 for s, x in (('L', 1), ('R', -1)):
@@ -194,7 +196,7 @@ def skin_weights(verts, faces=None, iters=30):
         deg = np.asarray(A.sum(1)).ravel()
         P = sp.diags(1 / np.maximum(deg, 1)) @ A
         head = acc[:, idx['head']] + acc[:, idx['jaw']]
-        keep = np.clip((head - 0.3) / 0.4, 0, 1)[:, None]
+        keep = np.clip((head - 0.65) / 0.3, 0, 1)[:, None]
         for _ in range(iters):
             acc = acc * (0.5 + 0.5 * keep) + (P @ acc) * (0.5 - 0.5 * keep)
     # keep the 4 strongest
@@ -250,10 +252,10 @@ def ear_mesh(side, names):
     for the coat shader."""
     x = 1 if side == 'L' else -1
     base = pos('ear' + side)
-    H_, W_ = 0.040 * HS, 0.039 * HS
+    H_, W_ = 0.036 * HS, 0.037 * HS
     nu, nv = 24, 18
     # ear frame: up, outward tilt, facing forward and a bit out
-    tilt, turn = np.radians(37), np.radians(20)
+    tilt, turn = np.radians(30), np.radians(24)
     up = np.array([x * np.sin(tilt), np.cos(tilt), 0.0])
     fwd = np.array([x * np.sin(turn), 0.0, np.cos(turn)])
     fwd -= up * (fwd @ up); fwd /= np.linalg.norm(fwd)
@@ -268,7 +270,7 @@ def ear_mesh(side, names):
         return lo
     def cup_of(u, v):
         # a deep funnel at the base, shallowing toward the tip; the outer edge curls forward a little
-        return 0.017 * (1 - v * v) * (1 - u) ** 0.8 - 0.002 * max(v, 0) ** 3 * (1 - u)
+        return 0.021 * (1 - v * v) * (1 - u) ** 0.65 - 0.002 * max(v, 0) ** 3 * (1 - u)
     t0s = []
     for k in range(nv + 1):
         v = k / nv * 2 - 1
@@ -278,7 +280,7 @@ def ear_mesh(side, names):
         for i in range(nu + 1):
             u = i / nu
             # rounded tip: the width falls away smoothly over the last fifth
-            w = W_ * (1 - u ** 1.8) ** 0.62 * (1 - 0.25 * u)
+            w = W_ * (1 - u ** 2.2) ** 0.55 * (1 - 0.2 * u)
             thick = 0.0055 * (1 - u) ** 1.5 + 0.0012
             for k in range(nv + 1):
                 v = k / nv * 2 - 1
@@ -333,8 +335,8 @@ CORRECT = ['sit', 'loaf', 'sphinx', 'side', 'curl', 'crouch', 'arch', 'stretch']
 # the body flattens against when it lies down.
 POSE_SCULPT = {
     'loaf': dict(floor=0.003, extra=[
-        ((0, 0.078, -0.06), (0.071, 0.088, 0.152), 0.04),       # the loaf: one rounded mound
-        ((0, 0.05, 0.072), (0.06, 0.052, 0.05), 0.03),           # chest over the tucked forearms
+        ((0, 0.058, -0.06), (0.076, 0.076, 0.158), 0.045),      # the loaf: one low rounded mound
+        ((0, 0.045, 0.068), (0.062, 0.046, 0.052), 0.035),       # chest over the tucked forearms
     ]),
     'sphinx': dict(floor=0.003, extra=[
         ((0, 0.066, -0.085), (0.068, 0.07, 0.13), 0.035),

@@ -42,7 +42,7 @@ float sdTriIso(vec2 p, vec2 q) {   // apex at the origin, base at y = q.y (iq)
 
 // --- where on the body are we (rest pose, metres; +z forward, +y up); anatomy defines come from the asset
 const vec3 HC = HEAD_C;
-const vec3 EYE = vec3(0.0156, 0.005, 0.039);   // socket centre, relative to HC (x mirrored)
+const vec3 EYE = vec3(0.0146, 0.005, 0.0345);   // socket centre, relative to HC (x mirrored)
 float eyeDist(vec3 h) { return length((h - vec3(sign(h.x) * EYE.x, EYE.y, EYE.z)) * vec3(0.85, 1.15, 1.0)); }
 // head-local coordinates in the head's own units (the sculpt draws the head HEADS times larger)
 vec3 hl(vec3 p) { return (p - HC) / HEADS; }
@@ -190,32 +190,32 @@ vec3 coat(vec3 p, float reg) {
   float spine = smoothstep(0.016, 0.005, abs(wp.x)) * smoothstep(BACKY - 0.04, BACKY - 0.008, p.y);
   stripe = max(stripe, (spine * 0.8 + smoothstep(0.02, 0.008, abs(wp.x)) * smoothstep(BACKY - 0.05, BACKY - 0.01, p.y) * s * 0.3) * body);
   // rings round the legs and the tail
-  float legR = smoothstep(0.55, 0.92, sin(p.y * 170.0 + n * 3.0)) * isLeg(p) * smoothstep(0.035, 0.07, p.y) * smoothstep(0.3, 0.55, fbm(p * 40.0));
+  float legR = smoothstep(0.62, 0.95, sin(p.y * 190.0 + n * 3.0)) * isLeg(p) * smoothstep(0.035, 0.07, p.y) * smoothstep(0.3, 0.55, fbm(p * 40.0));
   float tailR = smoothstep(0.2, 0.85, sin(tailT(p) * 27.0 + n * 2.0)) * isTail(p);
   // forehead: thin lines fanning back from between the eyes over the crown (the "M")
   // forehead "M": thin broken lines that start over the eyes and run back over the crown, the
   // inner ones converging toward the nose; measured as an angle up and over the skull
   float th = atan(h.y - 0.004, h.z + 0.012);
-  float ax = abs(h.x) + (fbm(p * 70.0) - 0.5) * 0.0018;
-  float lw = 0.0023 + 0.0008 * fbm(p * 50.0);
+  float ax = abs(h.x) + (fbm(p * 70.0) - 0.5) * 0.0026 + (fbm(p * 160.0) - 0.5) * 0.001;
+  float lw = 0.0015 + 0.0007 * fbm(p * 50.0);
   float m0 = smoothstep(lw * 0.8, lw * 0.25, ax) * smoothstep(0.42, 0.6, th);
   float m1 = smoothstep(lw, lw * 0.3, abs(ax - (0.0048 + 0.0022 * max(th - 0.25, 0.0)))) * smoothstep(0.22, 0.34, th);
   float m2 = smoothstep(lw * 1.1, lw * 0.3, abs(ax - (0.0098 + 0.0035 * max(th - 0.22, 0.0)))) * smoothstep(0.2, 0.3, th) * smoothstep(1.9, 1.3, th);
   float brow = smoothstep(0.0013, 0.0004, abs(eyeDist(h) - 0.0128)) * step(EYE.y + 0.003, h.y) * smoothstep(0.024, 0.016, abs(h.x)) * step(0.02, h.z);
   float m3 = smoothstep(lw * 1.1, lw * 0.3, abs(ax - (0.0145 + 0.004 * max(th - 0.5, 0.0)))) * smoothstep(0.7, 0.9, th) * smoothstep(2.2, 1.6, th);
-  float fore = max(max(m0 * 0.9, m1), max(max(m2, m3 * 0.8), brow * 0.8));
-  fore *= isHead(p) * smoothstep(0.25, 0.55, fbm(p * 38.0 + 2.0) + 0.15) * smoothstep(2.7, 1.9, th);
+  float fore = max(max(m0 * 0.8, m1 * 0.9), max(max(m2 * 0.85, m3 * 0.7), brow * 0.25)) * 0.85;
+  fore *= isHead(p) * smoothstep(0.3, 0.55, fbm(p * 52.0 + 2.0) + 0.1) * smoothstep(2.7, 1.9, th) * (0.7 + 0.3 * fbm(p * 90.0));
   // mascara line back from the outer corner of each eye, and a second line lower on the cheek
   float wob = (fbm(p * 120.0) - 0.5) * 0.0018;
-  float c1 = smoothstep(0.0012, 0.0004, abs(h.y - 0.0052 + 0.12 * (0.034 - h.z) + wob)) * smoothstep(0.035, 0.03, h.z);
-  float c2 = smoothstep(0.0014, 0.0005, abs(h.y + 0.012 + 0.55 * (0.028 - h.z) - 40.0 * (0.028 - h.z) * (0.028 - h.z) + wob)) * smoothstep(0.03, 0.022, h.z);
+  float c1 = smoothstep(0.0016, 0.0005, abs(h.y - 0.0052 + 0.12 * (0.034 - h.z) + wob)) * smoothstep(0.035, 0.03, h.z) * smoothstep(0.012, 0.022, h.z);
+  float c2 = smoothstep(0.0018, 0.0006, abs(h.y + 0.012 + 0.55 * (0.028 - h.z) - 40.0 * (0.028 - h.z) * (0.028 - h.z) + wob)) * smoothstep(0.03, 0.022, h.z) * smoothstep(0.0, 0.012, h.z);
   float cheek = max(c1, c2 * 0.8) * smoothstep(0.02, 0.026, abs(h.x)) * smoothstep(-0.02, 0.0, h.z) * isHead(p);
   // pale spectacles round the eyes and a pale muzzle
-  float spect = smoothstep(0.0118, 0.0088, eyeDist(h)) * isHead(p);
+  float spect = smoothstep(0.0112, 0.0086, eyeDist(h)) * isHead(p) * 0.6;
   float muzzle = smoothstep(0.011, 0.006, length((h - vec3(sign(h.x) * 0.0072, -0.021, 0.042)) * vec3(1.0, 1.2, 1.0))) * smoothstep(-0.011, -0.015, h.y);
   // a dark tear line from the inner corner of each eye down beside the nose
-  float tear = smoothstep(0.0013, 0.0004, abs(abs(h.x) - (0.0088 + 0.33 * h.y))) * smoothstep(0.001, -0.002, h.y) * smoothstep(-0.013, -0.008, h.y) * step(0.025, h.z);
-  float darkAmt = max(max(stripe * 0.8, legR * 0.6), max(tailR * 0.75, max(fore, max(cheek, tear * 0.8))));
+  float tear = smoothstep(0.0013, 0.0004, abs(abs(h.x) - (0.0082 + 0.33 * h.y))) * smoothstep(0.001, -0.002, h.y) * smoothstep(-0.013, -0.008, h.y) * step(0.025, h.z);
+  float darkAmt = max(max(stripe * 0.8, legR * 0.5), max(tailR * 0.75, max(fore, max(cheek, tear * 0.8))));
   // rows of dark follicles on the whisker pads
   {
     vec3 q = h - vec3(sign(h.x) * 0.0092, -0.0192, 0.0415);
@@ -291,10 +291,10 @@ float capsuleAO(vec3 p, vec3 n) {
     float l2 = max(dot(d, d), 1e-6);
     float cosT = dot(n, d) * inversesqrt(l2);
     float occ = clamp(cosT, 0.0, 1.0) * clamp(pow(A.w * A.w / l2, 0.75), 0.0, 1.0);
-    vis *= 1.0 - 0.9 * occ;
+    vis *= 1.0 - 0.7 * occ;
   }
   float hgt = max(p.y, 0.0);
-  vis *= 1.0 - 0.55 * clamp(0.5 - 0.5 * n.y, 0.0, 1.0) * exp(-hgt / 0.035);
+  vis *= 1.0 - 0.4 * clamp(0.5 - 0.5 * n.y, 0.0, 1.0) * exp(-hgt / 0.03);
   return vis;
 }
 void main() {
@@ -433,17 +433,19 @@ const vec2 POISSON[12] = vec2[](
 
 float keyShadow(vec3 wp, vec3 n) {
   if (uShadowOn < 0.5) return 1.0;
-  vec4 sc = uShadowMatrix * vec4(wp + n * 0.002, 1.0);
+  vec4 sc = uShadowMatrix * vec4(wp + n * 0.003, 1.0);
   sc.xyz /= sc.w;
   if (sc.x < 0.0 || sc.x > 1.0 || sc.y < 0.0 || sc.y > 1.0 || sc.z > 1.0) return 1.0;
-  float rot = hash13(floor(gl_FragCoord.xyz * vec3(1.0, 1.0, 0.0)) + vec3(0.0, 0.0, 17.0)) * 6.2832;
-  mat2 R = mat2(cos(rot), -sin(rot), sin(rot), cos(rot));
+  float ign = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
   float sum = 0.0;
-  for (int i = 0; i < 12; i++) {
-    float d = unpackRGBAToDepth(texture2D(uShadowMap, sc.xy + R * POISSON[i] * uShadowSoft));
-    sum += step(sc.z - 0.0015, d);
+  for (int i = 0; i < 16; i++) {
+    float fi = float(i);
+    float r = sqrt((fi + 0.5) / 16.0) * uShadowSoft;
+    float a = fi * 2.39996 + ign * 6.2832;
+    float d = unpackRGBAToDepth(texture2D(uShadowMap, sc.xy + vec2(cos(a), sin(a)) * r));
+    sum += smoothstep(sc.z - 0.003, sc.z - 0.0005, d);
   }
-  return sum / 12.0;
+  return sum / 16.0;
 }
 
 // Marschner hair scattering, after Karis, "Physically Based Hair Shading in Unreal" (2016)
@@ -507,13 +509,22 @@ void main() {
     if (lidE < 0.05 || vL < 0.0002) discard;   // bare skin has no hair to draw
     // locks: hair of a lock shares its shade; the pattern is drawn out along the hair flow
     vec3 comb = combDir(vRest, vReg);
+    // streaks: noise averaged along the hair flow, so locks run with the fur wherever it turns
     vec3 lp = vRest * uClumpDensity;
-    lp -= comb * dot(lp, comb) * 0.9;
-    float ln = vnoise(lp);
-    lockTilt = (ln - 0.5) * 2.0 + (vnoise(lp * 2.1 + 31.0) - 0.5);
+    float ln = 0.0, ln2 = 0.0, lpart = 0.0;
+    for (int k = -2; k <= 2; k++) {
+      vec3 q = lp + comb * (float(k) * 1.1);
+      ln += vnoise(q);
+      ln2 += vnoise(q * 2.3 + 13.0);
+      lpart += vnoise(q * 1.9 + 7.0);
+    }
+    ln = clamp((ln / 5.0 - 0.5) * 1.9 + 0.5, 0.0, 1.0);
+    ln2 = clamp((ln2 / 5.0 - 0.5) * 1.9 + 0.5, 0.0, 1.0);
+    lpart = (lpart / 5.0 - 0.5) * 2.3 + 0.5;
+    lockTilt = (ln - 0.5) * 2.0 + (ln2 - 0.5);
     // partings: thin dark lines where neighbouring locks separate and the undercoat shows
-    float part = smoothstep(0.07, 0.0, abs(ln - 0.5)) * 0.7 + smoothstep(0.05, 0.0, abs(vnoise(lp * 1.9 + 7.0) - 0.5)) * 0.4;
-    seed = vec3(ln, vnoise(lp * 2.3 + 13.0), part);
+    float part = smoothstep(0.08, 0.0, abs(ln - 0.5)) * 0.7 + smoothstep(0.06, 0.0, abs(lpart - 0.5)) * 0.4;
+    seed = vec3(ln, ln2, part);
     // clumps: hairs gather toward a tuft centre as they rise, leaving gaps between tufts. Find the
     // tuft this spot belongs to (cells drawn out along the flow) and undo the gathering in the skin's
     // plane to find which hair's root lands here.
@@ -531,7 +542,7 @@ void main() {
     float shortCoat = smoothstep(0.0075, 0.0035, vL);
     Hair A = hairPop(restA, comb, uDensity, 0.62, mix(0.56, 0.3, shortCoat), 0.2, 0.82, vH, fwRest);
     Hair B = hairPop(restB, comb, uDensity * 3.0, 0.8, mix(0.36, 0.46, shortCoat), 0.0, 0.7, vH, fwRest);
-    if (innerEar) { A.cov *= step(hash33(A.cell).y, 0.5) * 0.9; B.cov *= 0.45; }
+    if (innerEar) { A.cov *= step(hash33(A.cell).y, 0.4) * 0.8; B.cov *= 0.25; }
     alpha = 1.0 - (1.0 - A.cov) * (1.0 - B.cov);
     if (alpha < 0.02) discard;
     bool useA = A.cov >= B.cov;
@@ -554,28 +565,29 @@ void main() {
   vec3 creamL = lin(vec3(0.98, 0.84, 0.6));
   vec3 under = mix(tip, creamL * (0.6 + 0.4 * dot(tip, vec3(0.33))), 0.22);
   vec3 col = mix(under, tip, guard);
-  col = mix(col, max(col, creamL * dot(col, vec3(0.5, 0.35, 0.15)) * 1.6), guard * smoothstep(0.65, 1.0, hairT) * 0.4);
+  // tips are paler than the hair below them: the coat looks frosted where the light catches it
+  col = mix(col, min(col * vec3(1.32, 1.36, 1.3), vec3(1.0)), smoothstep(0.55, 1.0, hairT) * (0.4 + 0.4 * guard));
   col = mix(mix(tip, under, 0.6), col, smoothstep(0.0, 0.3, vH));
   // ginger coats mix deep orange hairs with paler cream ones
-  col = mix(col, max(col, creamL * dot(col, vec3(0.5, 0.35, 0.15)) * 1.5), paleHair * (0.3 + 0.35 * isFace(vRest)) * smoothstep(0.2, 0.7, vH));
-  col *= strandShade * (0.68 + 0.5 * seed.x + 0.18 * seed.y) * (1.0 - 0.55 * seed.z * (1.0 - 0.5 * vH));
+  col = mix(col, min(col * vec3(1.25, 1.32, 1.4), vec3(1.0)), paleHair * (0.3 + 0.35 * isFace(vRest)) * smoothstep(0.2, 0.7, vH));
+  col *= strandShade * (0.7 + 0.45 * seed.x + 0.15 * seed.y) * (1.0 - 0.45 * seed.z * (1.0 - 0.4 * vH));
   float earCup = 1.0;
   if (innerEar) {
     // skin: pink, deepening into shadow down in the funnel and toward the middle
     float deep = (1.0 - smoothstep(0.0, 0.55, vAux.x)) * (1.0 - abs(vAux.y));
-    col = mix(lin(vec3(0.86, 0.6, 0.53)), lin(vec3(0.5, 0.27, 0.24)), deep);
+    col = mix(lin(vec3(0.88, 0.56, 0.5)), lin(vec3(0.46, 0.24, 0.21)), deep);
     earCup = mix(1.0, 0.3, deep);
     // furnishings: long cream hairs, mostly from the inner edge and the lower half
-    if (uShell > 0.001) col = lin(vec3(0.96, 0.9, 0.8)) * strandShade;
+    if (uShell > 0.001) col = lin(vec3(0.95, 0.85, 0.7)) * strandShade;
   }
   col = mix(lin(vec3(0.06, 0.035, 0.025)), col, smoothstep(0.02, 0.075, lidE));   // dark lid margin
 
   vec3 N = normalize(vN), V = normalize(vView), T = normalize(vT + hairJit * smoothstep(0.1, 0.6, vH));
   // locks are little ridges: tilt the normal across the flow so they catch the light in streaks
   vec3 Bn = normalize(cross(N, T) + 1e-5);
-  N = normalize(N + Bn * lockTilt * 0.3 * smoothstep(0.0015, 0.004, vL));
+  N = normalize(N + Bn * lockTilt * 0.45 * smoothstep(0.0015, 0.004, vL));
   // light reaching into the coat: deeper hairs see less of it
-  float depthL = mix(0.48, 1.0, pow(vH, 0.55));
+  float depthL = mix(0.36, 1.0, pow(vH, 0.6));
   float furDepth = mix(1.0, depthL, smoothstep(0.0006, 0.0025, vL));
   if (innerEar) furDepth = mix(0.85, 1.0, vH);
   float sh = keyShadow(vWorld, N);
@@ -591,7 +603,9 @@ void main() {
   c += uRimCol * hairLight(Ts, N, V, uRimDir, absorb, uRough, 1.0);
   // sky and floor bounce
   vec3 amb = mix(uGroundCol, uSkyCol, clamp(N.y * 0.5 + 0.5, 0.0, 1.0));
-  c += amb * col * (0.8 + 0.2 * vH);
+  float lum = max(dot(col, vec3(0.3, 0.59, 0.11)), 1e-4);
+  vec3 warm = col * pow(col / lum, vec3(0.35));
+  c += amb * warm * (0.8 + 0.2 * vH);
   c *= furDepth * vAO * earCup;
   // ears are thin: light from behind glows through them
   if (vReg > 0.5) {
@@ -655,7 +669,7 @@ export function makeFurMaterials(opts: FurOptions, an: Anatomy, corr: Corrective
     uClumpDensity: { value: 260 },
     uClump: { value: 0.7 },
     uRough: { value: 0.46 },
-    uSpec: { value: 0.55 },
+    uSpec: { value: 0.85 },
     uDebug: { value: 0 },
     uBreath: { value: 0 },
     uPuff: { value: 0 },

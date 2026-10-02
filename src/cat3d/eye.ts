@@ -12,10 +12,10 @@ import * as THREE from 'three';
  * the eyeball (for lid shadows) and the coat shader (which cuts the opening in the lids).
  */
 export const LID_GLSL = /* glsl */ `
-const float LID_XC = 0.74;
+const float LID_XC = 0.7;
 vec2 lidCurves(float x, float xo, vec2 ul) {
-  float cy = -0.03 + 0.05 * xo / LID_XC;
-  float f = pow(max(0.0, 1.0 - x * x / (LID_XC * LID_XC)), 0.6);
+  float cy = -0.05 + 0.06 * xo / LID_XC;
+  float f = pow(max(0.0, 1.0 - x * x / (LID_XC * LID_XC)), 0.5);
   return vec2(cy + (ul.x + 0.03) * f, cy + (ul.y + 0.03) * f);
 }
 `;
@@ -73,8 +73,8 @@ vec3 env(vec3 r) {
   float dk = dot(r, k);
   if (dk > 0.0) {
     vec2 q = vec2(dot(r, u), dot(r, w)) / dk;
-    vec2 bq = max(abs(q) - vec2(0.16, 0.11), 0.0);
-    c += uKeyCol * 4.0 * smoothstep(0.14, 0.0, length(bq));
+    vec2 bq = max(abs(q) - vec2(0.3, 0.2), 0.0);
+    c += uKeyCol * 3.0 * smoothstep(0.25, 0.0, length(bq));
   }
   c += uFillCol * 5.0 * smoothstep(0.96, 0.985, dot(r, normalize(uFillDir)));
   return c;
@@ -127,7 +127,7 @@ void main() {
   vec3 dl = uGaze * d;
   float xo = dl.x * uSide;
   vec2 lc = lidCurves(dl.x, xo, vec2(uUpper, uLower));
-  float shade = mix(0.2, 1.0, smoothstep(0.0, 0.5, lc.x - dl.y)) * mix(0.55, 1.0, smoothstep(0.0, 0.14, dl.y - lc.y));
+  float shade = mix(0.12, 1.0, smoothstep(0.0, 0.62, lc.x - dl.y)) * mix(0.5, 1.0, smoothstep(0.0, 0.16, dl.y - lc.y));
   col = mix(col, vec3(0.05, 0.025, 0.02), smoothstep(-0.48, -0.7, xo));
   vec3 lightIn = uKeyCol * (0.3 + 0.7 * max(dot(N, uKeyDir), 0.0)) * 0.42 + uSkyCol * 0.9;
   col *= lightIn * shade;
@@ -164,10 +164,11 @@ export function makeEye(radius: number, side: 1 | -1, lights: EyeLights): CatEye
       uPupil: { value: 0.15 },
       // amber, sampled from a photograph of a ginger tabby's eye
       // golden amber, between the photographs' copper and hazel
-      uIrisA: { value: srgb(0.74, 0.58, 0.22) },
-      uIrisB: { value: srgb(0.7, 0.47, 0.14) },
-      uIrisC: { value: srgb(0.5, 0.31, 0.08) },
-      uFleck: { value: srgb(0.9, 0.74, 0.34) },
+      // olive gold, as in the photographs of ginger tabbies in daylight
+      uIrisA: { value: srgb(0.64, 0.6, 0.3) },
+      uIrisB: { value: srgb(0.56, 0.5, 0.22) },
+      uIrisC: { value: srgb(0.38, 0.33, 0.13) },
+      uFleck: { value: srgb(0.82, 0.76, 0.42) },
       ...lights,
       uRadius: { value: radius },
       uGaze: { value: new THREE.Matrix3() },
@@ -190,7 +191,7 @@ export function setLids(e: CatEye, lids: THREE.Vector4, open: number, squint = 0
   const o = Math.max(0, Math.min(1, open));
   // the lower lid rises a little as the eye shuts; the upper one comes down to meet it
   const lower = -0.5 + 0.35 * Math.max(0, Math.min(1, squint)) + 0.2 * (1 - o);
-  const upper = lower - 0.04 + (0.55 - lower + 0.04) * o;
+  const upper = lower - 0.04 + (0.64 - lower + 0.04) * o;
   e.eyeMat.uniforms.uLower.value = lower;
   e.eyeMat.uniforms.uUpper.value = upper;
   if (e.side > 0) { lids.x = upper; lids.y = lower; } else { lids.z = upper; lids.w = lower; }

@@ -125,6 +125,8 @@ export class Stage {
     this.scene.add(cat.group);
     // the floor takes the contact shadow of the first cat's capsules
     if (this.cats.length === 1) this.floorMat.uniforms.uCaps.value = cat.shared.uCaps.value;
+    // light bounced off the floor onto the underside: a pale floor lights the paws and belly
+    cat.shared.uGroundCol.value.copy(this.paper).multiplyScalar(0.42);
   }
 
   resize() {
