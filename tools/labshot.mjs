@@ -10,5 +10,5 @@ await page.waitForFunction(() => window.ready, null, { timeout: 120000 });
 if (js) await page.evaluate(js);
 await page.evaluate(() => window.lab.render());
 await page.waitForTimeout(300);
-await page.screenshot({ path: out });
+await page.screenshot({ path: out, timeout: 600000 });
 await b.close();

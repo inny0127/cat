@@ -1,0 +1,333 @@
+import * as THREE from 'three';
+import { POSES, blendPose, clonePose, copyPose, GROUPS, type Group, type Pose, type PoseName } from './pose';
+import { Wobble, noise1, clamp } from '../util/math';
+
+/** Which postures can go straight to which, and how long it takes (seconds). */
+const EDGES: [PoseName, PoseName, number][] = [
+  ['stand', 'sit', 0.95],
+  ['stand', 'crouch', 0.45],
+  ['stand', 'alert', 0.35],
+  ['stand', 'arch', 0.35],
+  ['stand', 'stretch', 1.1],
+  ['stand', 'loaf', 1.25],
+  ['crouch', 'loaf', 0.9],
+  ['crouch', 'sit', 0.8],
+  ['sit', 'loaf', 1.0],
+  ['sit', 'sphinx', 1.15],
+  ['loaf', 'sphinx', 0.8],
+  ['loaf', 'side', 1.5],
+  ['sphinx', 'side', 1.4],
+  ['side', 'curl', 1.6],
+  ['loaf', 'curl', 1.9],
+  ['alert', 'sit', 0.9],
+  ['arch', 'crouch', 0.5],
+];
+
+/** body parts start and finish at different moments: [delay, length] as fractions */
+const SCHEDULE: Record<Group, [number, number]> = {
+  hips: [0, 0.82], hind: [0, 0.85], chest: [0.08, 0.84], front: [0.12, 0.8],
+  head: [0.14, 0.78], tail: [0.18, 0.82], ears: [0, 0.55], face: [0, 1],
+};
+/** getting up leads with the front end */
+const RISE: Record<Group, [number, number]> = {
+  hips: [0.12, 0.85], hind: [0.12, 0.85], chest: [0, 0.8], front: [0, 0.75],
+  head: [0, 0.65], tail: [0.2, 0.8], ears: [0, 0.5], face: [0, 0.8],
+};
+const LOW: Partial<Record<PoseName, number>> = { stand: 3, alert: 3, arch: 3, stretch: 3, crouch: 2, sit: 2, loaf: 1, sphinx: 1, side: 0, curl: 0 };
+
+const ease = (t: number) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * t * (t * (t * 6 - 15) + 10));
+
+function route(from: PoseName, to: PoseName): PoseName[] {
+  if (from === to) return [];
+  const prev = new Map<PoseName, PoseName>();
+  const open: PoseName[] = [from];
+  const seen = new Set<PoseName>([from]);
+  while (open.length) {
+    const a = open.shift()!;
+    for (const [x, y] of EDGES) {
+      const b = x === a ? y : y === a ? x : null;
+      if (!b || seen.has(b)) continue;
+      seen.add(b);
+      prev.set(b, a);
+      if (b === to) {
+        const path: PoseName[] = [to];
+        let c = to;
+        while (prev.get(c) !== from) { c = prev.get(c)!; path.unshift(c); }
+        return path;
+      }
+      open.push(b);
+    }
+  }
+  return [to];
+}
+
+function edgeTime(a: PoseName, b: PoseName) {
+  for (const [x, y, d] of EDGES) if ((x === a && y === b) || (x === b && y === a)) return d;
+  return 1.2;
+}
+
+/**
+ * The cat's motor control: where it is and which way it faces, which posture it holds or is
+ * moving into, walking toward a goal, where it looks, blinking, ear flicks and the small
+ * restless motions of a living body. Produces the pose for this frame; cat.ts turns it into bones.
+ */
+export class Motor {
+  readonly pos = new THREE.Vector3();
+  yaw = 0;
+  readonly vel = new THREE.Vector3();
+  yawRate = 0;
+  speed = 0;
+
+  posture: PoseName = 'stand';
+  private target: PoseName = 'stand';
+  private path: PoseName[] = [];
+  private from: Pose = clonePose(POSES.stand);
+  private to: Pose = clonePose(POSES.stand);
+  private tt = 1;
+  private tdur = 1;
+  private sched = SCHEDULE;
+  private readonly prog = {} as Record<Group, number>;
+  readonly base: Pose = clonePose(POSES.stand);
+  readonly pose: Pose = clonePose(POSES.stand);
+  /** pose overrides blended on top (eating head-down, grooming leg, ...) */
+  layer: { pose: Partial<Pose>; w: number } | null = null;
+
+  // locomotion
+  goal: THREE.Vector3 | null = null;
+  goalSpeed = 0.45;
+  goalFace: number | null = null;
+  onArrive: (() => void) | null = null;
+  maxSpeed = 1.6;
+
+  // gaze (world point) and how much the head follows it
+  readonly look = new THREE.Vector3(0, 0.2, 1);
+  private readonly lookS = new THREE.Vector3(0, 0.2, 1);
+  lookTarget: THREE.Vector3 | null = null;
+  lookW = 0;
+  lookWTarget = 0;
+
+  // face
+  blink = 0;
+  private blinkT = 2;
+  private blinkPhase = -1;
+  private blinkSlow = false;
+  readonly twitch = { L: 0, R: 0, swivelL: 0, swivelR: 0 };
+  private earL = new Wobble(380, 11);
+  private earR = new Wobble(380, 11);
+  private earT = 3;
+  time = 0;
+  tailWave = 0.15;
+  tailWaveSpeed = 1;
+  private wavePhase = 0;
+
+  /** ask for a posture; finds a way there through the others */
+  setPosture(name: PoseName) {
+    if (name === this.target && (this.path.length || this.tt < 1 || this.posture === name)) return;
+    this.target = name;
+    this.path = route(this.tt < 1 ? this.nextOf() : this.posture, name);
+    if (this.tt >= 1) this.advance();
+  }
+
+  /** jump straight into a posture (tests, restoring a saved state) */
+  snap(name: PoseName) {
+    this.posture = this.target = name;
+    this.path = [];
+    copyPose(this.base, POSES[name]);
+    copyPose(this.from, POSES[name]);
+    copyPose(this.to, POSES[name]);
+    this.tt = 1;
+  }
+
+  private nextOf(): PoseName {
+    return this.posture;
+  }
+
+  private advance() {
+    const next = this.path.shift();
+    if (!next) return;
+    copyPose(this.from, this.base);
+    copyPose(this.to, POSES[next]);
+    this.tdur = edgeTime(this.posture, next) * (0.9 + Math.random() * 0.2);
+    this.sched = (LOW[next] ?? 2) > (LOW[this.posture] ?? 2) ? RISE : SCHEDULE;
+    this.posture = next;
+    this.tt = 0;
+  }
+
+  get settled() {
+    return this.tt >= 1 && this.path.length === 0;
+  }
+
+  get standing() {
+    return this.settled && (this.posture === 'stand' || this.posture === 'crouch' || this.posture === 'alert');
+  }
+
+  walkTo(p: THREE.Vector3, speed = 0.45, face: number | null = null, onArrive: (() => void) | null = null) {
+    this.goal = p.clone();
+    this.goal.y = 0;
+    this.goalSpeed = speed;
+    this.goalFace = face;
+    this.onArrive = onArrive;
+    if (this.posture !== 'stand' && this.posture !== 'crouch' && this.posture !== 'alert') this.setPosture('stand');
+  }
+
+  stop() {
+    this.goal = null;
+  }
+
+  lookAt(p: THREE.Vector3 | null, weight = 1) {
+    this.lookTarget = p ? p.clone() : null;
+    this.lookWTarget = p ? weight : 0;
+  }
+
+  slowBlink() {
+    this.blinkSlow = true;
+    this.blinkPhase = 0;
+  }
+
+  update(dt: number) {
+    this.time += dt;
+    this.transition(dt);
+    this.locomote(dt);
+    this.compose(dt);
+  }
+
+  private transition(dt: number) {
+    if (this.tt < 1) {
+      this.tt = Math.min(1, this.tt + dt / this.tdur);
+      for (const g of Object.keys(GROUPS) as Group[]) {
+        const [d, l] = this.sched[g];
+        this.prog[g] = ease((this.tt - d) / l);
+      }
+      blendPose(this.base, this.from, this.to, this.prog);
+      if (this.tt >= 1 && this.path.length) this.advance();
+    } else if (this.path.length) {
+      this.advance();
+    }
+  }
+
+  private locomote(dt: number) {
+    let want = 0, turn = 0;
+    if (this.goal && this.standing) {
+      const dx = this.goal.x - this.pos.x, dz = this.goal.z - this.pos.z;
+      const dist = Math.hypot(dx, dz);
+      if (dist < 0.025 && this.speed < 0.05) {
+        // arrived: turn to face the requested way, then report
+        if (this.goalFace !== null) {
+          const e = wrap(this.goalFace - this.yaw);
+          turn = clamp(e * 3, -2.2, 2.2);
+          if (Math.abs(e) < 0.06) this.arrive();
+        } else this.arrive();
+      } else {
+        const want_yaw = Math.atan2(dx, dz);
+        const e = wrap(want_yaw - this.yaw);
+        turn = clamp(e * 3.2, -2.4, 2.4);
+        // slow for sharp turns, and ease in to the stop
+        const facing = Math.max(0, Math.cos(e));
+        want = this.goalSpeed * Math.pow(facing, 3) * clamp(dist / 0.25, 0.15, 1);
+        if (dist < 0.025) want = 0;
+      }
+    }
+    // accelerate like an animal: quick to start, a couple of steps to stop
+    const acc = want > this.speed ? 1.6 : 2.4;
+    this.speed += clamp(want - this.speed, -acc * dt, acc * dt);
+    this.yawRate += (turn - this.yawRate) * Math.min(1, dt * 8);
+    this.yaw = wrap(this.yaw + this.yawRate * dt);
+    this.vel.set(Math.sin(this.yaw) * this.speed, 0, Math.cos(this.yaw) * this.speed);
+    this.pos.addScaledVector(this.vel, dt);
+  }
+
+  private arrive() {
+    this.goal = null;
+    const cb = this.onArrive;
+    this.onArrive = null;
+    cb?.();
+  }
+
+  /** the pose for this frame: posture blend + any layer + gait and life on top */
+  private compose(dt: number) {
+    const p = this.pose;
+    copyPose(p, this.base);
+    if (this.layer && this.layer.w > 0) {
+      const w = this.layer.w;
+      for (const [k, val] of Object.entries(this.layer.pose)) {
+        if (typeof val === 'number') (p as unknown as Record<string, number>)[k] += (val - (p as unknown as Record<string, number>)[k]) * w;
+      }
+    }
+    const t = this.time;
+    // gait: the body rises and rolls with the steps; the spine waves side to side
+    const moving = clamp(this.speed / 0.25);
+    const ph = this.gaitPhase * Math.PI * 2;
+    p.hipY += moving * 0.004 * Math.sin(2 * ph + 0.6);
+    p.hipRoll += moving * 0.045 * Math.sin(ph);
+    p.hipYaw += moving * 0.05 * Math.sin(ph + 1.3);
+    p.chestYaw -= moving * 0.07 * Math.sin(ph + 1.3);
+    p.chestRoll -= moving * 0.03 * Math.sin(ph + 0.4);
+    p.hipPitch += moving * 0.025 * Math.sin(2 * ph);
+    // turning: the spine bends into the curve and the head leads
+    const yr = clamp(this.yawRate, -2.5, 2.5);
+    p.lumbarYaw += yr * 0.12;
+    p.chestYaw += yr * 0.1;
+    p.neckYaw += yr * 0.12;
+    // walking: tail carried higher
+    p.tailLift += moving * 0.35;
+    p.tailCurve -= moving * 0.2;
+    // alive: slow weight shifts and head drift
+    p.hipRoll += 0.012 * noise1(t * 0.23 + 3);
+    p.chestYaw += 0.02 * noise1(t * 0.19 + 7);
+    p.headRoll += 0.05 * noise1(t * 0.13 + 11);
+    p.neckPitch += 0.03 * noise1(t * 0.17 + 5);
+    // tail: a lazy swish, more when the motor asks for it
+    this.wavePhase += dt * (1.1 + 1.6 * this.tailWave) * this.tailWaveSpeed;
+    // ears: flick now and then
+    this.earT -= dt;
+    if (this.earT < 0) {
+      this.earT = 1.5 + Math.random() * 5;
+      const side = Math.random() < 0.5 ? this.earL : this.earR;
+      side.kick((Math.random() < 0.5 ? -1 : 1) * (8 + Math.random() * 10));
+    }
+    this.twitch.L = this.earL.step(dt);
+    this.twitch.R = this.earR.step(dt);
+    this.twitch.swivelL = 0.25 * noise1(t * 0.3 + 1);
+    this.twitch.swivelR = 0.25 * noise1(t * 0.3 + 9);
+    // gaze
+    if (this.lookTarget) this.look.copy(this.lookTarget);
+    this.lookS.lerp(this.look, 1 - Math.exp(-dt * 7));
+    this.lookW += (this.lookWTarget - this.lookW) * (1 - Math.exp(-dt * 3));
+    // blinking
+    this.blinkT -= dt;
+    if (this.blinkPhase < 0 && this.blinkT < 0) {
+      this.blinkPhase = 0;
+      this.blinkSlow = false;
+      this.blinkT = 2.5 + Math.random() * 6;
+    }
+    if (this.blinkPhase >= 0) {
+      const dur = this.blinkSlow ? 1.4 : 0.2;
+      this.blinkPhase += dt / dur;
+      const s = this.blinkPhase;
+      this.blink = this.blinkSlow
+        ? (s < 0.35 ? ease(s / 0.35) : s < 0.55 ? 1 : 1 - ease((s - 0.55) / 0.45))
+        : (s < 0.35 ? s / 0.35 : 1 - (s - 0.35) / 0.65);
+      if (s >= 1) { this.blinkPhase = -1; this.blink = 0; }
+    }
+  }
+
+  /** the smoothed gaze point (world) */
+  get gaze() {
+    return this.lookS;
+  }
+
+  /** gait phase is kept by the stepper; the cat object copies it in */
+  gaitPhase = 0;
+
+  /** time-varying tail yaw for segment i of n */
+  tailWaveAt(i: number, n: number) {
+    const u = i / (n - 1);
+    return this.tailWave * 0.22 * Math.sin(this.wavePhase - u * 2.2) * (0.3 + u);
+  }
+}
+
+function wrap(a: number) {
+  while (a > Math.PI) a -= Math.PI * 2;
+  while (a < -Math.PI) a += Math.PI * 2;
+  return a;
+}

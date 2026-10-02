@@ -8,3 +8,4 @@ test-results/
 shots/
 artifact-dist/
 __pycache__/
+tests/*.local.test.ts

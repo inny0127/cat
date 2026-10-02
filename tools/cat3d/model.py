@@ -13,29 +13,33 @@ def P(*v): return np.array(v, float)
 BONES = {}   # name -> (parent, head position)
 def bone(name, parent, pos): BONES[name] = (parent, P(*pos))
 
+# proportions from feline anatomy (adult domestic cat, ~4 kg): withers ~0.24 m, sternum ~0.12,
+# humerus 0.074, radius 0.080, femur 0.088, tibia 0.094, hind cannon 0.061
 bone('root', None, (0, 0, -0.03))
-bone('hips', 'root', (0, 0.194, -0.138))
-bone('spine1', 'hips', (0, 0.200, -0.082))
-bone('spine2', 'spine1', (0, 0.202, -0.018))
-bone('chest', 'spine2', (0, 0.198, 0.045))
-bone('neck1', 'chest', (0, 0.200, 0.090))
-bone('neck2', 'neck1', (0, 0.215, 0.118))
-bone('head', 'neck2', (0, 0.230, 0.140))
-HC = P(0, 0.240, 0.163)      # centre of the head
+bone('hips', 'root', (0, 0.218, -0.150))
+bone('spine1', 'hips', (0, 0.224, -0.088))
+bone('spine2', 'spine1', (0, 0.226, -0.025))
+bone('chest', 'spine2', (0, 0.222, 0.040))
+bone('neck1', 'chest', (0, 0.226, 0.088))
+bone('neck2', 'neck1', (0, 0.246, 0.116))
+bone('head', 'neck2', (0, 0.266, 0.136))
+HC = P(0, 0.276, 0.159)      # centre of the head
 bone('jaw', 'head', tuple(HC + P(0, -0.014, -0.004)))
 for s, x in (('L', 1), ('R', -1)):
-    bone('ear' + s, 'head', tuple(HC + P(x * 0.030, 0.029, -0.007)))
-    bone('scap' + s, 'chest', (x * 0.028, 0.212, 0.078))
-    bone('arm' + s, 'scap' + s, (x * 0.042, 0.150, 0.098))
-    bone('fore' + s, 'arm' + s, (x * 0.042, 0.098, 0.074))
-    bone('wrist' + s, 'fore' + s, (x * 0.040, 0.028, 0.090))
-    bone('hand' + s, 'wrist' + s, (x * 0.040, 0.012, 0.106))
-    bone('thigh' + s, 'hips', (x * 0.044, 0.178, -0.146))
-    bone('shin' + s, 'thigh' + s, (x * 0.047, 0.112, -0.100))
-    bone('hock' + s, 'shin' + s, (x * 0.045, 0.058, -0.172))
-    bone('foot' + s, 'hock' + s, (x * 0.043, 0.014, -0.150))
+    bone('ear' + s, 'head', tuple(HC + P(x * 0.042, 0.021, -0.009)))
+    bone('scap' + s, 'chest', (x * 0.030, 0.240, 0.066))
+    bone('arm' + s, 'scap' + s, (x * 0.040, 0.178, 0.104))
+    bone('fore' + s, 'arm' + s, (x * 0.045, 0.112, 0.070))
+    bone('wrist' + s, 'fore' + s, (x * 0.040, 0.034, 0.088))
+    bone('hand' + s, 'wrist' + s, (x * 0.039, 0.012, 0.104))
+    bone('thigh' + s, 'hips', (x * 0.045, 0.200, -0.160))
+    bone('shin' + s, 'thigh' + s, (x * 0.050, 0.126, -0.112))
+    bone('hock' + s, 'shin' + s, (x * 0.046, 0.068, -0.186))
+    bone('foot' + s, 'hock' + s, (x * 0.044, 0.013, -0.160))
 TAIL_N = 10
-tail_pts = [P(0, 0.200, -0.182) + (P(0, -0.11, -0.27) * i / TAIL_N) for i in range(TAIL_N + 1)]
+TAIL_BASE = P(0, 0.222, -0.198)
+TAIL_VEC = P(0, -0.12, -0.26)
+tail_pts = [TAIL_BASE + TAIL_VEC * i / TAIL_N for i in range(TAIL_N + 1)]
 for i in range(TAIL_N):
     bone(f'tail{i}', 'hips' if i == 0 else f'tail{i-1}', tail_pts[i])
 
@@ -43,7 +47,7 @@ def pos(name): return BONES[name][1]
 
 EYE_R = 0.0102
 EYE_EULER = (-0.12, 0.22, 0.08)          # three.js XYZ order, left eye; the right one is mirrored
-def eye_centre(x): return HC + P(x * 0.0195, 0.005, 0.029)
+def eye_centre(x): return HC + P(x * 0.018, 0.005, 0.029)
 def euler_xyz(a, b, c):
     ca, sa, cb, sb, cc, sc = np.cos(a), np.sin(a), np.cos(b), np.sin(b), np.cos(c), np.sin(c)
     rx = np.array([[1, 0, 0], [0, ca, -sa], [0, sa, ca]])
@@ -62,47 +66,56 @@ def sub(bone_, c, r, k=0.006):
     PRIMS.append(dict(t='sub', b=bone_, c=P(*c), r=P(*r), k=k))
 def H(*o): return tuple(HC + P(*o))
 
-# torso: deep chest and belly (fur included), level back ~0.25 m
-ell('chest', (0, 0.172, 0.048), (0.051, 0.069, 0.070), k=0.03)
-ell('chest', (0, 0.150, 0.095), (0.040, 0.054, 0.036), k=0.03)      # chest ruff
-ell('spine2', (0, 0.180, -0.018), (0.052, 0.064, 0.060), k=0.035)
-ell('spine1', (0, 0.186, -0.080), (0.047, 0.058, 0.050), k=0.035)
-ell('hips', (0, 0.186, -0.138), (0.052, 0.056, 0.050), k=0.03)
-# short neck carrying the head about level with the back
-cone('neck1', (0, 0.196, 0.085), (0, 0.214, 0.118), 0.040, 0.035, k=0.03)
-cone('neck2', (0, 0.214, 0.118), (0, 0.230, 0.142), 0.035, 0.032, k=0.025)
+# torso: deep ribcage down to the sternum between the elbows, waist tucked up, rounded rump
+ell('chest', (0, 0.192, 0.048), (0.050, 0.068, 0.070), k=0.03)
+ell('chest', (0, 0.168, 0.092), (0.038, 0.050, 0.036), k=0.03)      # brisket
+ell('spine2', (0, 0.204, -0.022), (0.049, 0.062, 0.060), k=0.035)
+ell('spine1', (0, 0.206, -0.088), (0.044, 0.058, 0.050), k=0.035)
+ell('hips', (0, 0.210, -0.150), (0.047, 0.055, 0.050), k=0.03)
+# neck carrying the head a little above the back
+cone('neck1', (0, 0.218, 0.082), (0, 0.246, 0.116), 0.040, 0.035, k=0.03)
+cone('neck2', (0, 0.246, 0.116), (0, 0.266, 0.140), 0.035, 0.032, k=0.025)
 # head: a wide, low cranium over full cheeks; the muzzle drops well below the eyes, nose leather in front
-ell('head', H(0, 0.005, -0.008), (0.041, 0.034, 0.041), k=0.012)        # cranium
-ell('head', H(0, 0.012, 0.016), (0.028, 0.019, 0.024), k=0.010)         # brow / forehead
+ell('head', H(0, 0.008, -0.008), (0.041, 0.035, 0.041), k=0.012)        # cranium
+ell('head', H(0, 0.024, 0.0), (0.039, 0.021, 0.033), k=0.012)          # broad flat forehead
+ell('head', H(0, 0.012, 0.016), (0.034, 0.018, 0.024), k=0.010)         # brow
 for x in (1, -1):
-    ell('head', H(x * 0.021, -0.012, 0.010), (0.025, 0.022, 0.025), k=0.014)   # cheeks
-    ell('head', H(x * 0.0082, -0.0235, 0.0415), (0.0105, 0.0085, 0.0092), k=0.004)  # whisker pads
-ell('head', H(0, -0.020, 0.033), (0.018, 0.014, 0.016), k=0.007)        # muzzle
-ell('head', H(0, -0.0065, 0.036), (0.0085, 0.0135, 0.0125), k=0.008)    # nose bridge
-ell('head', H(0, -0.0160, 0.0450), (0.0060, 0.0048, 0.0052), k=0.003)   # nose leather
-ell('head', H(0, -0.0192, 0.0458), (0.0034, 0.0030, 0.0042), k=0.003)   # point of the nose
-ell('jaw', H(0, -0.0335, 0.031), (0.0120, 0.0075, 0.0120), k=0.006)     # chin
+    ell('head', H(x * 0.018, 0.0155, 0.030), (0.0125, 0.0055, 0.0100), k=0.006)  # brow ridge over each eye
+    ell('head', H(x * 0.02, -0.0078, 0.030), (0.012, 0.0052, 0.0090), k=0.006)   # cheekbone under it
+for x in (1, -1):
+    ell('head', H(x * 0.023, -0.011, 0.009), (0.029, 0.024, 0.026), k=0.014)   # cheeks: a wide face
+    ell('head', H(x * 0.0085, -0.0265, 0.0415), (0.0108, 0.0088, 0.0094), k=0.004)  # whisker pads
+ell('head', H(0, -0.023, 0.033), (0.019, 0.014, 0.016), k=0.007)        # muzzle
+ell('head', H(0, -0.0085, 0.036), (0.0085, 0.0150, 0.0125), k=0.008)    # nose bridge
+ell('head', H(0, -0.0190, 0.0450), (0.0060, 0.0048, 0.0052), k=0.003)   # nose leather
+ell('head', H(0, -0.0222, 0.0458), (0.0034, 0.0030, 0.0042), k=0.003)   # point of the nose
+ell('jaw', H(0, -0.0368, 0.031), (0.0120, 0.0075, 0.0120), k=0.006)     # chin
 # eyes: a socket round each eyeball, filled by the lids (a skin sphere just outside the ball;
 # the shader cuts the opening). The ball itself is a separate mesh.
 for x in (1, -1):
-    c = tuple(HC + P(x * 0.0195, 0.005, 0.029))
+    c = tuple(eye_centre(x))
     sub('head', c, (0.0122, 0.0122, 0.0122), k=0.003)
     PRIMS.append(dict(t='ell', b='head', c=P(*c), r=P(0.011, 0.011, 0.011), k=0.0025, rot=None))
-# legs: short below the body, thick upper limbs
+# legs, with round paws and four toes each
+TOES = [(-0.0112, -0.004), (-0.0038, 0.0), (0.0038, 0.0), (0.0112, -0.004)]
 for s, x in (('L', 1), ('R', -1)):
-    ell('scap' + s, (x * 0.038, 0.185, 0.075), (0.024, 0.055, 0.036), k=0.02)
-    cone('arm' + s, pos('arm' + s), pos('fore' + s), 0.023, 0.017, k=0.014)
-    cone('fore' + s, pos('fore' + s), pos('wrist' + s), 0.0155, 0.0115, k=0.008)
-    cone('wrist' + s, pos('wrist' + s), pos('hand' + s), 0.0115, 0.0115, k=0.006)
-    ell('hand' + s, (x * 0.040, 0.0115, 0.109), (0.0165, 0.011, 0.020), k=0.006)
-    ell('thigh' + s, (x * 0.042, 0.156, -0.120), (0.031, 0.062, 0.050), k=0.025)
-    cone('shin' + s, pos('shin' + s), pos('hock' + s), 0.019, 0.010, k=0.01)
+    ell('scap' + s, (x * 0.036, 0.205, 0.075), (0.022, 0.050, 0.034), k=0.02)
+    cone('arm' + s, pos('arm' + s), pos('fore' + s), 0.024, 0.018, k=0.014)
+    cone('fore' + s, pos('fore' + s), pos('wrist' + s), 0.016, 0.012, k=0.008)
+    cone('wrist' + s, pos('wrist' + s), pos('hand' + s), 0.012, 0.0115, k=0.006)
+    ell('hand' + s, (x * 0.039, 0.0115, 0.106), (0.0172, 0.0112, 0.019), k=0.006)
+    for tx, tz in TOES:
+        ell('hand' + s, (x * 0.039 + tx, 0.0085, 0.121 + tz), (0.0062, 0.0072, 0.0068), k=0.0035)
+    ell('thigh' + s, (x * 0.043, 0.176, -0.135), (0.031, 0.066, 0.054), k=0.025)
+    cone('shin' + s, pos('shin' + s), pos('hock' + s), 0.020, 0.011, k=0.01)
     cone('hock' + s, pos('hock' + s), pos('foot' + s), 0.0105, 0.0112, k=0.006)
-    ell('foot' + s, (x * 0.043, 0.0115, -0.145), (0.0162, 0.011, 0.022), k=0.006)
+    ell('foot' + s, (x * 0.044, 0.0115, -0.161), (0.0162, 0.0112, 0.021), k=0.006)
+    for tx, tz in TOES:
+        ell('foot' + s, (x * 0.044 + tx * 0.95, 0.0085, -0.146 + tz), (0.0060, 0.0070, 0.0066), k=0.0035)
 # tail: one smooth tapering tube
 for i in range(TAIL_N):
-    r0 = 0.0175 - 0.0065 * i / TAIL_N
-    r1 = 0.0175 - 0.0065 * (i + 1) / TAIL_N
+    r0 = 0.0182 - 0.0075 * i / TAIL_N
+    r1 = 0.0182 - 0.0075 * (i + 1) / TAIL_N
     cone(f'tail{i}', tail_pts[i], tail_pts[i + 1], r0, r1, k=0.02)
 
 # ------------------------------------------------------------------ evaluation
@@ -152,8 +165,10 @@ def polygonize(step=0.0022):
     verts += lo
     return verts, faces
 
-def skin_weights(verts):
-    """weights from how close each vertex is to the surface of each bone's primitives"""
+def skin_weights(verts, faces=None, iters=30):
+    """Weights from how close each vertex is to the surface of each bone's primitives, then
+    diffused over the surface so joints bend in smooth folds instead of creasing (the head is
+    left crisp so the jaw line can open)."""
     names = list(BONES.keys())
     idx = {n: i for i, n in enumerate(names)}
     acc = np.zeros((len(verts), len(names)))
@@ -165,6 +180,19 @@ def skin_weights(verts):
     for b, d in ds:
         w = np.exp(-np.maximum(d - dmin, 0) / 0.006)
         acc[:, idx[b]] = np.maximum(acc[:, idx[b]], w)
+    acc /= acc.sum(1, keepdims=True)
+    if faces is not None and iters:
+        import scipy.sparse as sp
+        V = len(verts)
+        e = np.concatenate([faces[:, [0, 1]], faces[:, [1, 2]], faces[:, [2, 0]]])
+        A = sp.coo_matrix((np.ones(len(e)), (e[:, 0], e[:, 1])), shape=(V, V)).tocsr()
+        A = ((A + A.T) > 0).astype(np.float64)
+        deg = np.asarray(A.sum(1)).ravel()
+        P = sp.diags(1 / np.maximum(deg, 1)) @ A
+        head = acc[:, idx['head']] + acc[:, idx['jaw']]
+        keep = np.clip((head - 0.3) / 0.4, 0, 1)[:, None]
+        for _ in range(iters):
+            acc = acc * (0.5 + 0.5 * keep) + (P @ acc) * (0.5 - 0.5 * keep)
     # keep the 4 strongest
     order = np.argsort(-acc, axis=1)[:, :4]
     w4 = np.take_along_axis(acc, order, 1)
@@ -192,8 +220,10 @@ def export_bin(out, meshes, names):
     E = lambda x: eye_centre(x).round(5).tolist()
     marks = dict(head=HC.round(5).tolist(), eyeL=E(1), eyeR=E(-1), eyeRadius=EYE_R,
                  eyeEulerL=list(EYE_EULER), eyeEulerR=[EYE_EULER[0], -EYE_EULER[1], -EYE_EULER[2]],
-                 nose=(HC + P(0, -0.016, 0.050)).round(5).tolist(),
-                 padL=(HC + P(0.0105, -0.0215, 0.0480)).round(5).tolist(), padR=(HC + P(-0.0105, -0.0215, 0.0480)).round(5).tolist())
+                 tailBase=TAIL_BASE.round(5).tolist(), tailVec=TAIL_VEC.round(5).tolist(),
+                 legTop=0.132, backY=0.262, bellyY=0.15, bib=[0, 0.168, 0.096], ribs=[0, 0.19, -0.01],
+                 nose=(HC + P(0, -0.019, 0.050)).round(5).tolist(),
+                 padL=(HC + P(0.011, -0.0245, 0.0480)).round(5).tolist(), padR=(HC + P(-0.011, -0.0245, 0.0480)).round(5).tolist())
     head = json.dumps(dict(landmarks=marks, bones=[{'name': nm, 'parent': BONES[nm][0], 'pos': BONES[nm][1].round(5).tolist()} for nm in names],
                            meshes=desc)).encode()
     head += b' ' * ((-len(head)) % 4)
@@ -208,10 +238,10 @@ def ear_mesh(side, names):
     """A cupped triangular shell, thin, skinned to its ear bone (blending into the head at the base)."""
     x = 1 if side == 'L' else -1
     base = pos('ear' + side)
-    H_, W_, T_ = 0.042, 0.038, 0.0032
+    H_, W_, T_ = 0.047, 0.044, 0.0032
     nu, nv = 18, 14
     # ear frame: up, outward tilt, facing forward and a bit out
-    tilt, turn = np.radians(24), np.radians(22)
+    tilt, turn = np.radians(33), np.radians(16)
     up = np.array([x * np.sin(tilt), np.cos(tilt), 0.0])
     fwd = np.array([x * np.sin(turn), 0.0, np.cos(turn)])
     fwd -= up * (fwd @ up); fwd /= np.linalg.norm(fwd)
@@ -232,7 +262,7 @@ def ear_mesh(side, names):
     for sheet in (0, 1):
         for i in range(nu + 1):
             u = i / nu
-            w = W_ * (1 - u) ** 0.62 * (1 - 0.3 * u)
+            w = W_ * (1 - u) ** 0.55 * (1 - 0.3 * u)
             for k in range(nv + 1):
                 v = k / nv * 2 - 1
                 cup = 0.013 * (1 - v * v) * (1 - u) ** 0.5
@@ -331,7 +361,7 @@ def main():
     vn = np.asarray(m.vertex_normals)
     out_ = np.mean(np.sum(vn * (m.vertices - m.vertices.mean(0)), 1) > 0)
     print('body faces', len(m.faces), 'watertight', m.is_watertight, 'normals outward', round(float(out_), 3))
-    j, w, names = skin_weights(np.asarray(m.vertices))
+    j, w, names = skin_weights(np.asarray(m.vertices), np.asarray(m.faces))
     body = ('body', np.asarray(m.vertices), np.asarray(m.faces), vn, j, w, np.zeros(len(m.vertices)))
     meshes = [body, ear_mesh('L', names), ear_mesh('R', names)]
     export_bin(out + '.cat', meshes, names)

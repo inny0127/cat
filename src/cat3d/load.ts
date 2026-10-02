@@ -13,6 +13,13 @@ export interface Landmarks {
   eyeRadius: number;
   eyeEulerL: [number, number, number];
   eyeEulerR: [number, number, number];
+  tailBase: number[];
+  tailVec: number[];
+  legTop: number;
+  backY: number;
+  bellyY: number;
+  bib: number[];
+  ribs: number[];
   nose: [number, number, number];
   padL: [number, number, number];
   padR: [number, number, number];
