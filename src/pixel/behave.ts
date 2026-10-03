@@ -353,7 +353,7 @@ export class Rub implements Act {
       this.set = true;
       // (now and then a little trill to it, the mouth with it)
       if (this.trill) { this.trill = false; c.sound('trill', 0.2); c.m.vocalize('trill', 0.29); }
-      m.walkTo(this.at(0.42), 0.11, face, () => {
+      m.walkTo(this.at(0.37), 0.11, face, () => {
         m.layer = null;
         this.set = false;
         if (--this.passes > 0) {
@@ -369,7 +369,9 @@ export class Rub implements Act {
     // the pole on the cat's left (+1) or its right (-1)
     const side = this.dir > 0 ? -1 : 1;
     const bell = (x: number, a: number, b: number) => ease((x - a + 0.12) / 0.12) * (1 - ease((x - b) / 0.14));
-    const k = bell(cheek, -0.03, 0.1), kf = bell(flank, -0.06, 0.08), kt = bell(tail, -0.02, 0.1);
+    // (the tail's sweep over before the pass ends, so that it does not jump back when it does: the
+    // pass is no longer than the view can follow out at that side of the room)
+    const k = bell(cheek, -0.03, 0.1), kf = bell(flank, -0.06, 0.08), kt = bell(tail, -0.02, 0.02);
     m.layer = {
       pose: {
         neckYaw: side * 0.65 * k, headYaw: side * 0.35 * k, headRoll: -side * 0.4 * k, neckPitch: -0.12 * k,
@@ -867,7 +869,8 @@ export class Zoomies implements Act {
     // (and it ends in the middle, just in front of the bed, where it sits down facing you, coming
     // to it from one side, so that the skid does not carry it out toward you)
     if (this.route[this.route.length - 1].z > h.z + 0.4) this.route.push(box ? R() : pick([L, R])());
-    this.route.push(at(box ? rand(0.04, 0.12) : rand(-0.08, 0.08), rand(0.3, 0.34)));
+    // (not so near you that its head would go off the bottom of the picture)
+    this.route.push(at(box ? rand(0.04, 0.12) : rand(-0.08, 0.08), rand(0.24, 0.28)));
     // (not off to a point it is all but standing on)
     while (this.route.length > 2 && this.route[0].distanceTo(c.m.pos.clone().setY(0)) < 0.25) this.route.shift();
   }
