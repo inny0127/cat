@@ -90,6 +90,8 @@ export class Stepper {
   /** how far the whole body stands lifted off the floor (over a cushion): the pose's paws are that
    *  much above where the floor is */
   lift = 0;
+  /** a paw coming down (settle: a little shift of the feet, not a stride) */
+  onLand: ((leg: Leg, settle: boolean) => void) | null = null;
   private settleCooldown = 0;
   private moving = 0;
   private still = 1;
@@ -197,6 +199,7 @@ export class Stepper {
           F.stepping = false;
           F.flex = 0;
           F.pos.copy(F.to);
+          this.onLand?.(l, F.settle);
         }
         continue;
       }

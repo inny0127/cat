@@ -64,7 +64,7 @@ export class PixelAvatar implements Avatar {
     this.ctx.rain = r;
   }
   /** what goes by outside the window, and the chirp it gets */
-  outside: { birds: () => THREE.Vector3 | null; chirp: () => void } | null = null;
+  outside: { birds: () => THREE.Vector3 | null; chirp: () => void; sound: (name: string, gain: number) => void } | null = null;
   /** something to do once it is down off the sill (asked to go somewhere while up there) */
   private afterPerch: (() => void) | null = null;
 
@@ -109,6 +109,7 @@ export class PixelAvatar implements Avatar {
       kick: (dir, speed) => this.toys?.kick(dir, speed),
       sill: () => this.sillSpot?.() ?? null,
       birds: () => this.outside?.birds() ?? null,
+      sound: (name, gain) => this.outside?.sound(name, gain),
       chirp: () => this.outside?.chirp(),
       perch: (h) => { this.cat.perch = h; },
       hold: (y) => { this.cat.liftHold = y; },

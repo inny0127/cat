@@ -72,7 +72,15 @@ export class PixelApp {
     this.avatar.sunSpot = () => this.room.sunSpot();
     this.avatar.toys = { yarn: () => this.room.yarnAt(), kick: (d, v) => this.room.kickYarn(d, v) };
     this.avatar.sillSpot = () => this.room.sillSpot();
-    this.avatar.outside = { birds: () => this.room.birds(), chirp: () => this.audio.play('chirp', { gain: 0.45 }) };
+    this.avatar.outside = {
+      birds: () => this.room.birds(),
+      chirp: () => this.audio.play('chirp', { gain: 0.45, pan: this.catPan() }),
+      sound: (name, gain) => this.audio.play(name, { gain, pan: this.catPan() }),
+    };
+    // its paws on the boards: soft, and softer still for a shuffle of the feet
+    this.cat.stepper.onLand = (_leg, settle) => {
+      if (!this.avatar.hidden) this.audio.play('step', { gain: settle ? 0.04 : 0.09, pan: this.catPan(), rate: 1.15 });
+    };
     this.frame3d();
 
     const now = Date.now();
@@ -279,6 +287,12 @@ export class PixelApp {
     }
     this.creditsOpen = on;
     el.classList.toggle('on', on);
+  }
+
+  /** where the cat is across the screen, for its sounds (-1 left .. 1 right, kept toward the middle) */
+  private catPan() {
+    const p = this.cat.motor.pos.clone().project(this.stage.camera);
+    return Math.max(-1, Math.min(1, p.x)) * 0.6;
   }
 
   /** is a thing in the room under a screen point (or near it: a finger is wider than it) */

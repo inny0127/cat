@@ -35,6 +35,8 @@ export interface Ctx {
   kick: (dir: THREE.Vector3, speed: number) => void;
   /** the windowsill, if there is one to sit on */
   sill: () => SillSpot | null;
+  /** a sound of the cat's own (a soft thump landing from a jump) */
+  sound: (name: string, gain: number) => void;
   /** how hard it is raining (0 .. 1): a grey day is for watching it from the sill */
   rain: number;
   /** birds going by outside the window (where, on the glass), if any; a chirp at them */
@@ -292,7 +294,7 @@ export class Play implements Act {
           this.hits.add(-1);
           c.kick(this.fwd.clone().addScaledVector(this.left, rand(-0.6, 0.6)), rand(0.35, 0.65));
         }
-        if (u >= 1) { this.bats = 1 + Math.floor(Math.random() * 3); this.next('bat'); }
+        if (u >= 1) { this.bats = 1 + Math.floor(Math.random() * 3); c.sound('thump', 0.18); this.next('bat'); }
         return true;
       }
       case 'bat': {
@@ -415,6 +417,7 @@ export class Sill implements Act {
           c.perch(S.height);
           c.hold(null);
           m.layer = null;
+          c.sound('thump', 0.28);
           this.next('settle', 0.6);
         }
         return true;
@@ -477,6 +480,7 @@ export class Sill implements Act {
           c.hold(null);
           m.layer = null;
           m.setPosture('stand');
+          c.sound('thump', 0.38);
           this.next('done');
         }
         return true;
