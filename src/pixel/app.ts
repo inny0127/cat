@@ -14,6 +14,7 @@ import { stepLife, nightness, THRESH } from '../sim/life';
 import { clamp } from '../util/math';
 import { PixelAvatar } from './avatar';
 import { Senses3D } from './senses';
+import { Room } from './room';
 
 const MODEL = './cat3d/fri.bin';
 
@@ -32,6 +33,7 @@ export class PixelApp {
   readonly input: PointerInput;
   readonly senses: Senses3D;
   readonly avatar: PixelAvatar;
+  readonly room: Room;
   state: CatState;
   brain!: Brain;
   private last = 0;
@@ -53,8 +55,11 @@ export class PixelApp {
     this.hintUi = new Hint(hintEl);
     this.senses = new Senses3D(cat, this.stage.camera, canvas);
     this.frame3d();
-    this.avatar = new PixelAvatar(cat, { x: 0, z: 0.05, yaw: 0 }, this.halfWidth() + 0.2,
+    this.avatar = new PixelAvatar(cat, { x: 0, z: 0.05, yaw: 0 }, this.halfWidth() + 0.25,
       (sx, sy, out) => this.senses.screenToWorld(sx, sy, out), () => this.stage.camera.position);
+    this.room = new Room(cat.shared as unknown as Record<string, { value: unknown }>, { bed: new THREE.Vector3(0, 0, 0.05) });
+    this.stage.scene.add(this.room.group);
+    this.avatar.spots = this.room.spots;
 
     const now = Date.now();
     const firstEver = !localStorageHas();
@@ -110,11 +115,11 @@ export class PixelApp {
    *  screen stands farther back so the room is as wide as on a wide one */
   private frame3d() {
     const cam = this.stage.camera;
-    const H = clamp(0.44 / cam.aspect, 0.5, 1.05);
+    const H = clamp(0.36 / cam.aspect, 0.5, 0.9);
     const d = H / (2 * Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2));
     const el = THREE.MathUtils.degToRad(13);
     cam.position.set(this.aim.x, this.aim.y + d * Math.sin(el), this.aim.z + d * Math.cos(el));
-    cam.lookAt(this.aim.x, this.aim.y + H * 0.14, this.aim.z);
+    cam.lookAt(this.aim.x, this.aim.y + H * 0.2, this.aim.z - 0.1);
     // the brain's touch speeds are in the painted cat's pixels: about 600 across the window
     this.senses.k = 600 / Math.max(1, innerWidth);
     // lights like a photographer's: the key up and to the left of the camera, a fill opposite
@@ -231,6 +236,7 @@ export class PixelApp {
     this.cat.motor.setMood(moodFromBrain(this.brain, sick, s.trust, nightness(Date.now())), true);
     this.avatar.update(dt);
     this.cat.update(dt);
+    this.room.update(s);
     this.hints(dt, contacts.length > 0);
     if ((this.saveIn -= dt) < 0) {
       this.saveIn = 10;

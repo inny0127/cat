@@ -91,8 +91,18 @@ const PAL_CAT = [
 ];
 const PAL_EYE = ['#ecd98a', '#c4c25a', '#8a8a36', '#4f5222', '#121010', '#ffffff'];
 const PAL_BG = ['#f4eee4', '#e6dccd', '#d0c2ae', '#b3a28b', '#8f7d67', '#6d5b48', '#3c2416'];
+/** the room's things (alpha 0.35): wood, the bed's dusty blue, the red bowl, kibble, water, litter */
+const PAL_PROP = [
+  '#f7f3ec', '#d9d1c4', '#c8a27a', '#a57f58', '#7a5a3c', '#4f3a27',
+  '#b9cbe0', '#8fa7c4', '#6a84a6', '#4b6283',
+  '#eba3a3', '#cf6f74', '#a24c55', '#6e2f38',
+  '#c58b52', '#93602f', '#5f3c1e',
+  '#c4e6f4', '#86c4e3', '#5a9cc6',
+  '#e3dccd', '#c2b8a6', '#968c7a',
+  '#3c2416',
+];
 const OUTLINE = 16;   // index of the outline colour in PAL_CAT
-const NPAL = Math.max(PAL_CAT.length, PAL_BG.length, PAL_EYE.length);
+const NPAL = Math.max(PAL_CAT.length, PAL_BG.length, PAL_EYE.length, PAL_PROP.length);
 
 const PIXEL_FRAG = /* glsl */ `
 precision highp float;
@@ -106,6 +116,7 @@ uniform float uDither;
 uniform vec3 uPalCat[${NPAL}];
 uniform vec3 uPalEye[${NPAL}];
 uniform vec3 uPalBg[${NPAL}];
+uniform vec3 uPalProp[${NPAL}];
 varying vec2 vUv;
 
 // Khronos PBR Neutral, as the full-resolution stage uses
@@ -131,15 +142,15 @@ vec3 oklab(vec3 c) {
   return mat3(0.2104542553, 1.9779984951, 0.0259040371, 0.7936177850, -2.4285922050, 0.7827717662, -0.0040720468, 0.4505937099, -0.8086757660) * lms;
 }
 float lin(float d) { float z = d * 2.0 - 1.0; return 2.0 * uNear * uFar / (uFar + uNear - z * (uFar - uNear)); }
-// the nearest colour of a palette (0 room, 1 cat, 2 eyes), and the second nearest with how close
-// the colour sits between them
+// the nearest colour of a palette (0 room, 1 cat, 2 eyes, 3 the room's things), and the second
+// nearest with how close the colour sits between them
 vec3 snap(vec3 c, int pal, out vec3 second, out float t) {
   vec3 q = oklab(c);
   float d1 = 1e9, d2 = 1e9; vec3 c1 = c, c2 = c;
-  int n = pal == 2 ? ${PAL_EYE.length} : pal == 1 ? ${PAL_CAT.length} : ${PAL_BG.length};
+  int n = pal == 3 ? ${PAL_PROP.length} : pal == 2 ? ${PAL_EYE.length} : pal == 1 ? ${PAL_CAT.length} : ${PAL_BG.length};
   for (int i = 0; i < ${NPAL}; i++) {
     if (i >= n) break;
-    vec3 p = pal == 2 ? uPalEye[i] : pal == 1 ? uPalCat[i] : uPalBg[i];
+    vec3 p = pal == 3 ? uPalProp[i] : pal == 2 ? uPalEye[i] : pal == 1 ? uPalCat[i] : uPalBg[i];
     vec3 e = oklab(p) - q;
     float d = dot(e * vec3(1.0, 1.4, 1.4), e);
     if (d < d1) { d2 = d1; c2 = c1; d1 = d; c1 = p; }
@@ -153,10 +164,11 @@ void main() {
   ivec2 p = ivec2(vUv * uSize);
   vec4 src = texelFetch(uColor, p, 0);
   vec3 c = toSRGB(neutral(src.rgb));
-  // the floor marks itself with alpha 0.25; the backdrop is at the far plane
+  // the floor marks itself with alpha 0.25, the room's things 0.35, the eyes 0.75; the backdrop is
+  // at the far plane
   float depth = texelFetch(uDepth, p, 0).r;
   bool cat = src.a > 0.5 && depth < 0.99999;
-  int pal = !cat ? 0 : src.a < 0.9 ? 2 : 1;
+  int pal = depth >= 0.99999 ? 0 : src.a < 0.3 ? 0 : src.a < 0.5 ? 3 : src.a < 0.9 ? 2 : 1;
   vec3 c2; float t;
   vec3 s = snap(c, pal, c2, t);
   // a little ordered dithering where a colour falls between two palette entries
@@ -253,6 +265,7 @@ export class Stage {
         uDither: { value: new URLSearchParams(location.search).has('dither') ? 1 : 0 },
         uPalCat: { value: palette(PAL_CAT) },
         uPalEye: { value: palette(PAL_EYE) },
+        uPalProp: { value: palette(PAL_PROP) },
         uPalBg: { value: palette(PAL_BG) },
       },
       vertexShader: PIXEL_VERT, fragmentShader: PIXEL_FRAG, depthTest: false, depthWrite: false, toneMapped: false,

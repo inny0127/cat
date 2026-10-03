@@ -41,7 +41,11 @@ export class PixelAvatar implements Avatar {
 
   private isHidden = false;
   /** coming or going: the walk is the avatar's until it ends */
-  private trip: { kind: 'leave' | 'come'; onDone?: () => void } | null = null;
+  private trip: { kind: 'leave' | 'come' | 'errand'; onDone?: () => void } | null = null;
+  /** an errand in the room: to the bowl, eat or drink there, then off out of the room */
+  private errand: { reason: string; phase: 'go' | 'do' | 'off'; t: number; dur: number; dir: number } | null = null;
+  /** the room's places (bowls, box), once there is a room */
+  spots: { food: THREE.Vector3; water: THREE.Vector3; litter: THREE.Vector3 } | null = null;
   private fading: { t: number; dur: number; onDone?: () => void } | null = null;
   private readonly look = new THREE.Vector3();
 
@@ -83,6 +87,7 @@ export class PixelAvatar implements Avatar {
         cb?.();
       }
     }
+    if (this.errand) this.doErrand(dt);
     if (!this.trip) m.setPosture(this.wanted());
     else if (this.trip.kind === 'leave' && Math.abs(m.pos.x) > this.offstage) {
       const cb = this.trip.onDone;
@@ -91,8 +96,8 @@ export class PixelAvatar implements Avatar {
       this.setHidden(true);
       cb?.();
     }
-    // eyes on the finger, or on you (through the window); asleep or dead, nowhere
-    if (!this.alive || this.sleep > 0.5) m.lookAt(null);
+    // eyes on the finger, or on you (through the window); asleep, dead or busy, nowhere
+    if (!this.alive || this.sleep > 0.5 || this.errand) m.lookAt(null);
     else if (this.gazeTarget && this.screenToWorld(this.gazeTarget.x, this.gazeTarget.y, this.look)) m.lookAt(this.look, 0.9);
     else m.lookAt(this.viewer(), this.trip ? 0.3 : 0.85);
   }
@@ -129,9 +134,54 @@ export class PixelAvatar implements Avatar {
     this.cat.motor.slowBlink();
   }
 
-  bolt(dir: number, onDone?: () => void, calm = false) {
+  /** eating and drinking where you can see: crouched with the head in the bowl, chewing or lapping */
+  private doErrand(dt: number) {
+    const e = this.errand!, m = this.cat.motor;
+    e.t += dt;
+    if (e.phase === 'do') {
+      if (e.t > e.dur) {
+        // done: off out of the room, the far way round
+        e.phase = 'off';
+        m.layer = null;
+        m.setPosture('stand');
+        m.walkTo(new THREE.Vector3(e.dir * (this.offstage + 0.35), 0, m.pos.z - 0.1), 0.3);
+        return;
+      }
+      m.setPosture('crouch');
+      const chew = e.reason === 'eat' ? 0.25 * Math.max(0, Math.sin(e.t * 8)) : 0.14 * Math.max(0, Math.sin(e.t * 15));
+      m.layer = { pose: { neckPitch: -0.85, headPitch: -0.25, jaw: chew }, w: Math.min(1, e.t * 1.5) };
+    } else if (e.phase === 'off' && Math.abs(m.pos.x) > this.offstage) {
+      this.errand = null;
+      this.trip = null;
+      this.setHidden(true);
+    }
+  }
+
+  bolt(dir: number, onDone?: () => void, calm = false, reason?: string) {
     if (this.trip || this.isHidden) return;
     const m = this.cat.motor;
+    const spot = !calm || !this.spots ? null : reason === 'eat' ? this.spots.food : reason === 'drink' ? this.spots.water : reason === 'litter' ? this.spots.litter : null;
+    if (spot) {
+      // walk to it and stop with the mouth over the bowl (the box: in it); the errand itself
+      // (the bowl going down) happens on arrival
+      const face = Math.atan2(spot.x - m.pos.x, spot.z - m.pos.z);
+      const reach = reason === 'litter' ? 0 : 0.2;
+      const at = new THREE.Vector3(spot.x - Math.sin(face) * reach, 0, spot.z - Math.cos(face) * reach);
+      this.trip = { kind: 'errand' };
+      this.errand = {
+        reason: reason!, phase: 'go', t: 0, dur: reason === 'eat' ? 26 + Math.random() * 14 : reason === 'drink' ? 12 + Math.random() * 8 : 0,
+        dir: spot.x >= 0 ? 1 : -1,
+      };
+      m.setPosture('stand');
+      m.walkTo(at, 0.3, face, () => {
+        if (this.errand) {
+          this.errand.phase = 'do';
+          this.errand.t = 0;
+        }
+        onDone?.();
+      });
+      return;
+    }
     const x = Math.sign(dir || 1) * (this.offstage + 0.3);
     this.trip = { kind: 'leave', onDone };
     m.setPosture('stand');
@@ -144,6 +194,8 @@ export class PixelAvatar implements Avatar {
 
   arrive(onDone?: () => void) {
     const m = this.cat.motor;
+    this.errand = null;
+    m.layer = null;
     const side = Math.random() < 0.5 ? -1 : 1;
     this.fading = null;
     this.setHidden(false);
@@ -158,6 +210,9 @@ export class PixelAvatar implements Avatar {
   }
 
   setHidden(h: boolean) {
+    // the brain thinks of an errand as away; here the cat is still in view at the bowl until it
+    // walks out
+    if (h && this.errand) return;
     this.isHidden = h;
     this.cat.group.visible = !h;
     if (h) {

@@ -432,7 +432,7 @@ export class Brain {
       this.anim.eyeTarget = 0.9;
       this.later(0.9, () => {
         this.audio.series('step', 4, 0.22, { gain: 0.5, pan: -0.4 });
-        this.anim.bolt(-1, go, true);
+        this.anim.bolt(-1, go, true, reason);
       });
     }
   }

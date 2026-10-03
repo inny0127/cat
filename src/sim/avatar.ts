@@ -41,8 +41,9 @@ export interface Avatar {
   jolt(strength?: number): void;
   swat(dirX?: number, dirY?: number): void;
   sigh(): void;
-  /** leave: dir -1 left, 1 right; calm walks off rather than bolting */
-  bolt(dir: number, onDone?: () => void, calm?: boolean): void;
+  /** leave: dir -1 left, 1 right; calm walks off rather than bolting; reason: the errand, if one
+   *  (a body with a room to show it in goes to the bowl or the box) */
+  bolt(dir: number, onDone?: () => void, calm?: boolean, reason?: string): void;
   /** a body that slowly isn't there any more */
   fadeAway(onDone?: () => void): void;
   /** come back into view */
