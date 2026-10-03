@@ -519,6 +519,40 @@ export class Room {
     print.rotation.set(-0.14, 0.18, 0);
     print.position.set(winL + 0.22, winB + 0.04, wallZ - 0.005);
     this.group.add(print);
+
+    // an old wooden radio on the sill: a cloth grille, a round dial that glows warm while it plays,
+    // two knobs and a handle (tapping it switches it on and off)
+    const radio = new THREE.Group();
+    const rw = 0.105, rh = 0.068, rd = 0.045;
+    radio.add(shadowy(new THREE.Mesh(new THREE.BoxGeometry(rw, rh, rd), this.mat('brown', { tone: 0.06 }))));
+    const grille = new THREE.Mesh(new THREE.PlaneGeometry(rw * 0.5, rh * 0.62), this.mat('rugCream', { tone: -0.05 }));
+    grille.position.set(-rw * 0.2, 0.002, rd / 2 + 0.0008);
+    radio.add(grille);
+    for (let i = 0; i < 4; i++) {
+      const slat = new THREE.Mesh(new THREE.PlaneGeometry(rw * 0.5, 0.0035), this.mat('brown', { tone: -0.12 }));
+      slat.position.set(-rw * 0.2, -rh * 0.2 + i * rh * 0.135, rd / 2 + 0.0012);
+      radio.add(slat);
+    }
+    this.dial = this.mat('bookMustard', { tone: 0.12 });
+    const dialM = new THREE.Mesh(new THREE.CircleGeometry(0.014, 16), this.dial);
+    dialM.position.set(rw * 0.27, 0.008, rd / 2 + 0.0008);
+    radio.add(dialM);
+    const needle = new THREE.Mesh(new THREE.PlaneGeometry(0.0025, 0.013), this.mat('bookRed'));
+    needle.position.set(rw * 0.27, 0.01, rd / 2 + 0.0014);
+    needle.rotation.z = -0.5;
+    radio.add(needle);
+    for (const kx of [0.19, 0.36]) {
+      const knob = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.006, 10).rotateX(Math.PI / 2), this.mat('metal', { tone: 0.2 }));
+      knob.position.set(rw * kx, -rh * 0.32, rd / 2 + 0.003);
+      radio.add(knob);
+    }
+    const handle = shadowy(new THREE.Mesh(new THREE.TorusGeometry(0.03, 0.004, 6, 16, Math.PI), this.mat('brown', { tone: -0.08 })));
+    handle.position.set(0, rh / 2, 0);
+    radio.add(handle);
+    radio.rotation.y = -0.22;
+    radio.position.set(winR - 0.21, winB + rh / 2, wallZ + 0.035);
+    this.group.add(radio);
+    this.radio = radio;
     this.print = print;
     pot(bx + 0.27, 0.03, 0.055, 'pot');
     tuft(bx + 0.27, ty + 0.085, 8, 0.02, 0.016, 0.05);
@@ -691,6 +725,29 @@ export class Room {
   private readonly win: { l: number; r: number; b: number; t: number; z: number };
   private readonly motes: { p: THREE.Vector3; v: THREE.Vector3; b: number; life: number }[] = [];
   private readonly timeU = { value: 0 };
+  /** the radio on the sill (tapping it switches the music on and off), and its dial */
+  radio: THREE.Object3D = new THREE.Group();
+  private dial!: THREE.ShaderMaterial;
+  private notesT = 0;
+  private readonly notes: { p: THREE.Vector3; t: number; dx: number }[] = [];
+
+  /** the radio playing or not: its dial lit, and notes rising off it (world points, how bright) */
+  setRadio(on: boolean, dt: number) {
+    this.dial.uniforms.uGlow.value = on ? 1 : 0;
+    if (on && (this.notesT -= dt) <= 0) {
+      this.notesT = 1.1 + Math.random() * 0.9;
+      const top = this.radio.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3((Math.random() - 0.5) * 0.04, 0.05, 0.02));
+      this.notes.push({ p: top, t: 0, dx: (Math.random() - 0.5) * 0.03 });
+    }
+    for (const n of this.notes) {
+      n.t += dt;
+      n.p.y += 0.022 * dt;
+      n.p.x += n.dx * dt + 0.004 * Math.sin(n.t * 3) * dt;
+    }
+    while (this.notes.length && this.notes[0].t > 3.2) this.notes.shift();
+    return this.notes.map((n) => ({ p: n.p, b: Math.min(1, n.t / 0.4, (3.2 - n.t) / 1.0) }));
+  }
+
   /** the little print on the sill (tapping it shows the credits) */
   print: THREE.Object3D = new THREE.Group();
   /** where the mug's steam rises from */

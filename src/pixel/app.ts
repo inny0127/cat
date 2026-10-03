@@ -89,6 +89,11 @@ export class PixelApp {
         this.gestureEnd();
         if (this.creditsOpen) { this.showCredits(false); return; }
         if (this.hitPrint(x, y)) { this.showCredits(true); return; }
+        if (this.hitThing(this.room.radio, x, y, 24)) {
+          this.audio.music(!this.audio.musicOn);
+          this.haptic.tap?.();
+          return;
+        }
         this.brain.glassTap(x, y);
       },
       glassKnock: (x, y) => { this.gestureEnd(); this.brain.knock(x, y); },
@@ -236,7 +241,16 @@ export class PixelApp {
     el.classList.toggle('on', on);
   }
 
-  /** is the little print on the shelf under a screen point */
+  /** is a thing in the room under a screen point (or near it: a finger is wider than it) */
+  private hitThing(o: THREE.Object3D, sx: number, sy: number, near: number) {
+    const ray = new THREE.Raycaster();
+    ray.setFromCamera(new THREE.Vector2((sx / innerWidth) * 2 - 1, -(sy / innerHeight) * 2 + 1), this.stage.camera);
+    if (ray.intersectObject(o, true).length) return true;
+    const p = o.getWorldPosition(new THREE.Vector3()).project(this.stage.camera);
+    return Math.hypot((p.x * 0.5 + 0.5) * innerWidth - sx, (-p.y * 0.5 + 0.5) * innerHeight - sy) < near;
+  }
+
+  /** is the little print on the sill under a screen point */
   private hitPrint(sx: number, sy: number) {
     const ray = new THREE.Raycaster();
     ray.setFromCamera(new THREE.Vector2((sx / innerWidth) * 2 - 1, -(sy / innerHeight) * 2 + 1), this.stage.camera);
@@ -373,6 +387,9 @@ export class PixelApp {
     // the tea on the books steams; by day dust turns in the sun
     this.stage.setSteam(this.room.mugTop, 1);
     this.stage.setMotes(this.room.dust(dt, 1 - dark));
+    // the radio: its dial lit and notes rising while it plays; slower and softer at night
+    this.stage.setNotes(this.room.setRadio(this.audio.musicPlaying, dt));
+    this.audio.setNight(dark);
     this.stage.setTime(now);
     this.hints(dt, contacts.length > 0);
     this.moveCamera(dt, contacts.length > 0);
@@ -382,8 +399,16 @@ export class PixelApp {
     }
   }
 
+  private radioHintIn = 25;
+
   private hints(dt: number, touching: boolean) {
     const s = this.state;
+    // once the radio has played a while: how to switch it off
+    if (this.audio.musicPlaying && !s.hints.radio && !touching && (this.radioHintIn -= dt) < 0) {
+      s.hints.radio = 1;
+      this.hintUi.show('창가의 라디오를 톡 누르면 음악을 끄고 켤 수 있어요', 5000);
+      return;
+    }
     if (touching || this.input.touching) {
       this.idleHintAt = 1e9;
       return;

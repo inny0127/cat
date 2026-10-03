@@ -8,7 +8,7 @@ const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-119
 const page = await b.newPage({ viewport: { width: w, height: h }, deviceScaleFactor: dpr || 1 });
 page.on('pageerror', (e) => console.log('ERR', e.message));
 page.on('console', (m) => { if (m.type() === 'error' || m.text().startsWith('state')) console.log('CONSOLE', m.text().slice(0, 400)); });
-await page.goto('http://localhost:5173/index.html?still');
+await page.goto((process.env.REEL_BASE ?? 'http://localhost:5173/') + 'index.html?still');
 await page.waitForFunction(() => window.__pcat, null, { timeout: 180000 });
 if (setup) await page.evaluate((js) => { const app = window.__pcat; window.__t0 ??= performance.now() / 1000; eval(js); }, setup);
 for (const hr of hoursArg.split(',')) {

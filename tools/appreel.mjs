@@ -29,7 +29,7 @@ if (seed) {
     } catch { /* first run: nothing saved yet */ }
   }, seed);
 }
-await page.goto('http://localhost:5173/index.html?still&' + query);
+await page.goto((process.env.REEL_BASE ?? 'http://localhost:5173/') + 'index.html?still&' + query);
 await page.waitForFunction(() => window.__pcat, null, { timeout: 180000 });
 
 const frames = Math.round(fps * seconds);

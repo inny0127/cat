@@ -1,4 +1,5 @@
 import * as S from './synth';
+import { Lofi } from './lofi';
 import { clamp, pick, rand } from '../util/math';
 
 type Bank = Record<string, AudioBuffer[]>;
@@ -28,6 +29,10 @@ export class CatAudio {
   private pourFilter!: BiquadFilterNode;
   private ready = false;
   muted = false;
+  /** the radio in the room (lofi.ts) */
+  private lofi: Lofi | null = null;
+  /** is the radio on (kept between visits; on unless it was switched off) */
+  musicOn = readMusic();
 
   start() {
     if (this.ctx) {
@@ -63,6 +68,25 @@ export class CatAudio {
     this.pourGain.connect(this.pourFilter).connect(this.near);
     // build the sample bank in small slices so the first frame isn't blocked
     void this.build();
+    this.lofi = new Lofi(ctx, this.master);
+    this.lofi.set(this.musicOn && !this.muted);
+  }
+
+  /** switch the radio on or off */
+  music(on: boolean) {
+    this.musicOn = on;
+    try { localStorage.setItem('cat-window.music', on ? '1' : '0'); } catch { /* private mode */ }
+    this.lofi?.set(on && !this.muted);
+  }
+
+  /** is the radio playing now */
+  get musicPlaying() {
+    return !!this.lofi?.playing;
+  }
+
+  /** night: the radio slower and softer */
+  setNight(n: number) {
+    this.lofi?.setNight(n);
   }
 
   private async build() {
@@ -181,5 +205,13 @@ export class CatAudio {
   }
   resume() {
     if (this.ctx && this.ctx.state !== 'running') void this.ctx.resume();
+  }
+}
+
+function readMusic() {
+  try {
+    return localStorage.getItem('cat-window.music') !== '0';
+  } catch {
+    return true;
   }
 }

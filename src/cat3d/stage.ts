@@ -95,6 +95,7 @@ uniform float uFar;
 uniform vec3 uPalEye[${PAL_EYE.length}];
 uniform vec3 uSteam;     // steam off a hot drink: where it rises from (art pixels), and how much
 uniform vec3 uMotes[16]; // dust in the sunlight: where (art pixels), and how bright (0 for none)
+uniform vec3 uNotes[4];  // music notes rising off the radio: where (art pixels), how bright
 uniform float uTime;
 uniform vec3 uTintSun;   // the colour of the hour: on what the sun lights,
 uniform vec3 uTintShade; // ... on everything else,
@@ -280,6 +281,13 @@ void main() {
   for (int i = 0; i < 16; i++) {
     if (uMotes[i].z > 0.0 && floor(uMotes[i].x) == float(p.x) && floor(uMotes[i].y) == float(p.y)) haze = max(haze, 0.75 * uMotes[i].z);
   }
+  // a quaver: its head, its stem, its flag (five wide, six high, from the bottom left)
+  const int NOTE[6] = int[](3, 7, 4, 4, 20, 12);
+  for (int i = 0; i < 4; i++) {
+    if (uNotes[i].z <= 0.0) continue;
+    ivec2 q = p - ivec2(floor(uNotes[i].xy));
+    if (q.x >= 0 && q.x < 5 && q.y >= 0 && q.y < 6 && ((NOTE[q.y] >> q.x) & 1) != 0) haze = max(haze, 0.85 * uNotes[i].z);
+  }
   col = mix(col, vec3(1.0, 0.97, 0.9), haze);
   glow = max(glow, haze * 0.5);
   gl_FragColor = vec4(col, glow);
@@ -415,6 +423,7 @@ export class Stage {
         uRampTex: { value: rampTexture() },
         uSteam: { value: new THREE.Vector3() },
         uMotes: { value: Array.from({ length: 16 }, () => new THREE.Vector3()) },
+        uNotes: { value: Array.from({ length: 4 }, () => new THREE.Vector3()) },
         uTime: { value: 0 },
         uTintSun: { value: new THREE.Vector3(1, 1, 1) },
         uTintShade: { value: new THREE.Vector3(1, 1, 1) },
@@ -555,6 +564,19 @@ export class Stage {
       if (!m || m.b <= 0) { u[i].set(0, 0, 0); continue; }
       this.toArt(m.p, a);
       u[i].set(a.x, a.y, m.b);
+    }
+  }
+
+  /** music notes: world points with a brightness each (up to 4) */
+  setNotes(notes: { p: THREE.Vector3; b: number }[]) {
+    if (!this.pixel) return;
+    const u = this.pixel.mat.uniforms.uNotes.value as THREE.Vector3[];
+    const a = new THREE.Vector2();
+    for (let i = 0; i < u.length; i++) {
+      const m = notes[i];
+      if (!m || m.b <= 0) { u[i].set(0, 0, 0); continue; }
+      this.toArt(m.p, a);
+      u[i].set(a.x - 2, a.y, m.b);
     }
   }
 
