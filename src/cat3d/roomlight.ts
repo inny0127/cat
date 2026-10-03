@@ -150,9 +150,6 @@ export function skyDay(hour: number) {
   return ss(5.6, 7.4, hour) * (1 - ss(18.6, 20.3, hour));
 }
 
-/** the light of the hour. The window looks south: the sun rises on the left, stands highest at
- *  midday and sets on the right, low and gold, its patch on the floor long and reaching into the
- *  room; after it, a pink dusk, then night with the lamp lit */
 /** the moon's phase on a date (0 new .. 0.5 full .. 1): an average month of the moon's, counted
  *  from a new moon of January 2000 (right to within a day or so) */
 export function moonPhase(d: Date) {
@@ -175,6 +172,10 @@ export function cloudAt(d: Date, rain = 0) {
   return Math.max(0.2 + 0.6 * (v(b) + (v(b + 1) - v(b)) * e), rain);
 }
 
+/** the light of the hour. The window looks south: the sun rises on the left, stands highest at
+ *  midday and sets on the right, low and gold, its patch on the floor long and reaching into the
+ *  room; after it, a pink dusk, then night. The lamp is lit as the sun goes down and
+ *  put out after it is up again. moon: how much of the moon is lit tonight */
 export function dayLight(hour: number, out?: DayLight, rain = 0, moon = 1): DayLight {
   const rise = 6.4, set = 19.1;
   const u = Math.max(0, Math.min(1, (hour - rise) / (set - rise)));
@@ -221,8 +222,9 @@ export function dayLight(hour: number, out?: DayLight, rain = 0, moon = 1): DayL
   o.amb = (0.11 * day + 0.03) * dim * (1 - 0.5 * gold);
   o.floorB = 0.45 * day * dim;
   o.fill = (0.22 * day + 0.03) * dim * (1 - 0.5 * gold);
-  o.lamp = Math.max(2.0 * ss(0.35, 0.8, night), 1.55 * rain);
-  o.fairy = Math.max(0.5 * ss(0.4, 0.8, night), 0.45 * rain);
+  const lit = Math.max(ss(set - 0.55, set - 0.4, hour), 1 - ss(rise + 0.3, rise + 0.45, hour));
+  o.lamp = Math.max(2.0 * lit, 1.55 * rain);
+  o.fairy = Math.max(0.5 * lit, 0.45 * rain);
   o.tintSun = (o.tintSun ?? new THREE.Vector3()).set(tintSun[0], tintSun[1], tintSun[2]);
   o.tintShade = (o.tintShade ?? new THREE.Vector3()).set(tintShade[0], tintShade[1], tintShade[2]);
   o.tintLamp = (o.tintLamp ?? new THREE.Vector3()).set(tintLamp[0], tintLamp[1], tintLamp[2]);
