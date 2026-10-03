@@ -8,6 +8,7 @@ export interface PlayOpts {
   gain?: number;
   pan?: number;
   far?: boolean; // off-screen: muffled and quieter
+  out?: boolean; // outside the window: through the glass
   rate?: number;
   delay?: number;
 }
@@ -21,6 +22,7 @@ export class CatAudio {
   private master!: GainNode;
   private near!: GainNode;
   private far!: GainNode;
+  private outside!: GainNode;
   private bank: Bank = {};
   private purrSrc: AudioBufferSourceNode | null = null;
   private purrGain!: GainNode;
@@ -56,6 +58,13 @@ export class CatAudio {
     lp.type = 'lowpass';
     lp.frequency.value = 1700;
     this.far.connect(lp).connect(this.master);
+    // the world outside, heard through the glass
+    this.outside = ctx.createGain();
+    this.outside.gain.value = 0.6;
+    const glass = ctx.createBiquadFilter();
+    glass.type = 'lowpass';
+    glass.frequency.value = 4200;
+    this.outside.connect(glass).connect(this.master);
     this.purrGain = ctx.createGain();
     this.purrGain.gain.value = 0;
     this.purrGain.connect(this.near);
@@ -113,6 +122,40 @@ export class CatAudio {
     }
   }
 
+  private birdIn = 4;
+  private crickSrc: AudioBufferSourceNode | null = null;
+  private crickGain: GainNode | null = null;
+  /** the world outside the window: birds by day (most at dawn and in spring), crickets on summer
+   *  and early autumn nights; rain quiets both */
+  setOutside(dt: number, o: { day: number; hour: number; month: number; rain: number }) {
+    const ctx = this.ctx;
+    if (!ctx || !this.ready || this.muted) return;
+    const spring = o.month >= 2 && o.month <= 6 ? 1 : o.month >= 7 && o.month <= 9 ? 0.6 : 0.25;
+    const dawn = Math.exp(-(((o.hour - 6.8) / 1.4) ** 2));
+    const birdy = o.day * (1 - o.rain) * spring * (0.5 + dawn);
+    if (birdy > 0.08 && (this.birdIn -= dt) <= 0) {
+      this.birdIn = rand(5, 16) / (0.4 + birdy);
+      this.play(Math.random() < 0.6 ? 'birdChip' : 'birdSong', { out: true, gain: rand(0.1, 0.24) * Math.min(1, birdy + 0.3), pan: rand(-0.8, 0.8), rate: rand(0.94, 1.08) });
+    }
+    const crick = (1 - o.day) * (1 - o.rain) * (o.month >= 5 && o.month <= 9 ? 1 : 0);
+    if (crick > 0.05 && !this.crickSrc) {
+      const src = ctx.createBufferSource();
+      src.buffer = this.bank.crickets[0];
+      src.loop = true;
+      this.crickGain = ctx.createGain();
+      this.crickGain.gain.value = 0;
+      src.connect(this.crickGain).connect(this.outside);
+      src.start();
+      this.crickSrc = src;
+    }
+    if (this.crickGain) this.crickGain.gain.setTargetAtTime(0.09 * crick, ctx.currentTime, 2);
+    if (crick <= 0.05 && this.crickSrc && this.crickGain && this.crickGain.gain.value < 0.002) {
+      this.crickSrc.stop();
+      this.crickSrc.disconnect();
+      this.crickSrc = null;
+    }
+  }
+
   private async build() {
     const sr = this.ctx!.sampleRate;
     const make = (fn: () => Float32Array) => {
@@ -141,6 +184,9 @@ export class CatAudio {
       ['thump', () => S.thump(sr), 2],
       ['step', () => S.step(sr), 4],
       ['rain', () => S.rain(sr), 1],
+      ['birdChip', () => S.birdChip(sr), 4],
+      ['birdSong', () => S.birdSong(sr), 4],
+      ['crickets', () => S.crickets(sr), 1],
     ];
     for (const [name, fn, count] of jobs) {
       this.bank[name] = [];
@@ -173,7 +219,7 @@ export class CatAudio {
       p.pan.value = clamp(o.pan, -1, 1);
       node = node.connect(p);
     }
-    node.connect(o.far ? this.far : this.near);
+    node.connect(o.out ? this.outside : o.far ? this.far : this.near);
     src.start(ctx.currentTime + (o.delay ?? 0));
     return src.buffer.duration / src.playbackRate.value;
   }

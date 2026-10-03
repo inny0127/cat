@@ -416,3 +416,77 @@ export function rain(sr: number, seconds = 6): Float32Array {
   for (let k = 0; k < seconds * 3; k++) tick(Math.floor(rnd(0, n)), rnd(0.15, 0.35), rnd(500, 900), rnd(0.008, 0.02));
   return normalize(d, 0.5);
 }
+
+/** a small bird outside: a few quick high chips ("tsip, tsip, tsip"), each falling a little */
+export function birdChip(sr: number) {
+  const count = 2 + Math.floor(rnd(0, 3)), gap = rnd(0.09, 0.16), len = rnd(0.035, 0.06), f0 = rnd(3800, 5200);
+  const n = Math.floor((count * gap + 0.1) * sr);
+  const d = new Float32Array(n);
+  for (let k = 0; k < count; k++) {
+    const at = Math.floor(k * gap * rnd(0.9, 1.1) * sr), m = Math.floor(len * sr);
+    const fk = f0 * rnd(0.97, 1.03);
+    let ph = 0;
+    for (let i = 0; i < m && at + i < n; i++) {
+      const x = i / m;
+      ph += (2 * Math.PI * fk * (1 + 0.28 * (1 - x))) / sr;
+      d[at + i] += Math.sin(ph) * Math.pow(Math.sin(Math.PI * x), 0.6) * (1 - 0.3 * k / count);
+    }
+  }
+  return normalize(d, 0.5);
+}
+
+/** a bird's little song: a run of notes stepping up and down, slurred, ending in a trill */
+export function birdSong(sr: number) {
+  const notes: [number, number][] = [];
+  let f = rnd(2600, 3600);
+  const count = 4 + Math.floor(rnd(0, 5));
+  for (let k = 0; k < count; k++) {
+    f = Math.max(2000, Math.min(5200, f * (Math.random() < 0.5 ? rnd(1.05, 1.3) : rnd(0.78, 0.96))));
+    notes.push([f, rnd(0.05, 0.12)]);
+  }
+  const trill = rnd(0.18, 0.32), tf = f * rnd(1.1, 1.3);
+  const total = notes.reduce((a, [, l]) => a + l + 0.025, 0) + trill + 0.1;
+  const n = Math.floor(total * sr);
+  const d = new Float32Array(n);
+  let at = 0, ph = 0;
+  for (let k = 0; k < notes.length; k++) {
+    const [fk, l] = notes[k];
+    const next = k + 1 < notes.length ? notes[k + 1][0] : tf;
+    const m = Math.floor(l * sr);
+    for (let i = 0; i < m && at + i < n; i++) {
+      const x = i / m;
+      // slurring toward the next note at the end of each, with a little vibrato
+      const fi = fk + (next - fk) * Math.max(0, (x - 0.7) / 0.3) ** 2;
+      ph += (2 * Math.PI * fi * (1 + 0.012 * Math.sin(2 * Math.PI * 28 * (at + i) / sr))) / sr;
+      d[at + i] += Math.sin(ph) * Math.pow(Math.sin(Math.PI * x), 0.5);
+    }
+    at += m + Math.floor(0.025 * sr);
+  }
+  const m = Math.floor(trill * sr);
+  for (let i = 0; i < m && at + i < n; i++) {
+    const x = i / m, t = i / sr;
+    ph += (2 * Math.PI * tf * (1 + 0.18 * Math.sin(2 * Math.PI * 24 * t))) / sr;
+    d[at + i] += Math.sin(ph) * (0.5 + 0.5 * Math.sin(2 * Math.PI * 24 * t)) * Math.sin(Math.PI * x) * 0.8;
+  }
+  return normalize(d, 0.45);
+}
+
+/** crickets on a summer night: a few of them, each chirping its own rhythm (a seamless loop) */
+export function crickets(sr: number, seconds = 8) {
+  const n = Math.floor(seconds * sr);
+  const d = new Float32Array(n);
+  for (let c = 0; c < 4; c++) {
+    const f = rnd(4300, 5400), every = rnd(0.5, 0.95), pulses = 3 + Math.floor(rnd(0, 2)), rate = rnd(26, 34), amp = rnd(0.3, 1);
+    const plen = Math.floor(0.02 * sr);
+    for (let s0 = rnd(0, every); s0 < seconds; s0 += every * rnd(0.96, 1.04)) {
+      for (let p = 0; p < pulses; p++) {
+        const at = Math.floor((s0 + p / rate) * sr);
+        for (let i = 0; i < plen; i++) {
+          const j = (at + i) % n;
+          d[j] += Math.sin((2 * Math.PI * f * (at + i)) / sr) * Math.sin((Math.PI * i) / plen) * amp;
+        }
+      }
+    }
+  }
+  return normalize(d, 0.4);
+}
