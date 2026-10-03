@@ -59,6 +59,10 @@ export class PixelAvatar implements Avatar {
   toys: { yarn: () => THREE.Vector3; kick: (dir: THREE.Vector3, speed: number) => void } | null = null;
   /** the windowsill to sit on */
   sillSpot: (() => SillSpot) | null = null;
+  /** how hard it is raining outside */
+  set rain(r: number) {
+    this.ctx.rain = r;
+  }
   /** what goes by outside the window, and the chirp it gets */
   outside: { birds: () => THREE.Vector3 | null; chirp: () => void } | null = null;
   /** something to do once it is down off the sill (asked to go somewhere while up there) */
@@ -97,6 +101,7 @@ export class PixelAvatar implements Avatar {
       room: { minX: home.x - 0.22, maxX: home.x + 0.22, minZ: home.z - 0.3, maxZ: home.z + 0.2 },
       mode: this.mode, mood: this.mood, kneading: false,
       bed: (p) => this.bedSpot(p),
+      rain: 0,
       sniff: () => this.spots?.sniff ?? [],
       sun: () => this.sunSpot?.() ?? null,
       lieAt: (p, at, face) => this.lieAt(p, at, face),

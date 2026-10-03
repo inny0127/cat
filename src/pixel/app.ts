@@ -412,6 +412,7 @@ export class PixelApp {
     const rain = this.rainOverride !== null ? +this.rainOverride : rainAt(clock);
     this.stage.setDayLight(this.room.update(s, hour, dt, rain));
     this.audio.setRain(rain);
+    this.avatar.rain = rain;
     // the phone's bar the colour of the wall at the top of the room
     const tc = dark > 0.5 ? '#3b3150' : '#c99486';
     if (tc !== this.themeColor) {

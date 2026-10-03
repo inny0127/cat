@@ -111,7 +111,7 @@ void main() {
     else {
       // old plaster, a little uneven
       m = ${PIX.wall};
-      tone += (vnoise(vWorld.xy * 16.0) - 0.5) * 0.07 + (vnoise(vWorld.xy * 45.0 + 7.0) - 0.5) * 0.03;
+      tone += (vnoise(vWorld.xy * 45.0 + 7.0) - 0.5) * 0.02;
     }
     // the floor's shadow along the foot of the wall
     tone -= 0.12 * (1.0 - smoothstep(0.0, 0.06, vWorld.y));
@@ -641,6 +641,50 @@ export class Room {
       }
     }
 
+    // on the wall to the left (seen on wide screens): a framed print of the sea under a low sun,
+    // and a clock that keeps the real time
+    {
+      const pr = new THREE.Group();
+      pr.add(shadowy(new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.4, 0.015), this.mat('brown', { tone: -0.05 }))));
+      const layer = (w: number, h: number, y: number, m: Material, tone: number, z = 0.0085) => {
+        const q = new THREE.Mesh(new THREE.PlaneGeometry(w, h), this.mat(m, { tone }));
+        q.position.set(0, y, z);
+        pr.add(q);
+      };
+      layer(0.25, 0.35, 0, 'rugCream', 0.1);
+      layer(0.25, 0.12, -0.115, 'water', 0.05, 0.009);
+      layer(0.25, 0.012, -0.05, 'water', 0.15, 0.0095);
+      layer(0.25, 0.012, -0.09, 'water', 0.12, 0.0095);
+      const sunD = new THREE.Mesh(new THREE.CircleGeometry(0.045, 20), this.mat('bookMustard', { tone: 0.1 }));
+      sunD.position.set(0.03, -0.035, 0.0088);
+      pr.add(sunD);
+      pr.position.set(bx - 0.9, 0.95, wallZ + 0.01);
+      this.group.add(pr);
+      const clock = new THREE.Group();
+      clock.add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.025, 32).rotateX(Math.PI / 2), this.mat('brown', { tone: 0.05 }))));
+      const face = new THREE.Mesh(new THREE.CircleGeometry(0.085, 32), this.mat('paint', { tone: 0.05 }));
+      face.position.z = 0.0135;
+      clock.add(face);
+      for (let i = 0; i < 12; i++) {
+        const a = (i / 12) * Math.PI * 2;
+        const tick = new THREE.Mesh(new THREE.PlaneGeometry(i % 3 === 0 ? 0.008 : 0.005, i % 3 === 0 ? 0.018 : 0.01), this.mat('ink'));
+        tick.position.set(Math.sin(a) * 0.07, Math.cos(a) * 0.07, 0.014);
+        tick.rotation.z = -a;
+        clock.add(tick);
+      }
+      const hand = (len: number, w: number) => {
+        const g = new THREE.PlaneGeometry(w, len).translate(0, len / 2 - 0.008, 0);
+        const m = new THREE.Mesh(g, this.mat('ink'));
+        m.position.z = 0.015;
+        clock.add(m);
+        return m;
+      };
+      this.hourHand = hand(0.045, 0.008);
+      this.minHand = hand(0.068, 0.005);
+      clock.position.set(bx - 0.62, 1.06, wallZ + 0.0125);
+      this.group.add(clock);
+    }
+
     // the lamp: a bronze stand, a linen shade
     const lx = bx - 0.3, lz = bz - 0.2;
     add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.08, 0.02, 20), this.mat('metal'))), lx, 0.01, lz);
@@ -898,6 +942,10 @@ export class Room {
     this.candles.push({ body, flame, seed: Math.random() * 10 });
   }
 
+  /** the clock's hands */
+  private hourHand: THREE.Mesh | null = null;
+  private minHand: THREE.Mesh | null = null;
+
   /** the radio on the sill (tapping it switches the music on and off), and its dial */
   radio: THREE.Object3D = new THREE.Group();
   private dial!: THREE.ShaderMaterial;
@@ -1045,6 +1093,11 @@ export class Room {
     this.rollYarn(dt);
     this.sky.uniforms.uTime.value = this.time;
     this.sky.uniforms.uHour.value = hour;
+    // the clock on the wall keeps the room's time
+    if (this.hourHand && this.minHand) {
+      this.hourHand.rotation.z = -((hour % 12) / 12) * Math.PI * 2;
+      this.minHand.rotation.z = -(hour % 1) * Math.PI * 2;
+    }
     const L = this.lights;
     (L.uKeyDir.value as THREE.Vector3).copy(d.keyDir);
     (L.uLampPos.value as THREE.Vector3).copy(this.lampPos);

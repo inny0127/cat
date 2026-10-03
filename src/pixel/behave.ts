@@ -35,6 +35,8 @@ export interface Ctx {
   kick: (dir: THREE.Vector3, speed: number) => void;
   /** the windowsill, if there is one to sit on */
   sill: () => SillSpot | null;
+  /** how hard it is raining (0 .. 1): a grey day is for watching it from the sill */
+  rain: number;
   /** birds going by outside the window (where, on the glass), if any; a chirp at them */
   birds: () => THREE.Vector3 | null;
   chirp: () => void;
@@ -527,7 +529,7 @@ export function chooseAct(c: Ctx, atHome: boolean, posture: PoseName): Act | nul
     if (atHome && c.mode === 'rest') opts.push([0.7 + 0.8 * m.sleepy, () => sunbathe(c)]);
     if (atHome && c.yarn()) opts.push([0.6 * (0.4 + m.arousal) * (1 - m.sleepy) * (c.mode === 'rest' ? 1 : 0.4), () => new Play()]);
     const sill = c.sill();
-    if (atHome && sill) opts.push([0.55 * (1 - 0.6 * m.sleepy), () => new Sill(sill)]);
+    if (atHome && sill) opts.push([0.55 * (1 + 1.5 * c.rain) * (1 - 0.6 * m.sleepy), () => new Sill(sill)]);
     else opts.push([1.5, () => toBed(c, 'loaf')]);
     opts.push([0.8, () => null]);
   }
