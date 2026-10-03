@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#f3efe9" />
+  <meta name="color-scheme" content="light" />
+  <meta name="description" content="픽셀 없이 그린 고양이. 손가락을 움직이면 눈으로 따라와요." />
+  <title>매끈한 고양이</title>
+  <style>
+    /* one full-bleed scene: the cat on its cream paper; the words small and low on the paper */
+    :root {
+      --paper: #f3efe9;
+      --ink: #6b574c;
+      --ink-soft: #8f7d72;
+      --text: 400 13px/1.5 -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
+      color-scheme: light;
+    }
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: var(--paper);
+      color: var(--ink);
+      overflow: hidden;
+      overscroll-behavior: none;
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-touch-callout: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #stage {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      touch-action: none;
+      opacity: 0;
+      transition: opacity 1.2s ease;
+    }
+    #stage.on { opacity: 1; }
+    #loading {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font: var(--text);
+      letter-spacing: 0.06em;
+      color: var(--ink-soft);
+      transition: opacity 1s ease;
+      pointer-events: none;
+    }
+    #loading span { animation: breathe 2.6s ease-in-out infinite; }
+    #loading.off { opacity: 0; }
+    @keyframes breathe { 0%, 100% { opacity: 0.35; } 50% { opacity: 0.95; } }
+    #hint {
+      position: fixed;
+      left: 16px;
+      right: 16px;
+      bottom: calc(40px + env(safe-area-inset-bottom, 0px));
+      text-align: center;
+      font: var(--text);
+      color: var(--ink);
+      opacity: 0;
+      transition: opacity 1.6s ease;
+      pointer-events: none;
+      text-wrap: balance;
+    }
+    #hint.on { opacity: 0.85; }
+    #credit {
+      position: fixed;
+      left: 16px;
+      right: 16px;
+      bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+      text-align: center;
+      font: 400 10.5px/1.4 -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+      color: var(--ink-soft);
+      opacity: 0.8;
+      pointer-events: none;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      #loading span { animation: none; }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="stage" aria-label="앉아서 두리번거리는 고양이. 손가락을 움직이면 눈으로 따라와요." role="img"></canvas>
+  <div id="loading"><span>고양이를 데려오는 중</span></div>
+  <div id="hint" aria-live="polite">손가락이나 마우스를 움직이면 고양이가 눈으로 따라와요</div>
+  <div id="credit">3D 모델: guillaume bolis, “3d modelling my cat: Fripouille” (CC BY 4.0), 수정해서 씀</div>
+  <noscript>고양이를 보려면 자바스크립트를 켜 주세요.</noscript>
+  <script type="module" src="/src/smooth/main.ts"></script>
+</body>
+</html>
