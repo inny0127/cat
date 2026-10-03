@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { Cat3D } from './cat';
+import { NRAMP, rampUniform } from './pixclass';
 
 const FLOOR_VERT = /* glsl */ `
 varying vec3 vWorld;
@@ -103,7 +104,6 @@ const PAL_PROP = [
   '#a9d4ee', '#fde3c0', '#f3b17e', '#e88f7a', '#34416a', '#222c4d', '#f6e7a8',
   '#3c2416',
 ];
-const OUTLINE = 16;   // index of the outline colour in PAL_CAT
 const NPAL = Math.max(PAL_CAT.length, PAL_BG.length, PAL_EYE.length, PAL_PROP.length);
 
 const PIXEL_FRAG = /* glsl */ `
@@ -119,6 +119,7 @@ uniform vec3 uPalCat[${NPAL}];
 uniform vec3 uPalEye[${NPAL}];
 uniform vec3 uPalBg[${NPAL}];
 uniform vec3 uPalProp[${NPAL}];
+uniform vec3 uRamp[${NRAMP}];
 varying vec2 vUv;
 
 // Khronos PBR Neutral, as the full-resolution stage uses
@@ -162,9 +163,59 @@ vec3 snap(vec3 c, int pal, out vec3 second, out float t) {
   t = sqrt(d1) / max(sqrt(d1) + sqrt(d2), 1e-5);
   return c1;
 }
+// the cat writes its material, light and rim light (pixclass.ts); -1 where it is not the cat
+int catAt(ivec2 q, out float light, out float rim) {
+  vec4 t = texelFetch(uColor, q, 0);
+  light = t.g;
+  rim = t.b;
+  if (t.a < 0.9 || texelFetch(uDepth, q, 0).r >= 0.99999) return -1;
+  return int(t.r * 16.0);
+}
+float invDepth(ivec2 q) { return 1.0 / lin(texelFetch(uDepth, q, 0).r); }
+
 void main() {
   ivec2 p = ivec2(vUv * uSize);
   vec4 src = texelFetch(uColor, p, 0);
+  float L0, R0;
+  int cls = catAt(p, L0, R0);
+  if (cls >= 0) {
+    // a single pixel of a material none of its neighbours share takes the commonest of theirs,
+    // and the light is evened a little over the same material, so the coat comes out in clean
+    // shapes and bands rather than specks
+    int nc[8];
+    float nl[8];
+    int k = 0, same = 0;
+    for (int dy = -1; dy <= 1; dy++) for (int dx = -1; dx <= 1; dx++) {
+      if (dx == 0 && dy == 0) continue;
+      float l2, r2;
+      int c2 = catAt(p + ivec2(dx, dy), l2, r2);
+      nc[k] = c2; nl[k] = l2; k++;
+      if (c2 == cls) same++;
+    }
+    if (same == 0) {
+      int best = cls, bestN = 0;
+      for (int i = 0; i < 8; i++) {
+        if (nc[i] < 0) continue;
+        int n = 0;
+        for (int j = 0; j < 8; j++) if (nc[j] == nc[i]) n++;
+        if (n > bestN) { bestN = n; best = nc[i]; }
+      }
+      cls = best;
+    }
+    float sumL = L0 * 4.0, sumW = 4.0;
+    for (int i = 0; i < 8; i++) if (nc[i] == cls) { sumL += nl[i]; sumW += 1.0; }
+    float L = sumL / sumW;
+    int level = L < 0.16 ? 0 : L < 0.32 ? 1 : L < 0.52 ? 2 : L < 0.76 ? 3 : 4;
+    // the light catching the edge from behind
+    if (R0 > 0.4) level = min(4, level + 1);
+    // just behind a nearer part of the body (a leg across the chest, the tail over a flank): a
+    // line in this colour's own shade, never black
+    float w = invDepth(p);
+    float front = max(max(invDepth(p + ivec2(-1, 0)), invDepth(p + ivec2(1, 0))), max(invDepth(p + ivec2(0, 1)), invDepth(p + ivec2(0, -1)))) - w;
+    if (front > 0.035 * w && w > 0.25) level = max(0, level - 1);
+    gl_FragColor = vec4(uRamp[cls * 5 + level], 1.0);
+    return;
+  }
   vec3 c = toSRGB(neutral(src.rgb));
   // the floor marks itself with alpha 0.25, the room's things 0.35, the eyes 0.75; the backdrop is
   // at the far plane
@@ -180,16 +231,6 @@ void main() {
     float th = fract(b * 0.0625 * 7.0) * 0.5;
     if (t > 0.5 - th * 0.35 && t > 0.38) s = c2;
   }
-  // outlines: an art pixel in front of its neighbour by more than a few centimetres is an edge
-  float w = 1.0 / lin(texelFetch(uDepth, p, 0).r);
-  float wl = 1.0 / lin(texelFetch(uDepth, p + ivec2(-1, 0), 0).r), wr = 1.0 / lin(texelFetch(uDepth, p + ivec2(1, 0), 0).r);
-  float wu = 1.0 / lin(texelFetch(uDepth, p + ivec2(0, 1), 0).r), wd = 1.0 / lin(texelFetch(uDepth, p + ivec2(0, -1), 0).r);
-  // how far the neighbours fall behind the surface this pixel lies on: across a plane, inverse
-  // depth changes linearly on screen, so only a real step leaves a second difference
-  float behind = max(2.0 * w - wl - wr, 2.0 * w - wu - wd);
-  if (w < 0.25) behind = 0.0;                                           // nothing to outline out at the horizon
-  if (behind > 0.1 * w) s = uPalCat[${OUTLINE}];                        // against the backdrop
-  else if (behind > 0.035 * w) { vec3 c3; float t3; s = snap(s * 0.62, pal, c3, t3); }  // a limb in front of the body
   gl_FragColor = vec4(s, 1.0);
 }`;
 
@@ -269,6 +310,7 @@ export class Stage {
         uPalEye: { value: palette(PAL_EYE) },
         uPalProp: { value: palette(PAL_PROP) },
         uPalBg: { value: palette(PAL_BG) },
+        uRamp: { value: rampUniform() },
       },
       vertexShader: PIXEL_VERT, fragmentShader: PIXEL_FRAG, depthTest: false, depthWrite: false, toneMapped: false,
     });

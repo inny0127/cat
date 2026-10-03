@@ -496,6 +496,41 @@ def teeth(V, inner, jaw, depth, front):
     return np.array(P), np.array(F), np.array(R), np.array(up)
 
 
+# ------------------------------------------------------------------ pixel art
+# The coat as a pixel artist would see it: a few flat colours (white, cream, ginger, the darker
+# ginger of the stripes, pink skin, dark), cleaned of the painting's single hairs, so that at a few
+# millimetres to the art pixel the stripes read as shapes rather than noise. The renderer tells the
+# colours apart and shades each with its own ramp; these are only keys (src/cat3d/pixclass.ts).
+PIX_KEYS = np.array([[255, 255, 255], [255, 200, 120], [230, 120, 40], [130, 50, 10], [255, 140, 170], [20, 10, 10]], np.uint8)
+
+
+def oklab(c):
+    c = np.where(c <= 0.04045, c / 12.92, ((c + 0.055) / 1.055) ** 2.4)
+    M1 = np.array([[0.4122214708, 0.5363325363, 0.0514459929], [0.2119034982, 0.6806995451, 0.1073969566], [0.0883024619, 0.2817188376, 0.6299787005]])
+    M2 = np.array([[0.2104542553, 0.7936177850, -0.0040720468], [1.9779984951, -2.4285922050, 0.4505937099], [0.0259040371, 0.7827717662, -0.8086757660]])
+    return np.cbrt(c @ M1.T) @ M2.T
+
+
+def pixel_coat(tex8):
+    import cv2
+    lab = oklab(tex8.astype(np.float64) / 255)
+    blur = lambda x, s=3.0: cv2.GaussianBlur(x.astype(np.float32), (0, 0), s)
+    Ls, a, b = blur(lab[..., 0]), blur(lab[..., 1]), blur(lab[..., 2])
+    Cs, hs = np.hypot(a, b), np.degrees(np.arctan2(b, a)) % 360
+    cls = np.zeros(Ls.shape, np.int32)
+    orange = (Cs >= 0.035) & (hs > 35) & (hs < 95)
+    pink = (Cs > 0.035) & ((hs < 35) | (hs > 330)) & (Ls > 0.55)
+    cls[orange] = 2
+    cls[orange & (blur(Ls, 4.0) > 0.655)] = 1
+    cls[orange & (Ls < 0.50)] = 3
+    cls[pink] = 4
+    cls[Ls < 0.3] = 5
+    soft = np.stack([blur(cls == k, 2.5) for k in range(len(PIX_KEYS))], -1)
+    clean = soft.argmax(-1)
+    print('pixel coat: ' + ', '.join('%s %.1f%%' % (n, 100 * (clean == k).mean()) for k, n in enumerate(['white', 'cream', 'ginger', 'stripe', 'pink', 'dark'])))
+    return PIX_KEYS[clean]
+
+
 # ------------------------------------------------------------------ weights
 def chain_weights(V, pts, blend):
     """Weights over a chain of bones (bone i runs from pts[i] to pts[i+1]): each vertex goes to the
@@ -681,6 +716,9 @@ def main():
     buf = io.BytesIO()
     Image.fromarray(tex8).save(buf, 'PNG', optimize=True)
     png = buf.getvalue()
+    buf = io.BytesIO()
+    Image.fromarray(pixel_coat(tex8)).save(buf, 'PNG', optimize=True)
+    pixpng = buf.getvalue()
     out_frac = np.mean(np.einsum('ij,ij->i', Nn, V - V.mean(0)) > 0)
     print('vertices', len(V), 'triangles', len(faces), 'normals outward %.2f' % out_frac)
 
@@ -723,11 +761,11 @@ def main():
     if os.environ.get('DUMP'):
         np.savez(os.environ['DUMP'], V=V, faces=faces, uv=uvs, Nn=Nn, reg=reg, aux=aux, nose=nose, Wo=Wo, names=np.array(names),
                  B=np.array([B[n] for n in names]), tex=tex8, eyeL=eyes['L']['c'], eyeR=eyes['R']['c'])
-    export(out, V, faces, Nn, order, w4, uvs, names, B, lm, png, reg, aux)
+    export(out, V, faces, Nn, order, w4, uvs, names, B, lm, png, reg, aux, pixpng)
     print('wrote', out)
 
 
-def export(out, V, faces, Nn, j, w, uv, names, B, lm, png, reg=None, aux=None):
+def export(out, V, faces, Nn, j, w, uv, names, B, lm, png, reg=None, aux=None, pixpng=None):
     """same layout as model.py's export_bin (read by src/cat3d/load.ts), plus UVs and the texture"""
     blobs, off = [], 0
 
@@ -745,8 +783,9 @@ def export(out, V, faces, Nn, j, w, uv, names, B, lm, png, reg=None, aux=None):
                 reg=add((np.zeros(n) if reg is None else reg).astype(np.float32)),
                 aux=add((np.zeros((n, 3)) if aux is None else aux).astype(np.float32)), uv=add(uv.astype(np.float32)))
     texture = dict(data=add(png), bytes=len(png), mime='image/png')
+    pixtex = dict(data=add(pixpng), bytes=len(pixpng), mime='image/png') if pixpng else None
     bones = [{'name': nm, 'parent': M.BONES[nm][0], 'pos': np.round(B[nm], 5).tolist()} for nm in names]
-    head = json.dumps(dict(landmarks=lm, bones=bones, meshes=[mesh], correctives=None, strands=None, texture=texture, credit=CREDIT)).encode()
+    head = json.dumps(dict(landmarks=lm, bones=bones, meshes=[mesh], correctives=None, strands=None, texture=texture, pixtex=pixtex, credit=CREDIT)).encode()
     head += b' ' * ((-len(head)) % 4)
     with open(out, 'wb') as fh:
         fh.write(np.array([len(head)], np.uint32).tobytes())

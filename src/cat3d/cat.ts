@@ -61,6 +61,9 @@ export class Cat3D {
   readonly meshes: THREE.SkinnedMesh[] = [];
   /** the painted coat's material, for a painted model */
   private skin: THREE.ShaderMaterial | null = null;
+  /** its coat in flat material colours, for pixel art */
+  private pixTexture: THREE.Texture | null = null;
+  private painted: THREE.Texture | null = null;
   private readonly homeM: Record<Leg, THREE.Vector3> = { LF: v(), RF: v(), LH: v(), RH: v() };
   private readonly homeW: Record<Leg, THREE.Vector3> = { LF: v(), RF: v(), LH: v(), RH: v() };
   private readonly targ: Record<Leg, THREE.Vector3> = { LF: v(), RF: v(), LH: v(), RH: v() };
@@ -92,6 +95,7 @@ export class Cat3D {
 
     // a model with its own painted coat is drawn as one textured surface instead of fur
     const painted = asset.texture;
+    this.painted = painted;
     const shells = painted ? 1 : opts.shells ?? 24;
     const LMa = asset.landmarks;
     const { mats, shared, defines } = makeFurMaterials({ shells, density: opts.density ?? 2400 }, { ...LMa, head: LMa.head }, asset.correctives);
@@ -99,7 +103,8 @@ export class Cat3D {
     this.shared = shared;
     let skin: THREE.ShaderMaterial | null = null;
     if (painted) {
-      skin = makeSkinMaterial(painted, shared as unknown as Record<string, { value: unknown }>, asset.bones);
+      skin = makeSkinMaterial(painted, shared as unknown as Record<string, { value: unknown }>, asset.bones, asset.pixTexture);
+      this.pixTexture = asset.pixTexture;
       this.skin = skin;
       for (const geo of Object.values(asset.meshes)) {
         const m = new THREE.SkinnedMesh(geo, skin);
@@ -219,10 +224,14 @@ export class Cat3D {
     this.tail.reset();
   }
 
-  /** pixel art: flat coat colour, flat eyes, no whiskers (finer than an art pixel) */
+  /** pixel art: flat coat colour, flat eyes, no whiskers (finer than an art pixel); the lids show
+   *  the coat's materials as the coat does */
   setPixelArt(on: boolean) {
     this.shared.uSolid.value = on ? 1 : 0;
-    for (const e of this.eyes) e.eyeMat.uniforms.uFlat.value = on ? 1 : 0;
+    for (const e of this.eyes) {
+      e.eyeMat.uniforms.uFlat.value = on ? 1 : 0;
+      if (this.pixTexture && e.eyeMat.uniforms.uLidTex.value > 0.5) e.eyeMat.uniforms.uLidMap.value = on ? this.pixTexture : this.painted;
+    }
     this.whiskers.mesh.visible = !on;
   }
 

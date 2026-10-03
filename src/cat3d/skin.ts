@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { AO_GLSL, LIGHT_GLSL } from './fur';
 import { GRADE_GLSL } from './grade';
+import { PIX, PIX_GLSL } from './pixclass';
 
 /**
  * A painted (textured) coat for a model that brings its own colours instead of the procedural fur:
@@ -57,7 +58,9 @@ void main() {
 const FRAG = /* glsl */ `
 #include <packing>
 uniform sampler2D uMap;
+uniform sampler2D uPixMap;
 uniform float uSolid;
+uniform vec3 uRimDir;
 uniform vec3 uKeyDir;
 uniform vec3 uKeyCol;
 uniform vec3 uFillDir;
@@ -67,6 +70,7 @@ uniform vec3 uGroundCol;
 uniform float uSpec;   // the hair shading below wants it declared
 uniform float uJawOpen;
 ${GRADE_GLSL}
+${PIX_GLSL}
 varying float vReg;
 varying vec3 vAux;
 varying vec2 vUv;
@@ -75,6 +79,24 @@ varying vec3 vWorld;
 varying float vAO;
 ${LIGHT_GLSL}
 void main() {
+  if (uSolid > 0.5) {
+    // pixel art: which material, and how much light, for the pixel pass to paint from its ramps
+    vec3 Np = normalize(vN) * (gl_FrontFacing ? 1.0 : -1.0);
+    int cls = vReg > 1.5 ? ${PIX.teeth} : vReg > 0.5 ? (vAux.y > 0.5 ? ${PIX.tongue} : ${PIX.mouth})
+      : !gl_FrontFacing ? ${PIX.mouth} : pixClass(texture2D(uPixMap, vUv).rgb);
+    float shp = keyShadow(vWorld, Np);
+    float direct = smoothstep(-0.15, 0.55, dot(Np, uKeyDir)) * mix(0.25, 1.0, shp);
+    // key, sky, fill, and the warm floor bouncing light up under the chin and belly
+    float light = direct * 0.56 + (Np.y * 0.5 + 0.5) * 0.28 + max(dot(Np, uFillDir), 0.0) * 0.2 + max(-Np.y, 0.0) * 0.14;
+    light *= mix(0.55, 1.0, vAO);
+    // the mouth darkens toward the throat
+    if (vReg > 0.5 && vReg < 1.5) light *= mix(1.0, 0.15, smoothstep(0.3, 0.95, vAux.x));
+    if (!gl_FrontFacing && vReg < 0.5) light *= 0.5;
+    vec3 Vp = normalize(cameraPosition - vWorld);
+    float rim = pow(1.0 - max(dot(Np, Vp), 0.0), 2.5) * max(dot(Np, uRimDir), 0.0) * shp;
+    gl_FragColor = pixOut(cls, light, rim);
+    return;
+  }
   vec3 col = texture2D(uMap, vUv).rgb;
   // inside the mouth: the lips' skin, then pink gums and palate, the tongue a softer pink, dark
   // toward the throat; the teeth ivory
@@ -117,10 +139,10 @@ function bristle(name: string) {
   return 0;   // ears, paws, the root
 }
 
-export function makeSkinMaterial(map: THREE.Texture, shared: Record<string, { value: unknown }>, bones: { name: string; pos: number[] }[]) {
+export function makeSkinMaterial(map: THREE.Texture, shared: Record<string, { value: unknown }>, bones: { name: string; pos: number[] }[], pixMap: THREE.Texture | null = null) {
   return new THREE.ShaderMaterial({
     uniforms: {
-      ...shared, uMap: { value: map }, uSolidGain: { value: 1.7 }, uSolidSat: { value: 1.3 },
+      ...shared, uMap: { value: map }, uPixMap: { value: pixMap ?? map }, uSolidGain: { value: 1.7 }, uSolidSat: { value: 1.3 },
       uBonePuff: { value: bones.map((b) => bristle(b.name)) },
       uJawOpen: { value: 0 }, uSnarl: { value: 0 },
     },

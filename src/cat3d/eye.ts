@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GRADE_GLSL } from './grade';
+import { PIX, PIX_GLSL } from './pixclass';
 
 /**
  * Cat eyes. The eyeball has a recessed iris seen through a bulging cornea (parallax), a slit
@@ -68,6 +69,7 @@ uniform vec3 uLidU;        //     u = dot(uLidU, (x, y, 1)) in the lid frame, v 
 uniform vec3 uLidV;
 uniform float uLidTex;
 ${GRADE_GLSL}
+${PIX_GLSL}
 varying vec3 vLocal;
 varying vec3 vViewLocal;
 varying vec3 vN;
@@ -195,9 +197,19 @@ void main() {
     float glint = max(step(max(gq.x, gq.y), 0.12) * step(0.3, uShine), step(max(gq2.x, gq2.y), 0.05) * step(0.75, uShine));
     vec3 c = mix(iris, vec3(0.004), pupil);
     c = mix(c, vec3(1.0), glint);
-    if (lidIn < rim) c = lidIn < 0.0 && !seam ? lidSkin(normalize(vN), dlo) : rimCol;
-    // alpha 0.75 tells the pixel pass to use the eyes' palette; lids are coat
-    gl_FragColor = vec4(c, lidIn < rim ? 1.0 : 0.75);
+    if (lidIn < rim) {
+      // the lids are coat: its material where it maps onto them (or dark skin), lit as the coat is;
+      // their margin is the dark skin of a cat's lid rim
+      vec3 Nl = normalize(vN);
+      if (lidIn < 0.0 && !seam) {
+        int cls = uLidTex > 0.5 ? pixClass(texture2D(uLidMap, vec2(dot(uLidU, vec3(dlo.xy, 1.0)), dot(uLidV, vec3(dlo.xy, 1.0)))).rgb) : ${PIX.white};
+        float light = smoothstep(-0.15, 0.55, dot(Nl, uKeyDir)) * 0.62 + (Nl.y * 0.5 + 0.5) * 0.25 + 0.06;
+        gl_FragColor = pixOut(cls, light, 0.0);
+      } else gl_FragColor = pixOut(${PIX.dark}, 0.42, 0.0);
+      return;
+    }
+    // alpha 0.75 tells the pixel pass to use the eyes' palette
+    gl_FragColor = vec4(c, 0.75);
     return;
   }
 

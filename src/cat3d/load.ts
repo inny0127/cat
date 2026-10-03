@@ -65,6 +65,8 @@ export interface CatAsset {
   texture: THREE.Texture | null;
   /** attribution the model's licence asks for */
   credit: string | null;
+  /** the coat in a few flat colours, one per material, for pixel art (pixclass.ts) */
+  pixTexture: THREE.Texture | null;
 }
 
 export const CORR_WIDTH = 1024;
@@ -125,17 +127,19 @@ export async function loadCatAsset(url: string): Promise<CatAsset> {
       aux: t.aux !== undefined ? new Float32Array(buf, base + t.aux, n * 3) : new Float32Array(n * 3),
     };
   }
-  let texture: THREE.Texture | null = null;
-  if (head.texture) {
-    const t = head.texture;
+  const image = async (t: { data: number; bytes: number; mime: string } | undefined) => {
+    if (!t) return null;
     const bmp = await createImageBitmap(new Blob([new Uint8Array(buf, base + t.data, t.bytes)], { type: t.mime }));
-    texture = new THREE.Texture(bmp);
-    texture.colorSpace = THREE.SRGBColorSpace;
-    texture.flipY = false;   // glTF's UVs
-    texture.anisotropy = 4;
-    texture.needsUpdate = true;
-  }
-  return { landmarks: head.landmarks, bones: head.bones, meshes, correctives, strands, texture, credit: head.credit ?? null };
+    const tex = new THREE.Texture(bmp);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.flipY = false;   // glTF's UVs
+    tex.anisotropy = 4;
+    tex.needsUpdate = true;
+    return tex;
+  };
+  const texture = await image(head.texture);
+  const pixTexture = await image(head.pixtex);
+  return { landmarks: head.landmarks, bones: head.bones, meshes, correctives, strands, texture, credit: head.credit ?? null, pixTexture };
 }
 
 /** Bones with identity rest rotations, positioned at their joints (world-aligned rest frame). */
