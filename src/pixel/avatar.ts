@@ -400,8 +400,10 @@ export class PixelAvatar implements Avatar {
         if (Math.random() < 0.4) setTimeout(() => this.cat.motor.dreamTwitch(), 180 + Math.random() * 200);
       }
       this.sleepStretch(dt, this.sleep > 0.75 && atHome && !this.touched);
+      this.nodOff(dt, this.sleep <= 0.75 && atHome && !this.touched && !this.act && m.posture === 'loaf' && m.targetPosture === 'loaf' && m.settled);
       return;
     }
+    this.nodOff(dt, false);
     if (this.mode === 'enjoy' || this.mode === 'annoyed' || this.mode === 'angry') {
       // in somebody's hands: stop and stay; tread with the front paws when it is happy there
       if (this.perched) { this.act!.update(dt, c); return; }
@@ -612,6 +614,40 @@ export class PixelAvatar implements Avatar {
   private waking = 0;
   wakeStretch() {
     this.waking = 4;
+  }
+
+  /** dozing off on its chest: the head sinks, slowly, slowly, and catches itself with a little
+   *  jerk, and sinks again, until sleep wins and it curls up */
+  private nod = { t: 0, len: 4.5, w: 0 };
+  private nodLayer: { pose: PoseLayer; w: number } | null = null;
+  private nodOff(dt: number, may: boolean) {
+    const m = this.cat.motor, n = this.nod;
+    // (its layer taken for something else: that has the head now)
+    if (this.nodLayer && m.layer !== this.nodLayer) {
+      this.nodLayer = null;
+      n.w = 0;
+    }
+    n.w = Math.max(0, Math.min(1, n.w + (may ? dt / 1.5 : -dt / 0.4)));
+    if (n.w <= 0) {
+      if (this.nodLayer && m.layer === this.nodLayer) m.layer = null;
+      this.nodLayer = null;
+      n.t = 0;
+      return;
+    }
+    n.t += dt;
+    if (n.t > n.len) {
+      n.t -= n.len;
+      n.len = 3.5 + Math.random() * 3;
+    }
+    // how far down: sinking most of the time, then up with a start, a little past, and settling
+    const u = n.t / n.len;
+    const d = u < 0.85 ? ease(u / 0.85) : u < 0.92 ? 1 - 1.1 * ease((u - 0.85) / 0.07) : -0.1 * (1 - ease((u - 0.92) / 0.08));
+    // (from the head held up, the nose toward you, to the chin sunk on the chest)
+    this.nodLayer ??= { pose: {}, w: 0 };
+    this.nodLayer.pose.neckPitch = -0.2 - 0.3 * d;
+    this.nodLayer.pose.headPitch = 0.75 - 0.4 * d;
+    this.nodLayer.w = ease(n.w);
+    m.layer = this.nodLayer;
   }
 
   doBlink(slow = false) {
