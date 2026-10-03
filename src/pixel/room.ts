@@ -62,8 +62,10 @@ void main() {
   } else if (uPattern == 2) {
     // a round rug: a cream border, a cream ring inside it, indigo between, a cream heart of it
     float r = length(vWorld.xz - uRug.xy) / uRug.z;
-    bool cream = r > 0.9 || (r > 0.66 && r < 0.72) || r < 0.16;
+    bool cream = r > 0.92 || (r > 0.78 && r < 0.81);
     m = cream ? ${PIX.rugCream} : ${PIX.rug};
+    // a tufted texture: every so often a stitch a shade lighter
+    if (!cream && fract(sin(dot(floor(vWorld.xz / 0.018), vec2(12.9898, 78.233))) * 43758.5453) > 0.86) tone += 0.06;
   } else if (uPattern == 3) {
     // the wall: panelling to the dado rail, plaster above
     if (vWorld.y < 0.3) {
@@ -218,17 +220,13 @@ export class Room {
 
     // the back wall, round the window
     const winL = bx - 0.34, winR = bx + 0.34, winB = 0.36, winT = 1.16;
-    const wallMat = this.mat('wall', { pattern: 3, dither: true });
-    const wallPiece = (x0: number, x1: number, y0: number, y1: number) => {
-      const m = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, y1 - y0), wallMat);
-      m.receiveShadow = true;
-      m.castShadow = true;   // the sun comes in only through the window
-      add(m, (x0 + x1) / 2, (y0 + y1) / 2, wallZ);
-    };
-    wallPiece(bx - 2, winL, 0, 2.2);
-    wallPiece(winR, bx + 2, 0, 2.2);
-    wallPiece(winL, winR, 0, winB);
-    wallPiece(winL, winR, winT, 2.2);
+    // one sheet with the window cut out of it (pieces would leave hairline cracks at their seams)
+    const wallShape = new THREE.Shape([new THREE.Vector2(bx - 2, 0), new THREE.Vector2(bx + 2, 0), new THREE.Vector2(bx + 2, 2.4), new THREE.Vector2(bx - 2, 2.4)]);
+    wallShape.holes.push(new THREE.Path([new THREE.Vector2(winL, winB), new THREE.Vector2(winL, winT), new THREE.Vector2(winR, winT), new THREE.Vector2(winR, winB)]));
+    const wall = new THREE.Mesh(new THREE.ShapeGeometry(wallShape), this.mat('wall', { pattern: 3, dither: true }));
+    wall.receiveShadow = true;
+    wall.castShadow = true;   // the sun comes in only through the window
+    add(wall, 0, 0, wallZ);
     // the dado rail stands proud of the wall
     add(shadowy(new THREE.Mesh(new THREE.BoxGeometry(4, 0.03, 0.02), this.mat('paint'))), bx, 0.318, wallZ + 0.01);
     add(shadowy(new THREE.Mesh(new THREE.BoxGeometry(4, 0.05, 0.015), this.mat('paint', { tone: -0.05 }))), bx, 0.025, wallZ + 0.008);
@@ -248,6 +246,18 @@ export class Room {
     bar(0.02, wh, 0.03, bx, winB + wh / 2, wallZ - 0.04);                 // glazing bars
     bar(ww, 0.02, 0.03, bx, winB + wh * 0.62, wallZ - 0.04);
     bar(ww + 0.14, 0.03, 0.15, bx, winB - 0.015, wallZ + 0.035);          // the sill
+    // on the sill: a little succulent in a pot and a candle in a jar
+    add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.028, 0.05, 14), this.mat('paint', { tone: -0.04 }))), winL + 0.11, winB + 0.025, wallZ + 0.02);
+    for (let i = 0; i < 7; i++) {
+      const a = (i / 7) * Math.PI * 2;
+      const l = shadowy(new THREE.Mesh(new THREE.SphereGeometry(0.016, 6, 4), this.mat('leaf', { tone: 0.08 * (i % 2) })));
+      l.scale.set(0.7, 1.4, 0.7);
+      l.rotation.z = Math.cos(a) * 0.5;
+      l.rotation.x = Math.sin(a) * 0.5;
+      add(l, winL + 0.11 + Math.cos(a) * 0.014, winB + 0.06, wallZ + 0.02 + Math.sin(a) * 0.014);
+    }
+    add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.06, 14), this.mat('bookMustard', { tone: 0.1 }))), winR - 0.12, winB + 0.03, wallZ + 0.02);
+
     // the curtains on their rod, gathered in soft folds
     add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, ww + 0.5, 8).rotateZ(Math.PI / 2), this.mat('metal'))), bx, winT + 0.09, wallZ + 0.06);
     for (const side of [-1, 1]) {
@@ -276,6 +286,66 @@ export class Room {
       this.bulbs.push(m);
       add(new THREE.Mesh(new THREE.SphereGeometry(0.009, 6, 4), m), p.x, p.y - 0.008, p.z);
     }
+
+    // a long shelf over the window: little pots of green (one trailing down past the curtain),
+    // a few books, a candle, a small framed print of hills under a sun
+    const ty = 1.4;
+    add(shadowy(new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.022, 0.11), this.mat('brown'))), bx, ty, wallZ + 0.055);
+    for (const sxp of [-0.3, 0.3]) add(shadowy(new THREE.Mesh(new THREE.BoxGeometry(0.015, 0.05, 0.08), this.mat('metal'))), bx + sxp, ty - 0.035, wallZ + 0.04);
+    const pot = (x: number, r: number, h: number, m: Material) => add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(r, r * 0.8, h, 14), this.mat(m))), x, ty + 0.011 + h / 2, wallZ + 0.055);
+    const tuft = (x: number, y: number, n: number, spread: number, size: number, tone = 0) => {
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2;
+        const l = shadowy(new THREE.Mesh(new THREE.SphereGeometry(size, 6, 4), this.mat('leaf', { tone: tone + 0.05 * (i % 2) })));
+        l.scale.set(0.8, 1.3, 0.8);
+        l.rotation.z = Math.cos(a) * 0.6;
+        add(l, x + Math.cos(a) * spread, y + Math.abs(Math.sin(i * 1.3)) * size, wallZ + 0.055 + Math.sin(a) * spread);
+      }
+    };
+    pot(bx - 0.36, 0.035, 0.06, 'pot');
+    tuft(bx - 0.36, ty + 0.09, 9, 0.025, 0.018);
+    pot(bx - 0.2, 0.028, 0.05, 'paint');
+    // a trailing pothos: strands of leaves down over the shelf's edge
+    for (let i = 0; i < 6; i++) {
+      const len = 0.14 + 0.22 * Math.abs(Math.sin(i * 1.9));
+      const sx0 = bx - 0.2 + (i - 2.5) * 0.012;
+      for (let j = 0; j < 6; j++) {
+        const l = shadowy(new THREE.Mesh(new THREE.SphereGeometry(0.014, 6, 4), this.mat('leaf', { tone: ((i + j) % 3) * 0.05 })));
+        l.scale.set(1, 0.65, 0.6);
+        add(l, sx0 + Math.sin(j * 1.7 + i) * 0.012, ty + 0.05 - (j / 5) * len, wallZ + 0.11);
+      }
+    }
+    const shelfBooks: [Material, number, number][] = [['bookBlue', 0.1, 0.02], ['bookRed', 0.12, 0.022], ['bookMustard', 0.09, 0.018]];
+    let sbx = bx - 0.06;
+    for (const [mname, h, t] of shelfBooks) {
+      add(shadowy(new THREE.Mesh(new THREE.BoxGeometry(t, h, 0.08), this.mat(mname))), sbx + t / 2, ty + 0.011 + h / 2, wallZ + 0.055);
+      sbx += t + 0.002;
+    }
+    // the print, leaning against the wall
+    const print = new THREE.Group();
+    print.add(shadowy(new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.12, 0.012), this.mat('brown', { tone: 0.1 }))));
+    const card = new THREE.Mesh(new THREE.PlaneGeometry(0.12, 0.09), this.mat('rugCream', { tone: 0.12 }));
+    card.position.z = 0.0065;
+    print.add(card);
+    const hillIn = (cx: number, w: number, h: number, m: Material, z: number) => {
+      const sh = new THREE.Shape();
+      sh.moveTo(cx - w / 2, -0.045);
+      for (let i = 0; i <= 10; i++) { const t = i / 10; sh.lineTo(cx - w / 2 + w * t, -0.045 + h * Math.sin(Math.PI * t)); }
+      const hm = new THREE.Mesh(new THREE.ShapeGeometry(sh), this.mat(m));
+      hm.position.z = z;
+      print.add(hm);
+    };
+    hillIn(0.025, 0.1, 0.05, 'leaf', 0.007);
+    hillIn(-0.03, 0.09, 0.035, 'panel', 0.0075);
+    const sun = new THREE.Mesh(new THREE.CircleGeometry(0.011, 10), this.mat('bookMustard', { tone: 0.15 }));
+    sun.position.set(0.03, 0.02, 0.0072);
+    print.add(sun);
+    print.rotation.x = -0.12;
+    print.position.set(bx + 0.13, ty + 0.072, wallZ + 0.04);
+    this.group.add(print);
+    pot(bx + 0.27, 0.03, 0.055, 'pot');
+    tuft(bx + 0.27, ty + 0.085, 8, 0.02, 0.016, 0.05);
+    add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.05, 12), this.mat('rugCream', { tone: 0.15 }))), bx + 0.38, ty + 0.036, wallZ + 0.05);
 
     // a shelf to the right of the window: books, a jar, a trailing plant
     const sx = winR + 0.32, sy = 0.92;
@@ -307,27 +377,51 @@ export class Room {
     add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.14, 0.17, 24, 1, true), this.shade)), lx, 1.02, lz);
     this.lampPos = new THREE.Vector3(lx, 0.97, lz);
 
-    // a monstera in a terracotta pot by the box
-    const px = bx + 0.42, pz = wallZ + 0.22;
+    // a monstera in a terracotta pot by the box: big split leaves fanned out toward the room
+    const px = bx + 0.43, pz = wallZ + 0.24;
     add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.085, 0.2, 20), this.mat('pot'))), px, 0.1, pz);
+    add(shadowy(new THREE.Mesh(new THREE.TorusGeometry(0.108, 0.012, 6, 24).rotateX(Math.PI / 2), this.mat('pot', { tone: 0.06 }))), px, 0.2, pz);
     add(new THREE.Mesh(new THREE.CircleGeometry(0.1, 16).rotateX(-Math.PI / 2), this.mat('brown', { tone: -0.1 })), px, 0.19, pz);
-    const leafShape = new THREE.Shape();
-    leafShape.moveTo(0, 0);
-    leafShape.bezierCurveTo(0.11, 0.04, 0.12, 0.2, 0, 0.26);
-    leafShape.bezierCurveTo(-0.12, 0.2, -0.11, 0.04, 0, 0);
-    const leafGeo = new THREE.ShapeGeometry(leafShape, 8);
-    const stems: [number, number, number][] = [[0.0, 0.62, 0.0], [1.1, 0.45, 0.4], [2.3, 0.55, -0.2], [3.4, 0.4, 0.5], [4.6, 0.5, 0.1], [5.6, 0.36, -0.3], [0.6, 0.3, 0.6]];
-    for (const [a, h, tilt] of stems) {
-      const leaf = new THREE.Mesh(leafGeo, this.mat('leaf', { tone: tilt * 0.08 }));
-      leaf.position.set(px + Math.cos(a) * 0.1, 0.2 + h, pz + Math.sin(a) * 0.08);
-      leaf.rotation.set(-0.9 + tilt * 0.3, a, Math.cos(a) * 0.5);
+    const leafGeo = monsteraLeaf();
+    const stems: [number, number, number, number][] = [
+      // angle round the pot, height, lean out, size
+      [0.0, 0.6, 0.55, 1.0], [1.3, 0.42, 0.75, 0.85], [2.6, 0.5, 0.6, 0.9], [-1.2, 0.36, 0.8, 0.8],
+      [3.6, 0.3, 0.7, 0.75], [0.7, 0.24, 0.9, 0.7], [-2.3, 0.48, 0.5, 0.85],
+    ];
+    for (const [a, h, lean, sz] of stems) {
+      const dir = new THREE.Vector3(Math.sin(a) * 0.9, 0, Math.cos(a) * 0.6 + 0.25).normalize();
+      const tip = new THREE.Vector3(px, 0.2, pz).addScaledVector(dir, lean * 0.22).add(new THREE.Vector3(0, h, 0));
+      const stemC = new THREE.QuadraticBezierCurve3(new THREE.Vector3(px + dir.x * 0.02, 0.19, pz + dir.z * 0.02), new THREE.Vector3(px + dir.x * 0.04, 0.2 + h * 0.8, pz + dir.z * 0.04), tip);
+      add(shadowy(new THREE.Mesh(new THREE.TubeGeometry(stemC, 8, 0.0045, 4), this.mat('leaf', { tone: -0.08 }))), 0, 0, 0);
+      const leaf = new THREE.Mesh(leafGeo, this.mat('leaf', { tone: (sz - 0.85) * 0.4 }));
+      leaf.scale.setScalar(sz);
+      leaf.position.copy(tip);
+      // the leaf sits on the end of its stem, its face toward the room (and a little up), leaning
+      // out the way its stem goes
+      leaf.rotation.order = 'YXZ';
+      leaf.rotation.set(-0.5 - 0.3 * (1 - lean), Math.sin(a) * 0.35, -Math.sin(a) * 0.95);
       shadowy(leaf);
       this.group.add(leaf);
-      const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.005, h, 5), this.mat('leaf', { tone: -0.1 }));
-      stem.position.set(px + Math.cos(a) * 0.05, 0.2 + h / 2, pz + Math.sin(a) * 0.04);
-      stem.rotation.z = -Math.cos(a) * 0.2;
-      this.group.add(stem);
     }
+
+    // in front: a stack of books with a mug on top, and a ball of yarn the cat plays with
+    const fx = bx + 0.36, fz = bz + 0.3;
+    const stack: [Material, number, number][] = [['bookBlue', 0.2, 0.03], ['bookRed', 0.18, 0.025], ['bookMustard', 0.17, 0.028]];
+    let fy = 0;
+    stack.forEach(([mname, w, t], i) => {
+      const bk = shadowy(new THREE.Mesh(new THREE.BoxGeometry(w, t, w * 0.7), this.mat(mname)));
+      bk.rotation.y = (i - 1) * 0.18;
+      add(bk, fx, fy + t / 2, fz);
+      fy += t;
+    });
+    add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.028, 0.07, 16), this.mat('paint'))), fx + 0.01, fy + 0.035, fz);
+    add(shadowy(new THREE.Mesh(new THREE.TorusGeometry(0.018, 0.006, 6, 12), this.mat('paint'))), fx + 0.045, fy + 0.04, fz);
+    add(new THREE.Mesh(new THREE.CircleGeometry(0.028, 14).rotateX(-Math.PI / 2), this.mat('brown')), fx + 0.01, fy + 0.066, fz);
+    this.mugTop = new THREE.Vector3(fx + 0.01, fy + 0.07, fz);
+    const yarn = shadowy(new THREE.Mesh(new THREE.SphereGeometry(0.045, 16, 12), this.mat('bookRed', { tone: 0.12 })));
+    add(yarn, bx - 0.3, 0.045, bz + 0.26);
+    const strand = new THREE.CatmullRomCurve3([new THREE.Vector3(bx - 0.27, 0.01, bz + 0.3), new THREE.Vector3(bx - 0.18, 0.003, bz + 0.36), new THREE.Vector3(bx - 0.08, 0.003, bz + 0.33), new THREE.Vector3(bx - 0.02, 0.003, bz + 0.4)]);
+    add(new THREE.Mesh(new THREE.TubeGeometry(strand, 20, 0.003, 4), this.mat('bookRed', { tone: 0.12 })), 0, 0, 0);
 
     // the bed: a soft teal rim round an oatmeal fleece cushion
     const cushion = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.03, 32), this.mat('fleece'));
@@ -377,6 +471,8 @@ export class Room {
   }
 
   private readonly timeU = { value: 0 };
+  /** where the mug's steam rises from */
+  mugTop = new THREE.Vector3();
   private readonly nightU = { value: 0 };
 
   private mat(name: Material, o: { pattern?: number; tone?: number; rug?: THREE.Vector3; wallZ?: number; dither?: boolean } = {}) {
@@ -425,4 +521,38 @@ export class Room {
     this.water.scale.setScalar(0.85 + 0.15 * w);
     this.clumps.count = Math.round(Math.max(0, Math.min(1, s.litter)) * 8);
   }
+}
+
+/** a monstera leaf: a broad heart with deep slits from the edge toward the midrib (in the xy
+ *  plane, stem at the origin, tip up +y) */
+function monsteraLeaf() {
+  const L = 0.24, W = 0.12;
+  const pts: THREE.Vector2[] = [];
+  const n = 40;
+  for (let i = 0; i <= n; i++) {
+    const t = i / n;                                   // right edge from the stem to the tip
+    const y = t * L;
+    const w = W * Math.sin(Math.PI * Math.pow(t, 0.8)) * (1 - 0.15 * t);
+    pts.push(new THREE.Vector2(w, y - 0.02 * Math.sin(Math.PI * t)));
+  }
+  const right = pts;
+  const left = pts.slice().reverse().map((p) => new THREE.Vector2(-p.x, p.y));
+  const outline = [...right, ...left.slice(1)];
+  // the slits: thin wedges cut in from each edge
+  const shape = new THREE.Shape();
+  shape.moveTo(outline[0].x, outline[0].y);
+  const slitAt = new Set([10, 17, 24, 31]);
+  for (let i = 1; i < outline.length; i++) {
+    const p = outline[i];
+    const k = i <= n ? i : 2 * n - i;
+    if (slitAt.has(k)) {
+      const inward = new THREE.Vector2(-Math.sign(p.x) * Math.abs(p.x) * 0.62, -0.012);
+      shape.lineTo(p.x, p.y);
+      shape.lineTo(p.x + inward.x, p.y + inward.y);
+      shape.lineTo(p.x + inward.x * 0.95, p.y + inward.y - 0.008);
+      continue;
+    }
+    shape.lineTo(p.x, p.y);
+  }
+  return new THREE.ShapeGeometry(shape, 4);
 }

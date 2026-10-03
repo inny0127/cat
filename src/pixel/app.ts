@@ -123,9 +123,9 @@ export class PixelApp {
     const cam = this.stage.camera;
     const tv = Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2);
     const el = THREE.MathUtils.degToRad(17);
-    // far enough to see a metre across at the bed, and 1.8 m up and down
-    const d = Math.max(0.5 / (tv * cam.aspect), 0.9 / tv);
-    const t = new THREE.Vector3(this.aim.x, 0.5, this.aim.z - 0.28);
+    // far enough to see a metre across at the bed, and 1.7 m up and down
+    const d = Math.max(0.52 / (tv * cam.aspect), 0.85 / tv);
+    const t = new THREE.Vector3(this.aim.x, 0.47, this.aim.z - 0.25);
     cam.position.set(t.x, t.y + d * Math.sin(el), t.z + d * Math.cos(el));
     cam.lookAt(t);
     // the brain's touch speeds are in the painted cat's pixels: about 600 across the window
