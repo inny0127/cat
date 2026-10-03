@@ -14,7 +14,10 @@ const report = await page.evaluate(async (minutes) => {
   const app = window.__pcat;
   const acts = ['wander', 'sun', 'play', 'sill', 'window', 'groom', 'yawn', 'stretch', 'bed'];
   const issues = [];
-  let t = 1, seen = {}, drag = null, drags = 0;
+  let t = 1, seen = {}, drag = null, drags = 0, errands = 0;
+  // a cat that wants to go somewhere and does not move
+  let stillFor = 0;
+  const lastPos = { x: 0, z: 0 };
   const ev = (x, y, t) => ({ preventDefault() {}, pointerId: 9, clientX: x, clientY: y, timeStamp: t * 1000, pointerType: 'touch', pressure: 0.5, width: 20, height: 20, buttons: 1 });
   app.brain.toAwake('rest');
   app.state.trust = 0.6;
@@ -26,6 +29,9 @@ const report = await page.evaluate(async (minutes) => {
     if (i % 400 === 0 && Math.random() < 0.6) { const a = acts[Math.floor(Math.random() * acts.length)]; app.avatar.startAct(a); }
     if (i % 2000 === 1000 && Math.random() < 0.3) app.brain.toSleep(0.7);
     if (i % 900 === 450 && Math.random() < 0.5) app.room.letBugIn(Math.random() < 0.5 ? 'moth' : 'fly');
+    // now and then off to the bowls or the box (and back when it has been away a while)
+    if (i % 1100 === 700 && Math.random() < 0.6 && app.brain.mode !== 'away') { app.brain.leave(['eat', 'drink', 'litter'][Math.floor(Math.random() * 3)]); errands++; }
+    if (app.brain.mode === 'away' && i % 400 === 0) app.state.awayUntil = Math.min(app.state.awayUntil, app.state.lastTick + 5000);
     if (i % 2000 === 1500) app.brain.toAwake('rest');
     // now and then a finger takes the ball of wool and drags it about a few seconds
     if (i % 300 === 0 && !drag && Math.random() < 0.4) {
@@ -52,10 +58,15 @@ const report = await page.evaluate(async (minutes) => {
     if (c.perch !== null && !(app.avatar.act && app.avatar.act.name === 'sill')) issues.push(`perched without the sill act at ${i}`);
     if (c.liftHold !== null && !(app.avatar.act && app.avatar.act.name === 'sill')) issues.push(`held in the air without the sill act at ${i}`);
     if (Math.abs(m.pos.x) > 3 || Math.abs(m.pos.z) > 3) issues.push(`far away ${m.pos.x.toFixed(2)},${m.pos.z.toFixed(2)} at ${i}`);
+    const moved = Math.hypot(m.pos.x - lastPos.x, m.pos.z - lastPos.z) > 0.002;
+    lastPos.x = m.pos.x; lastPos.z = m.pos.z;
+    const wants = (app.avatar.trip && !app.avatar.hidden && (!app.avatar.errand || app.avatar.errand.phase !== 'do'));
+    stillFor = wants && !moved ? stillFor + 0.05 : 0;
+    if (stillFor > 12) { issues.push(`stuck on a ${app.avatar.trip.kind} at ${i} (${app.avatar.errand ? app.avatar.errand.phase : ''})`); stillFor = -1e9; }
     if (i % 2400 === 0) await new Promise((r) => setTimeout(r, 0));
   }
   app.stage.render();
-  return { issues: issues.slice(0, 20), seen, drags, mode: app.brain.mode, doing: app.avatar.doing };
+  return { issues: issues.slice(0, 20), seen, drags, errands, mode: app.brain.mode, doing: app.avatar.doing };
 }, minutes);
 console.log(JSON.stringify(report), 'errors:', errs.slice(0, 10));
 await b.close();
