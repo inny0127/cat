@@ -555,7 +555,28 @@ void main() {
       vec3 glass = mix(facade * 0.62, hex(112.0, 140.0, 182.0), 0.45);
       if (wx == 0.0 && wy == 1.0) glass = mix(glass, hex(226.0, 238.0, 246.0), 0.45);
       c = tod(glass, mix(facade * 0.7, hex(255.0, 206.0, 150.0), 0.35), facade * 0.72, facade * 0.7);
-      if (on > 1.0 - 0.45 * night - 0.2 * dusk - 0.18 * uRain) { c = on > 0.93 ? hex(255.0, 168.0, 96.0) : hex(255.0, 214.0, 132.0); a = 0.17; }
+      // (through glass running with rain, each lit window swims in a glow of its own)
+      if (on > 1.0 - 0.45 * night - 0.2 * dusk - 0.18 * uRain) { c = on > 0.93 ? hex(255.0, 168.0, 96.0) : hex(255.0, 214.0, 132.0); a = uRain > 0.3 ? 0.2 : 0.17; }
+    }
+  }
+  // rain running down the glass at night: each lit window blurred into a soft glow round it
+  if (uRain > 0.3 && night > 0.5 && px.y < top + 4.0) {
+    float best = 9.0;
+    float wcx = floor((lx - 2.0) / 4.0), wcy = floor((px.y - 2.0) / 5.0);
+    for (int i = -1; i <= 1; i++) for (int j = -1; j <= 1; j++) {
+      vec2 wc = vec2(wcx + float(i), wcy + float(j));
+      float wlx = 2.0 + wc.x * 4.0, wly = 2.0 + wc.y * 5.0;
+      // (a window the block has there, and lit)
+      if (wlx < 2.0 || wlx + 1.0 >= bw - 2.0 || wly <= 1.0 || wly + 1.0 >= top - 3.0) continue;
+      vec2 wid = vec2(mc * 31.0 + wc.x, wc.y);
+      float on = hash2(wid + floor(uTime / 37.0) * 0.013 * step(0.5, h1(wid.x + wid.y)));
+      if (on <= 1.0 - 0.45 * night - 0.2 * dusk - 0.18 * uRain) continue;
+      best = min(best, length(vec2(lx, px.y) - vec2(wlx + 0.5, wly + 0.5)));
+    }
+    if (a < 0.16 && best < 3.8) {
+      float k = 1.0 - best / 3.8;
+      int g = band4(k * k * smoothstep(0.3, 0.8, uRain) * 1.2, px);
+      if (g > 0) c = mix(c, hex(255.0, 196.0, 120.0), float(g) * 0.14);
     }
   }
   // on the roofs
