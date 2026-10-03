@@ -24,7 +24,8 @@ bone('neck1', 'chest', (0, 0.226, 0.088))
 bone('neck2', 'neck1', (0, 0.246, 0.116))
 bone('head', 'neck2', (0, 0.266, 0.136))
 HC = P(0, 0.276, 0.159)      # centre of the head
-HS = 1.2                      # the whole head (skull, face, eyes, ears) is drawn at this scale
+HS = 1.4                      # the whole head (skull, face, eyes, ears) is drawn at this scale: a little
+                              # larger than life, which reads as young and endearing
 bone('jaw', 'head', tuple(HC + P(0, -0.014, -0.004) * HS))
 for s, x in (('L', 1), ('R', -1)):
     bone('ear' + s, 'head', tuple(HC + P(x * 0.0245, 0.03, 0.004) * HS))
@@ -46,9 +47,9 @@ for i in range(TAIL_N):
 
 def pos(name): return BONES[name][1]
 
-EYE_R = 0.0068 * HS
+EYE_R = 0.0090 * HS          # big eyes
 EYE_EULER = (-0.12, 0.22, 0.08)          # three.js XYZ order, left eye; the right one is mirrored
-def eye_centre(x): return HC + P(x * 0.0146, 0.005, 0.0299) * HS
+def eye_centre(x): return HC + P(x * 0.0152, 0.0025, 0.0288) * HS
 def euler_xyz(a, b, c):
     ca, sa, cb, sb, cc, sc = np.cos(a), np.sin(a), np.cos(b), np.sin(b), np.cos(c), np.sin(c)
     rx = np.array([[1, 0, 0], [0, ca, -sa], [0, sa, ca]])
@@ -78,28 +79,28 @@ ell('hips', (0, 0.208, -0.150), (0.050, 0.056, 0.050), k=0.03)
 cone('neck1', (0, 0.218, 0.082), (0, 0.246, 0.116), 0.041, 0.036, k=0.03)
 cone('neck2', (0, 0.246, 0.116), (0, 0.266, 0.140), 0.036, 0.031, k=0.025)
 # head: a wide, low cranium over full cheeks; the muzzle drops well below the eyes, nose leather in front
-ell('head', H(0, 0.009, -0.003), (0.0305, 0.028, 0.031), k=0.012)       # cranium
-ell('head', H(0, 0.02, 0.002), (0.028, 0.0155, 0.03), k=0.012)         # broad flat forehead
-ell('head', H(0, 0.011, 0.016), (0.026, 0.016, 0.024), k=0.010)         # brow
+ell('head', H(0, 0.009, -0.003), (0.031, 0.029, 0.030), k=0.012)        # cranium
+ell('head', H(0, 0.019, 0.0), (0.029, 0.017, 0.029), k=0.012)           # round forehead
+ell('head', H(0, 0.011, 0.014), (0.026, 0.016, 0.023), k=0.010)         # brow
 for x in (1, -1):
-    # the orbit's rim: a brow over the eye and a cheekbone under it, as far forward as the cornea
-    ell('head', H(x * 0.0155, 0.0162, 0.025), (0.0122, 0.0054, 0.0086), k=0.006)  # brow ridge
-    ell('head', H(x * 0.0172, -0.0068, 0.025), (0.0116, 0.005, 0.0082), k=0.006)  # cheekbone
+    # a soft rim round the big eyes
+    ell('head', H(x * 0.0162, 0.0178, 0.022), (0.0110, 0.0050, 0.0078), k=0.006)  # brow ridge
+    ell('head', H(x * 0.0178, -0.0095, 0.022), (0.0110, 0.0046, 0.0078), k=0.006)  # cheekbone
 for x in (1, -1):
-    # the face is widest across the cheeks, below the eyes, and stays broad down to the mouth
-    ell('head', H(x * 0.0185, -0.008, 0.006), (0.0165, 0.020, 0.0195), k=0.014)   # cheeks
-    ell('head', H(x * 0.0080, -0.0194, 0.0386), (0.0090, 0.0076, 0.0084), k=0.006)  # whisker pads
-ell('head', H(0, -0.0162, 0.032), (0.0150, 0.0118, 0.0150), k=0.007)    # muzzle
-ell('head', H(0, -0.0050, 0.0355), (0.0082, 0.0120, 0.0125), k=0.008)  # nose bridge
-ell('head', H(0, -0.0132, 0.0437), (0.0058, 0.0042, 0.0052), k=0.003)   # nose leather
-ell('head', H(0, -0.0158, 0.0442), (0.0032, 0.0026, 0.0038), k=0.003)   # point of the nose
-ell('jaw', H(0, -0.0270, 0.0300), (0.0085, 0.0058, 0.0090), k=0.006)     # chin
+    # round, full cheeks; a short muzzle tucked close under the eyes
+    ell('head', H(x * 0.0182, -0.0075, 0.006), (0.0172, 0.0195, 0.0195), k=0.014)  # cheeks
+    ell('head', H(x * 0.0076, -0.0158, 0.0352), (0.0086, 0.0070, 0.0078), k=0.006)  # whisker pads
+ell('head', H(0, -0.0132, 0.029), (0.0145, 0.0105, 0.0135), k=0.007)    # muzzle
+ell('head', H(0, -0.0035, 0.0335), (0.0080, 0.0098, 0.0115), k=0.008)  # nose bridge
+ell('head', H(0, -0.0100, 0.0410), (0.0048, 0.0034, 0.0044), k=0.003)   # nose leather: small
+ell('head', H(0, -0.0121, 0.0414), (0.0026, 0.0021, 0.0032), k=0.003)   # point of the nose
+ell('jaw', H(0, -0.0225, 0.0262), (0.0074, 0.0050, 0.0078), k=0.006)     # a small chin, tucked in
 # eyes: a socket round each eyeball, filled by the lids (a skin sphere just outside the ball;
 # the shader cuts the opening). The ball itself is a separate mesh.
 for x in (1, -1):
     c = tuple(eye_centre(x))
-    sub('head', c, (0.0080 * HS,) * 3, k=0.003)
-    PRIMS.append(dict(t='ell', b='head', c=P(*c), r=P(0.0071, 0.0071, 0.0071) * HS, k=0.004, rot=None))
+    sub('head', c, (EYE_R * 1.17,) * 3, k=0.003)
+    PRIMS.append(dict(t='ell', b='head', c=P(*c), r=P(1, 1, 1) * EYE_R * 1.043, k=0.004, rot=None))
 # legs, with round paws and four toes each
 TOES = [(-0.0112, -0.004), (-0.0038, 0.0), (0.0038, 0.0), (0.0112, -0.004)]
 for s, x in (('L', 1), ('R', -1)):
@@ -229,8 +230,8 @@ def export_bin(out, meshes, names, corr=None, strands=None):
                  eyeEulerL=list(EYE_EULER), eyeEulerR=[EYE_EULER[0], -EYE_EULER[1], -EYE_EULER[2]],
                  tailBase=TAIL_BASE.round(5).tolist(), tailVec=TAIL_VEC.round(5).tolist(),
                  legTop=0.132, backY=0.262, bellyY=0.15, bib=[0, 0.168, 0.096], ribs=[0, 0.19, -0.01],
-                 nose=(HC + P(0, -0.012, 0.049) * HS).round(5).tolist(), headScale=HS,
-                 padL=(HC + P(0.0105, -0.0175, 0.0470) * HS).round(5).tolist(), padR=(HC + P(-0.0105, -0.0175, 0.0470) * HS).round(5).tolist())
+                 nose=(HC + P(0, -0.0095, 0.0455) * HS).round(5).tolist(), headScale=HS,
+                 padL=(HC + P(0.0098, -0.0145, 0.0425) * HS).round(5).tolist(), padR=(HC + P(-0.0098, -0.0145, 0.0425) * HS).round(5).tolist())
     corr_desc = None
     if corr:
         # half floats: [pose][pos|normal][vertex][xyz]
@@ -544,7 +545,7 @@ def detail_weight(v):
     front = np.clip((0.062 - np.linalg.norm(h * (1, 1, 0.9), axis=1)) / 0.02, 0, 1) * np.clip((h[:, 2] - 0.0) / 0.02, 0, 1)
     return w + 12 * front
 
-def refine_lids(ms, edge=0.0007):
+def refine_lids(ms, edge=0.0011):
     """The lids carry the eye opening's edge, so they need far finer triangles than the body: split
     them round each eye and lay every vertex there exactly on the sculpt."""
     import pymeshlab
@@ -576,14 +577,14 @@ def refine_lids(ms, edge=0.0007):
 
 # the eye opening, as the shaders cut it (eye.ts LID_GLSL): directions from the eyeball centre in
 # the eye's frame; ul = heights of the upper and lower lid at the middle
-LID_XC = 0.75
-def lid_edge(dl, side, ul=(0.72, -0.54)):
+LID_XC = 0.82
+def lid_edge(dl, side, ul=(0.82, -0.66)):
     u = dl[:, 0] * side / LID_XC
-    cy = -0.02 + 0.08 * u
+    cy = -0.01 + 0.03 * u
     e = np.maximum(0, 1 - u * u)
     inner = np.maximum(-u, 0)
-    up = cy + (ul[0] + 0.03) * e ** (0.45 + 0.35 * inner) * (1 + 0.06 * u)
-    lo = cy + (ul[1] + 0.03) * e ** (0.5 + 0.45 * inner)
+    up = cy + (ul[0] + 0.03) * e ** (0.45 + 0.12 * inner) * (1 + 0.04 * u)
+    lo = cy + (ul[1] + 0.03) * e ** (0.5 + 0.15 * inner)
     return np.maximum(np.maximum(dl[:, 1] - up, lo - dl[:, 1]), np.abs(dl[:, 0]) - LID_XC)
 
 def hug_lids(v):

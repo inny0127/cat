@@ -12,15 +12,15 @@ import * as THREE from 'three';
  * the eyeball (for lid shadows) and the coat shader (which cuts the opening in the lids).
  */
 export const LID_GLSL = /* glsl */ `
-const float LID_XC = 0.75;
+const float LID_XC = 0.82;
 vec2 lidCurves(float x, float xo, vec2 ul) {
-  // a round eye whose inner corner draws out to a point, down toward the nose
+  // a big round eye, its inner corner drawn out a little toward the nose
   float u = xo / LID_XC;
-  float cy = -0.02 + 0.08 * u;
+  float cy = -0.01 + 0.03 * u;
   float e = max(0.0, 1.0 - u * u);
   float inner = max(-u, 0.0);
-  float fu = pow(e, 0.45 + 0.35 * inner) * (1.0 + 0.06 * u);
-  float fl = pow(e, 0.5 + 0.45 * inner);
+  float fu = pow(e, 0.45 + 0.12 * inner) * (1.0 + 0.04 * u);
+  float fl = pow(e, 0.5 + 0.15 * inner);
   return vec2(cy + (ul.x + 0.03) * fu, cy + (ul.y + 0.03) * fl);
 }
 `;
@@ -127,8 +127,13 @@ void main() {
   col = mix(col, col * 0.45, smoothstep(edge * 3.0, 0.0, pd));    // the iris darkens into the pupil rim
   col = mix(col, vec3(0.006, 0.006, 0.008), smoothstep(edge, -edge, pd));
   if (uFlat > 0.5) {
-    float pupil = step(abs(ip.x), 0.1 + 0.4 * uPupil) * step(abs(ip.y), 0.62);
-    gl_FragColor = vec4(mix(uIrisA * 1.5, vec3(0.004), pupil), 1.0);
+    // pixel art: a round iris filling the opening, a big soft-cornered pupil and a highlight
+    vec2 q = ip / vec2(0.22 + 0.2 * uPupil, 0.34 + 0.12 * uPupil);
+    float pupil = step(length(q), 1.0);
+    vec2 gq = abs(ip - vec2(-0.24, 0.27));
+    float glint = step(max(gq.x, gq.y), 0.13);   // a small square: reads as one or two pixels
+    vec3 c = mix(uIrisA * 1.4, vec3(0.004), pupil);
+    gl_FragColor = vec4(mix(c, vec3(1.0), glint), 1.0);
     return;
   }
 
@@ -203,8 +208,8 @@ export function makeEye(radius: number, side: 1 | -1, lights: EyeLights): CatEye
 export function setLids(e: CatEye, lids: THREE.Vector4, open: number, squint = 0) {
   const o = Math.max(0, Math.min(1, open));
   // the lower lid rises a little as the eye shuts; the upper one comes down to meet it
-  const lower = -0.54 + 0.35 * Math.max(0, Math.min(1, squint)) + 0.2 * (1 - o);
-  const upper = lower - 0.04 + (0.72 - lower + 0.04) * o;
+  const lower = -0.66 + 0.35 * Math.max(0, Math.min(1, squint)) + 0.2 * (1 - o);
+  const upper = lower - 0.04 + (0.82 - lower + 0.04) * o;
   e.eyeMat.uniforms.uLower.value = lower;
   e.eyeMat.uniforms.uUpper.value = upper;
   if (e.side > 0) { lids.x = upper; lids.y = lower; } else { lids.z = upper; lids.w = lower; }
