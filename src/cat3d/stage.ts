@@ -260,8 +260,10 @@ void main() {
     float acc = 0.0;
     for (int i = 0; i < 24; i++) acc += sunThrough(C + D * ((float(i) + 0.5) / 24.0));
     float hz = acc / 24.0 * length(D) * uBeam;
-    // a clean shape of lighter air where it is thick enough, and a soft glow all through it
-    col = mix(col, uBeamCol, hz > 0.1 ? 0.16 : 0.0);
+    // lighter air in two layers, the thicker the brighter, dithered where one gives way to the
+    // next; and a soft glow all through it
+    float lv = clamp(floor(hz * 7.0 + (bayer(p) - 0.5) * 0.7), 0.0, 2.0);
+    col = mix(col, uBeamCol, lv * 0.075);
     glow = max(glow, clamp(hz, 0.0, 1.0) * 0.7);
   }
   // steam curling up off a hot drink, and dust turning in the sunlight: a soft warm white over
