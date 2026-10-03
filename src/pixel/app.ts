@@ -134,6 +134,17 @@ export class PixelApp {
     canvas.addEventListener('webglcontextrestored', () => location.reload());
     (window as unknown as { __pcat: PixelApp }).__pcat = this;
     requestAnimationFrame((t) => this.loop(t));
+    // once the first frames are drawn, the room comes up out of the colour of its wall (driven by
+    // a test or a reel: there at once)
+    const show = () => {
+      canvas.classList.add('on');
+      document.getElementById('loading')?.classList.add('off');
+    };
+    if (this.manual) {
+      canvas.style.transition = 'none';
+      document.getElementById('loading')?.remove();
+      show();
+    } else requestAnimationFrame(() => requestAnimationFrame(show));
   }
 
   /** art pixels across the screen: about two css px each on a phone */

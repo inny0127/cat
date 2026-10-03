@@ -1,12 +1,10 @@
 // Keeps the cat available offline and brings the window forward when a notification is tapped.
-const CACHE = 'cat-window-v1';
+const CACHE = 'cat-window-v2';
 
 self.addEventListener('install', (e) => {
   e.waitUntil(
     caches.open(CACHE).then((c) =>
-      c.addAll(['./', './index.html', './manifest.webmanifest', './assets/rig.json', './assets/silhouette.png',
-        './assets/body.webp', './assets/head.webp', './assets/tail.webp', './assets/earL.webp', './assets/earR.webp',
-        './icons/icon-192.png']).catch(() => {}),
+      c.addAll(['./', './index.html', './manifest.webmanifest', './cat3d/fri.bin', './icons/icon-192.png']).catch(() => {}),
     ),
   );
   self.skipWaiting();

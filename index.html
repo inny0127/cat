@@ -38,7 +38,28 @@
       display: block;
       touch-action: none;
       cursor: default;
+      opacity: 0;
+      transition: opacity 1.4s ease;
     }
+    #stage.on { opacity: 1; }
+    /* while the room is made: the colour of its wall, and a line breathing in and out */
+    #loading {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #c99486;
+      color: #fff5e8;
+      font: 400 13px/1.5 -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
+      letter-spacing: 0.08em;
+      text-shadow: 0 1px 0 rgba(59, 49, 80, 0.45);
+      transition: opacity 1.4s ease;
+      pointer-events: none;
+    }
+    #loading span { animation: breathe 2.6s ease-in-out infinite; }
+    #loading.off { opacity: 0; }
+    @keyframes breathe { 0%, 100% { opacity: 0.35; } 50% { opacity: 0.95; } }
     #hint {
       position: fixed;
       left: 16px;
@@ -85,6 +106,7 @@
   </style>
 </head>
 <body>
+  <div id="loading"><span>창문을 여는 중…</span></div>
   <canvas id="stage" aria-label="방 안의 고양이. 손가락으로 쓰다듬을 수 있어요." role="img"></canvas>
   <div id="hint" aria-live="polite"></div>
   <div id="credits" role="dialog" aria-label="만든 것들"></div>
