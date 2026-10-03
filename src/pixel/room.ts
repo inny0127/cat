@@ -873,10 +873,12 @@ export class Room {
     this.mugTop = new THREE.Vector3(fx + 0.01, fy + 0.07, fz);
     const wool = this.mat('bookRed', { tone: 0.12, pattern: 5 });
     const yarn = shadowy(new THREE.Mesh(new THREE.SphereGeometry(0.045, 16, 12), wool));
-    add(yarn, bx - 0.3, 0.045, bz + 0.26);
+    // (in front of the bed, well in view on a phone, where a finger can find it)
+    const yx = bx - 0.22, yz = bz + 0.3;
+    add(yarn, yx, 0.045, yz);
     const strand = new THREE.Mesh(new THREE.BufferGeometry(), this.mat('bookRed', { tone: 0.12 }));
     this.group.add(strand);
-    this.yarn = { mesh: yarn, v: new THREE.Vector3(), tail: new THREE.Vector3(bx - 0.02, 0.003, bz + 0.4), strand, rebuild: 0 };
+    this.yarn = { mesh: yarn, v: new THREE.Vector3(), tail: new THREE.Vector3(yx - 0.16, 0.003, yz + 0.2), strand, rebuild: 0, hold: null, pinned: 0, pinAt: null, occ: -1 };
     this.windStrand();
 
     // the bed: a soft teal rim round an oatmeal fleece cushion
@@ -948,19 +950,20 @@ export class Room {
       cap(V(S.litter.x + ax * W / 2, 0.04, S.litter.z + az * D / 2), V(S.litter.x + bx2 * W / 2, 0.04, S.litter.z + bz2 * D / 2), 0.035, 0.5);
     }
     cap(V(fx, 0.03, fz), V(fx, 0.06, fz), 0.1, 0.5);                       // the stack of books
-    cap(V(bx - 0.3, 0.045, bz + 0.26), V(bx - 0.3, 0.046, bz + 0.26), 0.045, 0.6);   // the yarn
+    this.yarn.occ = occ.length;
+    cap(V(yx, 0.045, yz), V(yx, 0.046, yz), 0.045, 0.6);   // the yarn (it goes where the ball goes)
     cap(V(bx - 0.45, ty - 0.005, wallZ + 0.055), V(bx + 0.45, ty - 0.005, wallZ + 0.055), 0.045, 0.5);
     cap(V(sx - 0.21, sy, wallZ + 0.06), V(sx + 0.21, sy, wallZ + 0.06), 0.045, 0.5);
     cap(V(winL - 0.07, winB - 0.02, wallZ + 0.1), V(winR + 0.07, winB - 0.02, wallZ + 0.1), 0.04, 0.5);
     cap(V(bx - 2, 0.318, wallZ + 0.01), V(bx + 2, 0.318, wallZ + 0.01), 0.015, 0.4);
     cap(V(bx - 0.2, 0.16, wallZ + 0.055), V(bx + 0.2, 0.16, wallZ + 0.055), 0.07, 0.5);   // the radiator
-    this.yarnHome.set(bx - 0.3, 0, bz + 0.26);
+    this.yarnHome.set(yx, 0, yz);
     this.things.push([V(px, 0, pz), 0.11], [V(lx, 0, lz), 0.08], [V(fx, 0, fz), 0.14], [this.yarnHome, 0.05]);
     this.hides.push([V(fx, 0, fz), 0.14]);
     // worth a sniff: the monstera's pot, the radiator, the yarn, the books with the mug on them
     const face = (from: THREE.Vector3, at: THREE.Vector3) => Math.atan2(at.x - from.x, at.z - from.z);
     for (const [sx2, sz2, ax, az] of [
-      [px - 0.22, pz + 0.14, px, pz], [bx - 0.06, wallZ + 0.26, bx - 0.06, wallZ], [bx - 0.12, bz + 0.33, bx - 0.3, bz + 0.26], [fx - 0.17, fz + 0.03, fx, fz],
+      [px - 0.22, pz + 0.14, px, pz], [bx - 0.06, wallZ + 0.26, bx - 0.06, wallZ], [yx + 0.18, yz + 0.07, yx, yz], [fx - 0.17, fz + 0.03, fx, fz],
     ]) {
       const to = V(sx2, 0, sz2);
       S.sniff.push({ to, face: face(to, V(ax, 0, az)) });
@@ -973,8 +976,12 @@ export class Room {
   private readonly win: { l: number; r: number; b: number; t: number; z: number };
   private readonly motes: { p: THREE.Vector3; v: THREE.Vector3; b: number; life: number }[] = [];
   private readonly timeU = { value: 0 };
-  /** the ball of wool: the ball, how it is rolling, the loose end of its strand */
-  private readonly yarn!: { mesh: THREE.Mesh; v: THREE.Vector3; tail: THREE.Vector3; strand: THREE.Mesh; rebuild: number };
+  /** the ball of wool: the ball, how it is rolling, the loose end of its strand; where a finger on
+   *  it is pulling it, how much longer a cat's paws hold it down; its shadow among the occluders */
+  private readonly yarn!: {
+    mesh: THREE.Mesh; v: THREE.Vector3; tail: THREE.Vector3; strand: THREE.Mesh; rebuild: number;
+    hold: THREE.Vector3 | null; pinned: number; pinAt: THREE.Vector3 | null; occ: number;
+  };
 
   /** the windowsill for a cat: where to jump up from, where to sit on it (facing the glass), where
    *  to land jumping down, and how high it is */
@@ -1010,23 +1017,83 @@ export class Room {
     return this.yarn.mesh;
   }
 
-  /** a paw sends the ball rolling, a way and at a speed (m/s) */
+  /** a paw sends the ball rolling, a way and at a speed (m/s); under a finger it stays there */
   kickYarn(dir: THREE.Vector3, speed: number) {
+    if (this.yarn.hold) return;
     const d = Math.hypot(dir.x, dir.z) || 1;
     this.yarn.v.set((dir.x / d) * speed, 0, (dir.z / d) * speed);
   }
 
+  /** a finger on the ball: it rolls after the finger to a point on the floor (null: let go, and it
+   *  rolls on the way it was going, no faster than a good flick) */
+  holdYarn(at: THREE.Vector3 | null) {
+    const Y = this.yarn;
+    if (at) {
+      (Y.hold ??= new THREE.Vector3()).set(at.x, 0, at.z);
+      return;
+    }
+    Y.hold = null;
+    const sp = Math.hypot(Y.v.x, Y.v.z);
+    if (sp > 1.3) Y.v.multiplyScalar(1.3 / sp);
+  }
+
+  /** a cat's paws come down on the ball: held there a while (drawn in under them, at a point),
+   *  however it is pulled */
+  pinYarn(sec: number, at: THREE.Vector3) {
+    const Y = this.yarn;
+    Y.pinned = Math.max(Y.pinned, sec);
+    (Y.pinAt ??= new THREE.Vector3()).set(at.x, 0.045, at.z);
+    Y.v.set(0, 0, 0);
+  }
+
+  /** the floor the ball can roll over: from the room's one end to the other, from the wall under
+   *  the window to the front of the room */
+  get yarnBounds() {
+    return { minX: -0.7, maxX: 0.8, minZ: this.win.z + 0.08, maxZ: this.spots.bed.z + 0.55 };
+  }
+
+  /** a finger has the ball; a paw has it pinned */
+  get yarnHeld() {
+    return !!this.yarn.hold;
+  }
+  get yarnPinned() {
+    return this.yarn.pinned > 0;
+  }
+
+  /** how fast the ball is going (m/s) */
+  get yarnSpeed() {
+    return Math.hypot(this.yarn.v.x, this.yarn.v.z);
+  }
+
   /** the ball rolls, slowing, turning as it goes, glancing off the bed and the things on the floor
-   *  and the room's ends; its strand trails after it */
+   *  and the room's ends (under a finger, after the finger; under a paw, not at all); its strand
+   *  trails after it */
   private rollYarn(dt: number) {
     const Y = this.yarn, p = Y.mesh.position, v = Y.v, R = 0.045;
-    const sp = Math.hypot(v.x, v.z);
-    if (sp < 1e-4) return;
-    const ns = Math.max(0, sp - 0.55 * dt);
-    v.multiplyScalar(ns / sp);
+    let ns: number;
+    if (Y.pinned > 0) {
+      // under the paws: drawn in under them, then still
+      Y.pinned = Math.max(0, Y.pinned - dt);
+      const to = Y.pinAt ?? p;
+      v.set(to.x - p.x, 0, to.z - p.z).multiplyScalar(Math.min(1, dt * 20) / Math.max(dt, 1e-4));
+      ns = Math.hypot(v.x, v.z);
+      if (Y.pinned <= 0) v.set(0, 0, 0);
+      if (ns < 1e-4) return;
+    } else if (Y.hold) {
+      // quick after the fingertip, but rolling there, never jumping
+      v.set((Y.hold.x - p.x) * 12, 0, (Y.hold.z - p.z) * 12);
+      ns = Math.hypot(v.x, v.z);
+      if (ns > 2.2) { v.multiplyScalar(2.2 / ns); ns = 2.2; }
+      if (ns < 1e-4) return;
+    } else {
+      const sp = Math.hypot(v.x, v.z);
+      if (sp < 1e-4) return;
+      ns = Math.max(0, sp - 0.55 * dt);
+      v.multiplyScalar(ns / sp);
+    }
     p.x += v.x * dt;
     p.z += v.z * dt;
-    Y.mesh.rotateOnWorldAxis(new THREE.Vector3(v.z, 0, -v.x).normalize(), (ns * dt) / R);
+    if (ns > 1e-5) Y.mesh.rotateOnWorldAxis(new THREE.Vector3(v.z, 0, -v.x).normalize(), (ns * dt) / R);
     const S = this.spots;
     const round: [THREE.Vector3, number][] = [[S.bed, 0.21], [S.food, 0.07], [S.water, 0.07], [S.litter, 0.19], ...this.things.filter(([c]) => c.distanceTo(this.yarnHome) > 0.01)];
     for (const [c, r] of round) {
@@ -1039,9 +1106,15 @@ export class Room {
         if (vn < 0) { v.x -= 1.5 * vn * nx; v.z -= 1.5 * vn * nz; }
       }
     }
-    const { z } = this.win;
-    if (p.x < -0.7 || p.x > 0.8) { p.x = Math.max(-0.7, Math.min(0.8, p.x)); v.x *= -0.5; }
-    if (p.z < z + 0.08 || p.z > S.bed.z + 0.55) { p.z = Math.max(z + 0.08, Math.min(S.bed.z + 0.55, p.z)); v.z *= -0.5; }
+    const B = this.yarnBounds;
+    if (p.x < B.minX || p.x > B.maxX) { p.x = Math.max(B.minX, Math.min(B.maxX, p.x)); v.x *= -0.5; }
+    if (p.z < B.minZ || p.z > B.maxZ) { p.z = Math.max(B.minZ, Math.min(B.maxZ, p.z)); v.z *= -0.5; }
+    // its shadow on the floor goes with it
+    if (Y.occ >= 0) {
+      const O = this.lights.uOcc.value as THREE.Vector4[];
+      O[2 * Y.occ].set(p.x, R, p.z, R);
+      O[2 * Y.occ + 1].set(p.x, R + 0.001, p.z, 0.6);
+    }
     if ((Y.rebuild -= dt) <= 0) {
       Y.rebuild = 0.06;
       this.windStrand();

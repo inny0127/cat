@@ -33,6 +33,11 @@ export interface Ctx {
   /** the ball of wool, if there is one, and a paw sending it rolling */
   yarn: () => THREE.Vector3 | null;
   kick: (dir: THREE.Vector3, speed: number) => void;
+  /** a finger has the ball (moving it about for the cat); paws pin it down a while, at a point
+   *  (held under them however the finger pulls), and whether they still have it */
+  toyHeld: () => boolean;
+  pin: (sec: number, at: THREE.Vector3) => void;
+  toyPinned: () => boolean;
   /** the windowsill, if there is one to sit on */
   sill: () => SillSpot | null;
   /** a sound of the cat's own (a soft thump landing from a jump) */
@@ -213,18 +218,38 @@ const wrapA = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
  * wide, ears forward, the tip of the tail flicking), the rump up and wiggling, then spring and
  * land on it with both forepaws, and bat it about with one paw and the other; perhaps after it
  * once more where it rolled; then sit and wash a little, and back to bed.
+ *
+ * A ball under a finger is another thing: the head follows it everywhere; moved away it is run
+ * after, moved at all it is pounced on, brushed past close it gets a swipe; and caught, it is
+ * pinned under both forepaws and bitten at until it is pulled free (the finger feels the paws).
+ * So long as the hand keeps it going the cat keeps on, until it has had enough.
  */
 export class Play implements Act {
   readonly name = 'play';
-  private phase: 'go' | 'stalk' | 'wiggle' | 'pounce' | 'bat' | 'sit' = 'go';
+  private phase: 'go' | 'stalk' | 'wiggle' | 'pounce' | 'bat' | 'pin' | 'sit' = 'go';
   private t = 0;
   private dur = 0;
   private rounds = 0;
   private bats = 0;
   private hits = new Set<number>();
+  private caught = false;
   private bed: Act | null = null;
   private readonly fwd = new THREE.Vector3();
   private readonly left = new THREE.Vector3();
+  /** where the ball was a frame ago and how fast it is going; where the walk after it was aimed */
+  private readonly was = new THREE.Vector3(NaN, 0, 0);
+  private ys = 0;
+  private readonly aim = new THREE.Vector3(NaN, 0, 0);
+  /** how long it has played, and how long it will before it has had enough */
+  private total = 0;
+  private readonly patience = rand(70, 150);
+  /** how long since a hand last had the ball */
+  private sinceHand = 1e9;
+
+  /** it has had enough (and will not be tempted again for a while) */
+  get tired() {
+    return this.total > this.patience;
+  }
 
   private next(phase: Play['phase'], dur = 0) {
     this.phase = phase;
@@ -233,39 +258,77 @@ export class Play implements Act {
   }
 
   update(dt: number, c: Ctx) {
-    if (this.bed) return this.bed.update(dt, c);
     const m = c.m;
     const y = c.yarn();
     if (!y) return false;
     this.t += dt;
+    this.total += dt;
+    // the ball's way and speed (it may be on a finger)
+    if (Number.isNaN(this.was.x)) this.was.copy(y);
+    const inst = Math.hypot(y.x - this.was.x, y.z - this.was.z) / Math.max(dt, 1e-3);
+    this.ys += (inst - this.ys) * Math.min(1, dt * 8);
+    this.was.copy(y);
+    const held = c.toyHeld();
+    this.sinceHand = held ? 0 : this.sinceHand + dt;
+    // a hand still playing with it, and the cat not yet tired of it
+    const lured = this.sinceHand < 3 && !this.tired;
+    if (this.bed) {
+      // on its way back to bed: the ball moving again draws it back
+      if (!(lured && this.ys > 0.1)) return this.bed.update(dt, c);
+      this.bed.stop(c);
+      this.bed = null;
+      this.next('go');
+    }
     const dx = y.x - m.pos.x, dz = y.z - m.pos.z, dist = Math.hypot(dx, dz);
     const face = Math.atan2(dx, dz);
     this.fwd.set(Math.sin(m.yaw), 0, Math.cos(m.yaw));
     this.left.set(Math.cos(m.yaw), 0, -Math.sin(m.yaw));
-    // eyes on the ball all the while
+    // eyes and head on the ball all the while
+    if (this.phase !== 'sit') m.lookAt(y, 1);
     const watch: PoseLayer = { earFwd: 0.9, pupil: 0.95, eyeOpen: 1, whisker: 0.8 };
+    // enough is enough: off to sit and wash (not in the middle of a spring)
+    if (this.tired && (this.phase === 'go' || this.phase === 'stalk')) {
+      m.stop();
+      m.layer = null;
+      this.next('sit', rand(3, 6));
+    }
     switch (this.phase) {
       case 'go': {
         m.layer = null;
-        if (!m.goal) {
-          const stop = new THREE.Vector3(y.x - (dx / Math.max(dist, 1e-3)) * 0.27, 0, y.z - (dz / Math.max(dist, 1e-3)) * 0.27);
-          if (dist < 0.33) this.next('stalk', rand(1.2, 2.4));
-          else m.walkTo(stop, 0.2, face, () => this.next('stalk', rand(1.2, 2.4)));
+        if (dist < 0.33) {
+          m.stop();
+          this.next('stalk', lured ? rand(0.5, 1.2) : rand(1.2, 2.4));
+          return true;
+        }
+        // (and again whenever the ball has gone somewhere else)
+        if (!m.goal || !(Math.hypot(y.x - this.aim.x, y.z - this.aim.z) < 0.06)) {
+          this.aim.copy(y);
+          const stop = new THREE.Vector3(y.x - (dx / dist) * 0.27, 0, y.z - (dz / dist) * 0.27);
+          // after a ball on the move at a run, creeping up low on one at rest
+          const sp = this.ys > 0.25 ? (dist > 0.6 ? 0.95 : 0.5) : dist > 0.6 ? 0.45 : 0.22;
+          if (sp > 0.3) m.setPosture('stand');
+          m.walkTo(stop, sp, face, () => this.next('stalk', lured ? rand(0.5, 1.2) : rand(1.2, 2.4)));
         }
         return true;
       }
       case 'stalk': {
-        // squarely at it, or round to it with a step or two
-        if (Math.abs(wrapA(face - m.yaw)) > 0.45 && this.t < 0.1) { this.next('go'); m.walkTo(m.pos.clone(), 0.15, face, () => this.next('stalk', rand(1, 2))); return true; }
+        // off out of reach: after it; gone round to the side: round to it, still low
+        if (dist > 0.45) { this.next('go'); return true; }
+        const err = wrapA(face - m.yaw);
+        if (Math.abs(err) > 0.5 && !m.goal) m.walkTo(m.pos.clone(), 0.15, face);
         m.setPosture('crouch');
         m.layer = {
           pose: { ...watch, hipY: 0.135, neckPitch: -0.45, headPitch: 0.1, tailLift: -0.35, tailSide: 0.3 * Math.sin(this.t * 6.5), tailCurl: 0.7 * Math.sin(this.t * 9) },
           w: Math.min(1, this.t / 0.4),
         };
-        if (this.t > this.dur) this.next('wiggle', rand(0.7, 1.3));
+        // it moves: the hunter cannot wait (brushed past close by, a swipe at it)
+        if (this.ys > 0.35 && dist < 0.26 && this.t > 0.25) { this.bats = 1 + Math.floor(Math.random() * 2); this.hits.clear(); this.next('bat'); }
+        else if (this.ys > 0.12 && this.t > 0.4 && Math.abs(err) < 0.4) this.next('wiggle', rand(0.3, 0.6));
+        else if (this.t > this.dur) this.next('wiggle', rand(0.7, 1.3));
         return true;
       }
       case 'wiggle': {
+        if (dist > 0.5) { this.next('go'); return true; }
         // the rump up a little and wiggling, the hind paws treading
         const wg = Math.sin(this.t * Math.PI * 2 * 5);
         m.layer = {
@@ -276,13 +339,15 @@ export class Play implements Act {
           },
           w: 1,
         };
-        if (this.t > this.dur) { this.hits.clear(); this.next('pounce', 0.34); }
+        if (this.t > this.dur) { this.hits.clear(); this.caught = false; this.next('pounce', 0.34); }
         return true;
       }
       case 'pounce': {
-        // spring forward, all four off the floor a moment, forepaws reaching to land on it
+        // spring forward, all four off the floor a moment, forepaws reaching to land on it (and
+        // steering a little in the air after a ball that moves)
         const u = Math.min(1, this.t / this.dur), arc = Math.sin(Math.PI * u);
-        const reach = Math.min(0.2, Math.max(0.05, dist - 0.1));
+        m.yaw = wrapA(m.yaw + Math.max(-1, Math.min(1, wrapA(face - m.yaw))) * Math.min(1, dt * 5) * (1 - u));
+        const reach = Math.min(0.24, Math.max(0.05, dist - 0.13));
         m.pos.addScaledVector(this.fwd, ((Math.PI / 2) * reach / this.dur) * arc * dt);
         const fore = { planted: 0, frame: 0, x: 0.03, y: 0.012 + 0.07 * arc, z: 0.115 + 0.11 * Math.sin(Math.PI * Math.min(1, u * 1.15)), flex: 0.2 * arc };
         const hind = { planted: 0, frame: 0, x: 0.04, y: 0.013 + 0.025 * arc, z: -0.13 - 0.04 * arc };
@@ -292,9 +357,41 @@ export class Play implements Act {
         };
         if (!this.hits.has(-1) && u > 0.6 && dist < 0.21) {
           this.hits.add(-1);
-          c.kick(this.fwd.clone().addScaledVector(this.left, rand(-0.6, 0.6)), rand(0.35, 0.65));
+          if (held) {
+            // got it: down under both paws
+            this.caught = true;
+            c.pin(rand(0.9, 1.8), m.pos.clone().addScaledVector(this.fwd, 0.155));
+          } else c.kick(this.fwd.clone().addScaledVector(this.left, rand(-0.6, 0.6)), rand(0.35, 0.65));
         }
-        if (u >= 1) { this.bats = 1 + Math.floor(Math.random() * 3); c.sound('thump', 0.18); this.next('bat'); }
+        if (u >= 1) {
+          c.sound('thump', 0.18);
+          if (this.caught) {
+            if (Math.random() < 0.3) c.sound('trill', 0.22);
+            this.next('pin');
+          } else { this.bats = 1 + Math.floor(Math.random() * 3); this.next('bat'); }
+        }
+        return true;
+      }
+      case 'pin': {
+        // both forepaws on it, holding it down, the head down biting at it, the hind feet
+        // treading; till it is pulled out from under them, or it lets go to bat it about
+        const bite = Math.max(0, Math.sin(this.t * 7));
+        const tread = Math.sin(this.t * Math.PI * 2 * 3);
+        const paw = { planted: 0, frame: 0, x: 0.028, y: 0.075, z: 0.15, flex: 0.3 };
+        m.setPosture('crouch');
+        m.layer = {
+          pose: {
+            ...watch, hipY: 0.14, chestPitch: 0.1, neckPitch: -0.5, headPitch: -0.1 - 0.15 * bite, jaw: 0.3 * bite,
+            LF: paw, RF: paw, LH: { y: 0.012 + 0.01 * Math.max(0, tread) }, RH: { y: 0.012 + 0.01 * Math.max(0, -tread) },
+            tailSide: 0.5 * Math.sin(this.t * 7), tailCurl: 0.8 * Math.sin(this.t * 9),
+          },
+          w: Math.min(1, this.t / 0.12),
+        };
+        if (!c.toyPinned()) {
+          m.layer = null;
+          if (held || dist > 0.3) this.next('stalk', rand(0.3, 0.7));
+          else { this.bats = 1 + Math.floor(Math.random() * 2); this.hits.clear(); this.next('bat'); }
+        }
         return true;
       }
       case 'bat': {
@@ -302,7 +399,8 @@ export class Play implements Act {
         const T = 0.4, k = Math.floor(this.t / T), u = (this.t % T) / T;
         if (k >= this.bats || dist > 0.34) {
           m.layer = null;
-          if (this.rounds < 1 && Math.random() < 0.55 && dist < 0.9) { this.rounds++; this.next('go'); }
+          if (lured) this.next(dist < 0.33 ? 'stalk' : 'go', rand(0.6, 1.4));
+          else if (this.rounds < 1 && Math.random() < 0.55 && dist < 0.9 && !this.tired) { this.rounds++; this.next('go'); }
           else this.next('sit', rand(3, 6));
           return true;
         }
@@ -314,13 +412,17 @@ export class Play implements Act {
         m.layer = { pose: { ...watch, hipY: 0.145, neckPitch: -0.35, headPitch: 0.05, [right ? 'RF' : 'LF']: paw, tailSide: 0.3 * Math.sin(this.t * 8) }, w: 1 };
         if (!this.hits.has(k) && u > 0.55 && dist < 0.24) {
           this.hits.add(k);
-          // the right paw sweeps it off to the cat's left, the left paw to its right
-          c.kick(this.fwd.clone().multiplyScalar(0.5).addScaledVector(this.left, right ? 0.85 : -0.85), rand(0.3, 0.55));
+          // on a finger, a claw snags it a moment; loose, the right paw sweeps it off to the
+          // cat's left, the left paw to its right
+          if (held) c.pin(rand(0.2, 0.35), y.clone());
+          else c.kick(this.fwd.clone().multiplyScalar(0.5).addScaledVector(this.left, right ? 0.85 : -0.85), rand(0.3, 0.55));
         }
         return true;
       }
       case 'sit': {
-        // done: sit and wash the chest a little, then home
+        // done: sit and wash the chest a little, then home (unless the ball is moving again)
+        m.lookAt(null);
+        if (lured && this.ys > 0.1 && this.t > 0.5) { m.layer = null; this.next('go'); return true; }
         m.setPosture('sit');
         m.layer = { pose: { neckPitch: -0.75, headPitch: -0.55 + 0.12 * Math.sin(this.t * 8.5), jaw: 0.1 * Math.max(0, Math.sin(this.t * 8.5)), eyeOpen: 0.4 }, w: hump(this.t, this.dur, 0.6) };
         if (this.t > this.dur) {
@@ -336,6 +438,7 @@ export class Play implements Act {
   stop(c: Ctx) {
     this.bed?.stop(c);
     c.m.layer = null;
+    c.m.lookAt(null);
   }
 }
 

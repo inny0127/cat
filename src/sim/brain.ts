@@ -53,6 +53,7 @@ export class Brain {
   private wantSleepIn = rand(25, 70);
   private peekIn = rand(40, 160);
   private lastTouch = -1e9;
+  private lastToy = -1e9;
   private touchCount = 0;
   private pokes: number[] = [];
   private taps: number[] = [];
@@ -200,6 +201,24 @@ export class Brain {
       this.attention = { x: sx, y: sy, until: this.time + 3 };
       if (this.s.trust > 0.3 && chance(0.4)) this.say('chirp');
     }
+  }
+
+  /** a toy moved about before its eyes (the ball of wool under a finger, now at sx, sy): it wakes
+   *  to it out of a light sleep, its eyes follow it, it stays up for it, and being played with is
+   *  company */
+  toy(sx: number, sy: number, dt: number) {
+    if (this.inert) return;
+    if (this.mode === 'sleep' || this.mode === 'doze') {
+      if (chance(dt * 0.6 * (1 - this.sleepDepth * 0.8))) this.toAwake('alert');
+      return;
+    }
+    this.lastToy = this.time;
+    this.attention = { x: sx, y: sy, until: this.time + 0.5 };
+    this.arousal = clamp(this.arousal + dt * 0.3);
+    if (this.mode === 'rest') this.setMode('alert');
+    const s = this.s;
+    s.lonely = Math.max(0, s.lonely - dt * 0.006);
+    s.trust = clamp(s.trust + dt * 0.0006 * (1 - s.trust), -1, 1);
   }
 
   hover(sx: number, sy: number) {
@@ -495,7 +514,7 @@ export class Brain {
         }
       }
     }
-    const idle = this.time - this.lastTouch;
+    const idle = this.time - Math.max(this.lastTouch, this.lastToy);
     const e = s.bladder >= 1 ? 'litter' : null;
     if (e && !touching && idle > 8) {
       this.leave('litter');
@@ -544,7 +563,7 @@ export class Brain {
 
   private updateRest(dt: number, touching: boolean) {
     const s = this.s;
-    const idle = this.time - this.lastTouch;
+    const idle = this.time - Math.max(this.lastTouch, this.lastToy);
     const tired = 0.5 + 0.5 * nightness(Date.now()) + (s.health < THRESH.sick ? 0.4 : 0);
     if (touching) return;
     switch (this.mode) {

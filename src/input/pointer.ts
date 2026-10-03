@@ -1,8 +1,8 @@
 /**
  * Finger (and mouse) handling. Touches that start on the cat are petting contacts, sampled every
- * frame. Touches on the empty "glass" around it are gestures: tap, knock (double tap), long press
- * (pouring water), quick side-to-side scrubbing (shaking the kibble), and a downward swipe
- * (scooping the litter).
+ * frame. Touches on a toy in the room move it about. Touches on the empty "glass" around it are
+ * gestures: tap, knock (double tap), long press (pouring water), quick side-to-side scrubbing
+ * (shaking the kibble), and a downward swipe (scooping the litter).
  */
 export interface Contact {
   id: number;
@@ -37,6 +37,12 @@ export interface InputHandlers {
   longHold(sx: number, sy: number, onCat: boolean): void; // ~3 s still press
   hover(sx: number, sy: number): void;
   firstGesture(): void;
+  /** a finger down on a toy in the room (not on the cat): true takes the touch for moving the toy,
+   *  and then none of the glass's gestures */
+  grabToy?(sx: number, sy: number): boolean;
+  /** the finger moving the toy; letting go of it (tap: let go at once, barely moved) */
+  dragToy?(sx: number, sy: number): void;
+  releaseToy?(tap: boolean): void;
 }
 
 interface GlassTrack {
@@ -46,6 +52,8 @@ interface GlassTrack {
   pouring: boolean;
   timer: number;
   holdTimer: number;
+  /** the touch has hold of a toy */
+  toy?: boolean;
 }
 
 export class PointerInput {
@@ -93,6 +101,9 @@ export class PointerInput {
     if (onCat) {
       this.h.catTouchStart(c);
       this.glass.set(e.pointerId, { lastDx: 0, accum: 0, reversals: [], pouring: false, timer: 0, holdTimer });
+    } else if (this.h.grabToy?.(e.clientX, e.clientY)) {
+      clearTimeout(holdTimer);
+      this.glass.set(e.pointerId, { lastDx: 0, accum: 0, reversals: [], pouring: false, timer: 0, holdTimer: 0, toy: true });
     } else {
       const g: GlassTrack = { lastDx: 0, accum: 0, reversals: [], pouring: false, timer: 0, holdTimer };
       g.timer = window.setTimeout(() => {
@@ -131,6 +142,10 @@ export class PointerInput {
 
     const g = this.glass.get(e.pointerId);
     if (!g || c.startedOnCat) return;
+    if (g.toy) {
+      this.h.dragToy?.(c.sx, c.sy);
+      return;
+    }
     // side-to-side scrubbing: count direction reversals
     if (Math.abs(dsx) > 0.5) {
       if (Math.sign(dsx) !== Math.sign(g.lastDx) && g.accum > 16) {
@@ -161,6 +176,10 @@ export class PointerInput {
     const tap = !cancelled && dur < 300 && c.travel < 14;
     if (c.startedOnCat) {
       this.h.catTouchEnd(c, tap);
+      return;
+    }
+    if (g?.toy) {
+      this.h.releaseToy?.(tap);
       return;
     }
     if (cancelled || g?.pouring) return;

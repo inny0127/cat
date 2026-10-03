@@ -70,7 +70,10 @@ export class PixelApp {
     this.avatar.spots = this.room.spots;
     this.cat.groundAt = (x, z) => this.room.groundAt(x, z);
     this.avatar.sunSpot = () => this.room.sunSpot();
-    this.avatar.toys = { yarn: () => this.room.yarnAt(), kick: (d, v) => this.room.kickYarn(d, v) };
+    this.avatar.toys = {
+      yarn: () => this.room.yarnAt(), kick: (d, v) => this.room.kickYarn(d, v),
+      held: () => this.room.yarnHeld, pin: (sec, at) => this.room.pinYarn(sec, at), pinned: () => this.room.yarnPinned,
+    };
     this.avatar.sillSpot = () => this.room.sillSpot();
     this.avatar.outside = {
       birds: () => this.room.birds(),
@@ -102,18 +105,6 @@ export class PixelApp {
         this.gestureEnd();
         if (this.creditsOpen) { this.showCredits(false); return; }
         if (this.hitPrint(x, y)) { this.showCredits(true); return; }
-        if (this.hitThing(this.room.yarnBall, x, y, 22)) {
-          // a flick of the ball of wool: it rolls off away from the finger, and the cat may be
-          // after it
-          const b = this.room.yarnAt().clone().project(this.stage.camera);
-          const dx = x - (b.x * 0.5 + 0.5) * innerWidth, dy = y - (-b.y * 0.5 + 0.5) * innerHeight;
-          const d = Math.hypot(dx, dy);
-          const dir = d > 4 ? new THREE.Vector3(-dx / d, 0, -dy / d) : new THREE.Vector3(Math.random() - 0.5, 0, Math.random() - 0.5);
-          this.room.kickYarn(dir, 0.55);
-          this.haptic.tap?.();
-          this.avatar.playNow();
-          return;
-        }
         if (this.hitThing(this.room.radio, x, y, 24)) {
           this.audio.music(!this.audio.musicOn);
           this.haptic.tap?.();
@@ -127,8 +118,39 @@ export class PixelApp {
       shake: (k) => this.brain.kibble(k),
       scoop: () => { this.gestureEnd(); this.brain.scoop(); },
       longHold: (_x, _y, onCat) => this.longHold(onCat),
-      hover: (x, y) => this.brain.hover(x, y),
+      hover: (x, y) => {
+        this.brain.hover(x, y);
+        // (with a mouse: the ball of wool can be taken hold of)
+        const over = this.hitThing(this.room.yarnBall, x, y, 14);
+        if (over !== this.overToy) { this.overToy = over; canvas.style.cursor = over ? 'grab' : ''; }
+      },
       firstGesture: () => this.audio.start(),
+      // the ball of wool: a finger on it rolls it about the floor for the cat; a tap flicks it
+      grabToy: (x, y) => {
+        if (this.creditsOpen || !this.hitThing(this.room.yarnBall, x, y, 26)) return false;
+        // held where the finger took it, not snapped to the fingertip
+        const at = this.floorPoint(x, y);
+        if (!at) return false;
+        this.toyFinger = { x, y, off: this.room.yarnAt().clone().sub(at).setY(0) };
+        canvas.style.cursor = 'grabbing';
+        return true;
+      },
+      dragToy: (x, y) => {
+        const f = this.toyFinger;
+        const at = f && this.floorPoint(x, y);
+        if (!f || !at) return;
+        f.x = x;
+        f.y = y;
+        this.room.holdYarn(at.add(f.off));
+      },
+      releaseToy: (tap) => {
+        const f = this.toyFinger;
+        this.toyFinger = null;
+        this.room.holdYarn(null);
+        canvas.style.cursor = this.overToy ? 'grab' : '';
+        this.gestureEnd();
+        if (tap && f) this.flickYarn(f.x, f.y);
+      },
     });
     canvas.addEventListener('pointerdown', () => this.audio.start());
     this.motion.onShake = (k) => this.brain.kibble(k);
@@ -304,6 +326,40 @@ export class PixelApp {
     return Math.hypot((p.x * 0.5 + 0.5) * innerWidth - sx, (-p.y * 0.5 + 0.5) * innerHeight - sy) < near;
   }
 
+  /** a finger moving the ball of wool: where it is (css px), and where the ball is from the
+   *  point on the floor under it */
+  private toyFinger: { x: number; y: number; off: THREE.Vector3 } | null = null;
+  private toyWasPinned = false;
+  private overToy = false;
+  private readonly floorRay = new THREE.Raycaster();
+
+  /** the point on the floor (at the height of the ball's middle) under a screen point; up on the
+   *  wall, the floor's far edge below it; below the room, its near edge */
+  private floorPoint(sx: number, sy: number) {
+    const ray = this.floorRay;
+    ray.setFromCamera(new THREE.Vector2((sx / innerWidth) * 2 - 1, -(sy / innerHeight) * 2 + 1), this.stage.camera);
+    const o = ray.ray.origin, d = ray.ray.direction, h = 0.045;
+    const B = this.room.yarnBounds;
+    const at = (t: number) => new THREE.Vector3(o.x + d.x * t, h, o.z + d.z * t);
+    let p = d.y < -1e-4 ? at((h - o.y) / d.y) : null;
+    if (Math.abs(d.z) < 1e-4) return p;
+    if (!p || p.z < B.minZ) p = at((B.minZ - o.z) / d.z).setZ(B.minZ);
+    else if (p.z > B.maxZ) p = at((B.maxZ - o.z) / d.z).setZ(B.maxZ);
+    p.x = Math.max(B.minX, Math.min(B.maxX, p.x));
+    return p;
+  }
+
+  /** a flick of the ball of wool: it rolls off away from the finger, and the cat may be after it */
+  private flickYarn(x: number, y: number) {
+    const b = this.room.yarnAt().clone().project(this.stage.camera);
+    const dx = x - (b.x * 0.5 + 0.5) * innerWidth, dy = y - (-b.y * 0.5 + 0.5) * innerHeight;
+    const d = Math.hypot(dx, dy);
+    const dir = d > 4 ? new THREE.Vector3(-dx / d, 0, -dy / d) : new THREE.Vector3(Math.random() - 0.5, 0, Math.random() - 0.5);
+    this.room.kickYarn(dir, 0.55);
+    this.haptic.tap?.();
+    this.avatar.playNow();
+  }
+
   /** is the little print on the sill under a screen point */
   private hitPrint(sx: number, sy: number) {
     const ray = new THREE.Raycaster();
@@ -437,6 +493,15 @@ export class PixelApp {
     this.avatar.mood = mood;
     if (contacts.length) this.touchedAt = now;
     this.avatar.touched = now - this.touchedAt < 4;
+    // the ball of wool under a finger: the cat's eyes go to it, and moving it keeps it up and is
+    // company; caught under its paws, the finger feels it
+    const f = this.toyFinger, moving = this.room.yarnSpeed > 0.06;
+    this.avatar.lure = f || moving ? this.room.yarnAt() : null;
+    this.avatar.lureMoving = moving;
+    if (f && moving) this.brain.toy(f.x, f.y, dt);
+    const pinned = !!f && this.room.yarnPinned;
+    if (pinned && !this.toyWasPinned) this.haptic.tap('medium');
+    this.toyWasPinned = pinned;
     this.avatar.update(dt);
     this.cat.update(dt);
     // the weather: now and then a few hours of rain (or as asked, ?rain=1)
@@ -470,9 +535,9 @@ export class PixelApp {
   private hints(dt: number, touching: boolean) {
     const s = this.state;
     // the first time it plays with its ball of wool: that you can roll it too
-    if (this.avatar.doing === 'play' && !s.hints.yarn && !touching) {
-      s.hints.yarn = 1;
-      this.hintUi.show('털실 공을 톡 치면 굴러가요. 고양이가 쫓아갈지도 몰라요', 5000);
+    if (this.avatar.doing === 'play' && !s.hints.yarnDrag && !touching && !this.toyFinger) {
+      s.hints.yarnDrag = 1;
+      this.hintUi.show('털실 공을 손가락으로 끌어 보세요. 고양이가 쫓아올 거예요', 5000);
       return;
     }
     // once the radio has played a while: how to switch it off

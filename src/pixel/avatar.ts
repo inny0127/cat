@@ -55,8 +55,19 @@ export class PixelAvatar implements Avatar {
   spots: { food: THREE.Vector3; water: THREE.Vector3; litter: THREE.Vector3; sniff?: { to: THREE.Vector3; face: number }[] } | null = null;
   /** a place in the sun on the floor, if there is one now */
   sunSpot: (() => THREE.Vector3 | null) | null = null;
-  /** the ball of wool to play with */
-  toys: { yarn: () => THREE.Vector3; kick: (dir: THREE.Vector3, speed: number) => void } | null = null;
+  /** the ball of wool to play with: where it is, a paw sending it off, a finger having it, paws
+   *  pinning it down (and still having it) */
+  toys: {
+    yarn: () => THREE.Vector3; kick: (dir: THREE.Vector3, speed: number) => void;
+    held: () => boolean; pin: (sec: number, at: THREE.Vector3) => void; pinned: () => boolean;
+  } | null = null;
+  /** the ball while someone moves it about (set by the app), and how long the cat has watched it
+   *  go before it has to have it; and after a good long game, a while before it will play again */
+  lure: THREE.Vector3 | null = null;
+  lureMoving = false;
+  private lureT = 0;
+  private lureNeed = 0.8;
+  private playRest = 0;
   /** the windowsill to sit on */
   sillSpot: (() => SillSpot) | null = null;
   /** how hard it is raining outside */
@@ -110,6 +121,9 @@ export class PixelAvatar implements Avatar {
       lieAt: (p, at, face) => this.lieAt(p, at, face),
       yarn: () => this.toys?.yarn() ?? null,
       kick: (dir, speed) => this.toys?.kick(dir, speed),
+      toyHeld: () => this.toys?.held() ?? false,
+      pin: (sec, at) => this.toys?.pin(sec, at),
+      toyPinned: () => this.toys?.pinned() ?? false,
       sill: () => this.sillSpot?.() ?? null,
       birds: () => this.outside?.birds() ?? null,
       sound: (name, gain) => this.outside?.sound(name, gain),
@@ -205,7 +219,7 @@ export class PixelAvatar implements Avatar {
 
   /** something to chase: awake and its own master, it drops what it was doing and plays */
   playNow() {
-    if (!this.alive || this.sleep > 0.3 || this.errand || this.trip || this.hidden || this.perched) return false;
+    if (!this.alive || this.sleep > 0.3 || this.errand || this.trip || this.hidden || this.perched || this.playRest > 0) return false;
     if (this.mode !== 'rest' && this.mode !== 'alert') return false;
     if (this.act?.name === 'play') return true;
     if (this.mood.sleepy > 0.6) return false;
@@ -273,6 +287,8 @@ export class PixelAvatar implements Avatar {
     if (this.act) {
       if (!this.act.update(dt, c)) {
         this.act.stop(c);
+        // played itself out: not again for a while
+        if (this.act instanceof Play) this.playRest = this.act.tired ? 60 : 6;
         this.act = null;
       }
       return;
@@ -318,6 +334,15 @@ export class PixelAvatar implements Avatar {
       f();
     }
     if (this.errand) this.doErrand(dt);
+    this.playRest = Math.max(0, this.playRest - dt);
+    // a ball someone is moving about: watched a moment, then it has to have it
+    if (this.lure && this.act?.name !== 'play') {
+      this.lureT += dt * (this.lureMoving ? 1 : 0.25);
+      if (this.lureT > this.lureNeed && this.playNow()) this.lureT = 0;
+    } else {
+      this.lureT = 0;
+      this.lureNeed = 0.5 + Math.random() * 1.1;
+    }
     if (!this.trip) this.behave(dt);
     else {
       this.stopAct();
@@ -332,8 +357,9 @@ export class PixelAvatar implements Avatar {
     // eyes on the finger, or on you (through the window); asleep, dead or busy, nowhere (up on
     // the sill it looks where it likes: out of the window)
     const busy = this.errand || (this.act && this.act.name !== 'window' && this.act.name !== 'knead');
-    if (this.act instanceof Sill && this.mode !== 'enjoy') { /* the sill decides */ }
+    if ((this.act instanceof Sill || this.act instanceof Play) && this.mode !== 'enjoy') { /* the act decides */ }
     else if (!this.alive || this.sleep > 0.5 || busy) m.lookAt(null);
+    else if (this.lure) m.lookAt(this.lure, 1);
     else if (this.gazeTarget && this.screenToWorld(this.gazeTarget.x, this.gazeTarget.y, this.look)) m.lookAt(this.look, 0.9);
     else m.lookAt(this.viewer(), this.trip ? 0.3 : 0.85);
   }
