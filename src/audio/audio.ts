@@ -190,6 +190,8 @@ export class CatAudio {
       ['birdChip', () => S.birdChip(sr), 4],
       ['birdSong', () => S.birdSong(sr), 4],
       ['crickets', () => S.crickets(sr), 1],
+      ['thunder', () => S.thunder(sr), 2],
+      ['thunderNear', () => S.thunder(sr, true), 2],
     ];
     for (const [name, fn, count] of jobs) {
       this.bank[name] = [];

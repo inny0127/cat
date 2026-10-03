@@ -144,6 +144,18 @@ export class PixelAvatar implements Avatar {
     this.cat.motor.flickEar('both', 0.6);
     if (!this.act && !this.errand && !this.trip && Math.random() < 0.6) this.heard = { at: at.clone(), t: 0.9 + Math.random() * 0.8 };
   }
+  /** thunder (loud 0 .. 1): it looks to the window; awake, a near clap may send it to cover, into
+   *  the box if it is out, or to its bed */
+  thunder(loud: number, at: THREE.Vector3) {
+    if (!this.alive || this.isHidden) return;
+    this.hear(at);
+    if (loud < 0.75 || this.sleep > 0.3 || this.perched || this.errand || this.trip || Math.random() < 0.5) return;
+    if (this.act && (this.act.name === 'box' || this.act.name === 'to bed')) return;
+    this.stopAct();
+    const box = this.boxSpot?.();
+    this.act = box ? new Box(box) : toBed(this.ctx, 'loaf');
+  }
+
   /** something to do once it is down off the sill (asked to go somewhere while up there) */
   private afterPerch: (() => void) | null = null;
 

@@ -86,6 +86,13 @@ export class PixelApp {
       scareBug: (from) => this.room.scareBug(from),
       drop: (p) => this.room.setDrop(p),
     };
+    // thunder after a flash of lightning: heard through the glass, the louder the nearer; the cat
+    // starts at it and looks to the window, and a near clap may send it to cover
+    this.room.onThunder = (loud) => {
+      this.audio.play(loud > 0.6 ? 'thunderNear' : 'thunder', { out: true, gain: 0.3 + 0.6 * loud, pan: (Math.random() - 0.5) * 0.6 });
+      this.brain?.thunder(loud);
+      this.avatar.thunder(loud, this.room.windowMiddle);
+    };
     // its paws on the boards: soft, and softer still for a shuffle of the feet
     this.cat.stepper.onLand = (_leg, settle) => {
       if (!this.avatar.hidden) this.audio.play('step', { gain: settle ? 0.04 : 0.09, pan: this.catPan(), rate: 1.15 });

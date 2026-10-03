@@ -417,6 +417,36 @@ export function rain(sr: number, seconds = 6): Float32Array {
   return normalize(d, 0.5);
 }
 
+/** thunder: a long low roll that rumbles as it goes, swelling and dying away; near, it opens with
+ *  a crack */
+export function thunder(sr: number, near = false) {
+  const dur = rnd(4.5, 7.5);
+  const n = Math.floor(dur * sr);
+  const d = new Float32Array(n);
+  const lo = new Biquad(sr, 'lp', near ? 420 : 240), sub = new Biquad(sr, 'lp', 80);
+  const p1 = rnd(0, 6), p2 = rnd(0, 6), f1 = rnd(1.6, 2.8), f2 = rnd(4, 6.5);
+  let brown = 0;
+  for (let i = 0; i < n; i++) {
+    const t = i / sr;
+    brown = brown * 0.996 + noise() * 0.08;
+    const env = (1 - Math.exp(-t / (near ? 0.03 : 0.35))) * Math.exp(-t / (dur * 0.32));
+    // rolling: the loudness swells and falls as the sound comes in from further along the bolt
+    const roll = 0.55 + 0.45 * Math.sin(t * f1 + p1 + Math.sin(t * 0.6) * 2) * (0.6 + 0.4 * Math.sin(t * f2 + p2));
+    d[i] = (lo.run(brown) * 1.4 + sub.run(noise()) * 2.2) * env * roll;
+  }
+  if (near) {
+    // the crack: a tearing burst at the start, bright then quickly dull
+    const hp = new Biquad(sr, 'hp', 300), lp = new Biquad(sr, 'lp', 2600);
+    const len = Math.floor(0.35 * sr);
+    for (let i = 0; i < len; i++) {
+      const t = i / sr;
+      const tear = Math.random() < 0.3 ? noise() : noise() * 0.3;
+      d[i] += lp.run(hp.run(tear)) * 1.6 * Math.exp(-t / 0.09);
+    }
+  }
+  return normalize(fade(d, sr, 0.005, 0.8), 0.9);
+}
+
 /** a small bird outside: a few quick high chips ("tsip, tsip, tsip"), each falling a little */
 export function birdChip(sr: number) {
   const count = 2 + Math.floor(rnd(0, 3)), gap = rnd(0.09, 0.16), len = rnd(0.035, 0.06), f0 = rnd(3800, 5200);

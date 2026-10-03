@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { AO_GLSL, LIGHT_GLSL } from '../cat3d/fur';
-import { ROOM_LIGHT_GLSL, NOCC, cloudAt, dayLight, fogAt, moonLit, moonPhase, rainAt, skyDay, type DayLight } from '../cat3d/roomlight';
+import { ROOM_LIGHT_GLSL, NOCC, cloudAt, dayLight, fogAt, moonLit, moonPhase, rainAt, skyDay, stormAt, type DayLight } from '../cat3d/roomlight';
 import { PIX, PIX_GLSL, type Material } from '../cat3d/pixclass';
 import type { CatState } from '../sim/state';
 import { seasonAt } from './season';
@@ -183,6 +183,8 @@ uniform float uRainbow;  // a rainbow, after rain by day (0 .. 1)
 uniform float uCloud;    // how much cloud there is (0 a clear sky .. 1 overcast)
 uniform float uMoon;     // the moon's phase (0 new, 0.5 full)
 uniform float uFog;      // a morning mist (0 .. 1)
+uniform float uFlash;    // lightning now (0 .. 1)
+uniform vec3 uBolt;      // the bolt: where across (of the window), its seed, whether it is seen
 uniform vec3 uDrop;      // one drop running down the glass (window pixels), if z: the one a cat is after
 uniform vec3 uLeafA;     // the tree's leaves by the season: lit,
 uniform vec3 uLeafB;     // ... in shade,
@@ -393,6 +395,33 @@ void main() {
       a = 0.15;
     }
   }
+  // lightning: a bolt far off over the town, a jagged line down out of the cloud with a branch off
+  // it (behind the hill and the town, which stand dark against it)
+  if (uBolt.z > 0.5) {
+    float top = floor(H * 0.84), seg = 5.0;
+    float k = (top - sp.y) / seg;
+    if (k >= 0.0 && k < 15.0) {
+      float x = uBolt.x * Wd, xb = 0.0;
+      float kk = floor(k);
+      for (int j = 0; j < 15; j++) {
+        if (float(j) >= kk) break;
+        x += (h1(uBolt.y + float(j) * 1.7) - 0.5) * 6.0;
+        if (j == 3) xb = x;
+      }
+      float xl = x + (h1(uBolt.y + kk * 1.7) - 0.5) * 6.0 * fract(k);
+      // (two pixels wide down from the cloud, one below; a glow round it)
+      float dx = abs(sp.x + 0.5 - (xl + 0.5));
+      float wide = k < 8.0 ? 1.0 : 0.5;
+      if (dx < wide) { c = hex(240.0, 244.0, 255.0); a = 0.2; }
+      else if (dx < wide + 2.0) c = mix(c, hex(196.0, 206.0, 255.0), 0.5 - 0.2 * (dx - wide));
+      // (the branch, off one side from the fourth bend for a few)
+      float side = h1(uBolt.y * 3.3) < 0.5 ? -1.0 : 1.0;
+      if (k > 4.0 && k < 8.0) {
+        float xbr = xb + side * (k - 4.0) * seg * 0.75 + (h1(uBolt.y + floor(k) * 4.1) - 0.5) * 3.0;
+        if (abs(sp.x - floor(xbr + 0.5)) < 0.5) { c = hex(224.0, 230.0, 255.0); a = 0.2; }
+      }
+    }
+  }
   if (starry) {
     // now and then a plane's light crossing, blinking
     float tp = mod(uTime, 70.0);
@@ -573,6 +602,11 @@ void main() {
     vec3 fogCol = tod(hex(214.0, 222.0, 228.0), hex(242.0, 222.0, 200.0), hex(200.0, 176.0, 190.0), hex(58.0, 58.0, 84.0));
     c = mix(c, fogCol, uFog * fk * (a > 0.16 ? 0.35 : 1.0));
   }
+  // a flash of lightning lights it all up, the sky and its clouds the most
+  if (uFlash > 0.01) {
+    float fl = fk == 0.5 ? 0.78 : fk > 0.9 ? 0.4 : fk > 0.6 ? 0.25 : 0.12;
+    c = mix(c, hex(214.0, 222.0, 255.0), uFlash * fl);
+  }
 
   // snow falling: flakes drifting down slowly, swaying, near ones bigger
   if (uRain > 0.01 && uSnowing > 0.5) {
@@ -733,7 +767,7 @@ export class Room {
     this.sky = new THREE.ShaderMaterial({
       uniforms: {
         uTime: { value: 0 }, uHour: { value: 12 }, uSkyPx: { value: new THREE.Vector2(48, 56) }, uPxSize: { value: 0.01 }, uPar: { value: 0 }, uRain: { value: 0 },
-        uSnowing: { value: 0 }, uSnowLie: { value: 0 }, uRainbow: { value: 0 }, uCloud: { value: 0.5 }, uMoon: { value: 0.5 }, uFog: { value: 0 }, uDrop: { value: new THREE.Vector3() },
+        uSnowing: { value: 0 }, uSnowLie: { value: 0 }, uRainbow: { value: 0 }, uCloud: { value: 0.5 }, uMoon: { value: 0.5 }, uFog: { value: 0 }, uFlash: { value: 0 }, uBolt: { value: new THREE.Vector3() }, uDrop: { value: new THREE.Vector3() },
         uLeafA: { value: new THREE.Vector3(122 / 255, 162 / 255, 96 / 255) }, uLeafB: { value: new THREE.Vector3(76 / 255, 116 / 255, 76 / 255) },
         uLeafC: { value: new THREE.Vector3(1, 0.7, 0.75) }, uLeafs: { value: new THREE.Vector2(1, 0) },
       },
@@ -1544,6 +1578,43 @@ export class Room {
 
   /** a warm place on the floor in the sun, clear of the bed and the room's things, if the sun is
    *  in: points of the window's opening carried along the light down to the floor */
+  /** a thunderstorm: lightning now and then, and after each flash (the further off it struck, the
+   *  later and the softer) its thunder */
+  private readonly storm = { next: 6, t: 9, peak: 0, bolt: false, x: 0.5, seed: 0 };
+  private readonly thunderQ: { at: number; loud: number }[] = [];
+  /** thunder arriving now, how loud (0 .. 1) */
+  onThunder: ((loud: number) => void) | null = null;
+  /** a storm (0 .. 1) whatever the weather (the lab, tests) */
+  stormOverride: number | null = null;
+
+  /** a flash of lightning now: how far off (0 near .. 1 far) */
+  flashNow(far = Math.random()) {
+    const S = this.storm;
+    S.next = 10 + Math.random() * 35;
+    S.t = 0;
+    S.peak = 0.45 + 0.55 * (1 - far);
+    S.bolt = far < 0.65 && Math.random() < 0.7;
+    S.x = 0.15 + 0.7 * Math.random();
+    S.seed = Math.random() * 100;
+    this.thunderQ.push({ at: this.time + 1 + 6 * far + Math.random(), loud: 1 - 0.75 * far });
+  }
+
+  /** how bright the lightning is now (0 .. 1), and thunder heard when it is due */
+  private lightning(dt: number, storm: number) {
+    const S = this.storm;
+    if (storm > 0.05 && (S.next -= dt * storm) <= 0) this.flashNow();
+    S.t += dt;
+    // a stroke, a flicker, a second stroke, and it dies away
+    const t = S.t;
+    const b = t < 0.07 ? 1 : t < 0.13 ? 0.2 : t < 0.2 ? 0.85 : t < 0.7 ? 0.85 * Math.exp(-(t - 0.2) * 9) : 0;
+    for (let i = this.thunderQ.length - 1; i >= 0; i--) {
+      if (this.time < this.thunderQ[i].at) continue;
+      const q = this.thunderQ.splice(i, 1)[0];
+      this.onThunder?.(q.loud);
+    }
+    return S.peak * b;
+  }
+
   /** the heating is on: from late October to early April */
   heating = false;
 
@@ -1817,6 +1888,9 @@ export class Room {
     su.uSnowLie.value = se.winter;
     this.time += dt;
     this.timeU.value = this.time;
+    const flash = this.lightning(dt, this.stormOverride ?? stormAt(date, rain));
+    su.uFlash.value = flash;
+    (su.uBolt.value as THREE.Vector3).set(this.storm.x, this.storm.seed, this.storm.bolt && flash > 0.2 ? 1 : 0);
     // the air in the room just stirs the monstera's leaves, now one, now another, slowly
     for (const L of this.leaves) {
       const t = this.time * 0.45 + L.seed;
@@ -1839,7 +1913,8 @@ export class Room {
     L.uLampInt.value = d.lamp;
     L.uDay.value = 1 - Room.dark(hour);
     L.uSun.value = d.sun;
-    L.uSkyI.value = d.sky;
+    // (lightning floods the room with the sky's light a moment)
+    L.uSkyI.value = d.sky + 2.6 * flash;
     L.uAmb.value = d.amb;
     L.uFloorB.value = d.floorB;
     (L.uFill.value as THREE.Vector4).w = d.fill;

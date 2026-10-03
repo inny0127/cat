@@ -190,6 +190,21 @@ export class Brain {
     if (this.taps.length > 3) this.irritation = clamp(this.irritation + 0.07);
   }
 
+  /** thunder rolling in through the glass (loud 0 .. 1): a near clap startles it, out of a light
+   *  sleep too, the ears back and the fur up a moment; a far one only turns its ears */
+  thunder(loud: number) {
+    if (this.inert) return;
+    this.anim.twitchEar('both', 0.4 + loud);
+    if (this.mode === 'sleep' || this.mode === 'doze') {
+      if (!chance(loud * (1 - this.sleepDepth * 0.6))) return;
+      this.toAwake('alert');
+    }
+    // (never enough on its own to send it off sulking)
+    this.fear = Math.max(this.fear, Math.min(0.7, this.fear + 0.5 * loud));
+    this.arousal = clamp(this.arousal + 0.3 * loud);
+    if (loud > 0.45) this.anim.jolt(loud);
+  }
+
   knock(sx: number, sy: number) {
     // knocking on the glass is calling the cat
     if (this.mode === 'away' && this.s.alive) {

@@ -248,6 +248,18 @@ export function dayLight(hour: number, out?: DayLight, rain = 0, moon = 1, fog =
   return o;
 }
 
+/** is the rain a thunderstorm (0 .. 1): some rainy spells, mostly in summer; the same for everyone
+ *  at the same time */
+export function stormAt(d: Date, rain: number) {
+  if (rain < 0.4) return 0;
+  const day = Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 864e5);
+  const block = Math.floor((d.getHours() + d.getMinutes() / 60) / 3);
+  const x = Math.sin((day * 5.3 + block * 11.9) * 7.77) * 43758.5453, r = x - Math.floor(x);
+  const m = d.getMonth();
+  const chance = m >= 5 && m <= 7 ? 0.5 : m === 4 || m === 8 ? 0.25 : 0.06;
+  return r < chance ? Math.min(1, (rain - 0.4) / 0.4) : 0;
+}
+
 /** is it raining (0 .. 1): now and then for a few hours, the same for everyone at the same time.
  *  Each three hours of each day has its own chance; the rain comes on and goes off over about
  *  twenty minutes either side */
