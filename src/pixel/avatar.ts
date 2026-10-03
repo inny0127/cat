@@ -506,17 +506,38 @@ export class PixelAvatar implements Avatar {
           this.washAfter.stop(this.ctx);
           this.washAfter = null;
         }
-        // off out of the room, the far way round
+        // off out of the room, the far way round; from the litter box, as often as not, at a
+        // gallop with the tail up, as cats will
         e.phase = 'off';
         m.layer = null;
         m.setPosture('stand');
-        m.walkTo(new THREE.Vector3(e.dir * (this.offstage + 0.35), 0, m.pos.z - 0.1), 0.3);
+        const rocket = e.reason === 'litter' && Math.random() < 0.5;
+        if (rocket) {
+          m.zoom = 1;
+          m.layer = { pose: { tailLift: 1.25, tailHook: 0.7, earFwd: -0.35, earOut: 0.25, hipY: 0.185 }, w: 1 };
+          this.ctx.sound('scrabble', 0.25);
+        }
+        m.walkTo(new THREE.Vector3(e.dir * (this.offstage + 0.35), 0, m.pos.z - 0.1), rocket ? 1.3 : 0.3);
         return;
       }
       m.setPosture('crouch');
+      if (e.reason === 'litter') {
+        // squatting a while, the tail up out of the way; then turning the litter over the top of it
+        // with a forepaw, a scrape or two
+        const dig = e.t > e.dur - 2.5;
+        const sw = Math.sin(e.t * 9);
+        if (dig && Math.floor(e.t * 1.5) !== Math.floor((e.t - dt) * 1.5)) this.ctx.sound('scrabble', 0.12);
+        m.layer = {
+          pose: dig ? { neckPitch: -0.5, headPitch: -0.2, LF: { z: 0.03 + 0.03 * sw, y: 0.012 * Math.max(0, sw) } } : { hipY: 0.13, tailLift: 0.7, neckPitch: 0.05, earFwd: -0.15 },
+          w: Math.min(1, e.t * 1.5),
+        };
+        return;
+      }
       const chew = e.reason === 'eat' ? 0.25 * Math.max(0, Math.sin(e.t * 8)) : 0.14 * Math.max(0, Math.sin(e.t * 15));
       m.layer = { pose: { neckPitch: -0.85, headPitch: -0.25, jaw: chew }, w: Math.min(1, e.t * 1.5) };
     } else if (e.phase === 'off' && Math.abs(m.pos.x) > this.offstage) {
+      m.zoom = 0;
+      m.layer = null;
       this.errand = null;
       this.trip = null;
       this.setHidden(true);
@@ -545,7 +566,7 @@ export class PixelAvatar implements Avatar {
       this.trip = { kind: 'errand' };
       this.washAfter = null;
       this.errand = {
-        reason: reason!, phase: 'go', t: 0, dur: reason === 'eat' ? 26 + Math.random() * 14 : reason === 'drink' ? 12 + Math.random() * 8 : 0,
+        reason: reason!, phase: 'go', t: 0, dur: reason === 'eat' ? 26 + Math.random() * 14 : reason === 'drink' ? 12 + Math.random() * 8 : reason === 'litter' ? 7 + Math.random() * 3 : 0,
         dir: spot.x >= 0 ? 1 : -1,
       };
       m.setPosture('stand');
@@ -572,6 +593,7 @@ export class PixelAvatar implements Avatar {
     const m = this.cat.motor;
     this.errand = null;
     m.layer = null;
+    m.zoom = 0;
     const side = Math.random() < 0.5 ? -1 : 1;
     this.fading = null;
     this.setHidden(false);
@@ -594,6 +616,7 @@ export class PixelAvatar implements Avatar {
     if (h) {
       this.trip = null;
       this.cat.motor.stop();
+      this.cat.motor.zoom = 0;
       this.cat.place(this.home.x, this.home.z, this.home.yaw);
     }
   }
