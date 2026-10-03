@@ -71,6 +71,7 @@ export class PixelApp {
     this.avatar.feel = (sx, sy) => this.senses.hitNear(sx, sy);
     this.cat.groundAt = (x, z) => this.room.groundAt(x, z);
     this.avatar.sunSpot = () => this.room.sunSpot();
+    this.avatar.warmSpot = () => this.room.warmSpot();
     this.avatar.toys = {
       yarn: () => this.room.yarnAt(), kick: (d, v) => this.room.kickYarn(d, v),
       held: () => this.room.yarnHeld, pin: (sec, at) => this.room.pinYarn(sec, at), pinned: () => this.room.yarnPinned,

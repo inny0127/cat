@@ -1528,6 +1528,17 @@ export class Room {
 
   /** a warm place on the floor in the sun, clear of the bed and the room's things, if the sun is
    *  in: points of the window's opening carried along the light down to the floor */
+  /** the heating is on: from late October to early April */
+  heating = false;
+
+  /** a warm place on the floor by the radiator while the heating is on: the middle of the body
+   *  there, and which way to face, lying along it */
+  warmSpot(): { at: THREE.Vector3; face: number } | null {
+    if (!this.heating) return null;
+    const { l, r, z } = this.win;
+    return { at: new THREE.Vector3((l + r) / 2 + 0.1, 0, z + 0.25), face: -Math.PI / 2 };
+  }
+
   sunSpot(): THREE.Vector3 | null {
     const L = this.lights;
     const P = L.uPatch.value as THREE.Vector4;
@@ -1762,6 +1773,7 @@ export class Room {
     this.sky.uniforms.uCloud.value = this.cloudOverride ?? cloudAt(date, rain);
     // the year outside: the tree's leaves, snow; and what is put out for the time of year
     const md = date.getMonth() * 100 + date.getDate();
+    this.heating = md >= 925 || md <= 310;
     {
       const dayN = Math.floor(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) / 864e5);
       const B = this.box;

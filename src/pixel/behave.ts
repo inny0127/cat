@@ -27,6 +27,8 @@ export interface Ctx {
   sniff: () => { to: THREE.Vector3; face: number }[];
   /** a place on the floor in the sun, if the sun is in */
   sun: () => THREE.Vector3 | null;
+  /** a warm place by the radiator, if the heating is on, and which way to lie along it */
+  warm: () => { at: THREE.Vector3; face: number } | null;
   /** where to stand, and which way to face, to lie down in a posture with the middle of the body
    *  at a point and the face turned a way */
   lieAt: (p: PoseName, at: THREE.Vector3, face: number) => { to: THREE.Vector3; yaw: number };
@@ -248,6 +250,19 @@ export const sunbathe = (c: Ctx) => {
   const place = c.lieAt(posture, spot, rand(-0.7, 0.7));
   return new Walk('sun', [
     { to: place.to, face: place.yaw, stay: rand(40, 100), posture },
+    { to: bed.to, face: bed.yaw, stay: 0.1, posture: 'loaf' },
+  ]);
+};
+
+/** in the heating months, a long while lying on the floor by the warm radiator, then back to bed */
+export const warmUp = (c: Ctx) => {
+  const spot = c.warm();
+  if (!spot) return null;
+  const bed = c.bed('loaf');
+  const posture = pick<PoseName>(['loaf', 'loaf', 'side', 'sphinx']);
+  const place = c.lieAt(posture, spot.at, spot.face + rand(-0.2, 0.2));
+  return new Walk('warm', [
+    { to: place.to, face: place.yaw, stay: rand(45, 120), posture },
     { to: bed.to, face: bed.yaw, stay: 0.1, posture: 'loaf' },
   ]);
 };
@@ -1075,6 +1090,7 @@ export function chooseAct(c: Ctx, atHome: boolean, posture: PoseName): Act | nul
     if (atHome) opts.push([0.9 * Math.max(0, Math.min(1, m.trust + 0.3)) * (1 + m.arousal) + (c.mode === 'alert' ? 0.8 : 0), () => toWindow(c)]);
     if (atHome) opts.push([0.5 * (1 + m.arousal) * (1 - m.sleepy), () => wander(c)]);
     if (atHome && c.mode === 'rest') opts.push([0.7 + 0.8 * m.sleepy, () => sunbathe(c)]);
+    if (atHome && c.mode === 'rest' && c.warm()) opts.push([0.8 + 0.8 * m.sleepy, () => warmUp(c)]);
     if (atHome && c.yarn()) opts.push([0.6 * (0.4 + m.arousal) * (1 - m.sleepy) * (c.mode === 'rest' ? 1 : 0.4), () => new Play()]);
     const box = c.box();
     if (atHome && box) opts.push([0.7 * (1 - 0.4 * m.sleepy), () => new Box(box)]);

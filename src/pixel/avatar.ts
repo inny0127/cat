@@ -4,7 +4,7 @@ import type { PoseName } from '../cat3d/pose';
 import { NEUTRAL, type Mood } from '../cat3d/mood';
 import type { Avatar } from '../sim/avatar';
 import type { EarMood, TailMood } from '../rig/animator';
-import { Stretch, chooseAct, groomChest, groomFlank, knead, restingPose, toBed, toWindow, wander, washFace, yawn, type Act, type Ctx, sunbathe, Play, Sill, Hunt, Box, Zoomies, type SillSpot } from './behave';
+import { Stretch, chooseAct, groomChest, groomFlank, knead, restingPose, toBed, toWindow, wander, warmUp, washFace, yawn, type Act, type Ctx, sunbathe, Play, Sill, Hunt, Box, Zoomies, type SillSpot } from './behave';
 
 const LYING: PoseName[] = ['loaf', 'sphinx', 'side', 'curl'];
 const wrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
@@ -55,6 +55,8 @@ export class PixelAvatar implements Avatar {
   spots: { food: THREE.Vector3; water: THREE.Vector3; litter: THREE.Vector3; sniff?: { to: THREE.Vector3; face: number }[] } | null = null;
   /** a place in the sun on the floor, if there is one now */
   sunSpot: (() => THREE.Vector3 | null) | null = null;
+  /** by the radiator, while the heating is on */
+  warmSpot: (() => { at: THREE.Vector3; face: number } | null) | null = null;
   /** the ball of wool to play with: where it is, a paw sending it off, a finger having it, paws
    *  pinning it down (and still having it) */
   toys: {
@@ -186,6 +188,7 @@ export class PixelAvatar implements Avatar {
       night: 0,
       sniff: () => this.spots?.sniff ?? [],
       sun: () => this.sunSpot?.() ?? null,
+      warm: () => this.warmSpot?.() ?? null,
       lieAt: (p, at, face) => this.lieAt(p, at, face),
       yarn: () => this.toys?.yarn() ?? null,
       kick: (dir, speed) => this.toys?.kick(dir, speed),
@@ -279,7 +282,7 @@ export class PixelAvatar implements Avatar {
   }
 
   /** start one of its acts now (for the lab and tests) */
-  startAct(name: 'yawn' | 'groom' | 'groom chest' | 'wash' | 'stretch' | 'window' | 'wander' | 'knead' | 'bed' | 'sun' | 'play' | 'sill' | 'box' | 'zoomies') {
+  startAct(name: 'yawn' | 'groom' | 'groom chest' | 'wash' | 'stretch' | 'window' | 'wander' | 'knead' | 'bed' | 'sun' | 'play' | 'sill' | 'box' | 'zoomies' | 'warm') {
     if (this.perched) return;
     this.stopAct();
     const c = this.ctx;
@@ -287,7 +290,7 @@ export class PixelAvatar implements Avatar {
       : name === 'stretch' ? new Stretch('loaf') : name === 'window' ? toWindow(c) : name === 'wander' ? wander(c)
         : name === 'knead' ? knead() : name === 'sun' ? sunbathe(c) : name === 'play' ? new Play()
           : name === 'sill' && this.sillSpot ? new Sill(this.sillSpot())
-            : name === 'box' && this.boxSpot?.() ? new Box(this.boxSpot()!) : name === 'zoomies' ? new Zoomies(c) : toBed(c, 'loaf');
+            : name === 'box' && this.boxSpot?.() ? new Box(this.boxSpot()!) : name === 'zoomies' ? new Zoomies(c) : name === 'warm' ? warmUp(c) ?? toBed(c, 'loaf') : toBed(c, 'loaf');
   }
 
   /** something to chase: awake and its own master, it drops what it was doing and plays */

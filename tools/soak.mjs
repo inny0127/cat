@@ -12,7 +12,7 @@ await page.goto((process.env.REEL_BASE ?? 'http://localhost:5173/') + 'index.htm
 await page.waitForFunction(() => window.__pcat, null, { timeout: 180000 });
 const report = await page.evaluate(async (minutes) => {
   const app = window.__pcat;
-  const acts = ['wander', 'sun', 'play', 'sill', 'box', 'wash', 'zoomies', 'window', 'groom', 'yawn', 'stretch', 'bed'];
+  const acts = ['wander', 'sun', 'warm', 'play', 'sill', 'box', 'wash', 'zoomies', 'window', 'groom', 'yawn', 'stretch', 'bed'];
   const issues = [];
   let t = 1, seen = {}, drag = null, drags = 0, errands = 0;
   // a cat that wants to go somewhere and does not move
