@@ -153,6 +153,53 @@ export const knead = () => new Layered('knead', 1e9, 0.5, (t) => {
   return { LF: { y: 0.012 + 0.02 * l, flex: 0.4 * l }, RF: { y: 0.012 + 0.02 * r, flex: 0.4 * r }, eyeOpen: 0.3, squint: 0.5 };
 }, 'sphinx');
 
+/** a sneeze: a breath in with the head up a little and the eyes squeezing shut, then a sharp
+ *  little nod down with the sound of it; now and then two */
+export const sneeze = (c: Ctx) => {
+  const two = Math.random() < 0.3;
+  let heard = 0;
+  return new Layered('sneeze', two ? 1.6 : 0.9, 0.08, (t) => {
+    const k = two && t > 0.8 ? 1 : 0, u = (t - k * 0.8) / 0.8;
+    if (heard <= k && u > 0.45) { heard = k + 1; c.sound('sneeze', 0.32); }
+    const pre = u < 0.45 ? Math.sin(Math.PI * 0.5 * Math.max(0, u) / 0.45) : 0;
+    const nod = u >= 0.45 ? Math.sin(Math.PI * Math.min(1, (u - 0.45) / 0.3)) : 0;
+    return {
+      headPitch: 0.25 * pre - 0.55 * nod, neckPitch: 0.1 * pre - 0.3 * nod, eyeOpen: 0.25, squint: Math.min(1, 0.6 * pre + nod),
+      earFwd: -0.3 * nod, jaw: 0.22 * nod, whisker: 0.5 * nod,
+    };
+  });
+};
+
+/**
+ * Staring at nothing: up at a spot on the wall where nobody else can see a thing, the ears forward,
+ * the pupils wide and the tail tip ticking, a long while; then, as often as not, a chirp at it, and
+ * back to its own business as if nothing were there.
+ */
+export class Stare implements Act {
+  readonly name = 'stare';
+  private t = 0;
+  private readonly dur = rand(5, 10);
+  private readonly at: THREE.Vector3;
+  private chirp = Math.random() < 0.45;
+  constructor(c: Ctx) {
+    const h = c.home;
+    this.at = new THREE.Vector3(h.x + rand(-0.6, 0.6), rand(0.95, 1.5), h.z - 0.62);
+  }
+  update(dt: number, c: Ctx) {
+    this.t += dt;
+    const m = c.m;
+    m.setPosture('sit');
+    m.lookAt(this.at, 1);
+    m.layer = { pose: { earFwd: 0.55, pupil: 0.55, eyeOpen: 1, tailCurl: 0.6 * Math.sin(this.t * 6.5), whisker: 0.4 }, w: hump(this.t, this.dur, 0.5) };
+    if (this.chirp && this.t > this.dur - 1.2) { this.chirp = false; c.chirp(); }
+    return this.t < this.dur;
+  }
+  stop(c: Ctx) {
+    c.m.layer = null;
+    c.m.lookAt(null);
+  }
+}
+
 /** a stretch: up, forelegs out and rump high, then back down */
 export class Stretch implements Act {
   readonly name = 'stretch';
@@ -1139,6 +1186,8 @@ export function chooseAct(c: Ctx, atHome: boolean, posture: PoseName): Act | nul
     opts.push([0.8 + m.sleepy, yawn]);
     if (lying) opts.push([1 + m.pleasure, groomFlank], [0.6, groomChest], [0.8, washFace]);
     opts.push([0.35, () => new Stretch(posture === 'sit' ? 'sit' : 'loaf')]);
+    opts.push([0.1, () => sneeze(c)]);
+    opts.push([0.25 * (0.5 + m.arousal) * (1 - m.sleepy), () => new Stare(c)]);
     if (atHome) opts.push([0.9 * Math.max(0, Math.min(1, m.trust + 0.3)) * (1 + m.arousal) + (c.mode === 'alert' ? 0.8 : 0), () => toWindow(c)]);
     if (atHome) opts.push([0.5 * (1 + m.arousal) * (1 - m.sleepy), () => wander(c)]);
     if (atHome && c.mode === 'rest') opts.push([0.7 + 0.8 * m.sleepy, () => sunbathe(c)]);

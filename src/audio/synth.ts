@@ -417,6 +417,24 @@ export function rain(sr: number, seconds = 6): Float32Array {
   return normalize(d, 0.5);
 }
 
+/** a cat's sneeze: a faint quick breath in, then a tiny sharp "tch", a burst of breath snapped off */
+export function sneeze(sr: number) {
+  const n = Math.floor(0.32 * sr);
+  const d = new Float32Array(n);
+  const inb = new Biquad(sr, 'bp', rnd(1800, 2400), 1.2), burst = new Biquad(sr, 'bp', rnd(3200, 4400), 0.9), body = new Biquad(sr, 'bp', rnd(900, 1300), 2);
+  const at = Math.floor(rnd(0.12, 0.16) * sr);
+  for (let i = 0; i < n; i++) {
+    const t = i / sr;
+    if (i < at) d[i] = inb.run(noise()) * 0.08 * (t / (at / sr));
+    else {
+      const u = (i - at) / sr;
+      const e = Math.exp(-u / 0.022) * (1 - Math.exp(-u / 0.002));
+      d[i] = (burst.run(noise()) * 1.0 + body.run(noise()) * 0.5) * e;
+    }
+  }
+  return normalize(fade(d, sr, 0.004, 0.02), 0.7);
+}
+
 /** thunder: a long low roll that rumbles as it goes, swelling and dying away; near, it opens with
  *  a crack */
 export function thunder(sr: number, near = false) {
