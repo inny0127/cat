@@ -3,6 +3,7 @@ import { AO_GLSL, LIGHT_GLSL } from '../cat3d/fur';
 import { ROOM_LIGHT_GLSL, NOCC, dayLight, skyDay, type DayLight } from '../cat3d/roomlight';
 import { PIX, PIX_GLSL, type Material } from '../cat3d/pixclass';
 import type { CatState } from '../sim/state';
+import { seasonAt } from './season';
 
 /**
  * The cat's room, drawn by the pixel pass from the same palette as the cat (pixclass.ts): a corner
@@ -145,7 +146,13 @@ uniform float uHour;
 uniform vec2 uSkyPx;     // the window's size in art pixels
 uniform float uPxSize;   // an art pixel at the window, in metres
 uniform float uPar;      // where you look from, across the room from the window's middle (metres)
-uniform float uRain;     // 0 dry .. 1 raining
+uniform float uRain;     // 0 dry .. 1 raining (or snowing, in winter)
+uniform float uSnowing;  // 1: what falls is snow
+uniform float uSnowLie;  // snow lying on the roofs and the tree (0 .. 1)
+uniform vec3 uLeafA;     // the tree's leaves by the season: lit,
+uniform vec3 uLeafB;     // ... in shade,
+uniform vec3 uLeafC;     // ... and the season's other colour among them (autumn's red, spring's pink)
+uniform vec2 uLeafs;     // how full the tree is (0 bare .. 1), how much of the other colour
 varying vec2 vUv;
 float hash2(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float h1(float n) { return fract(sin(n * 127.1 + 31.7) * 43758.5453); }
@@ -303,20 +310,65 @@ void main() {
   float chx = nl - floor(ncell * (0.25 + 0.4 * h1(nc * 8.1)));
   if (chx >= 0.0 && chx < 3.0 && px.y >= roofTop && px.y < ridge + 3.0) c = tod(hex(140.0, 90.0, 80.0), hex(160.0, 96.0, 74.0), hex(96.0, 60.0, 76.0), hex(26.0, 22.0, 34.0));
 
-  // a tree in the corner, its leaves stirring
+  // snow lying: along the tops of the roofs across the way and of the blocks behind them
+  vec3 snowCol = tod(hex(240.0, 244.0, 250.0), hex(255.0, 236.0, 220.0), hex(220.0, 196.0, 214.0), hex(70.0, 76.0, 104.0));
+  if (uSnowLie > 0.01) {
+    if (px.y < roofTop && px.y >= roofTop - 2.0 && hash2(vec2(floor(nx / 2.0), 3.0)) < 0.4 + uSnowLie) c = snowCol;
+    else if (inB && px.y >= top - 1.0 && px.y >= roofTop) c = mix(c, snowCol, 0.85);
+  }
+
+  // a tree in the corner, its leaves stirring; it goes through the year: blossom in spring, deep
+  // green in summer, gold and red in autumn, bare branches (snow on them) in winter
   vec2 tp = px - vec2(slide(0.6), 0.0);
   float sway = floor(sin(uTime * 0.9 + tp.y * 0.08) * 1.0 + 0.5);
   vec2 tq = (tp - vec2(-Wd * 0.04 + sway, H * 0.05)) / vec2(Wd * 0.3, H * 0.3);
   float leaf = noise(tp * 0.22) * 0.6 + noise(tp * 0.5 + 9.0) * 0.4;
   float canopy = 1.0 - length(tq) + (leaf - 0.5) * 0.5;
-  if (canopy > 0.0) {
-    float lit = noise(tp * 0.3 + 3.0) + (tq.y - tq.x) * 0.5;
-    c = lit > 0.55 ? tod(hex(122.0, 162.0, 96.0), hex(172.0, 166.0, 82.0), hex(92.0, 82.0, 88.0), hex(26.0, 40.0, 40.0))
-                   : tod(hex(76.0, 116.0, 76.0), hex(112.0, 110.0, 62.0), hex(62.0, 52.0, 70.0), hex(18.0, 28.0, 32.0));
+  // its trunk and boughs, seen where the leaves are thin
+  vec2 tb = tp - vec2(-Wd * 0.04, 0.0);
+  float wood = 0.0;
+  if (tb.x > -2.0 && tb.x < Wd * 0.05 && tb.y < H * 0.2) wood = 1.0;
+  for (int k = 0; k < 4; k++) {
+    float fk = float(k);
+    vec2 a0 = vec2(Wd * 0.015, H * (0.1 + 0.04 * fk));
+    vec2 a1 = a0 + vec2(Wd * (0.08 + 0.05 * fk), H * (0.16 - 0.02 * fk)) * (fk == 1.0 ? vec2(1.2, 0.8) : vec2(1.0));
+    vec2 ab = a1 - a0;
+    float u = clamp(dot(tb - a0, ab) / dot(ab, ab), 0.0, 1.0);
+    if (length(tb - a0 - ab * u) < 1.6 - u) wood = 1.0;
   }
+  vec3 woodCol = tod(hex(74.0, 58.0, 60.0), hex(96.0, 66.0, 58.0), hex(66.0, 48.0, 62.0), hex(16.0, 18.0, 26.0));
+  if (canopy > -0.15 && wood > 0.5) c = woodCol;
+  if (canopy > 0.0 && noise(tp * 0.35 + 21.0) < 0.15 + 0.85 * uLeafs.x) {
+    float lit = noise(tp * 0.3 + 3.0) + (tq.y - tq.x) * 0.5;
+    vec3 la = uLeafA, lb = uLeafB;
+    // the season's other colour in clusters (red among the gold, pink blossom on the green)
+    if (noise(tp * 0.42 + 13.0) < uLeafs.y) { la = uLeafC; lb = uLeafC * 0.78; }
+    vec3 dayLit = la, dayShade = lb;
+    c = lit > 0.55 ? tod(dayLit, dayLit * vec3(1.06, 0.98, 0.82), dayLit * vec3(0.66, 0.55, 0.72), dayLit * vec3(0.16, 0.22, 0.3))
+                   : tod(dayShade, dayShade * vec3(1.04, 0.96, 0.8), dayShade * vec3(0.7, 0.58, 0.76), dayShade * vec3(0.17, 0.22, 0.3));
+  }
+  // snow lying on the boughs
+  if (uSnowLie > 0.01 && wood > 0.5 && canopy > -0.15 && hash2(px + 7.0) < uSnowLie * 0.5) c = snowCol;
 
+  // snow falling: flakes drifting down slowly, swaying, near ones bigger
+  if (uRain > 0.01 && uSnowing > 0.5) {
+    vec3 flake = mix(vec3(1.0), c, 0.2) * mix(1.0, 0.8, night);
+    for (int k = 0; k < 2; k++) {
+      float fk = float(k);
+      float cell = 7.0 + fk * 5.0;
+      vec2 q = vec2(px.x, px.y + uTime * (6.0 + fk * 5.0));
+      vec2 ci = floor(q / cell);
+      float hf = hash2(ci + fk * 17.0);
+      if (hf < uRain * 0.6) {
+        vec2 fp = (ci + vec2(0.2 + 0.6 * h1(hf * 9.0), 0.5)) * cell;
+        fp.x += 2.0 * sin(uTime * (0.8 + hf) + hf * 30.0);
+        vec2 dd = abs(q - floor(fp));
+        if (fk < 0.5 ? (dd.x + dd.y < 0.5) : (dd.x + dd.y < 1.5)) c = mix(c, flake, 0.85);
+      }
+    }
+  }
   // rain falling past: thin slanted streaks, near ones longer and quicker than far ones
-  if (uRain > 0.01) {
+  if (uRain > 0.01 && uSnowing < 0.5) {
     vec3 drop = mix(vec3(1.0), c, 0.45) * mix(1.0, 0.75, night);
     for (int k = 0; k < 2; k++) {
       float fk = float(k);
@@ -443,7 +495,12 @@ export class Room {
     const ww = winR - winL, wh = winT - winB;
     // (drawn after the sunbeam, so its light does not tint the sky)
     this.sky = new THREE.ShaderMaterial({
-      uniforms: { uTime: { value: 0 }, uHour: { value: 12 }, uSkyPx: { value: new THREE.Vector2(48, 56) }, uPxSize: { value: 0.01 }, uPar: { value: 0 }, uRain: { value: 0 } },
+      uniforms: {
+        uTime: { value: 0 }, uHour: { value: 12 }, uSkyPx: { value: new THREE.Vector2(48, 56) }, uPxSize: { value: 0.01 }, uPar: { value: 0 }, uRain: { value: 0 },
+        uSnowing: { value: 0 }, uSnowLie: { value: 0 },
+        uLeafA: { value: new THREE.Vector3(122 / 255, 162 / 255, 96 / 255) }, uLeafB: { value: new THREE.Vector3(76 / 255, 116 / 255, 76 / 255) },
+        uLeafC: { value: new THREE.Vector3(1, 0.7, 0.75) }, uLeafs: { value: new THREE.Vector2(1, 0) },
+      },
       vertexShader: SKY_VERT, fragmentShader: SKY_FRAG,
       transparent: true, blending: THREE.NoBlending,
     });
@@ -1085,9 +1142,18 @@ export class Room {
 
   /** the bowls and box as the cat's state has them; the light and the sky by the hour (and that
    *  light, for the pixel pass's colours) */
-  update(s: CatState, hour = 12, dt = 0, rain = 0): DayLight {
+  update(s: CatState, hour = 12, dt = 0, rain = 0, date: Date = new Date()): DayLight {
     const d = dayLight(hour, this.light, rain);
     this.sky.uniforms.uRain.value = rain;
+    // the year outside: the tree's leaves, snow
+    const se = seasonAt(date, rain);
+    const su = this.sky.uniforms;
+    (su.uLeafA.value as THREE.Vector3).set(...se.leafA);
+    (su.uLeafB.value as THREE.Vector3).set(...se.leafB);
+    (su.uLeafC.value as THREE.Vector3).set(...se.leafC);
+    (su.uLeafs.value as THREE.Vector2).set(se.full, se.other);
+    su.uSnowing.value = se.snowing ? 1 : 0;
+    su.uSnowLie.value = se.winter;
     this.time += dt;
     this.timeU.value = this.time;
     this.rollYarn(dt);

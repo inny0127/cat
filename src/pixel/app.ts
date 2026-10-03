@@ -383,9 +383,15 @@ export class PixelApp {
   /** ?rain=1: rain now (0: none) */
   private readonly rainOverride = new URLSearchParams(location.search).get('rain');
 
+  /** ?date=2027-01-15: the room's day of the year, for looking at another season */
+  private readonly dateOverride = new URLSearchParams(location.search).get('date');
+
   private clock() {
-    const d = new Date();
-    if (this.hourOverride !== null) d.setHours(+this.hourOverride, 0, 0, 0);
+    const d = this.dateOverride ? new Date(this.dateOverride + 'T12:00:00') : new Date();
+    if (this.hourOverride !== null) {
+      const h = +this.hourOverride;
+      d.setHours(Math.floor(h), Math.round((h % 1) * 60), 0, 0);
+    }
     return d;
   }
 
@@ -421,7 +427,7 @@ export class PixelApp {
     this.cat.update(dt);
     // the weather: now and then a few hours of rain (or as asked, ?rain=1)
     const rain = this.rainOverride !== null ? +this.rainOverride : rainAt(clock);
-    this.stage.setDayLight(this.room.update(s, hour, dt, rain));
+    this.stage.setDayLight(this.room.update(s, hour, dt, rain, clock));
     this.audio.setRain(rain);
     this.avatar.rain = rain;
     // the phone's bar the colour of the wall at the top of the room
