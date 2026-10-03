@@ -502,21 +502,30 @@ export class Sill implements Act {
 /** back to bed (or up, round and down again on it): turn round on it once and settle, lying so
  *  that the body is in the middle and the face toward the window */
 export const toBed = (c: Ctx, settle: PoseName) => {
-  const r = 0.07, a = Math.random() * Math.PI * 2, dir = Math.random() < 0.5 ? 1 : -1;
-  const ring = [0, 1, 2].map((k) => new THREE.Vector3(c.home.x + r * Math.cos(a + dir * k * 2.1), 0, c.home.z + r * Math.sin(a + dir * k * 2.1)));
   const bed = c.bed(settle);
+  // onto the bed, then round once on the spot (two turns of a third, the third bringing it round
+  // to the way it will lie), as a cat turns before it settles; already on it, it turns where it
+  // stands (lying down, it shuffles the rest of the way into the middle)
+  const near = Math.hypot(c.m.pos.x - bed.to.x, c.m.pos.z - bed.to.z) < 0.2;
+  const spot = near ? c.m.pos.clone() : bed.to;
+  const dir = Math.random() < 0.5 ? 1 : -1, a = bed.yaw + dir * 0.6;
+  const ring: Leg[] = [
+    ...(near ? [] : [{ to: spot, face: null, stay: 0, posture: 'stand' } as Leg]),
+    { to: spot, face: a + dir * 2.1, stay: 0.01, posture: 'stand' },
+    { to: spot, face: a + dir * 4.2, stay: 0.01, posture: 'stand' },
+  ];
   // sometimes it treads the cushion a little before it lies down, as cats do
   const tread: Leg[] = Math.random() < 0.4 ? [{
-    to: bed.to, face: bed.yaw, stay: 2 + Math.random() * 2, posture: 'stand',
+    to: spot, face: bed.yaw, stay: 2 + Math.random() * 2, posture: 'stand',
     layer: (t) => {
       const ph = t * Math.PI * 2 * 1.6, l = Math.max(0, Math.sin(ph)), rr = Math.max(0, Math.sin(ph + Math.PI));
       return { LF: { planted: 0, y: 0.012 + 0.018 * l, flex: 0.35 * l }, RF: { planted: 0, y: 0.012 + 0.018 * rr, flex: 0.35 * rr }, neckPitch: -0.35, headPitch: -0.1, eyeOpen: 0.5 };
     },
   }] : [];
   return new Walk('to bed', [
-    ...ring.map((to): Leg => ({ to, face: null, stay: 0, posture: 'stand' })),
+    ...ring,
     ...tread,
-    { to: bed.to, face: bed.yaw, stay: 0.1, posture: settle },
+    { to: spot, face: bed.yaw, stay: 0.1, posture: settle },
   ], 0.22);
 };
 
