@@ -250,8 +250,11 @@ void main() {
     float sx = nm[3] == mat && nm[4] == mat ? min(abs(stepPos(nl[4]) - s0), abs(s0 - stepPos(nl[3]))) : 0.0;
     float sy = nm[1] == mat && nm[6] == mat ? min(abs(stepPos(nl[6]) - s0), abs(s0 - stepPos(nl[1]))) : 0.0;
     int level = stepOf(L, kind == 2 && dithers(mat), p, max(sx, sy));
-    // the cat: the light catching an edge from behind lifts it a step
+    // the cat: the light catching an edge from behind lifts it a step; its outline below and to
+    // the right, against whatever is behind it, a step darker in its own colours (a pixel
+    // artist's selective outline: the shadow side drawn in, never in black)
     if (kind == 1 && third > 0.4) level += 1;
+    else if (kind == 1 && (nm[1] < 0 || nm[4] < 0)) level -= 1;
     // (the room: a third value over a quarter glows that much; nearly one, at its brightest)
     bool glows = kind == 2 && third > 0.9;
     float partGlow = kind == 2 && third > 0.25 ? (third - 0.25) / 0.74 : 0.0;
