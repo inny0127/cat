@@ -117,7 +117,8 @@ export function roomLightUniforms() {
     uFill: { value: new THREE.Vector4(0, 0.35, 0.94, 0.15) },
     uFairy: { value: new THREE.Vector4(0, 0, -10, 0) },
     uFairyInt: { value: 0 },
-    uOcc: { value: Array.from({ length: 2 * NOCC }, () => new THREE.Vector4()) },
+    // (unused slots must be all zero: a Vector4 starts with w = 1, a metre-wide shade at the origin)
+    uOcc: { value: Array.from({ length: 2 * NOCC }, () => new THREE.Vector4(0, 0, 0, 0)) },
   };
 }
 
@@ -193,10 +194,10 @@ export function dayLight(hour: number, out?: DayLight, rain = 0): DayLight {
   // giving back only a little; in the gold hours the sky dims and the room with it, and the low
   // sun is all the stronger for it
   o.sun = ma ? 0.34 * moon : 0.8 * sun * (1 - rain) * (1 + 0.6 * gold);
-  o.sky = (0.9 * day + 0.12 * night) * (1 - 0.45 * rain) * (1 - 0.4 * gold);
-  o.amb = (0.1 * day + 0.045) * dim * (1 - 0.35 * gold);
+  o.sky = (0.9 * day + 0.12 * night) * (1 - 0.45 * rain) * (1 - 0.55 * gold);
+  o.amb = (0.1 * day + 0.045) * dim * (1 - 0.5 * gold);
   o.floorB = 0.45 * day * dim;
-  o.fill = (0.22 * day + 0.03) * dim * (1 - 0.35 * gold);
+  o.fill = (0.22 * day + 0.03) * dim * (1 - 0.5 * gold);
   o.lamp = Math.max(1.5 * ss(0.35, 0.8, night), 1.2 * rain);
   o.fairy = Math.max(0.5 * ss(0.4, 0.8, night), 0.45 * rain);
   o.tintSun = (o.tintSun ?? new THREE.Vector3()).set(tintSun[0], tintSun[1], tintSun[2]);
