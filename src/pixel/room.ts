@@ -798,6 +798,11 @@ export class Room {
     return this.yarn.mesh.position;
   }
 
+  /** the ball itself (to tap) */
+  get yarnBall(): THREE.Object3D {
+    return this.yarn.mesh;
+  }
+
   /** a paw sends the ball rolling, a way and at a speed (m/s) */
   kickYarn(dir: THREE.Vector3, speed: number) {
     const d = Math.hypot(dir.x, dir.z) || 1;

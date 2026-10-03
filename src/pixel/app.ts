@@ -92,6 +92,18 @@ export class PixelApp {
         this.gestureEnd();
         if (this.creditsOpen) { this.showCredits(false); return; }
         if (this.hitPrint(x, y)) { this.showCredits(true); return; }
+        if (this.hitThing(this.room.yarnBall, x, y, 22)) {
+          // a flick of the ball of wool: it rolls off away from the finger, and the cat may be
+          // after it
+          const b = this.room.yarnAt().clone().project(this.stage.camera);
+          const dx = x - (b.x * 0.5 + 0.5) * innerWidth, dy = y - (-b.y * 0.5 + 0.5) * innerHeight;
+          const d = Math.hypot(dx, dy);
+          const dir = d > 4 ? new THREE.Vector3(-dx / d, 0, -dy / d) : new THREE.Vector3(Math.random() - 0.5, 0, Math.random() - 0.5);
+          this.room.kickYarn(dir, 0.55);
+          this.haptic.tap?.();
+          this.avatar.playNow();
+          return;
+        }
         if (this.hitThing(this.room.radio, x, y, 24)) {
           this.audio.music(!this.audio.musicOn);
           this.haptic.tap?.();
@@ -423,6 +435,12 @@ export class PixelApp {
 
   private hints(dt: number, touching: boolean) {
     const s = this.state;
+    // the first time it plays with its ball of wool: that you can roll it too
+    if (this.avatar.doing === 'play' && !s.hints.yarn && !touching) {
+      s.hints.yarn = 1;
+      this.hintUi.show('털실 공을 톡 치면 굴러가요. 고양이가 쫓아갈지도 몰라요', 5000);
+      return;
+    }
     // once the radio has played a while: how to switch it off
     if (this.audio.musicPlaying && !s.hints.radio && !touching && (this.radioHintIn -= dt) < 0) {
       s.hints.radio = 1;

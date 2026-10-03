@@ -161,6 +161,17 @@ export class PixelAvatar implements Avatar {
         : name === 'knead' ? knead() : name === 'sun' ? sunbathe(c) : name === 'play' ? new Play() : toBed(c, 'loaf');
   }
 
+  /** something to chase: awake and its own master, it drops what it was doing and plays */
+  playNow() {
+    if (!this.alive || this.sleep > 0.3 || this.errand || this.trip || this.hidden) return false;
+    if (this.mode !== 'rest' && this.mode !== 'alert') return false;
+    if (this.act?.name === 'play') return true;
+    if (this.mood.sleepy > 0.6) return false;
+    this.stopAct();
+    this.act = new Play();
+    return true;
+  }
+
   private stopAct() {
     if (!this.act) return;
     this.act.stop(this.ctx);
