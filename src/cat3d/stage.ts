@@ -81,7 +81,7 @@ const PAL_EYE = ['#ecd98a', '#c4c25a', '#8a8a36', '#4f5222', '#121010', '#ffffff
 const eyePalette = () => PAL_EYE.map((h) => new THREE.Vector3(...new THREE.Color().setStyle(h, THREE.SRGBColorSpace).convertLinearToSRGB().toArray()));
 
 /** the big, smooth surfaces, whose light dithers across the edges of its bands */
-const DITHERS: number[] = [PIX.wall, PIX.panel, PIX.floor, PIX.floorDark, PIX.rug, PIX.rugCream, PIX.curtain, PIX.paper, PIX.fleece];
+const DITHERS: number[] = [PIX.wall, PIX.panel, PIX.floor, PIX.floorDark, PIX.rug, PIX.rugCream, PIX.paper, PIX.fleece];
 
 const ART_FRAG = /* glsl */ `
 precision highp float;

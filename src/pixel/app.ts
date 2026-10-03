@@ -91,6 +91,8 @@ export class PixelApp {
     // starts at it and looks to the window, and a near clap may send it to cover
     // a shooting star: an idle cat awake looks up at the window
     this.room.onMeteor = () => this.avatar.see(this.room.meteorAt);
+    // a bird come down on the ledge outside: it is seen
+    this.room.onVisitor = () => { const v = this.room.visitorAt(); if (v) this.avatar.see(v); };
     this.room.onThunder = (loud) => {
       this.audio.play(loud > 0.6 ? 'thunderNear' : 'thunder', { out: true, gain: 0.3 + 0.6 * loud, pan: (Math.random() - 0.5) * 0.6 });
       this.brain?.thunder(loud);
@@ -547,6 +549,10 @@ export class PixelApp {
     const pinned = !!f && this.room.yarnPinned;
     if (pinned && !this.toyWasPinned) this.haptic.tap('medium');
     this.toyWasPinned = pinned;
+    // a bird on the ledge outside: watched; and gone the moment the cat comes up to the glass
+    const mp = this.cat.motor.pos, win = this.room.windowMiddle;
+    this.room.visitorOk = this.avatar.hidden || !(mp.z < win.z + 0.36 && Math.abs(mp.x - win.x) < 0.5);
+    this.avatar.visitor = this.avatar.hidden ? null : this.room.visitorAt();
     this.avatar.update(dt);
     this.cat.update(dt);
     this.brushYarn(dt);

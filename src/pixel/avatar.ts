@@ -69,6 +69,9 @@ export class PixelAvatar implements Avatar {
    *  go before it has to have it; and after a good long game, a while before it will play again */
   lure: THREE.Vector3 | null = null;
   lureMoving = false;
+  /** a bird on the ledge outside, if there is one (where, on the glass) */
+  visitor: THREE.Vector3 | null = null;
+  private chatterIn = 2;
   private lureT = 0;
   private lureNeed = 0.8;
   private playRest = 0;
@@ -209,6 +212,7 @@ export class PixelAvatar implements Avatar {
       night: 0,
       sniff: () => this.spots?.sniff ?? [],
       posts: () => this.spots?.posts ?? [],
+      visitor: () => this.visitor,
       sun: () => this.sunSpot?.() ?? null,
       sunlit: (p) => this.sunlitAt?.(p) ?? false,
       warm: () => this.warmSpot?.() ?? null,
@@ -474,7 +478,14 @@ export class PixelAvatar implements Avatar {
     if ((this.act instanceof Sill || this.act instanceof Play || this.act instanceof Hunt || this.act instanceof Box || this.act instanceof Zoomies || this.act instanceof Stare) && this.mode !== 'enjoy') { /* the act decides */ }
     else if (!this.alive || this.sleep > 0.5 || busy) m.lookAt(null);
     else if (this.lure) m.lookAt(this.lure, 1);
-    else if (this.heard && (this.heard.t -= dt) > 0) m.lookAt(this.heard.at, 0.8);
+    else if (this.visitor) {
+      // a bird on the ledge: eyes on it, and now and then a chatter at it
+      m.lookAt(this.visitor, 1);
+      if ((this.chatterIn -= dt) <= 0) {
+        this.chatterIn = 2.5 + Math.random() * 3;
+        if (Math.random() < 0.6) this.outside?.chirp();
+      }
+    } else if (this.heard && (this.heard.t -= dt) > 0) m.lookAt(this.heard.at, 0.8);
     else if (this.gazeTarget && this.screenToWorld(this.gazeTarget.x, this.gazeTarget.y, this.look)) m.lookAt(this.look, 0.9);
     else m.lookAt(this.viewer(), this.trip ? 0.3 : 0.85);
   }

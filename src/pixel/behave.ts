@@ -27,6 +27,8 @@ export interface Ctx {
   sniff: () => { to: THREE.Vector3; face: number }[];
   /** upright things to rub a cheek on (where they stand on the floor) */
   posts: () => THREE.Vector3[];
+  /** a bird come down on the ledge outside the window, if there is one (where, on the glass) */
+  visitor: () => THREE.Vector3 | null;
   /** a place on the floor in the sun, if the sun is in; and whether a point is in it */
   sun: () => THREE.Vector3 | null;
   sunlit: (p: THREE.Vector3) => boolean;
@@ -1358,7 +1360,8 @@ export function chooseAct(c: Ctx, atHome: boolean, posture: PoseName): Act | nul
     // now and then, more at dusk and after dark, a mad few seconds
     if (atHome) opts.push([0.28 * (0.3 + m.arousal) * (1 - m.sleepy) * (1 + 1.2 * c.night), () => new Zoomies(c)]);
     const sill = c.sill();
-    if (atHome && sill) opts.push([0.55 * (1 + 1.5 * c.rain + 1.2 * c.night) * (1 - 0.6 * m.sleepy), () => new Sill(sill)]);
+    // (a bird on the ledge outside: up for a closer look, which, as it is a bird, it will not wait for)
+    if (atHome && sill) opts.push([0.55 * (1 + 1.5 * c.rain + 1.2 * c.night) * (1 - 0.6 * m.sleepy) + (c.visitor() ? 3 : 0), () => new Sill(sill)]);
     else opts.push([1.5, () => toBed(c, 'loaf')]);
     opts.push([0.8, () => null]);
   }

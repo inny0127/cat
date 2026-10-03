@@ -190,6 +190,9 @@ uniform float uMoon;     // the moon's phase (0 new, 0.5 full)
 uniform float uFog;      // a morning mist (0 .. 1)
 uniform float uFlash;    // lightning now (0 .. 1)
 uniform vec3 uBolt;      // the bolt: where across (of the window), its seed, whether it is seen
+uniform vec4 uVisitor;   // a sparrow on the ledge outside: where along it, how high above it (flying;
+                         // window pixels), its pose (0 stands, 1 pecks, 2 hops, 3 4 wings up, down),
+                         // which way it faces (1 right, -1 left; 0: no bird)
 uniform vec4 uMeteor;    // a shooting star: where it starts (of the window), how long since (s;
                          // below 0, none), and which way it falls (-1 left, 1 right)
 uniform vec3 uDrop;      // one drop running down the glass (window pixels), if z: the one a cat is after
@@ -234,6 +237,35 @@ vec3 grad4(float t, vec3 a, vec3 b, vec3 c, vec3 d) {
 // the hours' weights: day, gold, dusk, night
 vec4 W;
 vec3 tod(vec3 day, vec3 gold, vec3 dusk, vec3 night) { return W.x * day + W.y * gold + W.z * dusk + W.w * night; }
+// a sparrow, a few pixels of it, facing +x with its feet at y 0: which part a cell is (0 none, 1 its
+// brown back and wings, 2 its grey-brown cap and cheek, 3 its pale breast, 4 dark (the eye, the
+// tail, a wing bar), 5 its beak, 6 its legs)
+int sparrow(ivec2 q, int pose) {
+  int x = q.x, y = q.y;
+  if (pose == 1) {
+    // head down, pecking at the ledge
+    if (y == 3) return x == -1 || x == 0 ? 1 : 0;
+    if (y == 2) return x == -2 ? 4 : x == -1 || x == 0 ? 1 : x == 1 ? 2 : 0;
+    if (y == 1) return x == -3 ? 4 : x == -1 ? 4 : x == 0 ? 3 : x == 1 ? 4 : x == 2 ? 2 : 0;
+    if (y == 0) return x == 0 ? 6 : x == 2 ? 5 : 0;
+    return 0;
+  }
+  if (pose == 3 || pose == 4) {
+    // flying: the wings up, or down
+    if (y == 4) return pose == 3 && x == -1 ? 1 : 0;
+    if (y == 3) return pose == 3 && (x == -1 || x == 0) ? 1 : 0;
+    if (y == 2) return x == -2 ? 4 : x == -1 || x == 0 ? 1 : x == 1 ? 2 : x == 2 ? 5 : 0;
+    if (y == 1) return x == -1 ? (pose == 4 ? 1 : 3) : x == 0 ? 3 : x == 1 ? 4 : 0;
+    if (y == 0) return pose == 4 && x == -1 ? 1 : 0;
+    return 0;
+  }
+  if (y == 4) return x == 0 || x == 1 ? 2 : 0;
+  if (y == 3) return x == -1 ? 1 : x == 0 ? 2 : x == 1 ? 4 : x == 2 ? 5 : 0;
+  if (y == 2) return x == -2 ? 4 : x == -1 || x == 0 ? 1 : x == 1 ? 3 : 0;
+  if (y == 1) return x == -3 ? 4 : x == -1 ? 4 : x == 0 || x == 1 ? 3 : 0;
+  if (y == 0) return x == 0 ? 6 : 0;
+  return 0;
+}
 // how far a layer at a distance seems to slide as you move across the room (whole pixels)
 float slide(float f) { return floor(uPar * f / uPxSize + 0.5); }
 // heaps of cloud drifting across: each a row of round puffs on a flat base, every puff lit on its
@@ -630,6 +662,27 @@ void main() {
     c = mix(c, hex(214.0, 222.0, 255.0), uFlash * fl);
   }
 
+  // the stone ledge outside along the foot of the glass, lit from above (snow on it in winter);
+  // and now and then a sparrow on it
+  if (px.y < 2.0) {
+    c = tod(hex(186.0, 180.0, 176.0), hex(222.0, 182.0, 150.0), hex(128.0, 106.0, 128.0), hex(50.0, 48.0, 72.0));
+    if (px.y < 1.0) c *= vec3(0.72, 0.7, 0.78);
+    else if (uSnowLie > 0.3) c = snowCol;
+    c = mix(c, c * vec3(0.8, 0.84, 0.92), uRain);
+    a = 0.15;
+  }
+  if (uVisitor.w != 0.0) {
+    ivec2 q = ivec2(floor(px) - vec2(floor(uVisitor.x), 2.0 + floor(uVisitor.y)));
+    q.x *= int(uVisitor.w);
+    int part = q.x >= -3 && q.x <= 2 && q.y >= 0 && q.y <= 4 ? sparrow(q, int(uVisitor.z + 0.5)) : 0;
+    if (part > 0) {
+      vec3 bc = part == 1 ? hex(132.0, 92.0, 64.0) : part == 2 ? hex(118.0, 104.0, 96.0) : part == 3 ? hex(226.0, 214.0, 190.0)
+        : part == 4 ? hex(50.0, 38.0, 40.0) : part == 5 ? hex(222.0, 168.0, 76.0) : hex(98.0, 74.0, 66.0);
+      c = tod(bc, bc * vec3(1.08, 0.94, 0.8), bc * vec3(0.7, 0.6, 0.74), bc * vec3(0.3, 0.32, 0.45));
+      a = 0.15;
+    }
+  }
+
   // snow falling: flakes drifting down slowly, swaying, near ones bigger
   if (uRain > 0.01 && uSnowing > 0.5) {
     vec3 flake = mix(vec3(1.0), c, 0.2) * mix(1.0, 0.8, night);
@@ -794,7 +847,7 @@ export class Room {
     this.sky = new THREE.ShaderMaterial({
       uniforms: {
         uTime: { value: 0 }, uHour: { value: 12 }, uSkyPx: { value: new THREE.Vector2(48, 56) }, uPxSize: { value: 0.01 }, uPar: { value: 0 }, uRain: { value: 0 },
-        uSnowing: { value: 0 }, uSnowLie: { value: 0 }, uRainbow: { value: 0 }, uCloud: { value: 0.5 }, uMoon: { value: 0.5 }, uFog: { value: 0 }, uFlash: { value: 0 }, uBolt: { value: new THREE.Vector3() }, uMeteor: { value: new THREE.Vector4(0, 0, -1, 1) }, uDrop: { value: new THREE.Vector3() },
+        uSnowing: { value: 0 }, uSnowLie: { value: 0 }, uRainbow: { value: 0 }, uCloud: { value: 0.5 }, uMoon: { value: 0.5 }, uFog: { value: 0 }, uFlash: { value: 0 }, uBolt: { value: new THREE.Vector3() }, uMeteor: { value: new THREE.Vector4(0, 0, -1, 1) }, uVisitor: { value: new THREE.Vector4() }, uDrop: { value: new THREE.Vector3() },
         uLeafA: { value: new THREE.Vector3(122 / 255, 162 / 255, 96 / 255) }, uLeafB: { value: new THREE.Vector3(76 / 255, 116 / 255, 76 / 255) },
         uLeafC: { value: new THREE.Vector3(1, 0.7, 0.75) }, uLeafs: { value: new THREE.Vector2(1, 0) },
       },
@@ -1610,6 +1663,101 @@ export class Room {
     return m;
   }
 
+  /** a sparrow that comes down on the ledge outside now and then by day: flies in, hops about and
+   *  pecks a while, and is off again (at once, if a cat comes up to the glass). Where along the
+   *  ledge and how high (window pixels), which way it faces, what it is doing */
+  private readonly visitor = { phase: 'none' as 'none' | 'in' | 'on' | 'out', t: 0, x: 0, y: 0, dir: 1, pose: 0, stay: 0, next: 0, act: 0, to: 0 };
+  private visitorIn = 90 + Math.random() * 200;
+  /** may a bird come down now (no cat up at the glass) */
+  visitorOk = true;
+  /** a bird has come down on the ledge */
+  onVisitor: (() => void) | null = null;
+
+  /** a sparrow coming down on the ledge now */
+  visitorNow() {
+    const V = this.visitor, W = (this.sky.uniforms.uSkyPx.value as THREE.Vector2).x;
+    V.phase = 'in';
+    V.t = 0;
+    V.dir = Math.random() < 0.5 ? 1 : -1;
+    // (where the sill's things leave the ledge in view, either side of the middle bar)
+    V.to = W * (Math.random() < 0.5 ? 0.37 + 0.09 * Math.random() : 0.55 + 0.1 * Math.random());
+    V.x = V.to - V.dir * 40;
+    V.y = 26;
+  }
+
+  /** the bird is off, now */
+  scareVisitor() {
+    const V = this.visitor;
+    if (V.phase === 'in' || V.phase === 'on') {
+      V.phase = 'out';
+      V.t = 0;
+      if (Math.random() < 0.5) V.dir = -V.dir;
+    }
+  }
+
+  /** where the bird on the ledge is, on the glass (null: none there) */
+  visitorAt(): THREE.Vector3 | null {
+    const V = this.visitor;
+    if (V.phase !== 'on') return null;
+    const px = this.sky.uniforms.uSkyPx.value as THREE.Vector2, { l, r, b, t, z } = this.win;
+    return new THREE.Vector3(l + (V.x / px.x) * (r - l), b + ((V.y + 4) / px.y) * (t - b), z - 0.02);
+  }
+
+  private updateVisitor(dt: number, may: boolean) {
+    const V = this.visitor, W = (this.sky.uniforms.uSkyPx.value as THREE.Vector2).x;
+    const flap = () => (Math.floor(V.t * 14) % 2 ? 3 : 4);
+    if (V.phase === 'none') {
+      if (may && this.visitorOk && (this.visitorIn -= dt) <= 0) this.visitorNow();
+    } else if (V.phase === 'in') {
+      // down on a slant to the ledge, wings going, the last of it a glide
+      V.t += dt;
+      const u = Math.min(1, V.t / 1.3);
+      V.x = V.to - V.dir * 40 * (1 - u);
+      V.y = 26 * (1 - u) * (1 - u);
+      V.pose = u < 0.85 ? flap() : 0;
+      if (u >= 1) {
+        V.phase = 'on';
+        V.t = 0;
+        V.stay = 9 + Math.random() * 16;
+        V.next = 0.6 + Math.random();
+        V.act = 0;
+        this.onVisitor?.();
+      }
+    } else if (V.phase === 'on') {
+      V.t += dt;
+      V.y = 0;
+      // now a hop or two along the ledge, now a peck at it, now a turn round
+      if (V.act > 0) {
+        V.act -= dt;
+        if (V.act <= 0) V.pose = 0;
+      } else if ((V.next -= dt) <= 0) {
+        V.next = 0.6 + Math.random() * 1.8;
+        const r = Math.random();
+        const lo = W * 0.36, hi = W * 0.66, mid = W * 0.5;
+        if (r < 0.35) {
+          // a hop (not over the middle bar, nor out of view)
+          const nx = V.x + V.dir * (2 + Math.floor(Math.random() * 2));
+          if (nx > lo && nx < hi && Math.abs(nx - mid) > 3 && Math.sign(nx - mid) === Math.sign(V.x - mid)) { V.x = nx; V.pose = 2; V.act = 0.12; }
+          else V.dir = -V.dir;
+        } else if (r < 0.75) { V.pose = 1; V.act = 0.22; if (Math.random() < 0.5) V.next = 0.3; }
+        else if (r < 0.9) V.dir = -V.dir;
+      }
+      if (V.pose === 2) V.y = 1;
+      if (V.t > V.stay || !may || !this.visitorOk) this.scareVisitor();
+    } else {
+      // off: up and away, wings going
+      V.t += dt;
+      V.x += V.dir * 45 * dt;
+      V.y += 30 * dt;
+      V.pose = flap();
+      if (V.x < -8 || V.x > W + 8 || V.y > 60) {
+        V.phase = 'none';
+        this.visitorIn = 150 + Math.random() * 360;
+      }
+    }
+    (this.sky.uniforms.uVisitor.value as THREE.Vector4).set(V.x, V.y, V.pose, V.phase === 'none' ? 0 : V.dir);
+  }
+
   /** a shooting star on a clear night now and then: where, how long ago, which way; and someone to
    *  tell (the cat looks up) */
   private readonly meteor = { t: -1, x: 0, y: 0, dir: 1 };
@@ -1968,6 +2116,8 @@ export class Room {
     if (Room.dark(hour) > 0.85 && rain < 0.3 && (su.uCloud.value as number) < 0.75 && (this.meteorIn -= dt) <= 0) this.meteorNow();
     if (M.t >= 0) M.t = M.t > 1 ? -1 : M.t + dt;
     (su.uMeteor.value as THREE.Vector4).set(M.x, M.y, M.t, M.dir);
+    // (birds come down by day, when it is dry and not snowing)
+    this.updateVisitor(dt, hour > 7 && hour < 17.5 && rain < 0.1 && !se.snowing);
     (su.uBolt.value as THREE.Vector3).set(this.storm.x, this.storm.seed, this.storm.bolt && flash > 0.2 ? 1 : 0);
     // the air in the room just stirs the monstera's leaves, now one, now another, slowly
     for (const L of this.leaves) {
