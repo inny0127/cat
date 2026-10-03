@@ -102,6 +102,37 @@ export const groomChest = () => new Layered('groom chest', rand(3, 6), 0.6, (t) 
   neckPitch: -0.75, headPitch: -0.55 + 0.12 * Math.sin(t * 8.5), jaw: 0.1 * Math.max(0, Math.sin(t * 8.5)), eyeOpen: 0.4,
 }));
 
+/** washing the face: sitting up, a forepaw raised to the mouth and licked, then drawn up over the
+ *  cheek to behind the ear with the head turned down into it, and again and again; then perhaps
+ *  the other side. The eyes half shut all the while */
+export const washFace = () => {
+  const first = Math.random() < 0.5 ? 1 : -1;
+  const cyc = rand(1.3, 1.7), n = 3 + Math.floor(Math.random() * 3);
+  const both = Math.random() < 0.6;
+  const d = cyc * n * (both ? 2 : 1) + 0.6;
+  return new Layered('wash', d, 0.5, (t) => {
+    const k = Math.floor(t / cyc), u = (t % cyc) / cyc;
+    const s = both && k >= n ? -first : first;
+    const paw = s > 0 ? 'LF' : 'RF';
+    // up to the mouth (a quarter of the turn), licked (the next), then the wipe up and back over
+    // the cheek and ear, and down to the mouth again
+    const reach = Math.min(1, u / 0.12);
+    const lick = u > 0.12 && u < 0.45;
+    const w = u >= 0.45 ? Math.sin(Math.PI * (u - 0.45) / 0.55) : 0;
+    const pose: PoseLayer = {
+      [paw]: {
+        planted: 0, frame: 0,
+        x: 0.012 + 0.03 * w, y: 0.06 + 0.15 * reach + 0.06 * w, z: 0.08 + 0.055 * reach - 0.035 * w, flex: 0.85,
+      },
+      headPitch: -0.32 - 0.25 * reach * (1 - w) + 0.1 * w, headYaw: s * 0.35 * w, headRoll: s * 0.4 * w,
+      neckPitch: -0.1 * reach,
+      jaw: lick ? 0.16 * Math.max(0, Math.sin(t * 15)) : 0.04,
+      eyeOpen: 0.3, squint: 0.55, earFwd: -0.2 * w,
+    };
+    return pose;
+  }, 'sit');
+};
+
 /** kneading: the front paws treading in turn, as kittens do at their mother */
 export const knead = () => new Layered('knead', 1e9, 0.5, (t) => {
   const ph = t * Math.PI * 2 * 1.4;
@@ -647,7 +678,7 @@ export function chooseAct(c: Ctx, atHome: boolean, posture: PoseName): Act | nul
   const lying = posture === 'loaf' || posture === 'sphinx' || posture === 'side' || posture === 'sit';
   if (c.mode === 'rest' || c.mode === 'alert') {
     opts.push([0.8 + m.sleepy, yawn]);
-    if (lying) opts.push([1 + m.pleasure, groomFlank], [0.6, groomChest]);
+    if (lying) opts.push([1 + m.pleasure, groomFlank], [0.6, groomChest], [0.8, washFace]);
     opts.push([0.35, () => new Stretch(posture === 'sit' ? 'sit' : 'loaf')]);
     if (atHome) opts.push([0.9 * Math.max(0, Math.min(1, m.trust + 0.3)) * (1 + m.arousal) + (c.mode === 'alert' ? 0.8 : 0), () => toWindow(c)]);
     if (atHome) opts.push([0.5 * (1 + m.arousal) * (1 - m.sleepy), () => wander(c)]);
