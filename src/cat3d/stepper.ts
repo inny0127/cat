@@ -9,6 +9,9 @@ import { LEGS, type Leg } from './pose';
 const WALK: Record<Leg, number> = { LH: 0, LF: 0.27, RH: 0.5, RF: 0.77 };
 /** trot: diagonal pairs together */
 const TROT: Record<Leg, number> = { LH: 0, RF: 0.02, RH: 0.5, LF: 0.52 };
+/** bounding, as a cat runs flat out over a short way (a half-bound): the hinds come down
+ *  together, then the fores one after the other */
+const BOUND: Record<Leg, number> = { LH: 0, RH: 0.06, LF: 0.46, RF: 0.58 };
 const FRONT: Record<Leg, boolean> = { LF: true, RF: true, LH: false, RH: false };
 
 /** stride length (m) at a speed (m/s): a slow cat takes long, unhurried steps, a quick one more
@@ -60,6 +63,8 @@ export interface GaitSignals {
   angle: number;
   /** strides per second */
   freq: number;
+  /** bounding, the back gathered (+, rounded as the hinds swing through) or stretched out (-) */
+  flex: number;
 }
 
 /**
@@ -73,13 +78,17 @@ export interface GaitSignals {
 export class Stepper {
   readonly feet: Record<Leg, FootState>;
   readonly signals: GaitSignals = {
-    moving: 0, hipHeave: 0, chestHeave: 0, hipRoll: 0, hipYaw: 0, chestRoll: 0, chestYaw: 0, scapL: 0, scapR: 0, angle: 0, freq: 0,
+    moving: 0, hipHeave: 0, chestHeave: 0, hipRoll: 0, hipYaw: 0, chestRoll: 0, chestYaw: 0, scapL: 0, scapR: 0, angle: 0, freq: 0, flex: 0,
   };
   phase = 0;
   /** the stride clock, counting strides */
   private clock = 0;
   /** 0 walk .. 1 trot */
   trot = 0;
+  /** bounding (flat out) */
+  bound = false;
+  /** in a mad rush (the zoomies): it bounds at any brisk pace, not only flat out */
+  eager = false;
   /** strides per second last frame */
   freq = 0;
   duty = 0.7;
@@ -117,6 +126,7 @@ export class Stepper {
   }
 
   private offset(l: Leg) {
+    if (this.bound) return BOUND[l];
     return WALK[l] * (1 - this.trot) + TROT[l] * this.trot;
   }
 
@@ -136,10 +146,14 @@ export class Stepper {
     // rhythm of the walk, the first strides short
     const v = Math.max(eff, Math.min(intent, 1.2), 0.06);
     this.trot = Math.min(1, Math.max(0, (speed - 0.75) / 0.35));
+    // flat out it bounds (on above a speed, off again only a good deal below it)
+    if (!this.bound && (speed > 1.2 || (this.eager && speed > 0.75))) this.bound = true;
+    else if (this.bound && speed < (this.eager ? 0.45 : 0.95)) this.bound = false;
     this.stride = strideAt(v);
     this.freq = v / this.stride;
-    const swingT = swingTimeAt(v);
-    this.duty = Math.min(0.82, Math.max(0.42, 1 - swingT * this.freq));
+    // (bounding: the paws are on the floor only a third of the stride)
+    const swingT = this.bound ? 0.6 / this.freq : swingTimeAt(v);
+    this.duty = this.bound ? 0.36 : Math.min(0.82, Math.max(0.42, 1 - swingT * this.freq));
     const standT = this.duty / this.freq;
     if (wantGait && this.still > 0.6) {
       // setting off from a standstill: a forepaw goes first, at once; the others have had their
@@ -221,7 +235,7 @@ export class Stepper {
         if ((due || (behind && !partner.stepping) || stranded) && this.moving > 0.3) {
           F.last = cyc;
           this.begin(F, home[l], vel, yawRate, centre, swingT, swingT + standT * 0.5,
-            (FRONT[l] ? 0.026 : 0.022) + 0.014 * Math.min(1, speed), false);
+            (FRONT[l] ? 0.026 : 0.022) + 0.014 * Math.min(1, speed) + (this.bound ? 0.018 : 0), false);
         }
       }
     }
@@ -305,6 +319,17 @@ export class Stepper {
     g.chestYaw = w * 0.08 * (ahead('RF') - ahead('LF')) * 0.5 - g.hipYaw;
     g.scapL = w * 0.007 * support('LF');
     g.scapR = w * 0.007 * support('RF');
+    g.flex = 0;
+    if (this.bound) {
+      // bounding: the whole body rides up in the flight after the hinds push off; the back
+      // gathers as the hinds swing through under it and stretches out as the fores reach; little
+      // roll or sway
+      const ph = this.phase;
+      g.hipHeave = w * 0.012 * Math.cos(tau * (ph - 0.3));
+      g.chestHeave = w * 0.012 * Math.cos(tau * (ph - 0.42));
+      g.flex = w * Math.cos(tau * (ph - 0.92));
+      g.hipRoll *= 0.3; g.chestRoll *= 0.3; g.hipYaw *= 0.3; g.chestYaw *= 0.3;
+    }
   }
 
   /** is any paw in the air */

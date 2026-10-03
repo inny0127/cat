@@ -318,6 +318,8 @@ export class Cat3D {
       stepper.reset(this.homeW);
       this.first = false;
     }
+    // (tearing about, it bounds whenever it is going at any pace, round the turns too)
+    stepper.eager = motor.zoom > 0.5;
     stepper.update(dt, this.homeW, this.planted, motor.vel, motor.yawRate, motor.pos, motor.yaw, motor.goal ? motor.wantSpeed : 0);
     body.scapLift.L = stepper.signals.scapL;
     body.scapLift.R = stepper.signals.scapR;

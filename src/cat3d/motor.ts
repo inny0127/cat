@@ -373,6 +373,9 @@ export class Motor {
     const moving = g ? g.moving : 0;
     if (g) {
       p.hipY += g.hipHeave;
+      // (bounding: the back rounds, the chest coming down toward the hips, and stretches out)
+      p.lumbarPitch -= 0.32 * g.flex;
+      p.chestPitch += 0.12 * g.flex;
       p.hipRoll += g.hipRoll;
       p.hipYaw += g.hipYaw;
       p.chestRoll += g.chestRoll;

@@ -540,7 +540,7 @@ export class Zoomies implements Act {
   private t = 0;
   private readonly route: THREE.Vector3[] = [];
   private i = -1;
-  private readonly speed = rand(1.1, 1.35);
+  private readonly speed = rand(1.3, 1.55);
   private kicked = false;
   private readonly lookDir = Math.random() < 0.5 ? -1 : 1;
   /** at the end: turning round to face you (1), turned (2) */
