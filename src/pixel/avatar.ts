@@ -81,6 +81,8 @@ export class PixelAvatar implements Avatar {
   private act: Act | null = null;
   private nextActIn = 6;
   private dreamIn = 20;
+  private scoot: { t: number; dx: number; dz: number; len: number } | null = null;
+  private scootIn = 0.4;
   private rest: PoseName = 'loaf';
   private readonly ctx: Ctx;
 
@@ -166,11 +168,21 @@ export class PixelAvatar implements Avatar {
     }
     m.setPosture(p);
     if (!atHome || m.goal || !LYING.includes(m.targetPosture)) return;
+    // into the middle of the bed in little scoots, not a glide: now and then a quick shift of a
+    // few centimetres
     const dx = b.to.x - m.pos.x, dz = b.to.z - m.pos.z, d = Math.hypot(dx, dz);
-    if (d > 0.004 && d < 0.3) {
-      const step = Math.min(d, 0.08 * dt);
-      m.pos.x += (dx / d) * step;
-      m.pos.z += (dz / d) * step;
+    if (this.scoot) {
+      const sc = this.scoot;
+      sc.t += dt;
+      const u = Math.min(1, sc.t / 0.3), du = Math.min(1, (sc.t - dt) / 0.3);
+      const ease = (x: number) => x * x * (3 - 2 * x);
+      const k = (ease(u) - ease(Math.max(0, du))) * sc.len;
+      m.pos.x += sc.dx * k;
+      m.pos.z += sc.dz * k;
+      if (u >= 1) this.scoot = null;
+    } else if (d > 0.012 && d < 0.3 && (this.scootIn -= dt) <= 0) {
+      this.scootIn = 0.7 + Math.random() * 0.6;
+      this.scoot = { t: 0, dx: dx / d, dz: dz / d, len: Math.min(d, 0.035) };
     }
     if (Math.abs(e) <= 0.8) m.yaw = wrap(m.yaw + Math.max(-0.3 * dt, Math.min(0.3 * dt, e)));
   }
