@@ -95,6 +95,9 @@ ${LIGHT_GLSL}
 // own stripes, at a few millimetres to the art pixel, come out as dabs). The head keeps its own.
 float hashT(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 int tabby(int cls, vec3 P) {
+  // (the top and back of the head are ginger all over: the painting's light tufts there come out
+  // as white specks)
+  if (cls == ${PIX.white} && P.z > 0.085 && P.z < 0.165 && P.y > 0.255) return ${PIX.ginger};
   if (cls != ${PIX.ginger} && cls != ${PIX.stripe} && cls != ${PIX.cream}) return cls;
   if (P.z > 0.085) return cls;
   bool band;
