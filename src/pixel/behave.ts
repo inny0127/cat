@@ -489,6 +489,121 @@ export class Play implements Act {
  * crept up on; come within reach, the cat rears up on its haunches and swipes at it (and off it
  * goes). In the end it loses interest, or the thing goes out of the window.
  */
+/**
+ * The zoomies: for no reason anyone can see, a burst of running round the room. A wiggle, then off
+ * at a scramble round the front of the bed and back, quick and low, sharp turns with a scrabble of
+ * claws, the tail up and the ears back, the ball of wool sent flying if it is in the way; then a
+ * dead stop, a sit, and a look round as if nothing had happened.
+ */
+export class Zoomies implements Act {
+  readonly name = 'zoomies';
+  private phase: 'wind' | 'dash' | 'stop' = 'wind';
+  private t = 0;
+  private readonly route: THREE.Vector3[] = [];
+  private i = -1;
+  private readonly speed = rand(1.1, 1.35);
+  private kicked = false;
+  private readonly lookDir = Math.random() < 0.5 ? -1 : 1;
+  /** at the end: turning round to face you (1), turned (2) */
+  private facing = 0;
+
+  constructor(c: Ctx) {
+    const h = c.home;
+    const at = (x: number, z: number) => new THREE.Vector3(h.x + x, 0, h.z + z);
+    // zigzags over the open floor in front of the bed: the middle, out to the left of the bed, the
+    // front right (clear of the books), ... (when the box is out on the left, the right only)
+    const box = c.box() !== null;
+    const F = () => at(box ? rand(0.04, 0.12) : rand(-0.1, 0.1), rand(0.44, 0.5));
+    const L = () => at(-0.42, rand(0.12, 0.24));
+    const R = () => at(rand(0.14, 0.22), rand(0.5, 0.56));
+    const n = 3 + Math.floor(Math.random() * 3);
+    const cycle = box ? [F, R] : Math.random() < 0.5 ? [F, L, R, L] : [L, F, R, F];
+    for (let k = 0; k < n; k++) this.route.push(cycle[k % cycle.length]());
+    // (and it ends in the middle, just in front of the bed, where it sits down facing you, coming
+    // to it from one side, so that the skid does not carry it out toward you)
+    if (this.route[this.route.length - 1].z > h.z + 0.4) this.route.push(box ? R() : pick([L, R])());
+    this.route.push(at(box ? rand(0.04, 0.12) : rand(-0.08, 0.08), rand(0.3, 0.34)));
+    // (not off to a point it is all but standing on)
+    while (this.route.length > 2 && this.route[0].distanceTo(c.m.pos.clone().setY(0)) < 0.25) this.route.shift();
+  }
+
+  private leg(c: Ctx) {
+    this.i++;
+    if (this.i >= this.route.length) {
+      // the brakes on: a skid of a few centimetres, and down it sits
+      c.m.stop();
+      this.phase = 'stop';
+      this.t = 0;
+      c.sound('thump', 0.12);
+      return;
+    }
+    // (each turn a scrabble of claws on the boards)
+    if (this.i > 0) c.sound('scrabble', 0.2);
+    c.m.walkTo(this.route[this.i], this.speed, null, null, true);
+  }
+
+  update(dt: number, c: Ctx) {
+    const m = c.m;
+    this.t += dt;
+    if (this.phase === 'wind') {
+      // low on the forelegs, the rump up and wiggling, eyes on nothing at all
+      m.setPosture('crouch');
+      const wg = Math.sin(this.t * Math.PI * 2 * 5);
+      m.layer = { pose: { hipY: 0.15, hipPitch: -0.12, hipYaw: 0.1 * wg, hipRoll: 0.07 * wg, tailCurl: 0.8 * Math.sin(this.t * 13), earFwd: 0.4 }, w: ease(this.t / 0.25) };
+      if (this.t > 0.75) {
+        this.phase = 'dash';
+        this.t = 0;
+        m.zoom = 1;
+        this.leg(c);
+      }
+      return true;
+    }
+    if (this.phase === 'dash') {
+      // low and quick, the tail up and hooked, the ears back
+      m.setPosture('stand');
+      m.layer = { pose: { tailLift: 1.25, tailHook: 0.7, earFwd: -0.35, earOut: 0.25, hipY: 0.185, neckPitch: 0.1, puff: 0.2 }, w: ease(this.t / 0.2) };
+      // the ball of wool in the way goes flying
+      const y = c.yarn();
+      if (y && !this.kicked && Math.hypot(y.x - m.pos.x, y.z - m.pos.z) < 0.13) {
+        this.kicked = true;
+        c.kick(new THREE.Vector3(Math.sin(m.yaw), 0, Math.cos(m.yaw)), 0.9);
+      }
+      // on to the next as soon as it is close, or has gone past it: at this speed it would only
+      // circle round a point it missed
+      const to = this.route[this.i];
+      const dx = to.x - m.pos.x, dz = to.z - m.pos.z, d = Math.hypot(dx, dz);
+      if (d < 0.13 || (d < 0.3 && dx * Math.sin(m.yaw) + dz * Math.cos(m.yaw) < 0) || !m.goal) this.leg(c);
+      return true;
+    }
+    m.zoom = Math.max(0, m.zoom - dt * 2);
+    // stopped dead (once the skid is over): sat down, a look one way and the other, as if nothing
+    // had happened
+    if (m.speed > 0.12 || this.facing < 2) {
+      // (round to face you, on the spot, once it has stopped)
+      if (m.speed <= 0.12 && this.facing === 0) {
+        this.facing = 1;
+        m.walkTo(m.pos.clone(), 0.2, rand(-0.35, 0.35), () => { this.facing = 2; });
+      }
+      this.t = 0;
+      return true;
+    }
+    m.setPosture('sit');
+    const look = this.lookDir * 0.7 * Math.sin(Math.min(1, this.t / 2.2) * Math.PI * 2);
+    m.layer = { pose: { headYaw: look, neckYaw: 0.5 * look, earFwd: 0.3 }, w: hump(this.t, 2.6, 0.4) };
+    if (this.t > 2.8) {
+      m.layer = null;
+      return false;
+    }
+    return true;
+  }
+
+  stop(c: Ctx) {
+    c.m.layer = null;
+    c.m.zoom = 0;
+    c.m.stop();
+  }
+}
+
 export class Hunt implements Act {
   readonly name = 'hunt';
   private phase: 'watch' | 'go' | 'swat' = 'watch';
@@ -963,6 +1078,8 @@ export function chooseAct(c: Ctx, atHome: boolean, posture: PoseName): Act | nul
     if (atHome && c.yarn()) opts.push([0.6 * (0.4 + m.arousal) * (1 - m.sleepy) * (c.mode === 'rest' ? 1 : 0.4), () => new Play()]);
     const box = c.box();
     if (atHome && box) opts.push([0.7 * (1 - 0.4 * m.sleepy), () => new Box(box)]);
+    // now and then, more at dusk and after dark, a mad few seconds
+    if (atHome) opts.push([0.28 * (0.3 + m.arousal) * (1 - m.sleepy) * (1 + 1.2 * c.night), () => new Zoomies(c)]);
     const sill = c.sill();
     if (atHome && sill) opts.push([0.55 * (1 + 1.5 * c.rain + 1.2 * c.night) * (1 - 0.6 * m.sleepy), () => new Sill(sill)]);
     else opts.push([1.5, () => toBed(c, 'loaf')]);

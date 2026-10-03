@@ -4,7 +4,7 @@ import type { PoseName } from '../cat3d/pose';
 import { NEUTRAL, type Mood } from '../cat3d/mood';
 import type { Avatar } from '../sim/avatar';
 import type { EarMood, TailMood } from '../rig/animator';
-import { Stretch, chooseAct, groomChest, groomFlank, knead, restingPose, toBed, toWindow, wander, washFace, yawn, type Act, type Ctx, sunbathe, Play, Sill, Hunt, Box, type SillSpot } from './behave';
+import { Stretch, chooseAct, groomChest, groomFlank, knead, restingPose, toBed, toWindow, wander, washFace, yawn, type Act, type Ctx, sunbathe, Play, Sill, Hunt, Box, Zoomies, type SillSpot } from './behave';
 
 const LYING: PoseName[] = ['loaf', 'sphinx', 'side', 'curl'];
 const wrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
@@ -279,7 +279,7 @@ export class PixelAvatar implements Avatar {
   }
 
   /** start one of its acts now (for the lab and tests) */
-  startAct(name: 'yawn' | 'groom' | 'groom chest' | 'wash' | 'stretch' | 'window' | 'wander' | 'knead' | 'bed' | 'sun' | 'play' | 'sill' | 'box') {
+  startAct(name: 'yawn' | 'groom' | 'groom chest' | 'wash' | 'stretch' | 'window' | 'wander' | 'knead' | 'bed' | 'sun' | 'play' | 'sill' | 'box' | 'zoomies') {
     if (this.perched) return;
     this.stopAct();
     const c = this.ctx;
@@ -287,7 +287,7 @@ export class PixelAvatar implements Avatar {
       : name === 'stretch' ? new Stretch('loaf') : name === 'window' ? toWindow(c) : name === 'wander' ? wander(c)
         : name === 'knead' ? knead() : name === 'sun' ? sunbathe(c) : name === 'play' ? new Play()
           : name === 'sill' && this.sillSpot ? new Sill(this.sillSpot())
-            : name === 'box' && this.boxSpot?.() ? new Box(this.boxSpot()!) : toBed(c, 'loaf');
+            : name === 'box' && this.boxSpot?.() ? new Box(this.boxSpot()!) : name === 'zoomies' ? new Zoomies(c) : toBed(c, 'loaf');
   }
 
   /** something to chase: awake and its own master, it drops what it was doing and plays */
@@ -442,7 +442,7 @@ export class PixelAvatar implements Avatar {
     // eyes on the finger, or on you (through the window); asleep, dead or busy, nowhere (up on
     // the sill it looks where it likes: out of the window)
     const busy = this.errand || (this.act && this.act.name !== 'window' && this.act.name !== 'knead');
-    if ((this.act instanceof Sill || this.act instanceof Play || this.act instanceof Hunt || this.act instanceof Box) && this.mode !== 'enjoy') { /* the act decides */ }
+    if ((this.act instanceof Sill || this.act instanceof Play || this.act instanceof Hunt || this.act instanceof Box || this.act instanceof Zoomies) && this.mode !== 'enjoy') { /* the act decides */ }
     else if (!this.alive || this.sleep > 0.5 || busy) m.lookAt(null);
     else if (this.lure) m.lookAt(this.lure, 1);
     else if (this.heard && (this.heard.t -= dt) > 0) m.lookAt(this.heard.at, 0.8);

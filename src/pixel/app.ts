@@ -275,8 +275,9 @@ export class PixelApp {
     if (this.focus < 0.01) this.catAim.copy(want);
     else this.catAim.lerp(want, 1 - Math.exp(-dt * 2.5));
     // the room view follows as the cat goes off toward an edge, a little ahead of it the way it is
-    // walking, never past the room's ends
-    const lead = want.x + m.vel.x * 0.7;
+    // walking (not when it is tearing about: it lags behind then, rather than swinging to and fro),
+    // never past the room's ends
+    const lead = want.x + m.vel.x * 0.7 * (1 - m.zoom);
     const off = lead - this.panX, dead = 0.07;
     const goal = Math.max(-0.3, Math.min(0.46, off > dead ? lead - dead : off < -dead ? lead + dead : this.panX));
     this.panX += (goal - this.panX) * (1 - Math.exp(-dt * 1.8));

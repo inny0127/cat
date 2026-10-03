@@ -104,6 +104,8 @@ export class Motor {
   goalPass = false;
   onArrive: (() => void) | null = null;
   maxSpeed = 1.6;
+  /** 0 .. 1: quick off the mark and sharp in the turns (the zoomies), rather than an easy walk */
+  zoom = 0;
 
   // gaze (world point) and how much the head follows it
   readonly look = new THREE.Vector3(0, 0.2, 1);
@@ -320,7 +322,7 @@ export class Motor {
         const want_yaw = Math.atan2(dx, dz);
         const e = wrap(want_yaw - this.yaw);
         // (on the spot a little slower than on the move)
-        const maxTurn = 1.35 + 0.45 * clamp(this.speed / 0.2);
+        const maxTurn = (1.35 + 0.45 * clamp(this.speed / 0.2)) * (1 + 2.2 * this.zoom);
         turn = clamp(e * 3.2, -maxTurn, maxTurn);
         // a cat walks round in an arc rather than stopping to pivot, slowing for the sharper
         // turns (near the goal too, so as not to circle it); the way behind it, it all but turns
@@ -334,7 +336,7 @@ export class Motor {
     }
     this.wantSpeed = want;
     // accelerate like an animal: quick to start, a couple of steps to stop
-    const acc = want > this.speed ? 0.7 : 1.4;
+    const acc = (want > this.speed ? 0.7 : 1.4) * (1 + 2 * this.zoom);
     this.speed += clamp(want - this.speed, -acc * dt, acc * dt);
     this.yawRate += (turn - this.yawRate) * Math.min(1, dt * 5);
     this.yaw = wrap(this.yaw + this.yawRate * dt);
