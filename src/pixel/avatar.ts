@@ -59,6 +59,8 @@ export class PixelAvatar implements Avatar {
   toys: { yarn: () => THREE.Vector3; kick: (dir: THREE.Vector3, speed: number) => void } | null = null;
   /** the windowsill to sit on */
   sillSpot: (() => SillSpot) | null = null;
+  /** what goes by outside the window, and the chirp it gets */
+  outside: { birds: () => THREE.Vector3 | null; chirp: () => void } | null = null;
   /** something to do once it is down off the sill (asked to go somewhere while up there) */
   private afterPerch: (() => void) | null = null;
 
@@ -101,6 +103,8 @@ export class PixelAvatar implements Avatar {
       yarn: () => this.toys?.yarn() ?? null,
       kick: (dir, speed) => this.toys?.kick(dir, speed),
       sill: () => this.sillSpot?.() ?? null,
+      birds: () => this.outside?.birds() ?? null,
+      chirp: () => this.outside?.chirp(),
       perch: (h) => { this.cat.perch = h; },
       hold: (y) => { this.cat.liftHold = y; },
     };
@@ -300,9 +304,11 @@ export class PixelAvatar implements Avatar {
         cb?.();
       }
     }
-    // eyes on the finger, or on you (through the window); asleep, dead or busy, nowhere
+    // eyes on the finger, or on you (through the window); asleep, dead or busy, nowhere (up on
+    // the sill it looks where it likes: out of the window)
     const busy = this.errand || (this.act && this.act.name !== 'window' && this.act.name !== 'knead');
-    if (!this.alive || this.sleep > 0.5 || busy) m.lookAt(null);
+    if (this.act instanceof Sill && this.mode !== 'enjoy') { /* the sill decides */ }
+    else if (!this.alive || this.sleep > 0.5 || busy) m.lookAt(null);
     else if (this.gazeTarget && this.screenToWorld(this.gazeTarget.x, this.gazeTarget.y, this.look)) m.lookAt(this.look, 0.9);
     else m.lookAt(this.viewer(), this.trip ? 0.3 : 0.85);
   }

@@ -72,6 +72,7 @@ export class PixelApp {
     this.avatar.sunSpot = () => this.room.sunSpot();
     this.avatar.toys = { yarn: () => this.room.yarnAt(), kick: (d, v) => this.room.kickYarn(d, v) };
     this.avatar.sillSpot = () => this.room.sillSpot();
+    this.avatar.outside = { birds: () => this.room.birds(), chirp: () => this.audio.play('chirp', { gain: 0.45 }) };
     this.frame3d();
 
     const now = Date.now();

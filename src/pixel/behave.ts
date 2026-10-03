@@ -35,6 +35,9 @@ export interface Ctx {
   kick: (dir: THREE.Vector3, speed: number) => void;
   /** the windowsill, if there is one to sit on */
   sill: () => SillSpot | null;
+  /** birds going by outside the window (where, on the glass), if any; a chirp at them */
+  birds: () => THREE.Vector3 | null;
+  chirp: () => void;
   /** up on something this high (null: on the floor), and held in the air at a height (a jump) */
   perch: (h: number | null) => void;
   hold: (lift: number | null) => void;
@@ -349,6 +352,8 @@ export class Sill implements Act {
   private leaving = false;
   private bed: Act | null = null;
   private watch = Math.random() * 10;
+  private chirpIn = 0.6;
+  private readonly gaze = new THREE.Vector3();
   constructor(private readonly spot: SillSpot) {}
 
   /** asked down: it comes down as soon as it can, and stops there */
@@ -417,15 +422,28 @@ export class Sill implements Act {
         if (this.t > this.dur) this.next('sit', this.leaving ? 1 : rand(30, 80));
         return true;
       case 'sit': {
-        // sat looking out: the tail down over the edge, the head turning after what goes by
+        // sat looking out: the tail down over the edge, the head turning after what goes by; birds
+        // going by are followed with the eyes and chattered at
         m.setPosture('sit');
         this.watch += dt;
-        const look = 0.45 * Math.sin(this.watch * 0.37) + 0.2 * Math.sin(this.watch * 1.3);
+        const birds = c.birds();
+        const look = birds ? 0 : 0.45 * Math.sin(this.watch * 0.37) + 0.2 * Math.sin(this.watch * 1.3);
+        if (birds) {
+          // (they are far off: out through the glass and a little up, following them along)
+          this.gaze.set(m.pos.x + (birds.x - m.pos.x) * 5, 1.9, m.pos.z - 4);
+          m.lookAt(this.gaze, 1);
+          if ((this.chirpIn -= dt) <= 0) { c.chirp(); this.chirpIn = rand(1.5, 3.5); }
+        } else m.lookAt(null);
+        const chatter = birds ? 0.1 + 0.09 * Math.max(0, Math.sin(this.watch * Math.PI * 2 * 11)) : 0;
         m.layer = {
-          pose: { neckYaw: look, headYaw: 0.4 * look, neckPitch: 0.1, headPitch: -0.05 + 0.05 * Math.sin(this.watch * 0.5), earFwd: 0.6, tailLift: -1.35, tailSide: 0.1, tailCurve: 0.25, tailCurl: 0.35 * Math.sin(this.watch * 0.8), tailSag: 1 },
+          pose: {
+            neckYaw: look, headYaw: 0.4 * look, neckPitch: 0.1, headPitch: -0.05 + 0.05 * Math.sin(this.watch * 0.5),
+            earFwd: birds ? 1 : 0.6, pupil: birds ? 0.95 : 0.6, whisker: birds ? 1 : 0, jaw: chatter,
+            tailLift: -1.35, tailSide: 0.1, tailCurve: 0.25, tailCurl: (birds ? 0.8 : 0.35) * Math.sin(this.watch * (birds ? 3 : 0.8)), tailSag: 1,
+          },
           w: Math.min(1, this.t / 1.2) * Math.min(1, Math.max(0, (this.dur - this.t) / 0.8)),
         };
-        if (this.t > this.dur || (this.leaving && this.t > 1)) { m.layer = null; this.next('about'); }
+        if (this.t > this.dur || (this.leaving && this.t > 1)) { m.layer = null; m.lookAt(null); this.next('about'); }
         return true;
       }
       case 'about':

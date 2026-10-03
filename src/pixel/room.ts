@@ -369,6 +369,8 @@ void main() {
   gl_FragColor = vec4(mix(off, uCol * tw + (1.0 - tw) * 0.25, uOn), uOn > 0.5 ? 0.2 : 0.15);
 }`;
 
+const ss = (a: number, b: number, x: number) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+
 export interface Spots {
   bed: THREE.Vector3;
   food: THREE.Vector3;
@@ -799,6 +801,22 @@ export class Room {
     const { l, r, b, z } = this.win;
     const x = (l + r) / 2;
     return { launch: new THREE.Vector3(x, 0, z + 0.44), seat: new THREE.Vector3(x, 0, z + 0.1), land: new THREE.Vector3(x + 0.03, 0, z + 0.46), height: b };
+  }
+
+  /** the little flock of birds going by outside, as the sky draws them (by day, not in rain): the
+   *  middle of it on the window's glass, or null when there are none */
+  birds(): THREE.Vector3 | null {
+    const u = this.sky.uniforms;
+    const h = u.uHour.value as number, rain = u.uRain.value as number;
+    const night = 1 - ss(5.4, 6.6, h) * (1 - ss(19.6, 20.6, h));
+    if (night > 0.5 || rain >= 0.3) return null;
+    const tb = ((this.time + 20) % 47 + 47) % 47;
+    if (tb >= 16) return null;
+    const px = u.uSkyPx.value as THREE.Vector2;
+    const x = -8 + (tb * (px.x + 16)) / 16 - 9, y = px.y * 0.74 + 3;
+    if (x < 0 || x > px.x) return null;
+    const { l, r, b, t, z } = this.win;
+    return new THREE.Vector3(l + (x / px.x) * (r - l), b + (y / px.y) * (t - b), z - 0.06);
   }
 
   /** where the ball of wool is */
