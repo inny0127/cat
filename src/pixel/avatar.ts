@@ -4,7 +4,7 @@ import type { PoseName } from '../cat3d/pose';
 import { NEUTRAL, type Mood } from '../cat3d/mood';
 import type { Avatar } from '../sim/avatar';
 import type { EarMood, TailMood } from '../rig/animator';
-import { Stretch, chooseAct, groomChest, groomFlank, knead, restingPose, toBed, toWindow, wander, warmUp, washFace, yawn, type Act, type Ctx, sunbathe, Play, Sill, Hunt, Box, Zoomies, type SillSpot } from './behave';
+import { Stretch, chooseAct, groomChest, groomFlank, knead, restingPose, toBed, toWindow, wander, warmUp, washFace, yawn, type Act, type Ctx, sunbathe, Play, Sill, Hunt, Box, Zoomies, Walk, type SillSpot } from './behave';
 
 const LYING: PoseName[] = ['loaf', 'sphinx', 'side', 'curl'];
 const wrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
@@ -330,10 +330,11 @@ export class PixelAvatar implements Avatar {
       m.setPosture('side');
       return;
     }
-    if (this.act instanceof Sill || this.act instanceof Box) this.act.nap = this.sleep;
+    if (this.act instanceof Sill || this.act instanceof Box || this.act instanceof Walk) this.act.nap = this.sleep;
     if (this.sleep > 0.3) {
-      // up on the sill when sleep comes: it dozes there, against the glass
-      if (this.perched) {
+      // up on the sill when sleep comes: it dozes there, against the glass; lying in the sun or by
+      // the radiator, it sleeps there
+      if (this.perched || (this.act instanceof Walk && this.act.canNap)) {
         if (!this.act!.update(dt, c)) this.act = null;
         return;
       }

@@ -173,17 +173,41 @@ interface Leg {
   stay: number;
   posture: PoseName;
   layer?: (t: number) => PoseLayer;
+  /** it may doze off here, where it lies (in the sun, by the radiator), and stays till it wakes */
+  nap?: boolean;
 }
 
 /** walking somewhere and doing something there, then on */
-class Walk implements Act {
+export class Walk implements Act {
   private i = 0;
   private arrived = false;
   private t = 0;
+  /** how deep asleep the cat is (set by whoever knows): lying where it may doze, it sleeps there */
+  nap = 0;
+  private napT = 0;
   constructor(readonly name: string, private readonly legs: Leg[], private readonly speed = 0.25) {}
+  /** lying somewhere it may doze off */
+  get canNap() {
+    const leg = this.legs[this.i];
+    return !!leg && this.arrived && !!leg.nap;
+  }
   update(dt: number, c: Ctx) {
     const leg = this.legs[this.i];
     if (!leg) return false;
+    if (this.arrived && leg.nap && this.nap > 0.3) {
+      // dozed off where it lay: the head sinking as it goes deeper; the time there waits till it wakes
+      this.napT += dt;
+      c.m.setPosture(leg.posture);
+      const deep = Math.min(1, Math.max(0, (this.nap - 0.3) / 0.5));
+      c.m.layer = leg.posture === 'side' ? null : { pose: { neckPitch: -0.5 * deep, headPitch: -0.25 * deep }, w: Math.min(1, this.napT / 1.5) };
+      return true;
+    }
+    if (this.napT > 0) {
+      // awake again: a little while longer where it is before it gets up
+      this.napT = 0;
+      c.m.layer = null;
+      this.t = Math.max(0, leg.stay - rand(6, 15));
+    }
     if (!this.arrived) {
       // up on its feet (again, if something sat it down on the way)
       c.m.setPosture('stand');
@@ -249,7 +273,7 @@ export const sunbathe = (c: Ctx) => {
   const posture = pick<PoseName>(['side', 'side', 'loaf', 'sphinx']);
   const place = c.lieAt(posture, spot, rand(-0.7, 0.7));
   return new Walk('sun', [
-    { to: place.to, face: place.yaw, stay: rand(40, 100), posture },
+    { to: place.to, face: place.yaw, stay: rand(40, 100), posture, nap: true },
     { to: bed.to, face: bed.yaw, stay: 0.1, posture: 'loaf' },
   ]);
 };
@@ -262,7 +286,7 @@ export const warmUp = (c: Ctx) => {
   const posture = pick<PoseName>(['loaf', 'loaf', 'side', 'sphinx']);
   const place = c.lieAt(posture, spot.at, spot.face + rand(-0.2, 0.2));
   return new Walk('warm', [
-    { to: place.to, face: place.yaw, stay: rand(45, 120), posture },
+    { to: place.to, face: place.yaw, stay: rand(45, 120), posture, nap: true },
     { to: bed.to, face: bed.yaw, stay: 0.1, posture: 'loaf' },
   ]);
 };
