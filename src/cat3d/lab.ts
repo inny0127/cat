@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { Cat3D } from './cat';
 import { Stage } from './stage';
 import type { PoseName } from './pose';
+import { MOODS, type MoodName } from './mood';
 
 // Development stage for the 3D cat: renders it with fur and lets scripts drive it in fixed steps.
 async function main() {
@@ -47,6 +48,9 @@ async function main() {
 
   const pose = q.get('pose') as PoseName | null;
   if (pose) cat.snap(pose);
+  // ?mood=happy|scared|angry|...: what the cat feels (its eyes show it)
+  const mood = q.get('mood') as MoodName | null;
+  if (mood && MOODS[mood]) cat.motor.setMood(MOODS[mood], true);
   // ?look: the cat looks into the lens, wherever the posture has carried its head (and the camera)
   const lookCam = q.has('look');
 
@@ -74,7 +78,7 @@ async function main() {
   step(+(q.get('t') || 0.05));
 
   const api = {
-    THREE, scene, cam, renderer, cat, stage, view, step, draw,
+    THREE, scene, cam, renderer, cat, stage, view, step, draw, MOODS,
     get follow() { return follow; }, set follow(v: boolean) { follow = v; },
     shared: cat.shared,
     render() { draw(); },

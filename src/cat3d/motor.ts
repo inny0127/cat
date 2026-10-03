@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { POSES, blendPose, clonePose, copyPose, GROUPS, type Group, type Pose, type PoseName } from './pose';
 import { Wobble, noise1, clamp } from '../util/math';
+import { NEUTRAL, eyesFor, type Mood } from './mood';
 
 /** Which postures can go straight to which, and how long it takes (seconds). */
 const EDGES: [PoseName, PoseName, number][] = [
@@ -111,6 +112,12 @@ export class Motor {
   private blinkT = 2;
   private blinkPhase = -1;
   private blinkSlow = false;
+  /** what the cat feels (see mood.ts); its eyes follow a beat behind */
+  readonly mood: Mood = { ...NEUTRAL };
+  /** how far the feeling moves the eyes from the posture's own face (lids, lower lid, pupil),
+   *  smoothed, and how bright they are */
+  readonly eyes = { open: 0, squint: 0, pupil: 0, shine: 1 };
+  private slowBlinkIn = 6;
   readonly twitch = { L: 0, R: 0, swivelL: 0, swivelR: 0 };
   private earL = new Wobble(380, 11);
   private earR = new Wobble(380, 11);
@@ -192,6 +199,12 @@ export class Motor {
   slowBlink() {
     this.blinkSlow = true;
     this.blinkPhase = 0;
+  }
+
+  /** set what the cat feels: the named parts change, the rest stay (or return to neutral with replace) */
+  setMood(m: Partial<Mood>, replace = false) {
+    if (replace) Object.assign(this.mood, NEUTRAL);
+    Object.assign(this.mood, m);
   }
 
   update(dt: number) {
@@ -303,6 +316,24 @@ export class Motor {
     if (this.lookTarget) this.look.copy(this.lookTarget);
     this.lookS.lerp(this.look, 1 - Math.exp(-dt * 7));
     this.lookW += (this.lookWTarget - this.lookW) * (1 - Math.exp(-dt * 3));
+    // the feeling in the eyes: lids within a few tenths of a second, pupils flooding open faster
+    // than they close down, the shine slowly
+    const want = eyesFor(this.mood), calm = eyesFor(NEUTRAL);
+    const ey = this.eyes;
+    const k = (rate: number) => 1 - Math.exp(-dt * rate);
+    ey.open += (want.open - calm.open - ey.open) * k(4);
+    ey.squint += (want.squint - calm.squint - ey.squint) * k(4);
+    const dp = want.pupil - calm.pupil;
+    ey.pupil += (dp - ey.pupil) * k(dp > ey.pupil ? 5 : 2.5);
+    ey.shine += (want.shine - ey.shine) * k(1.5);
+    // a cat that likes you says so with slow blinks
+    if (want.slowBlinkEvery > 0) {
+      this.slowBlinkIn -= dt;
+      if (this.slowBlinkIn < 0 && this.blinkPhase < 0) {
+        this.slowBlink();
+        this.slowBlinkIn = want.slowBlinkEvery * (0.7 + 0.6 * Math.random());
+      }
+    } else this.slowBlinkIn = Math.min(this.slowBlinkIn, 5);
     // blinking
     this.blinkT -= dt;
     if (this.blinkPhase < 0 && this.blinkT < 0) {
@@ -311,7 +342,7 @@ export class Motor {
       this.blinkT = 2.5 + Math.random() * 6;
     }
     if (this.blinkPhase >= 0) {
-      const dur = this.blinkSlow ? 1.4 : 0.2;
+      const dur = this.blinkSlow ? 1.4 + 0.6 * this.mood.sleepy : want.blinkTime;
       this.blinkPhase += dt / dur;
       const s = this.blinkPhase;
       this.blink = this.blinkSlow

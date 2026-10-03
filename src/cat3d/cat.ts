@@ -242,11 +242,15 @@ export class Cat3D {
     this.updateCaps();
     kin.apply(this.bones);
 
-    // face
-    const open = p.eyeOpen * (1 - motor.blink);
+    // face: the posture's own, moved by what the cat feels (mood.ts); a posture with the eyes
+    // shut (asleep) keeps them shut
+    const ey = motor.eyes;
+    const c01 = (x: number) => Math.max(0, Math.min(1, x));
+    const open = c01(p.eyeOpen + ey.open * Math.min(1, p.eyeOpen / 0.6)) * (1 - motor.blink);
     for (const e of this.eyes) {
-      setLids(e, this.shared.uLids.value, open, p.squint);
-      e.eyeMat.uniforms.uPupil.value = p.pupil;
+      setLids(e, this.shared.uLids.value, open, c01(p.squint + ey.squint));
+      e.eyeMat.uniforms.uPupil.value = c01(p.pupil + ey.pupil);
+      e.eyeMat.uniforms.uShine.value = ey.shine;
     }
     this.aimEyes();
     this.whiskers.setSpread(p.whisker);

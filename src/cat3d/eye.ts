@@ -44,6 +44,7 @@ void main() {
 const EYE_FRAG = /* glsl */ `
 ${LID_GLSL}
 uniform float uPupil;      // 0 slit .. 1 round
+uniform float uShine;      // 1 bright, wet eyes .. 0 dull (an ill cat)
 uniform float uFlat;       // pixel art: a flat iris and a pupil wide enough to survive the low resolution
 uniform vec3 uIrisA;       // round the pupil
 uniform vec3 uIrisB;       // the body of the iris
@@ -127,7 +128,9 @@ vec2 lidCurvesSoft(float xo, vec2 ul) {
   float e = max(0.0, 1.0 - u * u);
   float inner = max(-u, 0.0);
   float cy = -0.02 + 0.015 * u;
-  float fu = pow(e, 0.4 + 0.25 * inner);
+  // wide open the upper lid is a round dome; as it comes down it keeps an arc (it slides over a
+  // ball) instead of flattening into a bar
+  float fu = pow(e, 0.4 + 0.3 * clamp((0.5 - ul.x) / 0.6, 0.0, 1.0) + 0.25 * inner);
   float fl = pow(e, 0.55 + 0.35 * inner);
   return vec2(cy + (ul.x + 0.03) * fu, cy + (ul.y + 0.03) * fl);
 }
@@ -189,7 +192,7 @@ void main() {
     float pupil = step(length(q), 1.0);
     vec2 gq = abs(ip - vec2(-0.2, 0.22));
     vec2 gq2 = abs(ip - vec2(0.2, -0.2));
-    float glint = max(step(max(gq.x, gq.y), 0.12), step(max(gq2.x, gq2.y), 0.05));
+    float glint = max(step(max(gq.x, gq.y), 0.12) * step(0.3, uShine), step(max(gq2.x, gq2.y), 0.05) * step(0.75, uShine));
     vec3 c = mix(iris, vec3(0.004), pupil);
     c = mix(c, vec3(1.0), glint);
     if (lidIn < rim) c = lidIn < 0.0 && !seam ? lidSkin(normalize(vN), dlo) : rimCol;
@@ -212,7 +215,7 @@ void main() {
   // the wet cornea mirrors the room
   vec3 R = reflect(-V, N);
   float fres = 0.025 + 0.975 * pow(1.0 - max(dot(N, V), 0.0), 5.0);
-  col += env(R) * fres * mix(0.3, 1.0, shade);
+  col += env(R) * fres * mix(0.3, 1.0, shade) * mix(0.3, 1.0, uShine);
   if (uOwnLids > 0.5) col = seam ? rimCol : lidIn < 0.0 ? lidSkin(N, dlo) : mix(rimCol, col, smoothstep(0.0, rim, lidIn));
   gl_FragColor = vec4(col, 1.0);
   #include <tonemapping_fragment>
@@ -241,6 +244,7 @@ export function makeEye(radius: number, side: 1 | -1, lights: EyeLights): CatEye
   const eyeMat = new THREE.ShaderMaterial({
     uniforms: {
       uPupil: { value: 0.15 },
+      uShine: { value: 1 },
       uFlat: { value: 0 },
       // amber, sampled from a photograph of a ginger tabby's eye
       // golden amber, between the photographs' copper and hazel
