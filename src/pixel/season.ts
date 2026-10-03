@@ -16,6 +16,10 @@ export interface Season {
   snowing: boolean;
   /** how wintry it is: snow lies (0 .. 1), more after snow has fallen */
   winter: number;
+  /** leaves (or in spring blossom) coming down off the tree now and then (0 none .. 1 most) */
+  falling: number;
+  /** what comes down is blossom (the season's other colour), not leaves */
+  petals: boolean;
 }
 
 type Key = [day: number, a: [number, number, number], c: [number, number, number], full: number, other: number];
@@ -37,6 +41,7 @@ const KEYS: Key[] = [
 ];
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+const sstep = (a: number, b: number, x: number) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
 export function seasonAt(d: Date, rain = 0): Season {
   const start = Date.UTC(d.getFullYear(), 0, 1);
@@ -58,5 +63,8 @@ export function seasonAt(d: Date, rain = 0): Season {
     other: lerp(o0, o1, t),
     snowing: wintry > 0.4,
     winter: wintry * (0.3 + 0.7 * rain),
+    // (the blossom going over in mid April; the leaves as the tree thins from late October)
+    falling: Math.max(sstep(96, 104, day) * (1 - sstep(118, 126, day)), sstep(272, 292, day) * (1 - sstep(330, 344, day))),
+    petals: day < 200,
   };
 }

@@ -190,6 +190,7 @@ uniform float uMoon;     // the moon's phase (0 new, 0.5 full)
 uniform float uFog;      // a morning mist (0 .. 1)
 uniform float uFlash;    // lightning now (0 .. 1)
 uniform vec3 uBolt;      // the bolt: where across (of the window), its seed, whether it is seen
+uniform vec2 uFall;      // leaves (or blossom) coming down off the tree: how many (0 .. 1), petals (1)
 uniform vec4 uVisitor;   // a sparrow on the ledge outside: where along it, how high above it (flying;
                          // window pixels), its pose (0 stands, 1 pecks, 2 hops, 3 4 wings up, down),
                          // which way it faces (1 right, -1 left; 0: no bird)
@@ -671,6 +672,27 @@ void main() {
   }
   // snow lying on the boughs
   if (uSnowLie > 0.01 && wood > 0.5 && hash2(px + 7.0) < uSnowLie * 0.5) c = snowCol;
+  // now and then a leaf (in April a petal) let go of by the tree, drifting down on the breeze,
+  // turning over as it comes
+  if (uFall.x > 0.01) {
+    for (int k = 0; k < 4; k++) {
+      float fk = float(k);
+      float per = 7.0 + fk * 2.3;
+      float ph = uTime / per + h1(fk * 7.1);
+      float cyc = floor(ph), u = fract(ph);
+      if (h1(cyc * 3.7 + fk) > uFall.x) continue;
+      float y0 = H * (0.18 + 0.18 * h1(cyc * 2.9 + fk));
+      // (off the side of the crown away from the wall, the breeze carrying it out over the town)
+      vec2 lp = floor(vec2(Wd * (0.16 + 0.15 * h1(cyc * 1.3 + fk * 5.0)) + u * (24.0 + 14.0 * h1(cyc + fk * 3.0)) + 3.0 * sin(u * 12.566 + fk), y0 - u * (y0 + 4.0)));
+      vec2 q = floor(tp) - lp;
+      // (flat on, three pixels of it; edge on, two)
+      bool across = fract(u * 7.0 + fk * 0.3) < 0.5;
+      if (across ? (q.y == 0.0 && (q.x == 0.0 || q.x == 1.0)) || (q.x == 1.0 && q.y == 1.0) : (q.x == 0.0 && (q.y == 0.0 || q.y == 1.0))) {
+        vec3 lc = uFall.y > 0.5 || mod(fk, 2.0) < 0.5 ? uLeafC : uLeafA;
+        c = tod(lc, lc * vec3(1.06, 0.96, 0.84), lc * vec3(0.7, 0.6, 0.72), lc * vec3(0.22, 0.26, 0.38));
+      }
+    }
+  }
   // the mist: all of it paler and softer the further off, the far side of town all but gone (the
   // lit windows of the night and the stars still show through, blurred a little)
   if (uFog > 0.01) {
@@ -868,7 +890,7 @@ export class Room {
     this.sky = new THREE.ShaderMaterial({
       uniforms: {
         uTime: { value: 0 }, uHour: { value: 12 }, uSkyPx: { value: new THREE.Vector2(48, 56) }, uPxSize: { value: 0.01 }, uPar: { value: 0 }, uRain: { value: 0 },
-        uSnowing: { value: 0 }, uSnowLie: { value: 0 }, uRainbow: { value: 0 }, uCloud: { value: 0.5 }, uMoon: { value: 0.5 }, uFog: { value: 0 }, uFlash: { value: 0 }, uBolt: { value: new THREE.Vector3() }, uMeteor: { value: new THREE.Vector4(0, 0, -1, 1) }, uVisitor: { value: new THREE.Vector4() }, uDrop: { value: new THREE.Vector3() },
+        uSnowing: { value: 0 }, uSnowLie: { value: 0 }, uRainbow: { value: 0 }, uCloud: { value: 0.5 }, uMoon: { value: 0.5 }, uFog: { value: 0 }, uFlash: { value: 0 }, uBolt: { value: new THREE.Vector3() }, uMeteor: { value: new THREE.Vector4(0, 0, -1, 1) }, uVisitor: { value: new THREE.Vector4() }, uFall: { value: new THREE.Vector2() }, uDrop: { value: new THREE.Vector3() },
         uLeafA: { value: new THREE.Vector3(122 / 255, 162 / 255, 96 / 255) }, uLeafB: { value: new THREE.Vector3(76 / 255, 116 / 255, 76 / 255) },
         uLeafC: { value: new THREE.Vector3(1, 0.7, 0.75) }, uLeafs: { value: new THREE.Vector2(1, 0) },
       },
@@ -2130,6 +2152,7 @@ export class Room {
     (su.uLeafC.value as THREE.Vector3).set(...se.leafC);
     (su.uLeafs.value as THREE.Vector2).set(se.full, se.other);
     su.uSnowing.value = se.snowing ? 1 : 0;
+    (su.uFall.value as THREE.Vector2).set(se.falling * (1 - rain), se.petals ? 1 : 0);
     // a rainbow for a while after rain stops by day (not in winter's snow)
     const before = rainAt(new Date(date.getTime() - 30 * 60e3));
     const sunny = ss(7.5, 8.5, hour) * (1 - ss(17.0, 18.0, hour));
