@@ -4,7 +4,7 @@ import type { PoseName } from '../cat3d/pose';
 import { NEUTRAL, type Mood } from '../cat3d/mood';
 import type { Avatar } from '../sim/avatar';
 import type { EarMood, TailMood } from '../rig/animator';
-import { Stretch, chooseAct, groomChest, groomFlank, knead, restingPose, toBed, toWindow, wander, yawn, type Act, type Ctx, sunbathe } from './behave';
+import { Stretch, chooseAct, groomChest, groomFlank, knead, restingPose, toBed, toWindow, wander, yawn, type Act, type Ctx, sunbathe, Play } from './behave';
 
 const LYING: PoseName[] = ['loaf', 'sphinx', 'side', 'curl'];
 const wrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
@@ -55,6 +55,8 @@ export class PixelAvatar implements Avatar {
   spots: { food: THREE.Vector3; water: THREE.Vector3; litter: THREE.Vector3; sniff?: { to: THREE.Vector3; face: number }[] } | null = null;
   /** a place in the sun on the floor, if there is one now */
   sunSpot: (() => THREE.Vector3 | null) | null = null;
+  /** the ball of wool to play with */
+  toys: { yarn: () => THREE.Vector3; kick: (dir: THREE.Vector3, speed: number) => void } | null = null;
   private fading: { t: number; dur: number; onDone?: () => void } | null = null;
   private readonly look = new THREE.Vector3();
   /** the brain's mode and the cat's feelings (set by the app each frame) */
@@ -87,6 +89,8 @@ export class PixelAvatar implements Avatar {
       sniff: () => this.spots?.sniff ?? [],
       sun: () => this.sunSpot?.() ?? null,
       lieAt: (p, at, face) => this.lieAt(p, at, face),
+      yarn: () => this.toys?.yarn() ?? null,
+      kick: (dir, speed) => this.toys?.kick(dir, speed),
     };
   }
 
@@ -149,12 +153,12 @@ export class PixelAvatar implements Avatar {
   }
 
   /** start one of its acts now (for the lab and tests) */
-  startAct(name: 'yawn' | 'groom' | 'groom chest' | 'stretch' | 'window' | 'wander' | 'knead' | 'bed' | 'sun') {
+  startAct(name: 'yawn' | 'groom' | 'groom chest' | 'stretch' | 'window' | 'wander' | 'knead' | 'bed' | 'sun' | 'play') {
     this.stopAct();
     const c = this.ctx;
     this.act = name === 'yawn' ? yawn() : name === 'groom' ? groomFlank() : name === 'groom chest' ? groomChest()
       : name === 'stretch' ? new Stretch('loaf') : name === 'window' ? toWindow(c) : name === 'wander' ? wander(c)
-        : name === 'knead' ? knead() : name === 'sun' ? sunbathe(c) : toBed(c, 'loaf');
+        : name === 'knead' ? knead() : name === 'sun' ? sunbathe(c) : name === 'play' ? new Play() : toBed(c, 'loaf');
   }
 
   private stopAct() {

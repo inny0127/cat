@@ -30,6 +30,9 @@ export interface Ctx {
   /** where to stand, and which way to face, to lie down in a posture with the middle of the body
    *  at a point and the face turned a way */
   lieAt: (p: PoseName, at: THREE.Vector3, face: number) => { to: THREE.Vector3; yaw: number };
+  /** the ball of wool, if there is one, and a paw sending it rolling */
+  yarn: () => THREE.Vector3 | null;
+  kick: (dir: THREE.Vector3, speed: number) => void;
 }
 
 /** one thing the cat does: update returns false when it is over; stop cuts it short cleanly */
@@ -189,6 +192,139 @@ export const sunbathe = (c: Ctx) => {
   ]);
 };
 
+const wrapA = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
+
+/**
+ * Play with the ball of wool: creep up to a pounce away from it, crouch low and watch it (eyes
+ * wide, ears forward, the tip of the tail flicking), the rump up and wiggling, then spring and
+ * land on it with both forepaws, and bat it about with one paw and the other; perhaps after it
+ * once more where it rolled; then sit and wash a little, and back to bed.
+ */
+export class Play implements Act {
+  readonly name = 'play';
+  private phase: 'go' | 'stalk' | 'wiggle' | 'pounce' | 'bat' | 'sit' = 'go';
+  private t = 0;
+  private dur = 0;
+  private rounds = 0;
+  private bats = 0;
+  private hits = new Set<number>();
+  private bed: Act | null = null;
+  private readonly fwd = new THREE.Vector3();
+  private readonly left = new THREE.Vector3();
+
+  private next(phase: Play['phase'], dur = 0) {
+    this.phase = phase;
+    this.t = 0;
+    this.dur = dur;
+  }
+
+  update(dt: number, c: Ctx) {
+    if (this.bed) return this.bed.update(dt, c);
+    const m = c.m;
+    const y = c.yarn();
+    if (!y) return false;
+    this.t += dt;
+    const dx = y.x - m.pos.x, dz = y.z - m.pos.z, dist = Math.hypot(dx, dz);
+    const face = Math.atan2(dx, dz);
+    this.fwd.set(Math.sin(m.yaw), 0, Math.cos(m.yaw));
+    this.left.set(Math.cos(m.yaw), 0, -Math.sin(m.yaw));
+    // eyes on the ball all the while
+    const watch: PoseLayer = { earFwd: 0.9, pupil: 0.95, eyeOpen: 1, whisker: 0.8 };
+    switch (this.phase) {
+      case 'go': {
+        m.layer = null;
+        if (!m.goal) {
+          const stop = new THREE.Vector3(y.x - (dx / Math.max(dist, 1e-3)) * 0.27, 0, y.z - (dz / Math.max(dist, 1e-3)) * 0.27);
+          if (dist < 0.33) this.next('stalk', rand(1.2, 2.4));
+          else m.walkTo(stop, 0.2, face, () => this.next('stalk', rand(1.2, 2.4)));
+        }
+        return true;
+      }
+      case 'stalk': {
+        // squarely at it, or round to it with a step or two
+        if (Math.abs(wrapA(face - m.yaw)) > 0.45 && this.t < 0.1) { this.next('go'); m.walkTo(m.pos.clone(), 0.15, face, () => this.next('stalk', rand(1, 2))); return true; }
+        m.setPosture('crouch');
+        m.layer = {
+          pose: { ...watch, hipY: 0.135, neckPitch: -0.45, headPitch: 0.1, tailLift: -0.35, tailSide: 0.3 * Math.sin(this.t * 6.5), tailCurl: 0.7 * Math.sin(this.t * 9) },
+          w: Math.min(1, this.t / 0.4),
+        };
+        if (this.t > this.dur) this.next('wiggle', rand(0.7, 1.3));
+        return true;
+      }
+      case 'wiggle': {
+        // the rump up a little and wiggling, the hind paws treading
+        const wg = Math.sin(this.t * Math.PI * 2 * 5);
+        m.layer = {
+          pose: {
+            ...watch, hipY: 0.15, hipPitch: -0.12, neckPitch: -0.45, headPitch: 0.1, hipYaw: 0.1 * wg, hipRoll: 0.07 * wg,
+            LH: { y: 0.012 + 0.012 * Math.max(0, wg) }, RH: { y: 0.012 + 0.012 * Math.max(0, -wg) },
+            tailLift: -0.3, tailSide: 0.4 * Math.sin(this.t * 11), tailCurl: 0.9 * Math.sin(this.t * 13),
+          },
+          w: 1,
+        };
+        if (this.t > this.dur) { this.hits.clear(); this.next('pounce', 0.34); }
+        return true;
+      }
+      case 'pounce': {
+        // spring forward, all four off the floor a moment, forepaws reaching to land on it
+        const u = Math.min(1, this.t / this.dur), arc = Math.sin(Math.PI * u);
+        const reach = Math.min(0.2, Math.max(0.05, dist - 0.1));
+        m.pos.addScaledVector(this.fwd, ((Math.PI / 2) * reach / this.dur) * arc * dt);
+        const fore = { planted: 0, frame: 0, x: 0.03, y: 0.012 + 0.07 * arc, z: 0.115 + 0.11 * Math.sin(Math.PI * Math.min(1, u * 1.15)), flex: 0.2 * arc };
+        const hind = { planted: 0, frame: 0, x: 0.04, y: 0.013 + 0.025 * arc, z: -0.13 - 0.04 * arc };
+        m.layer = {
+          pose: { ...watch, hipY: 0.15 + 0.06 * arc, chestPitch: 0.3 * arc, neckPitch: -0.15, headPitch: 0.05, LF: fore, RF: fore, LH: hind, RH: hind, tailLift: 0.3 * arc - 0.2 },
+          w: 1,
+        };
+        if (!this.hits.has(-1) && u > 0.6 && dist < 0.21) {
+          this.hits.add(-1);
+          c.kick(this.fwd.clone().addScaledVector(this.left, rand(-0.6, 0.6)), rand(0.35, 0.65));
+        }
+        if (u >= 1) { this.bats = 1 + Math.floor(Math.random() * 3); this.next('bat'); }
+        return true;
+      }
+      case 'bat': {
+        // swipes with one forepaw and then the other: up, out, across and down
+        const T = 0.4, k = Math.floor(this.t / T), u = (this.t % T) / T;
+        if (k >= this.bats || dist > 0.34) {
+          m.layer = null;
+          if (this.rounds < 1 && Math.random() < 0.55 && dist < 0.9) { this.rounds++; this.next('go'); }
+          else this.next('sit', rand(3, 6));
+          return true;
+        }
+        const right = k % 2 === 0;
+        const lift = Math.sin(Math.PI * u);
+        const across = u < 0.45 ? 0.045 : 0.045 - 0.09 * (u - 0.45) / 0.55;
+        const paw = { planted: 0, frame: 0, x: across, y: 0.012 + 0.07 * lift, z: 0.125 + 0.1 * lift, flex: 0.35 * lift };
+        m.setPosture('crouch');
+        m.layer = { pose: { ...watch, hipY: 0.145, neckPitch: -0.35, headPitch: 0.05, [right ? 'RF' : 'LF']: paw, tailSide: 0.3 * Math.sin(this.t * 8) }, w: 1 };
+        if (!this.hits.has(k) && u > 0.55 && dist < 0.24) {
+          this.hits.add(k);
+          // the right paw sweeps it off to the cat's left, the left paw to its right
+          c.kick(this.fwd.clone().multiplyScalar(0.5).addScaledVector(this.left, right ? 0.85 : -0.85), rand(0.3, 0.55));
+        }
+        return true;
+      }
+      case 'sit': {
+        // done: sit and wash the chest a little, then home
+        m.setPosture('sit');
+        m.layer = { pose: { neckPitch: -0.75, headPitch: -0.55 + 0.12 * Math.sin(this.t * 8.5), jaw: 0.1 * Math.max(0, Math.sin(this.t * 8.5)), eyeOpen: 0.4 }, w: hump(this.t, this.dur, 0.6) };
+        if (this.t > this.dur) {
+          m.layer = null;
+          this.bed = toBed(c, 'loaf');
+        }
+        return true;
+      }
+    }
+    return true;
+  }
+
+  stop(c: Ctx) {
+    this.bed?.stop(c);
+    c.m.layer = null;
+  }
+}
+
 /** back to bed (or up, round and down again on it): turn round on it once and settle, lying so
  *  that the body is in the middle and the face toward the window */
 export const toBed = (c: Ctx, settle: PoseName) => {
@@ -221,6 +357,7 @@ export function chooseAct(c: Ctx, atHome: boolean, posture: PoseName): Act | nul
     if (atHome) opts.push([0.9 * Math.max(0, Math.min(1, m.trust + 0.3)) * (1 + m.arousal) + (c.mode === 'alert' ? 0.8 : 0), () => toWindow(c)]);
     if (atHome) opts.push([0.5 * (1 + m.arousal) * (1 - m.sleepy), () => wander(c)]);
     if (atHome && c.mode === 'rest') opts.push([0.7 + 0.8 * m.sleepy, () => sunbathe(c)]);
+    if (atHome && c.yarn()) opts.push([0.6 * (0.4 + m.arousal) * (1 - m.sleepy) * (c.mode === 'rest' ? 1 : 0.4), () => new Play()]);
     else opts.push([1.5, () => toBed(c, 'loaf')]);
     opts.push([0.8, () => null]);
   }

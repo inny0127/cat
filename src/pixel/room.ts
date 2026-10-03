@@ -17,7 +17,9 @@ const VERT = /* glsl */ `
 varying vec3 vN;
 varying vec3 vWorld;
 varying vec2 vUv;
+varying vec3 vLocal;
 void main() {
+  vLocal = position;
   vec4 wp = modelMatrix * vec4(position, 1.0);
   vWorld = wp.xyz;
   vN = normalize(mat3(modelMatrix) * normal);
@@ -40,6 +42,7 @@ uniform float uWallZ;
 varying vec3 vN;
 varying vec3 vWorld;
 varying vec2 vUv;
+varying vec3 vLocal;
 ${LIGHT_GLSL}
 ${AO_GLSL}
 ${ROOM_LIGHT_GLSL}
@@ -115,6 +118,16 @@ void main() {
   } else if (uPattern == 4) {
     // fleece: soft and a little uneven
     tone += (vnoise(vWorld.xz * 70.0) - 0.5) * 0.08;
+  } else if (uPattern == 5) {
+    // a ball of wool: strands wound round it in bands, one way over another (they turn with it
+    // as it rolls)
+    vec3 q = normalize(vLocal);
+    float b1 = fract(asin(clamp(dot(q, vec3(0.0, 0.8, 0.6)), -1.0, 1.0)) / 0.3);
+    float b2 = fract(asin(clamp(dot(q, vec3(0.8, -0.2, 0.56)), -1.0, 1.0)) / 0.3);
+    bool top = dot(q, vec3(0.5, 0.5, -0.7)) > 0.0;
+    float b = top ? b2 : b1;
+    if (b < 0.28) tone -= 0.09;
+    else if (b > 0.85) tone += 0.04;
   }
   // the floor darkens toward the wall's foot
   if (uPattern == 1 || uPattern == 2) tone -= 0.1 * (1.0 - smoothstep(0.0, 0.12, vWorld.z - uWallZ));
@@ -675,10 +688,13 @@ export class Room {
     add(shadowy(new THREE.Mesh(new THREE.TorusGeometry(0.018, 0.006, 6, 12), this.mat('paint'))), fx + 0.045, fy + 0.04, fz);
     add(new THREE.Mesh(new THREE.CircleGeometry(0.028, 14).rotateX(-Math.PI / 2), this.mat('brown')), fx + 0.01, fy + 0.066, fz);
     this.mugTop = new THREE.Vector3(fx + 0.01, fy + 0.07, fz);
-    const yarn = shadowy(new THREE.Mesh(new THREE.SphereGeometry(0.045, 16, 12), this.mat('bookRed', { tone: 0.12 })));
+    const wool = this.mat('bookRed', { tone: 0.12, pattern: 5 });
+    const yarn = shadowy(new THREE.Mesh(new THREE.SphereGeometry(0.045, 16, 12), wool));
     add(yarn, bx - 0.3, 0.045, bz + 0.26);
-    const strand = new THREE.CatmullRomCurve3([new THREE.Vector3(bx - 0.27, 0.01, bz + 0.3), new THREE.Vector3(bx - 0.18, 0.003, bz + 0.36), new THREE.Vector3(bx - 0.08, 0.003, bz + 0.33), new THREE.Vector3(bx - 0.02, 0.003, bz + 0.4)]);
-    add(new THREE.Mesh(new THREE.TubeGeometry(strand, 20, 0.003, 4), this.mat('bookRed', { tone: 0.12 })), 0, 0, 0);
+    const strand = new THREE.Mesh(new THREE.BufferGeometry(), this.mat('bookRed', { tone: 0.12 }));
+    this.group.add(strand);
+    this.yarn = { mesh: yarn, v: new THREE.Vector3(), tail: new THREE.Vector3(bx - 0.02, 0.003, bz + 0.4), strand, rebuild: 0 };
+    this.windStrand();
 
     // the bed: a soft teal rim round an oatmeal fleece cushion
     const cushion = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.03, 32), this.mat('fleece', { pattern: 4 }));
@@ -755,7 +771,8 @@ export class Room {
     cap(V(winL - 0.07, winB - 0.02, wallZ + 0.04), V(winR + 0.07, winB - 0.02, wallZ + 0.04), 0.04, 0.5);
     cap(V(bx - 2, 0.318, wallZ + 0.01), V(bx + 2, 0.318, wallZ + 0.01), 0.015, 0.4);
     cap(V(bx - 0.2, 0.16, wallZ + 0.055), V(bx + 0.2, 0.16, wallZ + 0.055), 0.07, 0.5);   // the radiator
-    this.things.push([V(px, 0, pz), 0.11], [V(lx, 0, lz), 0.08], [V(fx, 0, fz), 0.14], [V(bx - 0.3, 0, bz + 0.26), 0.05]);
+    this.yarnHome.set(bx - 0.3, 0, bz + 0.26);
+    this.things.push([V(px, 0, pz), 0.11], [V(lx, 0, lz), 0.08], [V(fx, 0, fz), 0.14], [this.yarnHome, 0.05]);
     this.hides.push([V(fx, 0, fz), 0.14]);
     // worth a sniff: the monstera's pot, the radiator, the yarn, the books with the mug on them
     const face = (from: THREE.Vector3, at: THREE.Vector3) => Math.atan2(at.x - from.x, at.z - from.z);
@@ -773,6 +790,68 @@ export class Room {
   private readonly win: { l: number; r: number; b: number; t: number; z: number };
   private readonly motes: { p: THREE.Vector3; v: THREE.Vector3; b: number; life: number }[] = [];
   private readonly timeU = { value: 0 };
+  /** the ball of wool: the ball, how it is rolling, the loose end of its strand */
+  private readonly yarn!: { mesh: THREE.Mesh; v: THREE.Vector3; tail: THREE.Vector3; strand: THREE.Mesh; rebuild: number };
+
+  /** where the ball of wool is */
+  yarnAt() {
+    return this.yarn.mesh.position;
+  }
+
+  /** a paw sends the ball rolling, a way and at a speed (m/s) */
+  kickYarn(dir: THREE.Vector3, speed: number) {
+    const d = Math.hypot(dir.x, dir.z) || 1;
+    this.yarn.v.set((dir.x / d) * speed, 0, (dir.z / d) * speed);
+  }
+
+  /** the ball rolls, slowing, turning as it goes, glancing off the bed and the things on the floor
+   *  and the room's ends; its strand trails after it */
+  private rollYarn(dt: number) {
+    const Y = this.yarn, p = Y.mesh.position, v = Y.v, R = 0.045;
+    const sp = Math.hypot(v.x, v.z);
+    if (sp < 1e-4) return;
+    const ns = Math.max(0, sp - 0.55 * dt);
+    v.multiplyScalar(ns / sp);
+    p.x += v.x * dt;
+    p.z += v.z * dt;
+    Y.mesh.rotateOnWorldAxis(new THREE.Vector3(v.z, 0, -v.x).normalize(), (ns * dt) / R);
+    const S = this.spots;
+    const round: [THREE.Vector3, number][] = [[S.bed, 0.21], [S.food, 0.07], [S.water, 0.07], [S.litter, 0.19], ...this.things.filter(([c]) => c.distanceTo(this.yarnHome) > 0.01)];
+    for (const [c, r] of round) {
+      const dx = p.x - c.x, dz = p.z - c.z, d = Math.hypot(dx, dz), min = r + R;
+      if (d < min && d > 1e-5) {
+        const nx = dx / d, nz = dz / d;
+        p.x = c.x + nx * min;
+        p.z = c.z + nz * min;
+        const vn = v.x * nx + v.z * nz;
+        if (vn < 0) { v.x -= 1.5 * vn * nx; v.z -= 1.5 * vn * nz; }
+      }
+    }
+    const { z } = this.win;
+    if (p.x < -0.7 || p.x > 0.8) { p.x = Math.max(-0.7, Math.min(0.8, p.x)); v.x *= -0.5; }
+    if (p.z < z + 0.08 || p.z > S.bed.z + 0.55) { p.z = Math.max(z + 0.08, Math.min(S.bed.z + 0.55, p.z)); v.z *= -0.5; }
+    if ((Y.rebuild -= dt) <= 0) {
+      Y.rebuild = 0.06;
+      this.windStrand();
+    }
+  }
+
+  /** the loose strand: from the ball to its end, which is dragged along once the ball is far */
+  private windStrand() {
+    const Y = this.yarn, p = Y.mesh.position, t = Y.tail;
+    const dx = t.x - p.x, dz = t.z - p.z, d = Math.hypot(dx, dz), L = 0.3;
+    if (d > L) { t.x = p.x + (dx / d) * L; t.z = p.z + (dz / d) * L; }
+    const ux = (t.x - p.x) / Math.max(d, 1e-4), uz = (t.z - p.z) / Math.max(d, 1e-4);
+    const pts = [
+      new THREE.Vector3(p.x + ux * 0.04, 0.008, p.z + uz * 0.04),
+      new THREE.Vector3(p.x + (t.x - p.x) * 0.4 - uz * 0.03, 0.003, p.z + (t.z - p.z) * 0.4 + ux * 0.03),
+      new THREE.Vector3(p.x + (t.x - p.x) * 0.7 + uz * 0.025, 0.003, p.z + (t.z - p.z) * 0.7 - ux * 0.025),
+      t.clone(),
+    ];
+    Y.strand.geometry.dispose();
+    Y.strand.geometry = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 20, 0.003, 4);
+  }
+
   /** the candles: lit in the evening and on grey days, their flames trembling, their jars aglow */
   private readonly candles: { body: THREE.ShaderMaterial; flame: THREE.Mesh; seed: number }[] = [];
   private candle(body: THREE.ShaderMaterial, top: THREE.Vector3) {
@@ -868,6 +947,8 @@ export class Room {
   private readonly things: [THREE.Vector3, number][] = [];
   /** ... and those tall enough to hide a cat lying behind them */
   private readonly hides: [THREE.Vector3, number][] = [];
+  /** where the ball of wool was left (it is among the things on the floor) */
+  private readonly yarnHome = new THREE.Vector3();
 
   /** how high the floor is at a point: the bed's cushion and its soft rim (paws stand on them) */
   groundAt(x: number, z: number) {
@@ -930,6 +1011,7 @@ export class Room {
     this.sky.uniforms.uRain.value = rain;
     this.time += dt;
     this.timeU.value = this.time;
+    this.rollYarn(dt);
     this.sky.uniforms.uTime.value = this.time;
     this.sky.uniforms.uHour.value = hour;
     const L = this.lights;
