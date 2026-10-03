@@ -172,11 +172,25 @@ export function cloudAt(d: Date, rain = 0) {
   return Math.max(0.2 + 0.6 * (v(b) + (v(b + 1) - v(b)) * e), rain);
 }
 
+/** a morning mist (0 .. 1): some days, more in spring and autumn; it gathers in the small hours,
+ *  is thickest about sunrise and is gone by late morning; never under rain */
+export function fogAt(d: Date, rain = 0) {
+  const day = Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 864e5);
+  const x = Math.sin(day * 7.13 + 3.1) * 43758.5453, r = x - Math.floor(x);
+  const m = d.getMonth();
+  const chance = m === 2 || m === 3 || m === 4 || m === 8 || m === 9 || m === 10 ? 0.28 : 0.12;
+  if (r > chance) return 0;
+  const h = d.getHours() + d.getMinutes() / 60;
+  // (how thick it is that day)
+  const thick = 0.55 + 0.45 * (r / chance);
+  return thick * ss(1, 4, h) * (1 - ss(8.6, 10.6, h)) * (1 - rain);
+}
+
 /** the light of the hour. The window looks south: the sun rises on the left, stands highest at
  *  midday and sets on the right, low and gold, its patch on the floor long and reaching into the
  *  room; after it, a pink dusk, then night. The lamp is lit as the sun goes down and
  *  put out after it is up again. moon: how much of the moon is lit tonight */
-export function dayLight(hour: number, out?: DayLight, rain = 0, moon = 1): DayLight {
+export function dayLight(hour: number, out?: DayLight, rain = 0, moon = 1, fog = 0): DayLight {
   const rise = 6.4, set = 19.1;
   const u = Math.max(0, Math.min(1, (hour - rise) / (set - rise)));
   const up = hour > rise && hour < set ? 1 : 0;
@@ -217,7 +231,8 @@ export function dayLight(hour: number, out?: DayLight, rain = 0, moon = 1): DayL
   // the light is the window's: bright near it and less and less toward you, the room behind you
   // giving back only a little; in the gold hours the sky dims and the room with it, and the low
   // sun is all the stronger for it
-  o.sun = ma ? 0.34 * moonUp : 0.8 * sun * (1 - rain) * (1 + 0.6 * gold);
+  // (in a mist the sun comes through soft and weak)
+  o.sun = (ma ? 0.34 * moonUp : 0.8 * sun * (1 - rain) * (1 + 0.6 * gold)) * (1 - 0.65 * fog);
   o.sky = (0.9 * day + 0.12 * night) * (1 - 0.45 * rain) * (1 - 0.55 * gold);
   o.amb = (0.11 * day + 0.03) * dim * (1 - 0.5 * gold);
   o.floorB = 0.45 * day * dim;

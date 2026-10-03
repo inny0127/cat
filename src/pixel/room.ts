@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { AO_GLSL, LIGHT_GLSL } from '../cat3d/fur';
-import { ROOM_LIGHT_GLSL, NOCC, cloudAt, dayLight, moonLit, moonPhase, rainAt, skyDay, type DayLight } from '../cat3d/roomlight';
+import { ROOM_LIGHT_GLSL, NOCC, cloudAt, dayLight, fogAt, moonLit, moonPhase, rainAt, skyDay, type DayLight } from '../cat3d/roomlight';
 import { PIX, PIX_GLSL, type Material } from '../cat3d/pixclass';
 import type { CatState } from '../sim/state';
 import { seasonAt } from './season';
@@ -182,6 +182,7 @@ uniform float uSnowLie;  // snow lying on the roofs and the tree (0 .. 1)
 uniform float uRainbow;  // a rainbow, after rain by day (0 .. 1)
 uniform float uCloud;    // how much cloud there is (0 a clear sky .. 1 overcast)
 uniform float uMoon;     // the moon's phase (0 new, 0.5 full)
+uniform float uFog;      // a morning mist (0 .. 1)
 uniform vec3 uDrop;      // one drop running down the glass (window pixels), if z: the one a cat is after
 uniform vec3 uLeafA;     // the tree's leaves by the season: lit,
 uniform vec3 uLeafB;     // ... in shade,
@@ -307,6 +308,9 @@ void main() {
   vec3 grey = vec3(lumS) * vec3(0.93, 0.97, 1.08) * 0.8;
   c = mix(c, grey, uRain * 0.85);
   bool starry = night > 0.5 && uRain < 0.5;
+  // how much of the mist lies between the window and what is seen at this pixel (set layer by
+  // layer below: the sky, the hill far off, the town, the roofs across the way, the tree)
+  float fk = 0.5;
   if (starry) {
     // stars, fewer down toward the town's glow; a few bright ones that glint
     float st = hash2(sp);
@@ -420,12 +424,13 @@ void main() {
   farCol = mix(farCol, grey * 1.05, uRain * 0.6);
   if (px.y < max(farH, hill)) {
     c = farCol;
+    fk = 0.93;
     if (night > 0.5 && px.y < farH && hash2(vec2(fx, px.y) * 0.37) > 0.985) { c = hex(255.0, 214.0, 150.0); a = 0.17; }
   }
   // the tower on the hill: a mast, a pod, a light on top
   float tx = fx - floor(Wd * 0.7);
   float tBase = H * 0.395;
-  if (abs(tx) < 1.0 && px.y >= tBase && px.y < tBase + H * 0.17) c = farCol * 0.88;
+  if (abs(tx) < 1.0 && px.y >= tBase && px.y < tBase + H * 0.17) { c = farCol * 0.88; fk = 0.9; }
   if (abs(tx) < 2.5 && px.y >= tBase + H * 0.11 && px.y < tBase + H * 0.13) {
     c = farCol * 0.85;
     if (night > 0.5 && abs(tx) < 2.0 && mod(px.x, 2.0) < 1.0) { c = hex(255.0, 236.0, 200.0); a = 0.17; }
@@ -450,6 +455,7 @@ void main() {
   facade = mix(facade, grey * 0.85, uRain * 0.35);
   if (inB) {
     c = facade;
+    fk = 0.62;
     // the side toward the sun lit, the other in shade (by night, neither)
     bool sunR = h > 12.75;
     float lit = (1.0 - night) * (1.0 - uRain);
@@ -483,6 +489,7 @@ void main() {
   float slope = abs(nl - ncell * 0.5) * 0.45;
   float roofTop = ridge - floor(slope);
   if (px.y < roofTop) {
+    fk = 0.4;
     c = tod(hex(160.0, 98.0, 84.0), hex(186.0, 104.0, 76.0), hex(112.0, 64.0, 80.0), hex(30.0, 24.0, 38.0));
     if (mod(px.y + floor(nl * 0.5), 3.0) < 1.0) c *= 0.88;           // rows of tiles
     if (nl > ncell * 0.5) c *= 0.9;                                   // the far side of the ridge
@@ -514,7 +521,7 @@ void main() {
     if (length(tb - a0 - ab * u) < 1.6 - u) wood = 1.0;
   }
   vec3 woodCol = tod(hex(74.0, 58.0, 60.0), hex(96.0, 66.0, 58.0), hex(66.0, 48.0, 62.0), hex(16.0, 18.0, 26.0));
-  if (wood > 0.5) c = woodCol;
+  if (wood > 0.5) { c = woodCol; fk = 0.24; }
   {
     const float TX[12] = float[](0.04, 0.14, 0.22, 0.09, 0.19, -0.01, 0.27, 0.11, 0.02, 0.21, 0.3, 0.08);
     const float TY[12] = float[](0.3, 0.32, 0.26, 0.23, 0.19, 0.2, 0.17, 0.13, 0.09, 0.1, 0.24, 0.03);
@@ -555,10 +562,17 @@ void main() {
       int ti = lv > 0.7 ? 3 : lv > 0.42 ? 2 : lv > 0.12 ? 1 : 0;
       vec3 col = pick(ti, lb * vec3(0.68, 0.72, 0.86), lb, la, la * 1.1 + vec3(0.04, 0.04, 0.0));
       c = tod(col, col * vec3(1.06, 0.98, 0.82), col * vec3(0.66, 0.55, 0.72), col * vec3(0.16, 0.22, 0.3));
+      fk = 0.22;
     }
   }
   // snow lying on the boughs
   if (uSnowLie > 0.01 && wood > 0.5 && hash2(px + 7.0) < uSnowLie * 0.5) c = snowCol;
+  // the mist: all of it paler and softer the further off, the far side of town all but gone (the
+  // lit windows of the night and the stars still show through, blurred a little)
+  if (uFog > 0.01) {
+    vec3 fogCol = tod(hex(214.0, 222.0, 228.0), hex(242.0, 222.0, 200.0), hex(200.0, 176.0, 190.0), hex(58.0, 58.0, 84.0));
+    c = mix(c, fogCol, uFog * fk * (a > 0.16 ? 0.35 : 1.0));
+  }
 
   // snow falling: flakes drifting down slowly, swaying, near ones bigger
   if (uRain > 0.01 && uSnowing > 0.5) {
@@ -719,7 +733,7 @@ export class Room {
     this.sky = new THREE.ShaderMaterial({
       uniforms: {
         uTime: { value: 0 }, uHour: { value: 12 }, uSkyPx: { value: new THREE.Vector2(48, 56) }, uPxSize: { value: 0.01 }, uPar: { value: 0 }, uRain: { value: 0 },
-        uSnowing: { value: 0 }, uSnowLie: { value: 0 }, uRainbow: { value: 0 }, uCloud: { value: 0.5 }, uMoon: { value: 0.5 }, uDrop: { value: new THREE.Vector3() },
+        uSnowing: { value: 0 }, uSnowLie: { value: 0 }, uRainbow: { value: 0 }, uCloud: { value: 0.5 }, uMoon: { value: 0.5 }, uFog: { value: 0 }, uDrop: { value: new THREE.Vector3() },
         uLeafA: { value: new THREE.Vector3(122 / 255, 162 / 255, 96 / 255) }, uLeafB: { value: new THREE.Vector3(76 / 255, 116 / 255, 76 / 255) },
         uLeafC: { value: new THREE.Vector3(1, 0.7, 0.75) }, uLeafs: { value: new THREE.Vector2(1, 0) },
       },
@@ -1616,6 +1630,8 @@ export class Room {
    *  lab, tests) */
   moonOverride: number | null = null;
   cloudOverride: number | null = null;
+  /** a morning mist (0 .. 1), whatever the date (the lab, tests) */
+  fogOverride: number | null = null;
 
   /** the middle of the window (where the world outside is heard from) */
   get windowMiddle() {
@@ -1769,7 +1785,9 @@ export class Room {
   /** the bowls and box as the cat's state has them; the light and the sky by the hour (and that
    *  light, for the pixel pass's colours) */
   update(s: CatState, hour = 12, dt = 0, rain = 0, date: Date = new Date()): DayLight {
-    const d = dayLight(hour, this.light, rain, moonLit(date));
+    const fog = this.fogOverride ?? fogAt(date, rain);
+    const d = dayLight(hour, this.light, rain, moonLit(date), fog);
+    this.sky.uniforms.uFog.value = fog;
     this.sky.uniforms.uRain.value = rain;
     this.sky.uniforms.uMoon.value = this.moonOverride ?? moonPhase(date);
     this.sky.uniforms.uCloud.value = this.cloudOverride ?? cloudAt(date, rain);

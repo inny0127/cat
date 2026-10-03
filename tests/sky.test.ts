@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cloudAt, moonLit, moonPhase } from '../src/cat3d/roomlight';
+import { cloudAt, fogAt, moonLit, moonPhase } from '../src/cat3d/roomlight';
 
 describe('the sky outside', () => {
   it('has the moon as it really is', () => {
@@ -21,5 +21,22 @@ describe('the sky outside', () => {
       last = c;
     }
     expect(cloudAt(new Date(Date.UTC(2026, 9, 3, 12)), 1)).toBe(1);
+  });
+
+  it('has a mist on some mornings, gone by late morning and never in the rain', () => {
+    let misty = 0;
+    for (let day = 0; day < 365; day++) {
+      const at = (h: number) => new Date(2026, 0, 1 + day, Math.floor(h), Math.round((h % 1) * 60));
+      const dawn = fogAt(at(6.5));
+      expect(dawn).toBeGreaterThanOrEqual(0);
+      expect(dawn).toBeLessThanOrEqual(1);
+      if (dawn > 0) misty++;
+      expect(fogAt(at(11))).toBe(0);
+      expect(fogAt(at(15))).toBe(0);
+      expect(fogAt(at(6.5), 1)).toBe(0);
+    }
+    // (some mornings, not most)
+    expect(misty).toBeGreaterThan(25);
+    expect(misty).toBeLessThan(120);
   });
 });
