@@ -259,7 +259,8 @@ void main() {
     // the right, against whatever is behind it, a step darker in its own colours (a pixel
     // artist's selective outline: the shadow side drawn in, never in black)
     // (neither outline ever goes down to a ramp's deepest step: that reads as a black line)
-    if (kind == 1 && third > 0.4) level += 1;
+    bool rimLit = kind == 1 && third > 0.4;
+    if (rimLit) level += third > 0.7 ? 2 : 1;
     else if (kind == 1 && (nm[1] < 0 || nm[4] < 0) && level >= 2) level -= 1;
     // (the room: a third value over a quarter glows that much; nearly one, at its brightest)
     bool glows = kind == 2 && third > 0.9;
@@ -277,6 +278,9 @@ void main() {
     // the colour of the light it is in: the lamp's, the sun's (the moon's), the shade's, mixed as
     // they are mixed on it
     vec3 tint = uTintShade * max(0.0, 1.0 - wl - ws) + uTintLamp * wl + uTintSun * ws;
+    // (an edge of the cat caught by the light from the window behind it is lit by that light, the
+    // sun's gold, or by night the moon's blue, whatever the light on the rest of it)
+    if (rimLit) tint = mix(tint, uTintSun, 0.85);
     // (what glows of itself, a candle's jar, a lit dial, a lantern, is its own warm light)
     if (glows) tint = vec3(1.05, 0.97, 0.86);
     col = clamp(col * tint, 0.0, 1.0);
@@ -307,7 +311,8 @@ void main() {
     // next (lit, not greyed: the light adds to what is behind it); and a soft glow all through it
     // (in the light's own colour, and a little more of it, warming what is seen through it too:
     // lightened alone, the violet shade under a low gold sun goes a misty grey, a fog, not a ray)
-    float lv = clamp(floor(hz * 22.0 + (bayer(p) - 0.5) * 0.9), 0.0, 3.0);
+    // (not dithered over the cat: checkers all over its coat read as noise, not light)
+    float lv = clamp(floor(hz * 22.0 + (kind == 1 ? 0.0 : (bayer(p) - 0.5) * 0.9)), 0.0, 3.0);
     vec3 bc = clamp(mix(vec3(dot(uBeamCol, vec3(0.3, 0.59, 0.11))), uBeamCol, 1.5), 0.0, 1.0);
     col *= mix(vec3(1.0), bc, lv * 0.09);
     col = 1.0 - (1.0 - col) * (1.0 - bc * lv * 0.085);

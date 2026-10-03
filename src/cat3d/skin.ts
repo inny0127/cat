@@ -102,7 +102,7 @@ void main() {
       rim *= clamp(uSkyI + uSun, 0.0, 1.0);
       // modelled as a painter models a figure, whatever the room's light: lighter where the body
       // turns up and toward you from the left, darker where it turns down and away
-      lt.x *= mix(0.78, 1.14, smoothstep(-0.45, 0.75, dot(Np, normalize(vec3(-0.45, 0.8, 0.4)))));
+      lt.x *= mix(0.62, 1.24, smoothstep(-0.45, 0.75, dot(Np, normalize(vec3(-0.45, 0.8, 0.4)))));
       // and in its own shade low down, where it meets what it lies or stands on (the lower flanks
       // of a loaf, paws tucked under, the belly), as a form darkens toward the ground
       float under = 1.0 - smoothstep(-0.3, 0.6, Np.y);
@@ -126,7 +126,7 @@ void main() {
     // not where the light from behind catches the edge
     if (uRoomLit > 0.5 && gl_FrontFacing) {
       float ndv = max(dot(Np, Vp), 0.0);
-      lt.x *= 1.0 - 0.32 * smoothstep(0.34, 0.12, ndv) * (1.0 - step(0.4, rim));
+      lt.x *= 1.0 - 0.4 * smoothstep(0.46, 0.14, ndv) * (1.0 - step(0.4, rim));
     }
     gl_FragColor = pixOutLit(cls, lt, rim);
     return;
