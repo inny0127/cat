@@ -146,6 +146,13 @@ export class PixelAvatar implements Avatar {
     this.cat.motor.flickEar('both', 0.6);
     if (!this.act && !this.errand && !this.trip && Math.random() < 0.6) this.heard = { at: at.clone(), t: 0.9 + Math.random() * 0.8 };
   }
+  /** something seen out of the corner of its eye (a shooting star going down the window): awake
+   *  and idle, the ears go up and it looks */
+  see(at: THREE.Vector3) {
+    if (!this.alive || this.isHidden || this.sleep > 0.5) return;
+    this.cat.motor.flickEar('both', 0.4);
+    if (!this.act && !this.errand && !this.trip) this.heard = { at: at.clone(), t: 1.3 + Math.random() * 0.8 };
+  }
   /** thunder (loud 0 .. 1): it looks to the window; awake, a near clap may send it to cover, into
    *  the box if it is out, or to its bed */
   thunder(loud: number, at: THREE.Vector3) {

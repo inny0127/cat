@@ -89,6 +89,8 @@ export class PixelApp {
     };
     // thunder after a flash of lightning: heard through the glass, the louder the nearer; the cat
     // starts at it and looks to the window, and a near clap may send it to cover
+    // a shooting star: an idle cat awake looks up at the window
+    this.room.onMeteor = () => this.avatar.see(this.room.meteorAt);
     this.room.onThunder = (loud) => {
       this.audio.play(loud > 0.6 ? 'thunderNear' : 'thunder', { out: true, gain: 0.3 + 0.6 * loud, pan: (Math.random() - 0.5) * 0.6 });
       this.brain?.thunder(loud);

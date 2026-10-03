@@ -190,6 +190,8 @@ uniform float uMoon;     // the moon's phase (0 new, 0.5 full)
 uniform float uFog;      // a morning mist (0 .. 1)
 uniform float uFlash;    // lightning now (0 .. 1)
 uniform vec3 uBolt;      // the bolt: where across (of the window), its seed, whether it is seen
+uniform vec4 uMeteor;    // a shooting star: where it starts (of the window), how long since (s;
+                         // below 0, none), and which way it falls (-1 left, 1 right)
 uniform vec3 uDrop;      // one drop running down the glass (window pixels), if z: the one a cat is after
 uniform vec3 uLeafA;     // the tree's leaves by the season: lit,
 uniform vec3 uLeafB;     // ... in shade,
@@ -432,6 +434,21 @@ void main() {
     float tp = mod(uTime, 70.0);
     vec2 pl = vec2(-6.0 + tp * (Wd + 12.0) / 40.0, H * 0.9 - tp * 0.12);
     if (tp < 40.0 && sp == floor(pl) && fract(uTime * 0.8) < 0.3) { c = hex(255.0, 120.0, 100.0); a = 0.2; }
+    // once in a while a shooting star: a bright head and a short tail that fades behind it, gone
+    // in well under a second
+    if (uMeteor.z >= 0.0 && uMeteor.z < 0.6) {
+      vec2 dir = normalize(vec2(uMeteor.w, -0.55));
+      vec2 head = vec2(uMeteor.x * Wd, uMeteor.y * H) + dir * uMeteor.z * 90.0;
+      vec2 d = sp + 0.5 - head;
+      float behind = -dot(d, dir), across = abs(d.x * dir.y - d.y * dir.x);
+      // (the tail no longer than the way it has come)
+      float tail = min(16.0, uMeteor.z * 90.0 + 1.0);
+      if (behind > -0.6 && behind < tail && across < 0.6) {
+        float u = max(behind, 0.0) / 16.0;
+        float k = (1.0 - u) * (1.0 - u) * (1.0 - smoothstep(0.38, 0.6, uMeteor.z));
+        if (k > 0.06) { c = mix(c, behind < 1.5 ? hex(255.0, 254.0, 246.0) : hex(236.0, 236.0, 255.0), min(1.0, k * 1.3)); a = k > 0.5 ? 0.2 : 0.17; }
+      }
+    }
   } else {
     // a few birds crossing now and then, wings up, wings down
     float tb = mod(uTime + 20.0, 47.0);
@@ -777,7 +794,7 @@ export class Room {
     this.sky = new THREE.ShaderMaterial({
       uniforms: {
         uTime: { value: 0 }, uHour: { value: 12 }, uSkyPx: { value: new THREE.Vector2(48, 56) }, uPxSize: { value: 0.01 }, uPar: { value: 0 }, uRain: { value: 0 },
-        uSnowing: { value: 0 }, uSnowLie: { value: 0 }, uRainbow: { value: 0 }, uCloud: { value: 0.5 }, uMoon: { value: 0.5 }, uFog: { value: 0 }, uFlash: { value: 0 }, uBolt: { value: new THREE.Vector3() }, uDrop: { value: new THREE.Vector3() },
+        uSnowing: { value: 0 }, uSnowLie: { value: 0 }, uRainbow: { value: 0 }, uCloud: { value: 0.5 }, uMoon: { value: 0.5 }, uFog: { value: 0 }, uFlash: { value: 0 }, uBolt: { value: new THREE.Vector3() }, uMeteor: { value: new THREE.Vector4(0, 0, -1, 1) }, uDrop: { value: new THREE.Vector3() },
         uLeafA: { value: new THREE.Vector3(122 / 255, 162 / 255, 96 / 255) }, uLeafB: { value: new THREE.Vector3(76 / 255, 116 / 255, 76 / 255) },
         uLeafC: { value: new THREE.Vector3(1, 0.7, 0.75) }, uLeafs: { value: new THREE.Vector2(1, 0) },
       },
@@ -1593,6 +1610,24 @@ export class Room {
     return m;
   }
 
+  /** a shooting star on a clear night now and then: where, how long ago, which way; and someone to
+   *  tell (the cat looks up) */
+  private readonly meteor = { t: -1, x: 0, y: 0, dir: 1 };
+  private meteorIn = 60 + Math.random() * 240;
+  onMeteor: (() => void) | null = null;
+
+  /** a shooting star now */
+  meteorNow() {
+    const M = this.meteor;
+    M.t = 0;
+    M.dir = Math.random() < 0.5 ? -1 : 1;
+    // (below the fairy lights, and clear of the moon high on the left)
+    M.x = M.dir > 0 ? 0.5 + 0.2 * Math.random() : 0.75 + 0.2 * Math.random();
+    M.y = 0.62 + 0.18 * Math.random();
+    this.meteorIn = 90 + Math.random() * 420;
+    this.onMeteor?.();
+  }
+
   /** a thunderstorm: lightning now and then, and after each flash (the further off it struck, the
    *  later and the softer) its thunder */
   private readonly storm = { next: 6, t: 9, peak: 0, bolt: false, x: 0.5, seed: 0 };
@@ -1740,6 +1775,12 @@ export class Room {
   get windowMiddle() {
     const { l, r, b, t, z } = this.win;
     return new THREE.Vector3((l + r) / 2, (b + t) / 2, z);
+  }
+
+  /** where on the glass the shooting star is now (or last was) */
+  get meteorAt() {
+    const { l, r, b, t, z } = this.win, M = this.meteor;
+    return new THREE.Vector3(l + (r - l) * (M.x + 0.25 * M.dir), b + (t - b) * (M.y - 0.15), z);
   }
 
   /** the insect about the room, if there is one */
@@ -1922,6 +1963,11 @@ export class Room {
     this.timeU.value = this.time;
     const flash = this.lightning(dt, this.stormOverride ?? stormAt(date, rain));
     su.uFlash.value = flash;
+    // (a clear dark night: no rain, not overcast)
+    const M = this.meteor;
+    if (Room.dark(hour) > 0.85 && rain < 0.3 && (su.uCloud.value as number) < 0.75 && (this.meteorIn -= dt) <= 0) this.meteorNow();
+    if (M.t >= 0) M.t = M.t > 1 ? -1 : M.t + dt;
+    (su.uMeteor.value as THREE.Vector4).set(M.x, M.y, M.t, M.dir);
     (su.uBolt.value as THREE.Vector3).set(this.storm.x, this.storm.seed, this.storm.bolt && flash > 0.2 ? 1 : 0);
     // the air in the room just stirs the monstera's leaves, now one, now another, slowly
     for (const L of this.leaves) {
