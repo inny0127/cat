@@ -25,8 +25,9 @@ export interface Ctx {
   bed: (p: PoseName) => { to: THREE.Vector3; yaw: number };
   /** places in the room worth a sniff */
   sniff: () => { to: THREE.Vector3; face: number }[];
-  /** a place on the floor in the sun, if the sun is in */
+  /** a place on the floor in the sun, if the sun is in; and whether a point is in it */
   sun: () => THREE.Vector3 | null;
+  sunlit: (p: THREE.Vector3) => boolean;
   /** a warm place by the radiator, if the heating is on, and which way to lie along it */
   warm: () => { at: THREE.Vector3; face: number } | null;
   /** where to stand, and which way to face, to lie down in a posture with the middle of the body
@@ -175,6 +176,9 @@ interface Leg {
   layer?: (t: number) => PoseLayer;
   /** it may doze off here, where it lies (in the sun, by the radiator), and stays till it wakes */
   nap?: boolean;
+  /** where it would rather be now (the patch of sun having moved on): it gets up and goes there
+   *  (undefined: it is well where it is; null: there is nothing to stay for, and it moves on) */
+  follow?: () => { to: THREE.Vector3; yaw: number } | null | undefined;
 }
 
 /** walking somewhere and doing something there, then on */
@@ -185,6 +189,7 @@ export class Walk implements Act {
   /** how deep asleep the cat is (set by whoever knows): lying where it may doze, it sleeps there */
   nap = 0;
   private napT = 0;
+  private followIn = 8;
   constructor(readonly name: string, private readonly legs: Leg[], private readonly speed = 0.25) {}
   /** lying somewhere it may doze off */
   get canNap() {
@@ -217,6 +222,19 @@ export class Walk implements Act {
         c.m.walkTo(leg.to, this.speed, leg.face, () => { this.arrived = true; this.t = 0; }, pass);
       }
       return true;
+    }
+    // lying in the sun, awake, as the patch moves off across the floor: up, and after it
+    if (leg.follow && (this.followIn -= dt) <= 0) {
+      this.followIn = 8;
+      const want = leg.follow();
+      if (want === null) this.t = Math.max(this.t, leg.stay);
+      else if (want) {
+        leg.to = want.to;
+        leg.face = want.yaw;
+        leg.stay = Math.max(leg.stay, this.t + 30);
+        this.arrived = false;
+        return true;
+      }
     }
     this.t += dt;
     c.m.setPosture(leg.posture);
@@ -271,9 +289,19 @@ export const sunbathe = (c: Ctx) => {
   if (!spot) return null;
   const bed = c.bed('loaf');
   const posture = pick<PoseName>(['side', 'side', 'loaf', 'sphinx']);
-  const place = c.lieAt(posture, spot, rand(-0.7, 0.7));
+  const face = rand(-0.7, 0.7);
+  const place = c.lieAt(posture, spot, face);
+  // (as the sun moves round and the patch goes off it, it gets up and lies down in it again)
+  let mid = spot.clone();
+  const follow = () => {
+    if (c.sunlit(mid)) return undefined;
+    const s = c.sun();
+    if (!s) return null;
+    mid = s.clone();
+    return c.lieAt(posture, s, face);
+  };
   return new Walk('sun', [
-    { to: place.to, face: place.yaw, stay: rand(40, 100), posture, nap: true },
+    { to: place.to, face: place.yaw, stay: rand(60, 160), posture, nap: true, follow },
     { to: bed.to, face: bed.yaw, stay: 0.1, posture: 'loaf' },
   ]);
 };

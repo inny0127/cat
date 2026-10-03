@@ -1626,6 +1626,18 @@ export class Room {
     return { at: new THREE.Vector3((l + r) / 2 + 0.1, 0, z + 0.25), face: -Math.PI / 2 };
   }
 
+  /** is a point on the floor in the patch of sun (the window's opening, carried along the light) */
+  sunlit(p: THREE.Vector3) {
+    const L = this.lights;
+    const P = L.uPatch.value as THREE.Vector4;
+    const K = L.uKeyDir.value as THREE.Vector3;
+    if (P.w <= 0.04 || K.y < 0.1 || K.z > -0.05) return false;
+    const { l, r, b, t, z } = this.win;
+    const s = (z - p.z) / K.z;
+    const x = p.x + K.x * s, y = K.y * s;
+    return x > l + 0.03 && x < r - 0.03 && y > b + 0.03 && y < t - 0.03;
+  }
+
   sunSpot(): THREE.Vector3 | null {
     const L = this.lights;
     const P = L.uPatch.value as THREE.Vector4;
