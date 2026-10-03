@@ -16,6 +16,8 @@ varying vec2 vUv;
 varying vec3 vN;
 varying vec3 vWorld;
 varying float vAO;
+// where this bit of coat is on the cat standing at rest (the stripes are laid out by it)
+varying vec3 vRest;
 // 0 the coat; 1 the inside of the mouth (aux: how deep in from the lips, the tongue's side);
 // 2 a tooth (aux: its root)
 attribute float reg;
@@ -52,6 +54,7 @@ void main() {
   vN = normalize(mat3(modelMatrix) * objectNormal);
   vWorld = wp.xyz;
   vUv = uv;
+  vRest = position;
   vAO = capsuleAO(wp.xyz, vN);
   gl_Position = projectionMatrix * viewMatrix * wp;
 }`;
@@ -84,13 +87,43 @@ varying vec2 vUv;
 varying vec3 vN;
 varying vec3 vWorld;
 varying float vAO;
+varying vec3 vRest;
 ${LIGHT_GLSL}
+// a ginger tabby's stripes on the body and the tail, laid out as a pixel artist would draw them: a
+// dark line along the spine, bands down the flanks from it a few centimetres apart, leaning back a
+// little and now and then broken, bars across the thighs and rings round the tail (the painting's
+// own stripes, at a few millimetres to the art pixel, come out as dabs). The head keeps its own.
+float hashT(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+int tabby(int cls, vec3 P) {
+  if (cls != ${PIX.ginger} && cls != ${PIX.stripe} && cls != ${PIX.cream}) return cls;
+  if (P.z > 0.085) return cls;
+  bool band;
+  if (P.z < -0.19) {
+    // the tail: rings, closer together toward the tip
+    float s = -(P.z + 0.19);
+    band = fract(s / mix(0.026, 0.02, clamp(s / 0.2, 0.0, 1.0))) < 0.42;
+  } else if (P.y < 0.165) {
+    // the thighs and the lower flanks: bars across
+    float ph = P.y / 0.024 + 0.4 * sin(P.z * 60.0);
+    band = fract(ph) < 0.38 && hashT(vec2(floor(ph), sign(P.x))) > 0.25;
+  } else {
+    float th = atan(abs(P.x), P.y - 0.2);
+    float ph = (P.z + 0.022 * th) / 0.03 + 0.22 * sin(th * 3.0 + P.z * 37.0) + 0.08 * sin(th * 7.0 - P.z * 90.0);
+    float k = floor(ph);
+    // (each band its own width, and now and then one broken partway down the flank)
+    float wide = 0.3 + 0.16 * hashT(vec2(k, 3.0 + sign(P.x)));
+    bool broken = hashT(vec2(k, sign(P.x))) > 0.7 && th > 0.6 + 0.6 * hashT(vec2(k, 7.0));
+    band = (fract(ph) < wide && !broken) || th < 0.1;
+  }
+  if (!band) return cls == ${PIX.stripe} ? ${PIX.ginger} : cls;
+  return cls == ${PIX.cream} ? ${PIX.ginger} : ${PIX.stripe};
+}
 void main() {
   if (uSolid > 0.5) {
     // pixel art: which material, and how much light, for the pixel pass to paint from its ramps
     vec3 Np = normalize(vN) * (gl_FrontFacing ? 1.0 : -1.0);
     int cls = vReg > 1.5 ? ${PIX.teeth} : vReg > 0.5 ? (vAux.y > 0.5 ? ${PIX.tongue} : ${PIX.mouth})
-      : !gl_FrontFacing ? ${PIX.mouth} : pixClass(texture2D(uPixMap, vUv).rgb);
+      : !gl_FrontFacing ? ${PIX.mouth} : tabby(pixClass(texture2D(uPixMap, vUv).rgb), vRest);
     float shp = keyShadow(vWorld, Np);
     vec3 Vp = normalize(cameraPosition - vWorld);
     float rim = pow(1.0 - max(dot(Np, Vp), 0.0), 2.5) * max(dot(Np, uRimDir), 0.0) * shp;
