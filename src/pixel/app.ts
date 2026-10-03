@@ -516,6 +516,7 @@ export class PixelApp {
     // a bird outside: the cat's ear goes to it, and if it is awake, a glance at the window
     if (this.audio.setOutside(dt, { day: 1 - dark, hour, month: clock.getMonth(), rain })) this.avatar.hear(this.room.windowMiddle);
     this.avatar.rain = rain;
+    this.avatar.night = dark;
     // the phone's bar the colour of the wall at the top of the room
     const tc = dark > 0.5 ? '#3b3150' : '#c99486';
     if (tc !== this.themeColor) {

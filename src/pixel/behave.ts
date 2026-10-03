@@ -44,6 +44,8 @@ export interface Ctx {
   sound: (name: string, gain: number) => void;
   /** how hard it is raining (0 .. 1): a grey day is for watching it from the sill */
   rain: number;
+  /** how dark it is outside (0 day .. 1 night): the lit town is for watching too */
+  night: number;
   /** birds going by outside the window (where, on the glass), if any; a chirp at them */
   birds: () => THREE.Vector3 | null;
   chirp: () => void;
@@ -587,7 +589,10 @@ const smooth = (x: number) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * x * (10 + x * (
  */
 export class Sill implements Act {
   readonly name = 'sill';
-  phase: 'go' | 'gather' | 'up' | 'settle' | 'sit' | 'about' | 'look' | 'down' | 'done' = 'go';
+  phase: 'go' | 'gather' | 'up' | 'settle' | 'sit' | 'nap' | 'about' | 'look' | 'down' | 'done' = 'go';
+  /** how deep asleep the cat is (set by the avatar): asleep up here, it dozes on the sill */
+  nap = 0;
+
   private t = 0;
   private dur = 0;
   private readonly from = new THREE.Vector3();
@@ -664,10 +669,28 @@ export class Sill implements Act {
         return true;
       }
       case 'settle':
+        // (squarely to the glass: back round to it after a doze along the sill)
         m.setPosture('stand');
-        if (this.t > this.dur) this.next('sit', this.leaving ? 1 : rand(30, 80));
+        if (Math.abs(wrapA(Math.PI - m.yaw)) > 0.12) { if (!m.goal) m.walkTo(m.pos.clone(), 0.1, Math.PI); return true; }
+        if (this.t > this.dur) this.next('sit', this.leaving ? 1 : c.night > 0.5 ? rand(60, 150) : rand(30, 80));
         return true;
+      case 'nap': {
+        // dozing up here: down where it sits, a loaf looking out, the head sinking as it goes
+        // deeper, the tail hanging down over the edge; woken, a while looking out again before it
+        // is down
+        m.lookAt(null);
+        m.setPosture('loaf');
+        const deep = Math.min(1, Math.max(0, (this.nap - 0.3) / 0.5));
+        m.layer = { pose: { neckPitch: -0.55 * deep, headPitch: -0.25 * deep, tailLift: -1.3, tailSag: 1, tailCurve: 0.2 }, w: Math.min(1, this.t / 1.5) };
+        if (this.nap <= 0.3 || this.leaving) { m.layer = null; this.next('settle', this.leaving ? 0.3 : rand(4, 10)); }
+        return true;
+      }
       case 'sit': {
+        if (this.nap > 0.3 && !this.leaving) {
+          m.layer = null; m.lookAt(null); this.drop = null; c.drop(null);
+          this.next('nap');
+          return true;
+        }
         // sat looking out: the tail down over the edge, the head turning after what goes by; birds
         // going by are followed with the eyes and chattered at
         m.setPosture('sit');
@@ -823,7 +846,7 @@ export function chooseAct(c: Ctx, atHome: boolean, posture: PoseName): Act | nul
     if (atHome && c.mode === 'rest') opts.push([0.7 + 0.8 * m.sleepy, () => sunbathe(c)]);
     if (atHome && c.yarn()) opts.push([0.6 * (0.4 + m.arousal) * (1 - m.sleepy) * (c.mode === 'rest' ? 1 : 0.4), () => new Play()]);
     const sill = c.sill();
-    if (atHome && sill) opts.push([0.55 * (1 + 1.5 * c.rain) * (1 - 0.6 * m.sleepy), () => new Sill(sill)]);
+    if (atHome && sill) opts.push([0.55 * (1 + 1.5 * c.rain + 1.2 * c.night) * (1 - 0.6 * m.sleepy), () => new Sill(sill)]);
     else opts.push([1.5, () => toBed(c, 'loaf')]);
     opts.push([0.8, () => null]);
   }

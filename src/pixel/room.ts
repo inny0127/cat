@@ -562,7 +562,7 @@ export class Room {
     bar(0.045, wh, 0.08, winR + 0.02, winB + wh / 2);
     bar(0.02, wh, 0.03, bx, winB + wh / 2, wallZ - 0.04);                 // glazing bars
     bar(ww, 0.02, 0.03, bx, winB + wh * 0.62, wallZ - 0.04);
-    bar(ww + 0.14, 0.03, 0.22, bx, winB - 0.015, wallZ + 0.07);           // the sill, deep enough for a cat
+    bar(ww + 0.14, 0.03, 0.3, bx, winB - 0.015, wallZ + 0.11);            // the sill, deep enough for a cat to sleep on
     // on the sill: a little succulent in a pot and a candle in a jar
     add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.028, 0.05, 14), this.mat('paint', { tone: -0.04 }))), winL + 0.11, winB + 0.025, wallZ + 0.02);
     for (let i = 0; i < 7; i++) {
@@ -754,7 +754,7 @@ export class Room {
     // (standing on the sill by the succulent, a little back against the glass)
     print.scale.setScalar(0.62);
     print.rotation.set(-0.14, 0.18, 0);
-    print.position.set(winL + 0.19, winB + 0.04, wallZ - 0.005);
+    print.position.set(winL + 0.16, winB + 0.04, wallZ - 0.005);
     this.group.add(print);
 
     // an old wooden radio on the sill: a cloth grille, a round dial that glows warm while it plays,
@@ -787,7 +787,7 @@ export class Room {
     handle.position.set(0, rh / 2, 0);
     radio.add(handle);
     radio.rotation.y = -0.22;
-    radio.position.set(winR - 0.19, winB + rh / 2, wallZ + 0.03);
+    radio.position.set(winR - 0.15, winB + rh / 2, wallZ + 0.03);
     this.group.add(radio);
     this.radio = radio;
     this.print = print;
@@ -1009,7 +1009,7 @@ export class Room {
     cap(V(yx, 0.045, yz), V(yx, 0.046, yz), 0.045, 0.6);   // the yarn (it goes where the ball goes)
     cap(V(bx - 0.45, ty - 0.005, wallZ + 0.055), V(bx + 0.45, ty - 0.005, wallZ + 0.055), 0.045, 0.5);
     cap(V(sx - 0.21, sy, wallZ + 0.06), V(sx + 0.21, sy, wallZ + 0.06), 0.045, 0.5);
-    cap(V(winL - 0.07, winB - 0.02, wallZ + 0.1), V(winR + 0.07, winB - 0.02, wallZ + 0.1), 0.04, 0.5);
+    cap(V(winL - 0.07, winB - 0.02, wallZ + 0.14), V(winR + 0.07, winB - 0.02, wallZ + 0.14), 0.04, 0.5);
     cap(V(bx - 2, 0.318, wallZ + 0.01), V(bx + 2, 0.318, wallZ + 0.01), 0.015, 0.4);
     cap(V(bx - 0.2, 0.16, wallZ + 0.055), V(bx + 0.2, 0.16, wallZ + 0.055), 0.07, 0.5);   // the radiator
     this.yarnHome.set(yx, 0, yz);
@@ -1043,7 +1043,7 @@ export class Room {
   sillSpot() {
     const { l, r, b, z } = this.win;
     const x = (l + r) / 2;
-    return { launch: new THREE.Vector3(x, 0, z + 0.44), seat: new THREE.Vector3(x, 0, z + 0.1), land: new THREE.Vector3(x + 0.03, 0, z + 0.46), height: b };
+    return { launch: new THREE.Vector3(x, 0, z + 0.44), seat: new THREE.Vector3(x, 0, z + 0.08), land: new THREE.Vector3(x + 0.03, 0, z + 0.46), height: b };
   }
 
   /** the little flock of birds going by outside, as the sky draws them (by day, not in rain): the

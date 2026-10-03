@@ -74,6 +74,10 @@ export class PixelAvatar implements Avatar {
   set rain(r: number) {
     this.ctx.rain = r;
   }
+  /** how dark it is outside */
+  set night(n: number) {
+    this.ctx.night = n;
+  }
   /** what goes by outside the window, and the chirp it gets */
   outside: {
     birds: () => THREE.Vector3 | null; chirp: () => void; sound: (name: string, gain: number) => void;
@@ -138,6 +142,7 @@ export class PixelAvatar implements Avatar {
       mode: this.mode, mood: this.mood, kneading: false,
       bed: (p) => this.bedSpot(p),
       rain: 0,
+      night: 0,
       sniff: () => this.spots?.sniff ?? [],
       sun: () => this.sunSpot?.() ?? null,
       lieAt: (p, at, face) => this.lieAt(p, at, face),
@@ -278,13 +283,15 @@ export class PixelAvatar implements Avatar {
       m.setPosture('side');
       return;
     }
+    if (this.act instanceof Sill) this.act.nap = this.sleep;
     if (this.sleep > 0.3) {
-      // sleep is taken in bed: go back to it, turn round once and settle (down off the sill first)
-      if (this.act && this.act.name !== 'to bed') this.stopAct();
+      // up on the sill when sleep comes: it dozes there, against the glass
       if (this.perched) {
         if (!this.act!.update(dt, c)) this.act = null;
         return;
       }
+      // otherwise sleep is taken in bed: go back to it, turn round once and settle
+      if (this.act && this.act.name !== 'to bed') this.stopAct();
       if (!this.act && !atHome) this.act = toBed(c, this.wanted());
       if (this.act) {
         if (!this.act.update(dt, c)) this.act = null;
