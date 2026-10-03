@@ -49,6 +49,8 @@ export interface Avatar {
   /** woken of itself from a long sleep: the yawn and the stretch of a cat getting up, if the body
    *  can show them */
   wakeStretch?(): void;
+  /** something it cannot make out (a tap on the glass): the head tipped to one side a moment */
+  puzzled?(): void;
   /** leave: dir -1 left, 1 right; calm walks off rather than bolting; reason: the errand, if one
    *  (a body with a room to show it in goes to the bowl or the box) */
   bolt(dir: number, onDone?: () => void, calm?: boolean, reason?: string): void;

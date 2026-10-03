@@ -257,6 +257,10 @@ export class Motor {
    *  under a scratch, the rump and tail raised under a stroke at the base of the tail (set by
    *  whoever knows where the hand is; eased toward) */
   readonly petTarget = { roll: 0, yaw: 0, pitch: 0, rump: 0 };
+  /** the head tipped to one side, as a cat listens to something it cannot place (radians, + to
+   *  its right) */
+  tilt = 0;
+  private tiltNow = 0;
   private readonly pet = { roll: 0, yaw: 0, pitch: 0, rump: 0 };
 
   /** something said (a meow, a trill, a chirp), how long it lasts and when it starts */
@@ -498,6 +502,10 @@ export class Motor {
       p.hipPitch -= 0.12 * P.rump;
       p.tailLift += 0.6 * P.rump;
     }
+    // the puzzled tilt: over quickly, back slowly, the ears pricked while it lasts
+    this.tiltNow += (this.tilt - this.tiltNow) * (1 - Math.exp(-dt * (this.tilt !== 0 ? 7 : 3.5)));
+    p.headRoll += this.tiltNow;
+    p.earFwd += 0.5 * Math.abs(this.tiltNow);
     // tail: a lazy swish, more when the motor asks for it or the cat is cross or keen
     this.wavePhase += dt * (1.1 + 1.6 * this.waveAmp) * this.tailWaveSpeed * Math.max(0.2, f.tailWaveSpeed);
     // ears: flick now and then, often when annoyed

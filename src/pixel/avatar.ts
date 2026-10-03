@@ -139,8 +139,18 @@ export class PixelAvatar implements Avatar {
     else if (b === 'hips' || b === 'tail0' || b === 'tail1') T.rump = keen;
   }
 
-  /** a sound it turned to: where, and for how much longer it looks */
-  private heard: { at: THREE.Vector3; t: number } | null = null;
+  /** a sound it turned to: where, for how much longer it looks, and whether (and which way) it
+   *  tips its head to it */
+  private heard: { at: THREE.Vector3; t: number; tilt: number } | null = null;
+  private puzzle = () => (Math.random() < 0.4 ? (Math.random() < 0.5 ? -1 : 1) * (0.3 + 0.15 * Math.random()) : 0);
+  /** a tap on the glass it cannot make out: the head tipped to one side (which way, how long yet) */
+  private puzzledTilt = 0;
+  private puzzledFor = 0;
+  puzzled() {
+    if (this.sleep > 0.3 || this.act) return;
+    this.puzzledTilt = this.puzzle() || (Math.random() < 0.5 ? -0.36 : 0.36);
+    this.puzzledFor = 1.4 + Math.random();
+  }
 
   /** a sound somewhere in the room or outside: an ear goes to it, and an idle cat awake glances
    *  that way a moment */
@@ -151,14 +161,14 @@ export class PixelAvatar implements Avatar {
       return;
     }
     this.cat.motor.flickEar('both', 0.6);
-    if (!this.act && !this.errand && !this.trip && Math.random() < 0.6) this.heard = { at: at.clone(), t: 0.9 + Math.random() * 0.8 };
+    if (!this.act && !this.errand && !this.trip && Math.random() < 0.6) this.heard = { at: at.clone(), t: 0.9 + Math.random() * 0.8, tilt: this.puzzle() };
   }
   /** something seen out of the corner of its eye (a shooting star going down the window): awake
    *  and idle, the ears go up and it looks */
   see(at: THREE.Vector3) {
     if (!this.alive || this.isHidden || this.sleep > 0.5) return;
     this.cat.motor.flickEar('both', 0.4);
-    if (!this.act && !this.errand && !this.trip) this.heard = { at: at.clone(), t: 1.3 + Math.random() * 0.8 };
+    if (!this.act && !this.errand && !this.trip) this.heard = { at: at.clone(), t: 1.3 + Math.random() * 0.8, tilt: this.puzzle() };
   }
   /** thunder (loud 0 .. 1): it looks to the window; awake, a near clap may send it to cover, into
    *  the box if it is out, or to its bed */
@@ -495,6 +505,7 @@ export class PixelAvatar implements Avatar {
     // eyes on the finger, or on you (through the window); asleep, dead or busy, nowhere (up on
     // the sill it looks where it likes: out of the window)
     const busy = this.errand || (this.act && this.act.name !== 'window' && this.act.name !== 'knead');
+    let tilt = 0;
     if ((this.act instanceof Sill || this.act instanceof Play || this.act instanceof Hunt || this.act instanceof Box || this.act instanceof Zoomies || this.act instanceof Stare || this.act?.ownGaze) && this.mode !== 'enjoy') { /* the act decides */ }
     else if (!this.alive || this.sleep > 0.5 || busy) m.lookAt(null);
     else if (this.lure) m.lookAt(this.lure, 1);
@@ -505,9 +516,17 @@ export class PixelAvatar implements Avatar {
         this.chatterIn = 2.5 + Math.random() * 3;
         if (Math.random() < 0.6) this.outside?.chirp();
       }
-    } else if (this.heard && (this.heard.t -= dt) > 0) m.lookAt(this.heard.at, 0.8);
+    } else if (this.heard && (this.heard.t -= dt) > 0) {
+      m.lookAt(this.heard.at, 0.8);
+      tilt = this.heard.tilt;
+    }
     else if (this.gazeTarget && this.screenToWorld(this.gazeTarget.x, this.gazeTarget.y, this.look)) m.lookAt(this.look, 0.9);
     else m.lookAt(this.viewer(), this.trip ? 0.3 : 0.85);
+    if (this.puzzledFor > 0) {
+      this.puzzledFor -= dt;
+      if (!busy && this.alive && this.sleep <= 0.5) tilt = this.puzzledTilt;
+    }
+    m.tilt = tilt;
   }
 
   /** now and then, deep asleep on its side or curled up, a long slow stretch in its sleep: the

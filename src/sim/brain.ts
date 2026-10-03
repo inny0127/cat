@@ -189,6 +189,7 @@ export class Brain {
     }
     this.attention = { x: sx, y: sy, until: this.time + rand(1.5, 3) };
     this.arousal = clamp(this.arousal + 0.2);
+    if ((this.mode === 'rest' || this.mode === 'alert') && this.taps.length < 3 && chance(0.55)) this.anim.puzzled?.();
     if (this.taps.length > 3) this.irritation = clamp(this.irritation + 0.07);
   }
 
