@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { Cat3D } from '../cat3d/cat';
-import type { PoseName } from '../cat3d/pose';
+import { POSES, type PoseName } from '../cat3d/pose';
 import { NEUTRAL, type Mood } from '../cat3d/mood';
 import type { Avatar } from '../sim/avatar';
 import type { EarMood, TailMood } from '../rig/animator';
@@ -354,6 +354,8 @@ export class PixelAvatar implements Avatar {
     c.kneading = this.kneading;
     // at home: on the bed, wherever on it the body has settled
     const atHome = Math.hypot(m.pos.x - c.home.x, m.pos.z - c.home.z) < 0.2;
+    // (woken in the middle of a stretch in its sleep: that is over)
+    if (this.stretchT > 0 && (this.sleep <= 0.3 || !this.alive)) this.sleepStretch(0, false);
     if (!this.alive) {
       this.stopAct();
       m.setPosture('side');
@@ -381,6 +383,7 @@ export class PixelAvatar implements Avatar {
         this.cat.motor.dreamTwitch();
         if (Math.random() < 0.4) setTimeout(() => this.cat.motor.dreamTwitch(), 180 + Math.random() * 200);
       }
+      this.sleepStretch(dt, this.sleep > 0.75 && atHome && !this.touched);
       return;
     }
     if (this.mode === 'enjoy' || this.mode === 'annoyed' || this.mode === 'angry') {
@@ -489,6 +492,45 @@ export class PixelAvatar implements Avatar {
     } else if (this.heard && (this.heard.t -= dt) > 0) m.lookAt(this.heard.at, 0.8);
     else if (this.gazeTarget && this.screenToWorld(this.gazeTarget.x, this.gazeTarget.y, this.look)) m.lookAt(this.look, 0.9);
     else m.lookAt(this.viewer(), this.trip ? 0.3 : 0.85);
+  }
+
+  /** now and then, deep asleep on its side or curled up, a long slow stretch in its sleep: the
+   *  legs reaching out, a little tremble at the full of it, the head tipped back and the mouth
+   *  coming open a little; then it lets go and settles again */
+  private stretchIn = 90 + Math.random() * 240;
+  private stretchT = 0;
+  private sleepStretch(dt: number, may: boolean) {
+    const m = this.cat.motor;
+    const posture = m.posture;
+    if (this.stretchT <= 0) {
+      if (!may || (this.stretchIn -= dt) > 0 || (posture !== 'side' && posture !== 'curl') || !m.settled) return;
+      this.stretchT = 1e-3;
+      this.stretchIn = 150 + Math.random() * 420;
+    }
+    // (woken, or touched, it stops there)
+    if (!may || (posture !== 'side' && posture !== 'curl')) {
+      this.stretchT = 0;
+      m.layer = null;
+      return;
+    }
+    const t = (this.stretchT += dt), P = POSES[posture];
+    const ease = (x: number) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x));
+    const tr = 0.005 * Math.sin(t * 38) * ease((t - 1.1) / 0.3) * (1 - ease((t - 2.2) / 0.25));
+    m.layer = {
+      pose: {
+        LF: { z: P.LF.z + 0.07 + tr, y: P.LF.y + 0.008, flex: 0 }, RF: { z: P.RF.z + 0.055 + tr, flex: 0 },
+        LH: { z: P.LH.z - 0.06, flex: 0 }, RH: { z: P.RH.z - 0.045, flex: 0 },
+        // (the trunk as it lies: lying on its side, bending the back or the neck would lift it off
+        // the bed)
+        headPitch: P.headPitch + 0.15, tailCurl: P.tailCurl * 0.5,
+        jaw: 0.28 * ease((t - 1.2) / 0.5) * (1 - ease((t - 2.2) / 0.4)), eyeOpen: 0, squint: 0.6,
+      },
+      w: ease(t / 1.4) * (1 - ease((t - 2.4) / 1.2)),
+    };
+    if (t > 3.6) {
+      this.stretchT = 0;
+      m.layer = null;
+    }
   }
 
   doBlink(slow = false) {
