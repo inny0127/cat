@@ -113,6 +113,13 @@ void main() {
     // the mouth darkens toward the throat
     if (vReg > 0.5 && vReg < 1.5) lt.x *= mix(1.0, 0.15, smoothstep(0.3, 0.95, vAux.x));
     if (!gl_FrontFacing && vReg < 0.5) lt.x *= 0.5;
+    // where the body turns away from you (the edge of a leg against the chest, of the head against
+    // the shoulders) a shade darker in its own colour, as a pixel artist outlines a form from within;
+    // not where the light from behind catches the edge
+    if (uRoomLit > 0.5 && gl_FrontFacing) {
+      float ndv = max(dot(Np, Vp), 0.0);
+      lt.x *= 1.0 - 0.32 * smoothstep(0.34, 0.12, ndv) * (1.0 - step(0.4, rim));
+    }
     gl_FragColor = pixOutLit(cls, lt, rim);
     return;
   }
