@@ -247,6 +247,9 @@ export class Cat3D {
     this.headScale = on ? 1.15 : 1;
     for (const e of this.eyes) {
       e.eyeMat.uniforms.uFlat.value = on ? 1 : 0;
+      // (drawn a few art pixels across, the eyes are made a little bigger, as a pixel artist would
+      // draw them: room for the iris, the pupil and the light in them, not a squint)
+      e.group.scale.setScalar(on ? 1.3 : 1);
       if (this.pixTexture && e.eyeMat.uniforms.uLidTex.value > 0.5) e.eyeMat.uniforms.uLidMap.value = on ? this.pixTexture : this.painted;
     }
     this.whiskers.setPixelArt(on);
