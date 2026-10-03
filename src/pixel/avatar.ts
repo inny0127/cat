@@ -4,7 +4,7 @@ import type { PoseName } from '../cat3d/pose';
 import { NEUTRAL, type Mood } from '../cat3d/mood';
 import type { Avatar } from '../sim/avatar';
 import type { EarMood, TailMood } from '../rig/animator';
-import { Stretch, chooseAct, groomChest, groomFlank, knead, restingPose, toBed, toWindow, wander, washFace, yawn, type Act, type Ctx, sunbathe, Play, Sill, type SillSpot } from './behave';
+import { Stretch, chooseAct, groomChest, groomFlank, knead, restingPose, toBed, toWindow, wander, washFace, yawn, type Act, type Ctx, sunbathe, Play, Sill, Hunt, type SillSpot } from './behave';
 
 const LYING: PoseName[] = ['loaf', 'sphinx', 'side', 'curl'];
 const wrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
@@ -75,7 +75,13 @@ export class PixelAvatar implements Avatar {
     this.ctx.rain = r;
   }
   /** what goes by outside the window, and the chirp it gets */
-  outside: { birds: () => THREE.Vector3 | null; chirp: () => void; sound: (name: string, gain: number) => void } | null = null;
+  outside: {
+    birds: () => THREE.Vector3 | null; chirp: () => void; sound: (name: string, gain: number) => void;
+    /** a moth or a fly in the room, and a swipe that sends it off */
+    bug?: () => { p: THREE.Vector3; resting: boolean } | null; scareBug?: (from: THREE.Vector3) => void;
+  } | null = null;
+  /** after a hunt, a while before the next */
+  private huntRest = 0;
   /** something to do once it is down off the sill (asked to go somewhere while up there) */
   private afterPerch: (() => void) | null = null;
 
@@ -128,6 +134,8 @@ export class PixelAvatar implements Avatar {
       birds: () => this.outside?.birds() ?? null,
       sound: (name, gain) => this.outside?.sound(name, gain),
       chirp: () => this.outside?.chirp(),
+      bug: () => this.outside?.bug?.() ?? null,
+      scareBug: (from) => this.outside?.scareBug?.(from),
       perch: (h) => { this.cat.perch = h; },
       hold: (y) => { this.cat.liftHold = y; },
     };
@@ -289,8 +297,15 @@ export class PixelAvatar implements Avatar {
         this.act.stop(c);
         // played itself out: not again for a while
         if (this.act instanceof Play) this.playRest = this.act.tired ? 60 : 6;
+        if (this.act instanceof Hunt) this.huntRest = 40 + Math.random() * 60;
         this.act = null;
       }
+      return;
+    }
+    // a moth or a fly about: nothing else matters for a while
+    const bug = c.bug();
+    if (bug && this.huntRest <= 0 && this.mood.sleepy < 0.7 && Math.hypot(bug.p.x - m.pos.x, bug.p.z - m.pos.z) < 2.2) {
+      this.act = new Hunt();
       return;
     }
     this.lieIn(this.mode === 'alert' ? 'sit' : this.rest, atHome, dt);
@@ -335,6 +350,7 @@ export class PixelAvatar implements Avatar {
     }
     if (this.errand) this.doErrand(dt);
     this.playRest = Math.max(0, this.playRest - dt);
+    this.huntRest = Math.max(0, this.huntRest - dt);
     // a ball someone is moving about: watched a moment, then it has to have it
     if (this.lure && this.act?.name !== 'play') {
       this.lureT += dt * (this.lureMoving ? 1 : 0.25);
@@ -357,7 +373,7 @@ export class PixelAvatar implements Avatar {
     // eyes on the finger, or on you (through the window); asleep, dead or busy, nowhere (up on
     // the sill it looks where it likes: out of the window)
     const busy = this.errand || (this.act && this.act.name !== 'window' && this.act.name !== 'knead');
-    if ((this.act instanceof Sill || this.act instanceof Play) && this.mode !== 'enjoy') { /* the act decides */ }
+    if ((this.act instanceof Sill || this.act instanceof Play || this.act instanceof Hunt) && this.mode !== 'enjoy') { /* the act decides */ }
     else if (!this.alive || this.sleep > 0.5 || busy) m.lookAt(null);
     else if (this.lure) m.lookAt(this.lure, 1);
     else if (this.gazeTarget && this.screenToWorld(this.gazeTarget.x, this.gazeTarget.y, this.look)) m.lookAt(this.look, 0.9);

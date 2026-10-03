@@ -1276,6 +1276,114 @@ export class Room {
     return y;
   }
 
+  /** a moth round the lit lamp by night; a fly about the window by day in the warm months: what
+   *  it is, where, where it is making for, how long it has been about and will be, how long yet it
+   *  rests where it has landed, and whether it is on its way out */
+  private bug: {
+    kind: 'moth' | 'fly'; p: THREE.Vector3; v: THREE.Vector3; aim: THREE.Vector3; t: number; life: number;
+    rest: number; land: boolean; turn: number; leaving: boolean;
+  } | null = null;
+  private bugIn = 60 + Math.random() * 180;
+
+  /** the insect about the room, if there is one */
+  bugAt() {
+    return this.bug ? { p: this.bug.p, kind: this.bug.kind, resting: this.bug.rest > 0 } : null;
+  }
+
+  /** something swiped at it: off it goes, quick, away from there and up */
+  scareBug(from: THREE.Vector3) {
+    const B = this.bug;
+    if (!B) return;
+    B.rest = 0;
+    const d = B.p.clone().sub(from).setY(0);
+    if (d.lengthSq() < 1e-6) d.set(Math.random() - 0.5, 0, Math.random() - 0.5);
+    d.normalize();
+    B.v.set(d.x * 1.1, 0.9, d.z * 1.1);
+    B.aim.copy(B.p).addScaledVector(d, 0.4).setY(Math.min(1.25, B.p.y + 0.35));
+    B.land = false;
+    B.turn = 0.6;
+  }
+
+  /** let one in now (the lab, tests, reels) */
+  letBugIn(kind: 'moth' | 'fly') {
+    const { l, r, t, z } = this.win;
+    this.bug = {
+      kind, p: new THREE.Vector3(l + Math.random() * (r - l), t - 0.06, z + 0.04), v: new THREE.Vector3(), aim: new THREE.Vector3(),
+      t: 0, life: 50 + Math.random() * 90, rest: 0, land: false, turn: 0, leaving: false,
+    };
+    this.bug.aim.copy(this.bug.p);
+  }
+
+  /** the moth or fly about its business: now and then one comes in at the window (a moth only while
+   *  the lamp is lit, a fly by day in the warm months), stays a while and goes */
+  private flyBug(dt: number, lamp: boolean, day: number, month: number, rain: number) {
+    const rnd = (a: number, b: number) => a + Math.random() * (b - a);
+    if (!this.bug) {
+      if ((this.bugIn -= dt) > 0) return;
+      this.bugIn = rnd(150, 420);
+      if (lamp && month >= 2 && month <= 10) this.letBugIn('moth');
+      else if (!lamp && day > 0.6 && rain < 0.3 && month >= 4 && month <= 8) this.letBugIn('fly');
+      return;
+    }
+    const B = this.bug, p = B.p, v = B.v;
+    B.t += dt;
+    const { l, r, b, t, z } = this.win;
+    if (!B.leaving && (B.t > B.life || (B.kind === 'moth' && !lamp))) {
+      // out the way it came: up to the top of the window
+      B.leaving = true;
+      B.rest = 0;
+      B.aim.set(rnd(l, r), t + 0.3, z + 0.02);
+    }
+    if (B.rest > 0) {
+      B.rest -= dt;
+      v.set(0, 0, 0);
+      return;
+    }
+    let speed: number, steer: number, jitter: number;
+    if (B.kind === 'moth' && !B.leaving) {
+      // round and round the lamp's shade, close in and bumping it, now and then out a little way
+      // (a little toward the room's middle, where the light falls)
+      const L = this.lampPos;
+      const a = B.t * 2.3 + Math.sin(B.t * 0.9) * 1.5;
+      const rad = 0.16 + 0.06 * Math.sin(B.t * 0.7) + 0.16 * Math.max(0, Math.sin(B.t * 0.23)) ** 6;
+      B.aim.set(L.x + 0.09 + Math.cos(a) * rad * 1.3, L.y + 0.02 + 0.08 * Math.sin(B.t * 1.3) + 0.04 * Math.sin(B.t * 3.1), L.z + 0.05 + Math.sin(a) * rad);
+      speed = 0.55; steer = 7; jitter = 2.2;
+    } else {
+      // a fly: quick straight darts with sudden turns; now and then it lands on the sill, the wall
+      // or the glass, and sits there rubbing its legs
+      if (!B.leaving && ((B.turn -= dt) <= 0 || p.distanceTo(B.aim) < 0.025)) {
+        if (B.land && p.distanceTo(B.aim) < 0.03) {
+          B.rest = rnd(1.5, 5);
+          B.land = false;
+          B.turn = 0;
+          return;
+        }
+        B.turn = rnd(0.25, 0.9);
+        B.land = Math.random() < 0.3;
+        if (B.land) {
+          const where = Math.random();
+          if (where < 0.45) B.aim.set(rnd(l + 0.05, r - 0.05), b + 0.006, z + rnd(0.04, 0.18));         // the sill
+          else if (where < 0.8) B.aim.set(rnd(l + 0.03, r - 0.03), rnd(b + 0.1, t - 0.08), z - 0.045); // the glass
+          else B.aim.set(rnd(l - 0.3, l - 0.08) * (Math.random() < 0.5 ? 1 : -1), rnd(0.45, 1.1), z + 0.006);   // the wall
+          B.turn = 3;
+        } else B.aim.set(rnd(l - 0.15, r + 0.15), rnd(0.3, 1.15), z + rnd(0.05, 0.6));
+      }
+      speed = B.leaving ? 0.7 : 0.75; steer = 9; jitter = 1.2;
+    }
+    const want = B.aim.clone().sub(p);
+    const dist = want.length();
+    want.multiplyScalar(Math.min(1, dist / 0.05) * speed / Math.max(dist, 1e-4));
+    v.lerp(want, Math.min(1, dt * steer));
+    v.x += (Math.random() - 0.5) * jitter * dt;
+    v.y += (Math.random() - 0.5) * jitter * dt;
+    v.z += (Math.random() - 0.5) * jitter * dt;
+    p.addScaledVector(v, dt);
+    // never through the floor, the wall or the glass
+    p.y = Math.max(0.03, p.y);
+    p.z = Math.max(p.z, (p.x > l && p.x < r && p.y > b && p.y < t) ? z - 0.05 : z + 0.004);
+    if (B.leaving && (p.y > t + 0.25 || Math.abs(p.x) > 1.2)) this.bug = null;
+  }
+
   /** dust motes drifting in the sunbeam (world points and how bright each is) */
   dust(dt: number, day: number) {
     const K = this.lights.uKeyDir.value as THREE.Vector3;
@@ -1340,6 +1448,7 @@ export class Room {
     this.time += dt;
     this.timeU.value = this.time;
     this.rollYarn(dt);
+    this.flyBug(dt, d.lamp > 0.5, 1 - Room.dark(hour), date.getMonth(), rain);
     this.sky.uniforms.uTime.value = this.time;
     this.sky.uniforms.uHour.value = hour;
     // the clock on the wall keeps the room's time

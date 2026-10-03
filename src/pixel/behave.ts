@@ -47,6 +47,10 @@ export interface Ctx {
   /** birds going by outside the window (where, on the glass), if any; a chirp at them */
   birds: () => THREE.Vector3 | null;
   chirp: () => void;
+  /** a moth or a fly about the room, if there is one (resting: landed somewhere), and a swipe at
+   *  it from a point, which sends it off */
+  bug: () => { p: THREE.Vector3; resting: boolean } | null;
+  scareBug: (from: THREE.Vector3) => void;
   /** up on something this high (null: on the floor), and held in the air at a height (a jump) */
   perch: (h: number | null) => void;
   hold: (lift: number | null) => void;
@@ -468,6 +472,104 @@ export class Play implements Act {
 
   stop(c: Ctx) {
     this.bed?.stop(c);
+    c.m.layer = null;
+    c.m.lookAt(null);
+  }
+}
+
+/**
+ * A moth or a fly in the room: the cat's eyes and head go with it wherever it goes, ears up, the
+ * tip of the tail twitching, and now and then it chatters at it, jaw quivering. Landed low, it is
+ * crept up on; come within reach, the cat rears up on its haunches and swipes at it (and off it
+ * goes). In the end it loses interest, or the thing goes out of the window.
+ */
+export class Hunt implements Act {
+  readonly name = 'hunt';
+  private phase: 'watch' | 'go' | 'swat' = 'watch';
+  private t = 0;
+  private total = 0;
+  private readonly patience = rand(30, 70);
+  private chatterIn = rand(1.5, 4);
+  private chatter = -1;
+  private side = 1;
+  private hit = false;
+  private calm = 0;
+  private readonly fwd = new THREE.Vector3();
+
+  private next(phase: Hunt['phase']) {
+    this.phase = phase;
+    this.t = 0;
+  }
+
+  update(dt: number, c: Ctx) {
+    const m = c.m;
+    const bug = c.bug();
+    this.t += dt;
+    this.total += dt;
+    if (!bug || (this.total > this.patience && this.phase !== 'swat')) return false;
+    const b = bug.p;
+    const dx = b.x - m.pos.x, dz = b.z - m.pos.z, dist = Math.hypot(dx, dz);
+    const face = Math.atan2(dx, dz);
+    const low = b.y < 0.42;
+    this.fwd.set(Math.sin(m.yaw), 0, Math.cos(m.yaw));
+    m.lookAt(b, 1);
+    // chattering at it now and then: a quick quiver of the jaw and a little twittering
+    if (this.chatter < 0 && (this.chatterIn -= dt) <= 0) { this.chatter = 0; this.chatterIn = rand(3, 7); c.chirp(); }
+    let jaw = 0;
+    if (this.chatter >= 0) {
+      this.chatter += dt;
+      jaw = 0.1 + 0.1 * Math.max(0, Math.sin(this.chatter * Math.PI * 2 * 11));
+      if (this.chatter > 0.7) this.chatter = -1;
+    }
+    const keen: PoseLayer = { earFwd: 1, pupil: 0.95, eyeOpen: 1, whisker: 0.9, jaw, tailCurl: 0.6 * Math.sin(this.total * 9) };
+    this.calm = Math.max(0, this.calm - dt);
+    switch (this.phase) {
+      case 'watch': {
+        m.layer = { pose: keen, w: Math.min(1, this.t / 0.4) };
+        if (!m.goal && low && this.calm <= 0) {
+          if (dist < 0.36) {
+            // squarely at it first, then up and at it
+            if (Math.abs(wrapA(face - m.yaw)) > 0.5) m.walkTo(m.pos.clone(), 0.15, face);
+            else { this.hit = false; this.side = Math.random() < 0.5 ? 1 : -1; this.next('swat'); }
+          } else if (bug.resting && dist < 1.4) {
+            // landed low within a few strides: crept up on, low to the floor
+            const stop = new THREE.Vector3(b.x - (dx / dist) * 0.28, 0, b.z - (dz / dist) * 0.28);
+            m.setPosture('crouch');
+            m.walkTo(stop, 0.18, face, () => this.next('watch'));
+            this.next('go');
+          }
+        }
+        return true;
+      }
+      case 'go': {
+        m.layer = { pose: { ...keen, tailLift: -0.35 }, w: 1 };
+        // it took off: stop and watch again
+        if (!bug.resting || !low) { m.stop(); this.next('watch'); }
+        return true;
+      }
+      case 'swat': {
+        // up on the haunches and a forepaw flung up and out at it, then down again
+        const u = Math.min(1, this.t / 0.55), up = Math.sin(Math.PI * u);
+        const reach = Math.min(0.32, Math.max(0.16, b.y - 0.02)), out = Math.min(0.26, Math.max(0.12, dist));
+        const paw = { planted: 0, frame: 0, x: 0.02 + 0.03 * up, y: 0.05 + (reach - 0.05) * up, z: 0.08 + (out - 0.08) * up, flex: 0.5 * up };
+        m.setPosture('sit');
+        m.layer = {
+          pose: { ...keen, chestPitch: -1.12 * up - 0.97 * (1 - up), hipY: 0.064 + 0.03 * up, neckPitch: 0.1 * up, [this.side > 0 ? 'LF' : 'RF']: paw },
+          w: 1,
+        };
+        if (!this.hit && u > 0.45) {
+          this.hit = true;
+          const pawAt = m.pos.clone().addScaledVector(this.fwd, out).setY(reach);
+          if (pawAt.distanceTo(b) < 0.18) c.scareBug(pawAt);
+        }
+        if (u >= 1) { this.calm = rand(1.5, 3); this.next('watch'); }
+        return true;
+      }
+    }
+    return true;
+  }
+
+  stop(c: Ctx) {
     c.m.layer = null;
     c.m.lookAt(null);
   }

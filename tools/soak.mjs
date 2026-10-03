@@ -25,6 +25,7 @@ const report = await page.evaluate(async (minutes) => {
     if (i % 1500 === 0) app.rainOverride = Math.random() < 0.3 ? '1' : '0';
     if (i % 400 === 0 && Math.random() < 0.6) { const a = acts[Math.floor(Math.random() * acts.length)]; app.avatar.startAct(a); }
     if (i % 2000 === 1000 && Math.random() < 0.3) app.brain.toSleep(0.7);
+    if (i % 900 === 450 && Math.random() < 0.5) app.room.letBugIn(Math.random() < 0.5 ? 'moth' : 'fly');
     if (i % 2000 === 1500) app.brain.toAwake('rest');
     // now and then a finger takes the ball of wool and drags it about a few seconds
     if (i % 300 === 0 && !drag && Math.random() < 0.4) {

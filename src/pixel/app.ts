@@ -79,6 +79,8 @@ export class PixelApp {
       birds: () => this.room.birds(),
       chirp: () => this.audio.play('chirp', { gain: 0.45, pan: this.catPan() }),
       sound: (name, gain) => this.audio.play(name, { gain, pan: this.catPan() }),
+      bug: () => this.room.bugAt(),
+      scareBug: (from) => this.room.scareBug(from),
     };
     // its paws on the boards: soft, and softer still for a shuffle of the feet
     this.cat.stepper.onLand = (_leg, settle) => {
@@ -330,6 +332,7 @@ export class PixelApp {
    *  point on the floor under it */
   private toyFinger: { x: number; y: number; off: THREE.Vector3 } | null = null;
   private toyWasPinned = false;
+  private readonly bugLight = new THREE.Vector3();
   private overToy = false;
   private readonly floorRay = new THREE.Raycaster();
 
@@ -518,6 +521,10 @@ export class PixelApp {
     // the tea on the books steams; by day dust turns in the sun
     this.stage.setSteam(this.room.mugTop, 1);
     this.stage.setMotes(this.room.dust(dt, (1 - dark) * (1 - rain)));
+    // a moth round the lamp, a fly at the window: their wings a blur of up and down
+    const bug = this.room.bugAt();
+    this.stage.setBug(bug?.p ?? null, bug?.kind, bug ? !bug.resting && Math.sin(now * (bug.kind === 'moth' ? 38 : 70)) > 0 : false,
+      this.bugLight.set(1, 1, 1).lerp(new THREE.Vector3(1.15, 0.95, 0.75), dark));
     // the radio: its dial lit and notes rising while it plays; slower and softer at night
     this.stage.setNotes(this.room.setRadio(this.audio.musicPlaying, dt));
     this.audio.setNight(dark);

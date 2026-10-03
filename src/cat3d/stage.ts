@@ -96,6 +96,9 @@ uniform vec3 uPalEye[${PAL_EYE.length}];
 uniform vec3 uSteam;     // steam off a hot drink: where it rises from (art pixels), and how much
 uniform vec3 uMotes[16]; // dust in the sunlight: where (art pixels), and how bright (0 for none)
 uniform vec3 uNotes[4];  // music notes rising off the radio: where (art pixels), how bright
+uniform vec4 uBug;       // a moth or a fly: where (art pixels), how far off (view depth), and what
+                         // (0 none, 1 a moth, 2 a fly; its fraction, the wings' beat)
+uniform vec3 uBugCol;    // ... and the colour of the light on it
 uniform float uTime;
 uniform vec3 uTintSun;   // the colour of the hour: on what the sun lights,
 uniform vec3 uTintShade; // ... on everything else,
@@ -326,6 +329,30 @@ void main() {
   }
   col = mix(col, vec3(1.0, 0.97, 0.9), haze);
   glow = max(glow, haze * 0.5);
+  // a moth (pale wings beating, its body between them) or a fly (a dark speck, its wings
+  // catching the light), behind whatever stands nearer
+  if (uBug.w >= 1.0) {
+    ivec2 q = p - ivec2(floor(uBug.xy));
+    bool behind = depth < 0.99999 && lin(depth) < uBug.z - 0.03;
+    int what = int(uBug.w);
+    bool up = fract(uBug.w) > 0.5;
+    if (!behind && what == 1) {
+      // five wide, three high: wings up, then down
+      const int UP[3] = int[](4, 31, 17);
+      const int DN[3] = int[](17, 31, 4);
+      if (q.x >= -2 && q.x <= 2 && q.y >= -1 && q.y <= 1) {
+        int row = up ? UP[q.y + 1] : DN[q.y + 1];
+        if (((row >> (q.x + 2)) & 1) != 0) {
+          bool body = q.x == 0;
+          col = (body ? vec3(0.42, 0.33, 0.3) : vec3(0.86, 0.79, 0.66)) * uBugCol;
+          glow = max(glow, body ? 0.0 : 0.25);
+        }
+      }
+    } else if (!behind && what == 2) {
+      if (q == ivec2(0, 0) || q == ivec2(1, 0)) col = vec3(0.13, 0.11, 0.15);
+      else if (up && (q == ivec2(0, 1) || q == ivec2(1, 1))) col = mix(col, vec3(0.85, 0.88, 0.95) * uBugCol, 0.6);
+    }
+  }
   gl_FragColor = vec4(col, glow);
 }`;
 
@@ -466,6 +493,7 @@ export class Stage {
         uSteam: { value: new THREE.Vector3() },
         uMotes: { value: Array.from({ length: 16 }, () => new THREE.Vector3()) },
         uNotes: { value: Array.from({ length: 4 }, () => new THREE.Vector3()) },
+        uBug: { value: new THREE.Vector4() }, uBugCol: { value: new THREE.Vector3(1, 1, 1) },
         uTime: { value: 0 },
         uTintSun: { value: new THREE.Vector3(1, 1, 1) },
         uTintShade: { value: new THREE.Vector3(1, 1, 1) },
@@ -635,6 +663,17 @@ export class Stage {
       this.toArt(m.p, a);
       u[i].set(a.x - 2, a.y, m.b);
     }
+  }
+
+  /** a moth or a fly at a world point (null: none), its wings up or down, in a light of a colour */
+  setBug(at: THREE.Vector3 | null, kind: 'moth' | 'fly' = 'moth', up = false, light?: THREE.Vector3) {
+    if (!this.pixel) return;
+    const u = this.pixel.mat.uniforms.uBug.value as THREE.Vector4;
+    if (!at) { u.set(0, 0, 0, 0); return; }
+    const a = this.toArt(at, new THREE.Vector2());
+    const depth = -at.clone().applyMatrix4(this.camera.matrixWorldInverse).z;
+    u.set(a.x, a.y, depth, (kind === 'moth' ? 1 : 2) + (up ? 0.75 : 0.25));
+    if (light) (this.pixel.mat.uniforms.uBugCol.value as THREE.Vector3).copy(light);
   }
 
   /** the pixel pass's clock (steam) */
