@@ -82,6 +82,20 @@ export class PixelAvatar implements Avatar {
   } | null = null;
   /** after a hunt, a while before the next */
   private huntRest = 0;
+  /** a sound it turned to: where, and for how much longer it looks */
+  private heard: { at: THREE.Vector3; t: number } | null = null;
+
+  /** a sound somewhere in the room or outside: an ear goes to it, and an idle cat awake glances
+   *  that way a moment */
+  hear(at: THREE.Vector3) {
+    if (!this.alive || this.isHidden) return;
+    if (this.sleep > 0.5) {
+      if (Math.random() < 0.4) this.cat.motor.flickEar(Math.random() < 0.5 ? 'L' : 'R', 0.5);
+      return;
+    }
+    this.cat.motor.flickEar('both', 0.6);
+    if (!this.act && !this.errand && !this.trip && Math.random() < 0.6) this.heard = { at: at.clone(), t: 0.9 + Math.random() * 0.8 };
+  }
   /** something to do once it is down off the sill (asked to go somewhere while up there) */
   private afterPerch: (() => void) | null = null;
 
@@ -376,6 +390,7 @@ export class PixelAvatar implements Avatar {
     if ((this.act instanceof Sill || this.act instanceof Play || this.act instanceof Hunt) && this.mode !== 'enjoy') { /* the act decides */ }
     else if (!this.alive || this.sleep > 0.5 || busy) m.lookAt(null);
     else if (this.lure) m.lookAt(this.lure, 1);
+    else if (this.heard && (this.heard.t -= dt) > 0) m.lookAt(this.heard.at, 0.8);
     else if (this.gazeTarget && this.screenToWorld(this.gazeTarget.x, this.gazeTarget.y, this.look)) m.lookAt(this.look, 0.9);
     else m.lookAt(this.viewer(), this.trip ? 0.3 : 0.85);
   }

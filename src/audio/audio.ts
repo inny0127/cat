@@ -127,15 +127,17 @@ export class CatAudio {
   private crickGain: GainNode | null = null;
   /** the world outside the window: birds by day (most at dawn and in spring), crickets on summer
    *  and early autumn nights; rain quiets both */
-  setOutside(dt: number, o: { day: number; hour: number; month: number; rain: number }) {
+  setOutside(dt: number, o: { day: number; hour: number; month: number; rain: number }): 'bird' | null {
     const ctx = this.ctx;
-    if (!ctx || !this.ready || this.muted) return;
+    if (!ctx || !this.ready || this.muted) return null;
+    let heard: 'bird' | null = null;
     const spring = o.month >= 2 && o.month <= 6 ? 1 : o.month >= 7 && o.month <= 9 ? 0.6 : 0.25;
     const dawn = Math.exp(-(((o.hour - 6.8) / 1.4) ** 2));
     const birdy = o.day * (1 - o.rain) * spring * (0.5 + dawn);
     if (birdy > 0.08 && (this.birdIn -= dt) <= 0) {
       this.birdIn = rand(5, 16) / (0.4 + birdy);
       this.play(Math.random() < 0.6 ? 'birdChip' : 'birdSong', { out: true, gain: rand(0.1, 0.24) * Math.min(1, birdy + 0.3), pan: rand(-0.8, 0.8), rate: rand(0.94, 1.08) });
+      heard = 'bird';
     }
     const crick = (1 - o.day) * (1 - o.rain) * (o.month >= 5 && o.month <= 9 ? 1 : 0);
     if (crick > 0.05 && !this.crickSrc) {
@@ -154,6 +156,7 @@ export class CatAudio {
       this.crickSrc.disconnect();
       this.crickSrc = null;
     }
+    return heard;
   }
 
   private async build() {

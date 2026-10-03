@@ -109,6 +109,7 @@ export class PixelApp {
         if (this.hitPrint(x, y)) { this.showCredits(true); return; }
         if (this.hitThing(this.room.radio, x, y, 24)) {
           this.audio.music(!this.audio.musicOn);
+          this.avatar.hear(this.room.radio.getWorldPosition(new THREE.Vector3()));
           this.haptic.tap?.();
           return;
         }
@@ -511,7 +512,8 @@ export class PixelApp {
     const rain = this.rainOverride !== null ? +this.rainOverride : rainAt(clock);
     this.stage.setDayLight(this.room.update(s, hour, dt, rain, clock));
     this.audio.setRain(rain);
-    this.audio.setOutside(dt, { day: 1 - dark, hour, month: clock.getMonth(), rain });
+    // a bird outside: the cat's ear goes to it, and if it is awake, a glance at the window
+    if (this.audio.setOutside(dt, { day: 1 - dark, hour, month: clock.getMonth(), rain })) this.avatar.hear(this.room.windowMiddle);
     this.avatar.rain = rain;
     // the phone's bar the colour of the wall at the top of the room
     const tc = dark > 0.5 ? '#3b3150' : '#c99486';

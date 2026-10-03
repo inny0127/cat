@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { AO_GLSL, LIGHT_GLSL } from '../cat3d/fur';
-import { ROOM_LIGHT_GLSL, NOCC, dayLight, skyDay, type DayLight } from '../cat3d/roomlight';
+import { ROOM_LIGHT_GLSL, NOCC, dayLight, rainAt, skyDay, type DayLight } from '../cat3d/roomlight';
 import { PIX, PIX_GLSL, type Material } from '../cat3d/pixclass';
 import type { CatState } from '../sim/state';
 import { seasonAt } from './season';
@@ -164,6 +164,7 @@ uniform float uPar;      // where you look from, across the room from the window
 uniform float uRain;     // 0 dry .. 1 raining (or snowing, in winter)
 uniform float uSnowing;  // 1: what falls is snow
 uniform float uSnowLie;  // snow lying on the roofs and the tree (0 .. 1)
+uniform float uRainbow;  // a rainbow, after rain by day (0 .. 1)
 uniform vec3 uLeafA;     // the tree's leaves by the season: lit,
 uniform vec3 uLeafB;     // ... in shade,
 uniform vec3 uLeafC;     // ... and the season's other colour among them (autumn's red, spring's pink)
@@ -245,6 +246,16 @@ void main() {
       int hb = band4(1.0 - smoothstep(r, r + 13.0, sd), px);
       if (hb > 0) c = mix(c, halo, (float(hb) / 3.0) * 0.55 * low);
       if (sd < r) { c = mix(c, disc, low); if (low > 0.5) a = 0.2; }
+    }
+    // after rain, with the sun out again: a rainbow, low and wide over the town
+    if (uRainbow > 0.01) {
+      float rk = (length(sp - vec2(0.45 * Wd, -0.55 * H)) / H - 1.0) / 0.075;
+      if (rk > 0.0 && rk < 1.0) {
+        int rb = int(floor((1.0 - rk) * 6.0));
+        vec3 rc = rb == 0 ? hex(236.0, 122.0, 122.0) : rb == 1 ? hex(240.0, 172.0, 112.0) : rb == 2 ? hex(240.0, 224.0, 132.0)
+          : rb == 3 ? hex(142.0, 208.0, 142.0) : rb == 4 ? hex(128.0, 170.0, 230.0) : hex(170.0, 140.0, 220.0);
+        c = mix(c, rc, 0.42 * uRainbow * smoothstep(0.0, 0.12, rk) * smoothstep(1.0, 0.88, rk));
+      }
     }
     // slow clouds, lit gold and pink at the ends of the day
     float n = noise(sp * vec2(0.09, 0.18) + vec2(uTime * 0.02, 0.0)) * 0.7 + noise(sp * vec2(0.2, 0.4) + vec2(uTime * 0.03, 3.0)) * 0.3;
@@ -527,7 +538,7 @@ export class Room {
     this.sky = new THREE.ShaderMaterial({
       uniforms: {
         uTime: { value: 0 }, uHour: { value: 12 }, uSkyPx: { value: new THREE.Vector2(48, 56) }, uPxSize: { value: 0.01 }, uPar: { value: 0 }, uRain: { value: 0 },
-        uSnowing: { value: 0 }, uSnowLie: { value: 0 },
+        uSnowing: { value: 0 }, uSnowLie: { value: 0 }, uRainbow: { value: 0 },
         uLeafA: { value: new THREE.Vector3(122 / 255, 162 / 255, 96 / 255) }, uLeafB: { value: new THREE.Vector3(76 / 255, 116 / 255, 76 / 255) },
         uLeafC: { value: new THREE.Vector3(1, 0.7, 0.75) }, uLeafs: { value: new THREE.Vector2(1, 0) },
       },
@@ -1300,6 +1311,15 @@ export class Room {
   } | null = null;
   private bugIn = 60 + Math.random() * 180;
 
+  /** a rainbow now (the lab, tests), whatever the weather was */
+  rainbowOverride: number | null = null;
+
+  /** the middle of the window (where the world outside is heard from) */
+  get windowMiddle() {
+    const { l, r, b, t, z } = this.win;
+    return new THREE.Vector3((l + r) / 2, (b + t) / 2, z);
+  }
+
   /** the insect about the room, if there is one */
   bugAt() {
     return this.bug ? { p: this.bug.p, kind: this.bug.kind, resting: this.bug.rest > 0 } : null;
@@ -1459,6 +1479,10 @@ export class Room {
     (su.uLeafC.value as THREE.Vector3).set(...se.leafC);
     (su.uLeafs.value as THREE.Vector2).set(se.full, se.other);
     su.uSnowing.value = se.snowing ? 1 : 0;
+    // a rainbow for a while after rain stops by day (not in winter's snow)
+    const before = rainAt(new Date(date.getTime() - 30 * 60e3));
+    const sunny = ss(7.5, 8.5, hour) * (1 - ss(17.0, 18.0, hour));
+    su.uRainbow.value = this.rainbowOverride ?? Math.max(0, Math.min(1, before * 1.5 - rain * 3)) * sunny * (se.snowing ? 0 : 1);
     su.uSnowLie.value = se.winter;
     this.time += dt;
     this.timeU.value = this.time;
