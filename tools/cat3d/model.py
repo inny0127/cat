@@ -24,8 +24,7 @@ bone('neck1', 'chest', (0, 0.226, 0.088))
 bone('neck2', 'neck1', (0, 0.246, 0.116))
 bone('head', 'neck2', (0, 0.266, 0.136))
 HC = P(0, 0.276, 0.159)      # centre of the head
-HS = 1.4                      # the whole head (skull, face, eyes, ears) is drawn at this scale: a little
-                              # larger than life, which reads as young and endearing
+HS = 1.22                     # the whole head (skull, face, eyes, ears) is drawn at this scale
 bone('jaw', 'head', tuple(HC + P(0, -0.014, -0.004) * HS))
 for s, x in (('L', 1), ('R', -1)):
     bone('ear' + s, 'head', tuple(HC + P(x * 0.0245, 0.03, 0.004) * HS))
@@ -47,9 +46,9 @@ for i in range(TAIL_N):
 
 def pos(name): return BONES[name][1]
 
-EYE_R = 0.0090 * HS          # big eyes
+EYE_R = 0.0104 * HS          # a cat's eyeball is large; the lids show only part of it
 EYE_EULER = (-0.12, 0.22, 0.08)          # three.js XYZ order, left eye; the right one is mirrored
-def eye_centre(x): return HC + P(x * 0.0152, 0.0025, 0.0288) * HS
+def eye_centre(x): return HC + P(x * 0.0145, 0.0029, 0.0277) * HS
 def euler_xyz(a, b, c):
     ca, sa, cb, sb, cc, sc = np.cos(a), np.sin(a), np.cos(b), np.sin(b), np.cos(c), np.sin(c)
     rx = np.array([[1, 0, 0], [0, ca, -sa], [0, sa, ca]])
@@ -78,23 +77,25 @@ ell('hips', (0, 0.208, -0.150), (0.050, 0.056, 0.050), k=0.03)
 # neck carrying the head a little above the back
 cone('neck1', (0, 0.218, 0.082), (0, 0.246, 0.116), 0.041, 0.036, k=0.03)
 cone('neck2', (0, 0.246, 0.116), (0, 0.266, 0.140), 0.036, 0.031, k=0.025)
-# head: a wide, low cranium over full cheeks; the muzzle drops well below the eyes, nose leather in front
-ell('head', H(0, 0.009, -0.003), (0.031, 0.029, 0.030), k=0.012)        # cranium
-ell('head', H(0, 0.019, 0.0), (0.029, 0.017, 0.029), k=0.012)           # round forehead
-ell('head', H(0, 0.011, 0.014), (0.026, 0.016, 0.023), k=0.010)         # brow
+# head: fitted to a sculpt of a real cat's head ("Cat named Maggie" by chambersu, CC BY 4.0,
+# sketchfab.com/3d-models/7a078f6d97c748e3b19a042d71e2f012), aligned on the eyes and fitted by
+# least squares (head-local units; the head is drawn HS times larger)
+ell('head', H(0, 0.01440, -0.02300), (0.03414, 0.01554, 0.02088), k=0.0120)   # cranium
+ell('head', H(0, 0.02715, 0.00008), (0.03054, 0.01898, 0.03708), k=0.0120)   # forehead and crown
+ell('head', H(0, 0.01167, 0.02740), (0.02422, 0.01630, 0.01994), k=0.0100)   # brow
 for x in (1, -1):
-    # a soft rim round the big eyes
-    ell('head', H(x * 0.0162, 0.0178, 0.022), (0.0110, 0.0050, 0.0078), k=0.006)  # brow ridge
-    ell('head', H(x * 0.0178, -0.0095, 0.022), (0.0110, 0.0046, 0.0078), k=0.006)  # cheekbone
+    ell('head', H(x * 0.00411, 0.01643, 0.02779), (0.02133, 0.01478, 0.01237), k=0.0060)   # brow ridges
 for x in (1, -1):
-    # round, full cheeks; a short muzzle tucked close under the eyes
-    ell('head', H(x * 0.0182, -0.0075, 0.006), (0.0172, 0.0195, 0.0195), k=0.014)  # cheeks
-    ell('head', H(x * 0.0076, -0.0158, 0.0352), (0.0086, 0.0070, 0.0078), k=0.006)  # whisker pads
-ell('head', H(0, -0.0132, 0.029), (0.0145, 0.0105, 0.0135), k=0.007)    # muzzle
-ell('head', H(0, -0.0035, 0.0335), (0.0080, 0.0098, 0.0115), k=0.008)  # nose bridge
-ell('head', H(0, -0.0100, 0.0410), (0.0048, 0.0034, 0.0044), k=0.003)   # nose leather: small
-ell('head', H(0, -0.0121, 0.0414), (0.0026, 0.0021, 0.0032), k=0.003)   # point of the nose
-ell('jaw', H(0, -0.0225, 0.0262), (0.0074, 0.0050, 0.0078), k=0.006)     # a small chin, tucked in
+    ell('head', H(x * 0.02132, -0.01449, 0.01254), (0.00385, 0.01346, 0.01978), k=0.0060)   # cheekbones
+for x in (1, -1):
+    ell('head', H(x * 0.02653, 0.00814, 0.00611), (0.00840, 0.01927, 0.01809), k=0.0140)   # cheeks
+for x in (1, -1):
+    ell('head', H(x * 0.00186, -0.01692, 0.03591), (0.01439, 0.01395, 0.00250), k=0.0060)   # whisker pads
+ell('head', H(0, -0.00411, 0.02920), (0.02332, 0.00866, 0.00250), k=0.0070)   # muzzle
+ell('head', H(0, 0.00437, 0.03496), (0.01442, 0.00385, 0.00938), k=0.0080)   # nose bridge
+ell('head', H(0, -0.00096, 0.03910), (0.00768, 0.02812, 0.00604), k=0.0030)   # bridge of the nose down to the leather
+ell('head', H(0, -0.02111, 0.04018), (0.00845, 0.00673, 0.00593), k=0.0030)   # nose
+ell('jaw', H(0, -0.02536, 0.01504), (0.01643, 0.01332, 0.01684), k=0.0060)   # chin and lower jaw
 # eyes: a socket round each eyeball, filled by the lids (a skin sphere just outside the ball;
 # the shader cuts the opening). The ball itself is a separate mesh.
 for x in (1, -1):
@@ -230,8 +231,8 @@ def export_bin(out, meshes, names, corr=None, strands=None):
                  eyeEulerL=list(EYE_EULER), eyeEulerR=[EYE_EULER[0], -EYE_EULER[1], -EYE_EULER[2]],
                  tailBase=TAIL_BASE.round(5).tolist(), tailVec=TAIL_VEC.round(5).tolist(),
                  legTop=0.132, backY=0.262, bellyY=0.15, bib=[0, 0.168, 0.096], ribs=[0, 0.19, -0.01],
-                 nose=(HC + P(0, -0.0095, 0.0455) * HS).round(5).tolist(), headScale=HS,
-                 padL=(HC + P(0.0098, -0.0145, 0.0425) * HS).round(5).tolist(), padR=(HC + P(-0.0098, -0.0145, 0.0425) * HS).round(5).tolist())
+                 nose=(HC + P(0, -0.022, 0.049) * HS).round(5).tolist(), headScale=HS,
+                 padL=(HC + P(0.0105, -0.0285, 0.0445) * HS).round(5).tolist(), padR=(HC + P(-0.0105, -0.0285, 0.0445) * HS).round(5).tolist())
     corr_desc = None
     if corr:
         # half floats: [pose][pos|normal][vertex][xyz]
@@ -577,14 +578,14 @@ def refine_lids(ms, edge=0.0011):
 
 # the eye opening, as the shaders cut it (eye.ts LID_GLSL): directions from the eyeball centre in
 # the eye's frame; ul = heights of the upper and lower lid at the middle
-LID_XC = 0.82
-def lid_edge(dl, side, ul=(0.82, -0.66)):
+LID_XC = 0.62
+def lid_edge(dl, side, ul=(0.5, -0.43)):
     u = dl[:, 0] * side / LID_XC
-    cy = -0.01 + 0.03 * u
+    cy = -0.02 + 0.08 * u
     e = np.maximum(0, 1 - u * u)
     inner = np.maximum(-u, 0)
-    up = cy + (ul[0] + 0.03) * e ** (0.45 + 0.12 * inner) * (1 + 0.04 * u)
-    lo = cy + (ul[1] + 0.03) * e ** (0.5 + 0.15 * inner)
+    up = cy + (ul[0] + 0.03) * e ** (0.45 + 0.35 * inner) * (1 + 0.06 * u)
+    lo = cy + (ul[1] + 0.03) * e ** (0.5 + 0.45 * inner)
     return np.maximum(np.maximum(dl[:, 1] - up, lo - dl[:, 1]), np.abs(dl[:, 0]) - LID_XC)
 
 def hug_lids(v):
