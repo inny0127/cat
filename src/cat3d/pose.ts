@@ -167,6 +167,9 @@ export const POSES = {
 
 export type PoseName = keyof typeof POSES;
 
+/** a pose laid over another: any channel, and any of a paw's numbers */
+export type PoseLayer = { [K in keyof Pose]?: Pose[K] extends Foot ? Partial<Foot> : number };
+
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
 /** every numeric channel of a pose, for blending */

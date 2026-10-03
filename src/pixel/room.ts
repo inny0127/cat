@@ -49,6 +49,8 @@ export class Room {
   private readonly kibble: THREE.Mesh;
   private readonly water: THREE.Mesh;
   private readonly clumps: THREE.InstancedMesh;
+  private readonly sky: THREE.ShaderMaterial;
+  private readonly moon: THREE.Mesh;
 
   constructor(private readonly lights: Record<string, { value: unknown }>, at: { bed: THREE.Vector3 }) {
     const bed = at.bed.clone();
@@ -66,6 +68,27 @@ export class Room {
     const skirt = new THREE.Mesh(new THREE.BoxGeometry(6, 0.05, 0.02), this.mat('#c8a27a'));
     skirt.position.set(0, 0.025, bed.z - 0.94);
     this.group.add(wall, skirt);
+
+    // a window in the back wall: the sky in it follows the real time of day
+    const wz = bed.z - 0.935, wy = 0.52, ww = 0.36, wh = 0.3;
+    this.sky = this.mat('#a9d4ee');
+    const sky = new THREE.Mesh(new THREE.PlaneGeometry(ww, wh), this.sky);
+    sky.position.set(bed.x + 0.06, wy, wz - 0.004);
+    this.moon = new THREE.Mesh(new THREE.CircleGeometry(0.022, 16), this.mat('#f6e7a8'));
+    this.moon.position.set(bed.x + 0.15, wy + 0.07, wz - 0.002);
+    const frame = this.mat('#a57f58');
+    const bar = (w: number, h: number, x: number, y: number) => {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.025), frame);
+      m.position.set(bed.x + 0.06 + x, wy + y, wz + 0.005);
+      this.group.add(m);
+    };
+    bar(ww + 0.04, 0.025, 0, wh / 2 + 0.008);
+    bar(ww + 0.06, 0.03, 0, -wh / 2 - 0.01);
+    bar(0.025, wh + 0.04, -ww / 2 - 0.008, 0);
+    bar(0.025, wh + 0.04, ww / 2 + 0.008, 0);
+    bar(0.015, wh, 0, 0);
+    bar(ww, 0.015, 0, 0);
+    this.group.add(sky, this.moon);
 
     // the bed: a round cushion in a soft rim
     const cushion = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.012, 32), this.mat('#b9cbe0'));
@@ -135,8 +158,12 @@ export class Room {
     });
   }
 
-  /** the bowls and box as the cat's state has them */
-  update(s: CatState) {
+  /** the bowls and box as the cat's state has them; the sky by the hour */
+  update(s: CatState, night = 0, hour = 12) {
+    const dusk = Math.max(0, 1 - Math.abs(hour - 19) / 1.5), dawn = Math.max(0, 1 - Math.abs(hour - 6.5) / 1.2);
+    const sky = night > 0.5 ? '#2a3459' : dusk > 0.3 ? '#f3b17e' : dawn > 0.3 ? '#fde3c0' : '#a9d4ee';
+    (this.sky.uniforms.uColor.value as THREE.Color).setStyle(sky, THREE.SRGBColorSpace);
+    this.moon.visible = night > 0.5;
     const f = Math.max(0, Math.min(1, s.food));
     this.kibble.visible = f > 0.02;
     this.kibble.scale.set(0.55 + 0.45 * Math.sqrt(f), 0.15 + 0.85 * f, 0.55 + 0.45 * Math.sqrt(f));

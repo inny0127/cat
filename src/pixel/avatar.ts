@@ -1,8 +1,10 @@
 import * as THREE from 'three';
 import type { Cat3D } from '../cat3d/cat';
 import type { PoseName } from '../cat3d/pose';
+import { NEUTRAL, type Mood } from '../cat3d/mood';
 import type { Avatar } from '../sim/avatar';
 import type { EarMood, TailMood } from '../rig/animator';
+import { Stretch, chooseAct, groomChest, groomFlank, knead, restingPose, toBed, toWindow, wander, yawn, type Act, type Ctx } from './behave';
 
 export interface Spot {
   x: number;
@@ -48,6 +50,14 @@ export class PixelAvatar implements Avatar {
   spots: { food: THREE.Vector3; water: THREE.Vector3; litter: THREE.Vector3 } | null = null;
   private fading: { t: number; dur: number; onDone?: () => void } | null = null;
   private readonly look = new THREE.Vector3();
+  /** the brain's mode and the cat's feelings (set by the app each frame) */
+  mode = 'sleep';
+  mood: Mood = { ...NEUTRAL };
+  /** what it is doing of its own accord (behave.ts), and when to think of something else */
+  private act: Act | null = null;
+  private nextActIn = 6;
+  private rest: PoseName = 'loaf';
+  private readonly ctx: Ctx;
 
   constructor(
     private readonly cat: Cat3D,
@@ -61,6 +71,86 @@ export class PixelAvatar implements Avatar {
     private readonly viewer: () => THREE.Vector3,
   ) {
     cat.place(home.x, home.z, home.yaw);
+    const h = new THREE.Vector3(home.x, 0, home.z);
+    this.ctx = {
+      m: cat.motor, home: h, window: new THREE.Vector3(home.x, 0, home.z + 0.2),
+      room: { minX: home.x - 0.22, maxX: home.x + 0.22, minZ: home.z - 0.3, maxZ: home.z + 0.2 },
+      mode: this.mode, mood: this.mood, kneading: false,
+    };
+  }
+
+  /** straight into the posture the brain wants, no getting there (opening the app) */
+  settle() {
+    this.cat.snap(this.wanted());
+  }
+
+  /** what it is doing of its own accord, if anything */
+  get doing() {
+    return this.act?.name ?? null;
+  }
+
+  /** start one of its acts now (for the lab and tests) */
+  startAct(name: 'yawn' | 'groom' | 'groom chest' | 'stretch' | 'window' | 'wander' | 'knead' | 'bed') {
+    this.stopAct();
+    const c = this.ctx;
+    this.act = name === 'yawn' ? yawn() : name === 'groom' ? groomFlank() : name === 'groom chest' ? groomChest()
+      : name === 'stretch' ? new Stretch('loaf') : name === 'window' ? toWindow(c) : name === 'wander' ? wander(c)
+        : name === 'knead' ? knead() : toBed(c, 'loaf');
+  }
+
+  private stopAct() {
+    if (!this.act) return;
+    this.act.stop(this.ctx);
+    this.act = null;
+  }
+
+  /** the cat's own business: the brain's state decides what is allowed (asleep: back to bed
+   *  first; being handled: stay put, kneading if it is happy; at rest: things of its own) */
+  private behave(dt: number) {
+    const m = this.cat.motor, c = this.ctx;
+    c.mode = this.mode;
+    c.mood = this.mood;
+    c.kneading = this.kneading;
+    const atHome = Math.hypot(m.pos.x - c.home.x, m.pos.z - c.home.z) < 0.08;
+    if (!this.alive) {
+      this.stopAct();
+      m.setPosture('side');
+      return;
+    }
+    if (this.sleep > 0.3) {
+      // sleep is taken in bed: go back to it, turn round once and settle
+      if (this.act && this.act.name !== 'to bed') this.stopAct();
+      if (!this.act && !atHome) this.act = toBed(c, 'loaf');
+      if (this.act) {
+        if (!this.act.update(dt, c)) this.act = null;
+        return;
+      }
+      m.setPosture(this.wanted());
+      return;
+    }
+    if (this.mode === 'enjoy' || this.mode === 'annoyed' || this.mode === 'angry') {
+      // in somebody's hands: stop and stay; tread with the front paws when it is happy there
+      if (this.act && !(this.act.name === 'knead' && this.kneading)) this.stopAct();
+      if (!this.act && this.kneading) this.act = knead();
+      if (this.act) this.act.update(dt, c);
+      else m.setPosture(this.wanted() === 'sit' ? 'sit' : atHome ? this.rest : 'loaf');
+      return;
+    }
+    // its own time: carry on with what it is doing, or now and then think of something
+    if (this.act) {
+      if (!this.act.update(dt, c)) {
+        this.act.stop(c);
+        this.act = null;
+      }
+      return;
+    }
+    m.setPosture(this.mode === 'alert' ? 'sit' : this.rest);
+    this.nextActIn -= dt;
+    if (this.nextActIn < 0) {
+      this.nextActIn = 4 + Math.random() * 8;
+      this.act = chooseAct(c, atHome, m.posture);
+      if (!this.act && Math.random() < 0.5) this.rest = restingPose(this.mood, this.mode);
+    }
   }
 
   get hidden() {
@@ -88,16 +178,20 @@ export class PixelAvatar implements Avatar {
       }
     }
     if (this.errand) this.doErrand(dt);
-    if (!this.trip) m.setPosture(this.wanted());
-    else if (this.trip.kind === 'leave' && Math.abs(m.pos.x) > this.offstage) {
-      const cb = this.trip.onDone;
-      this.trip = null;
-      m.stop();
-      this.setHidden(true);
-      cb?.();
+    if (!this.trip) this.behave(dt);
+    else {
+      this.stopAct();
+      if (this.trip.kind === 'leave' && Math.abs(m.pos.x) > this.offstage) {
+        const cb = this.trip.onDone;
+        this.trip = null;
+        m.stop();
+        this.setHidden(true);
+        cb?.();
+      }
     }
     // eyes on the finger, or on you (through the window); asleep, dead or busy, nowhere
-    if (!this.alive || this.sleep > 0.5 || this.errand) m.lookAt(null);
+    const busy = this.errand || (this.act && this.act.name !== 'window' && this.act.name !== 'knead');
+    if (!this.alive || this.sleep > 0.5 || busy) m.lookAt(null);
     else if (this.gazeTarget && this.screenToWorld(this.gazeTarget.x, this.gazeTarget.y, this.look)) m.lookAt(this.look, 0.9);
     else m.lookAt(this.viewer(), this.trip ? 0.3 : 0.85);
   }

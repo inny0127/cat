@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { POSES, blendPose, clonePose, copyPose, GROUPS, type Group, type Pose, type PoseName } from './pose';
+import { POSES, blendPose, clonePose, copyPose, GROUPS, type Foot, type Group, type Pose, type PoseLayer, type PoseName } from './pose';
 import { Wobble, noise1, clamp } from '../util/math';
 import { NEUTRAL, bodyFor, eyesFor, type BodyLook, type Mood } from './mood';
 
@@ -91,12 +91,14 @@ export class Motor {
   readonly base: Pose = clonePose(POSES.stand);
   readonly pose: Pose = clonePose(POSES.stand);
   /** pose overrides blended on top (eating head-down, grooming leg, ...) */
-  layer: { pose: Partial<Pose>; w: number } | null = null;
+  layer: { pose: PoseLayer; w: number } | null = null;
 
   // locomotion
   goal: THREE.Vector3 | null = null;
   goalSpeed = 0.45;
   goalFace: number | null = null;
+  /** a waypoint on the way somewhere: walk through it without stopping */
+  goalPass = false;
   onArrive: (() => void) | null = null;
   maxSpeed = 1.6;
 
@@ -185,11 +187,12 @@ export class Motor {
     return this.settled && (this.posture === 'stand' || this.posture === 'crouch' || this.posture === 'alert');
   }
 
-  walkTo(p: THREE.Vector3, speed = 0.45, face: number | null = null, onArrive: (() => void) | null = null) {
+  walkTo(p: THREE.Vector3, speed = 0.45, face: number | null = null, onArrive: (() => void) | null = null, pass = false) {
     this.goal = p.clone();
     this.goal.y = 0;
     this.goalSpeed = speed;
     this.goalFace = face;
+    this.goalPass = pass;
     this.onArrive = onArrive;
     if (this.posture !== 'stand' && this.posture !== 'crouch' && this.posture !== 'alert') this.setPosture('stand');
   }
@@ -266,7 +269,8 @@ export class Motor {
     if (this.goal && this.standing) {
       const dx = this.goal.x - this.pos.x, dz = this.goal.z - this.pos.z;
       const dist = Math.hypot(dx, dz);
-      if (dist < 0.025 && this.speed < 0.05) {
+      if (this.goalPass && dist < 0.06) this.arrive();
+      else if (dist < 0.025 && this.speed < 0.05) {
         // arrived: turn to face the requested way, then report
         if (this.goalFace !== null) {
           const e = wrap(this.goalFace - this.yaw);
@@ -279,7 +283,7 @@ export class Motor {
         turn = clamp(e * 3.2, -2.4, 2.4);
         // slow for sharp turns, and ease in to the stop
         const facing = Math.max(0, Math.cos(e));
-        want = this.goalSpeed * Math.pow(facing, 3) * clamp(dist / 0.25, 0.15, 1);
+        want = this.goalSpeed * Math.pow(facing, this.goalPass ? 1.5 : 3) * (this.goalPass ? 1 : clamp(dist / 0.25, 0.15, 1));
         if (dist < 0.025) want = 0;
       }
     }
@@ -307,6 +311,11 @@ export class Motor {
       const w = this.layer.w;
       for (const [k, val] of Object.entries(this.layer.pose)) {
         if (typeof val === 'number') (p as unknown as Record<string, number>)[k] += (val - (p as unknown as Record<string, number>)[k]) * w;
+        else if (val) {
+          // a paw: each of its numbers given
+          const f = (p as unknown as Record<string, Foot>)[k];
+          for (const [fk, fv] of Object.entries(val as Partial<Foot>)) (f as unknown as Record<string, number>)[fk] += ((fv as number) - (f as unknown as Record<string, number>)[fk]) * w;
+        }
       }
     }
     const t = this.time;

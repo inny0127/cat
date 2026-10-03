@@ -99,6 +99,8 @@ const PAL_PROP = [
   '#c58b52', '#93602f', '#5f3c1e',
   '#c4e6f4', '#86c4e3', '#5a9cc6',
   '#e3dccd', '#c2b8a6', '#968c7a',
+  // the sky through the window: day, dawn and dusk, night
+  '#a9d4ee', '#fde3c0', '#f3b17e', '#e88f7a', '#34416a', '#222c4d', '#f6e7a8',
   '#3c2416',
 ];
 const OUTLINE = 16;   // index of the outline colour in PAL_CAT

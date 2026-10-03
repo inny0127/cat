@@ -69,6 +69,7 @@ export class PixelApp {
     this.state.stats.visits++;
     this.makeBrain();
     this.brain.wake(performance.now() / 1000, firstEver);
+    this.avatar.settle();
 
     this.input = new PointerInput(canvas, {
       hitCat: (sx, sy) => !this.avatar.hidden && !!this.senses.hitNear(sx, sy),
@@ -216,10 +217,21 @@ export class PixelApp {
     else if (k === 'l' || k === 's') this.brain.scoop();
   }
 
+  /** ?still: the page only draws; whoever drives it (tests, reels) calls tick() */
+  private readonly manual = new URLSearchParams(location.search).has('still');
+  /** ?hour=21: the room's clock, for looking at the evening by day */
+  private readonly hourOverride = new URLSearchParams(location.search).get('hour');
+
+  private clock() {
+    const d = new Date();
+    if (this.hourOverride !== null) d.setHours(+this.hourOverride, 0, 0, 0);
+    return d;
+  }
+
   private loop(nowMs: number) {
     const dt = Math.min(0.05, this.last ? (nowMs - this.last) / 1000 : 0.016);
     this.last = nowMs;
-    if (this.visible) this.tick(dt, nowMs / 1000);
+    if (this.visible && !this.manual) this.tick(dt, nowMs / 1000);
     this.stage.render();
     requestAnimationFrame((t) => this.loop(t));
   }
@@ -233,10 +245,15 @@ export class PixelApp {
     // what it feels shows in its eyes, ears, tail, fur and breath
     const s = this.state;
     const sick = s.alive ? clamp((THRESH.sick - s.health) / THRESH.sick * 1.6) : 1;
-    this.cat.motor.setMood(moodFromBrain(this.brain, sick, s.trust, nightness(Date.now())), true);
+    const clock = this.clock();
+    const night = nightness(clock.getTime());
+    const mood = moodFromBrain(this.brain, sick, s.trust, night);
+    this.cat.motor.setMood(mood, true);
+    this.avatar.mode = this.brain.mode;
+    this.avatar.mood = mood;
     this.avatar.update(dt);
     this.cat.update(dt);
-    this.room.update(s);
+    this.room.update(s, night, clock.getHours() + clock.getMinutes() / 60);
     this.hints(dt, contacts.length > 0);
     if ((this.saveIn -= dt) < 0) {
       this.saveIn = 10;
