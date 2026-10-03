@@ -444,7 +444,8 @@ export class PixelAvatar implements Avatar {
       this.lureT = 0;
       this.lureNeed = 0.5 + Math.random() * 1.1;
     }
-    if (!this.trip) this.behave(dt);
+    // (out of the room it does nothing here)
+    if (!this.trip) { if (!this.isHidden) this.behave(dt); }
     else {
       this.stopAct();
       if (this.trip.kind === 'leave' && Math.abs(m.pos.x) > this.offstage) {
@@ -607,6 +608,10 @@ export class PixelAvatar implements Avatar {
 
   arrive(onDone?: () => void) {
     const m = this.cat.motor;
+    // (anything left over from before is dropped first: stopping it later would stop this walk too)
+    if (this.act) { this.act.stop(this.ctx); this.act = null; }
+    this.cat.perch = null;
+    this.cat.liftHold = null;
     this.errand = null;
     m.layer = null;
     m.zoom = 0;
