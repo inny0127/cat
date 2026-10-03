@@ -310,7 +310,8 @@ export class PixelAvatar implements Avatar {
 
   /** start one of its acts now (for the lab and tests) */
   startAct(name: 'yawn' | 'groom' | 'groom chest' | 'wash' | 'stretch' | 'window' | 'wander' | 'knead' | 'bed' | 'sun' | 'play' | 'sill' | 'box' | 'zoomies' | 'warm' | 'sneeze' | 'stare' | 'rub' | 'scratch') {
-    if (this.perched) return;
+    // (not on its way somewhere, to the bowls or out of the room: the walk there is its business)
+    if (this.perched || this.trip) return;
     this.stopAct();
     const c = this.ctx;
     this.act = name === 'yawn' ? yawn() : name === 'groom' ? groomFlank() : name === 'groom chest' ? groomChest() : name === 'wash' ? washFace()

@@ -16,7 +16,7 @@ const report = await page.evaluate(async (minutes) => {
   const issues = [];
   let t = 1, seen = {}, drag = null, drags = 0, errands = 0;
   // a cat that wants to go somewhere and does not move
-  let stillFor = 0;
+  let stillFor = 0, lastAct = '';
   const lastPos = { x: 0, z: 0 };
   const ev = (x, y, t) => ({ preventDefault() {}, pointerId: 9, clientX: x, clientY: y, timeStamp: t * 1000, pointerType: 'touch', pressure: 0.5, width: 20, height: 20, buttons: 1 });
   app.brain.toAwake('rest');
@@ -27,7 +27,7 @@ const report = await page.evaluate(async (minutes) => {
     t += 0.05;
     if (i % 600 === 0) app.hourOverride = String(Math.floor(Math.random() * 24) + Math.random());
     if (i % 1500 === 0) app.rainOverride = Math.random() < 0.3 ? '1' : '0';
-    if (i % 400 === 0 && Math.random() < 0.6) { const a = acts[Math.floor(Math.random() * acts.length)]; app.avatar.startAct(a); }
+    if (i % 400 === 0 && Math.random() < 0.6) { const a = acts[Math.floor(Math.random() * acts.length)]; app.avatar.startAct(a); lastAct = `${a} at ${i}${app.avatar.trip ? ' (on a trip)' : ''}`; }
     if (i % 2000 === 1000 && Math.random() < 0.3) app.brain.toSleep(0.7);
     if (i % 900 === 450 && Math.random() < 0.5) app.room.letBugIn(Math.random() < 0.5 ? 'moth' : 'fly');
     // now and then off to the bowls or the box (and back when it has been away a while)
@@ -63,7 +63,7 @@ const report = await page.evaluate(async (minutes) => {
     lastPos.x = m.pos.x; lastPos.z = m.pos.z;
     const wants = (app.avatar.trip && !app.avatar.hidden && (!app.avatar.errand || app.avatar.errand.phase !== 'do'));
     stillFor = wants && !moved ? stillFor + 0.05 : 0;
-    if (stillFor > 12) { issues.push(`stuck on a ${app.avatar.trip.kind} at ${i} (${app.avatar.errand ? app.avatar.errand.phase : ''})`); stillFor = -1e9; }
+    if (stillFor > 12) { issues.push(`stuck on a ${app.avatar.trip.kind} at ${i} (${app.avatar.errand ? app.avatar.errand.phase : ''}; act ${app.avatar.doing}, goal ${!!m.goal}, ${m.posture}, last act started ${lastAct})`); stillFor = -1e9; }
     if (i % 2400 === 0) await new Promise((r) => setTimeout(r, 0));
   }
   app.stage.render();
