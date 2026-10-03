@@ -172,7 +172,7 @@ export function dayLight(hour: number, out?: DayLight, rain = 0): DayLight {
   const dusk = Math.max(0, 1 - Math.abs(hour - 19.4) / 1.1) * (1 - up * 0.5);
   const tintSun = lerp3([1.07, 1.0, 0.88], [1.2, 0.88, 0.62], gold);
   // (in the gold hours the shade leans the other way, to violet)
-  let tintShade = lerp3([0.97, 0.98, 1.03], [0.98, 0.9, 1.0], gold);
+  let tintShade = lerp3([1.0, 0.98, 1.0], [0.98, 0.9, 1.0], gold);
   tintShade = lerp3(tintShade, [0.94, 0.84, 1.0], dusk);
   // rain: a grey, blue-ish day
   tintShade = lerp3(tintShade, [0.9, 0.94, 1.04], rain * day);

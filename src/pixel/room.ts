@@ -118,6 +118,11 @@ void main() {
   } else if (uPattern == 4) {
     // fleece: soft and a little uneven
     tone += (vnoise(vWorld.xz * 70.0) - 0.5) * 0.08;
+  } else if (uPattern == 7) {
+    // a pleated shade: narrow folds all the way round, each lit on one side
+    float a = atan(vLocal.z, vLocal.x) / 6.2832 * 36.0;
+    float f = fract(a);
+    tone += f < 0.5 ? 0.05 : -0.06;
   } else if (uPattern == 6) {
     // plush: the deep pile of a cat's bed, in soft tufts
     tone += (vnoise(vWorld.xz * 95.0 + vWorld.y * 40.0) - 0.5) * 0.16 + (vnoise(vWorld.xz * 31.0 - 3.0) - 0.5) * 0.08;
@@ -143,7 +148,7 @@ void main() {
   float glowAmt = 0.0;
   if (uGlow > 1.5) {
     float foot = 1.0 - smoothstep(uLampPos.y - 0.04, uLampPos.y + 0.12, vWorld.y);
-    lt.x = 0.62 + 0.4 * foot;
+    lt.x = 0.62 + 0.4 * foot + 0.6 * (tone - uTone);
     glowAmt = 0.35 + 0.64 * foot;
   } else if (uGlow > 0.5) glowAmt = 0.99;
   gl_FragColor = pixRoomLit(m, lt, glowAmt);
@@ -610,10 +615,10 @@ export class Room {
       this.decor.push({ obj: tl, from: [2, 15], to: [4, 20] });
     }
 
-    // under the window, an old column radiator painted white: its fins, the pipes along its top
+    // under the window, an old column radiator painted cream: its fins, the pipes along its top
     // and foot, its legs, and the pipe and valve at its end
     const radW = 0.46, radB = 0.07, radH = 0.19, radZ = wallZ + 0.055;
-    const radMat = this.mat('paint', { tone: -0.03 });
+    const radMat = this.mat('rugCream', { tone: 0.06 });
     const nFin = 13;
     for (let i = 0; i < nFin; i++) {
       const x = bx - radW / 2 + (i + 0.5) * (radW / nFin);
@@ -828,7 +833,7 @@ export class Room {
     const lx = bx - 0.3, lz = bz - 0.2;
     add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.08, 0.02, 20), this.mat('metal'))), lx, 0.01, lz);
     add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 1.0, 8), this.mat('metal'))), lx, 0.5, lz);
-    this.shade = this.mat('shade');
+    this.shade = this.mat('shade', { pattern: 7 });
     add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.12, 0.16, 24, 1, true), this.shade)), lx, 1.02, lz);
     this.lampPos = new THREE.Vector3(lx, 0.97, lz);
 
