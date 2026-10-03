@@ -512,11 +512,16 @@ export class PixelApp {
   }
 
   private loop(nowMs: number) {
+    requestAnimationFrame((t) => this.loop(t));
+    // pixel art wants no more than 60 frames a second, and a cat asleep with nobody touching it
+    // no more than 30 (on a 120 Hz screen, every other frame or three in four are let go): the
+    // phone stays cool and its battery lasts, left open on a desk all evening
+    const calm = this.brain.mode === 'sleep' && nowMs / 1000 - this.touchedAt > 3 && this.room.yarnSpeed < 0.01;
+    if (this.last && nowMs - this.last < 1000 / (calm ? 30 : 60) - 3) return;
     const dt = Math.min(0.05, this.last ? (nowMs - this.last) / 1000 : 0.016);
     this.last = nowMs;
     if (this.visible && !this.manual) this.tick(dt, nowMs / 1000);
     this.stage.render();
-    requestAnimationFrame((t) => this.loop(t));
   }
 
   /** one step of the cat's life, mind and body (also driven by tests in fixed steps) */
