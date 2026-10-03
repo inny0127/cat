@@ -4,7 +4,7 @@ import type { PoseName } from '../cat3d/pose';
 import { NEUTRAL, type Mood } from '../cat3d/mood';
 import type { Avatar } from '../sim/avatar';
 import type { EarMood, TailMood } from '../rig/animator';
-import { Stretch, chooseAct, groomChest, groomFlank, knead, restingPose, toBed, toWindow, wander, yawn, type Act, type Ctx, sunbathe, Play } from './behave';
+import { Stretch, chooseAct, groomChest, groomFlank, knead, restingPose, toBed, toWindow, wander, yawn, type Act, type Ctx, sunbathe, Play, Sill, type SillSpot } from './behave';
 
 const LYING: PoseName[] = ['loaf', 'sphinx', 'side', 'curl'];
 const wrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
@@ -57,6 +57,15 @@ export class PixelAvatar implements Avatar {
   sunSpot: (() => THREE.Vector3 | null) | null = null;
   /** the ball of wool to play with */
   toys: { yarn: () => THREE.Vector3; kick: (dir: THREE.Vector3, speed: number) => void } | null = null;
+  /** the windowsill to sit on */
+  sillSpot: (() => SillSpot) | null = null;
+  /** something to do once it is down off the sill (asked to go somewhere while up there) */
+  private afterPerch: (() => void) | null = null;
+
+  /** up on the sill (or jumping to or from it): it has to come down before anything else */
+  private get perched() {
+    return this.act instanceof Sill && this.act.up;
+  }
   private fading: { t: number; dur: number; onDone?: () => void } | null = null;
   private readonly look = new THREE.Vector3();
   /** the brain's mode and the cat's feelings (set by the app each frame) */
@@ -91,12 +100,20 @@ export class PixelAvatar implements Avatar {
       lieAt: (p, at, face) => this.lieAt(p, at, face),
       yarn: () => this.toys?.yarn() ?? null,
       kick: (dir, speed) => this.toys?.kick(dir, speed),
+      sill: () => this.sillSpot?.() ?? null,
+      perch: (h) => { this.cat.perch = h; },
+      hold: (y) => { this.cat.liftHold = y; },
     };
   }
 
   /** straight into the posture the brain wants, no getting there (opening the app) */
   settle() {
-    this.stopAct();
+    // (straight into bed, from wherever it was, the sill included)
+    if (this.act) this.act.stop(this.ctx);
+    this.act = null;
+    this.cat.perch = null;
+    this.cat.liftHold = null;
+    this.afterPerch = null;
     const p = this.wanted();
     const b = this.bedSpot(p);
     this.cat.place(b.to.x, b.to.z, b.yaw);
@@ -153,17 +170,19 @@ export class PixelAvatar implements Avatar {
   }
 
   /** start one of its acts now (for the lab and tests) */
-  startAct(name: 'yawn' | 'groom' | 'groom chest' | 'stretch' | 'window' | 'wander' | 'knead' | 'bed' | 'sun' | 'play') {
+  startAct(name: 'yawn' | 'groom' | 'groom chest' | 'stretch' | 'window' | 'wander' | 'knead' | 'bed' | 'sun' | 'play' | 'sill') {
+    if (this.perched) return;
     this.stopAct();
     const c = this.ctx;
     this.act = name === 'yawn' ? yawn() : name === 'groom' ? groomFlank() : name === 'groom chest' ? groomChest()
       : name === 'stretch' ? new Stretch('loaf') : name === 'window' ? toWindow(c) : name === 'wander' ? wander(c)
-        : name === 'knead' ? knead() : name === 'sun' ? sunbathe(c) : name === 'play' ? new Play() : toBed(c, 'loaf');
+        : name === 'knead' ? knead() : name === 'sun' ? sunbathe(c) : name === 'play' ? new Play()
+          : name === 'sill' && this.sillSpot ? new Sill(this.sillSpot()) : toBed(c, 'loaf');
   }
 
   /** something to chase: awake and its own master, it drops what it was doing and plays */
   playNow() {
-    if (!this.alive || this.sleep > 0.3 || this.errand || this.trip || this.hidden) return false;
+    if (!this.alive || this.sleep > 0.3 || this.errand || this.trip || this.hidden || this.perched) return false;
     if (this.mode !== 'rest' && this.mode !== 'alert') return false;
     if (this.act?.name === 'play') return true;
     if (this.mood.sleepy > 0.6) return false;
@@ -174,6 +193,11 @@ export class PixelAvatar implements Avatar {
 
   private stopAct() {
     if (!this.act) return;
+    // up on the sill it is not simply dropped: it is asked down, and carries on until it is
+    if (this.act instanceof Sill && this.act.up) {
+      this.act.leave();
+      return;
+    }
     this.act.stop(this.ctx);
     this.act = null;
   }
@@ -193,8 +217,12 @@ export class PixelAvatar implements Avatar {
       return;
     }
     if (this.sleep > 0.3) {
-      // sleep is taken in bed: go back to it, turn round once and settle
+      // sleep is taken in bed: go back to it, turn round once and settle (down off the sill first)
       if (this.act && this.act.name !== 'to bed') this.stopAct();
+      if (this.perched) {
+        if (!this.act!.update(dt, c)) this.act = null;
+        return;
+      }
       if (!this.act && !atHome) this.act = toBed(c, this.wanted());
       if (this.act) {
         if (!this.act.update(dt, c)) this.act = null;
@@ -205,6 +233,7 @@ export class PixelAvatar implements Avatar {
     }
     if (this.mode === 'enjoy' || this.mode === 'annoyed' || this.mode === 'angry') {
       // in somebody's hands: stop and stay; tread with the front paws when it is happy there
+      if (this.perched) { this.act!.update(dt, c); return; }
       if (this.act && !(this.act.name === 'knead' && this.kneading)) this.stopAct();
       if (!this.act && this.kneading) this.act = knead();
       if (this.act) this.act.update(dt, c);
@@ -252,6 +281,12 @@ export class PixelAvatar implements Avatar {
         this.setHidden(true);
         cb?.();
       }
+    }
+    if (this.afterPerch && !this.perched) {
+      const f = this.afterPerch;
+      this.afterPerch = null;
+      if (this.act instanceof Sill) { this.act.stop(this.ctx); this.act = null; }
+      f();
     }
     if (this.errand) this.doErrand(dt);
     if (!this.trip) this.behave(dt);
@@ -329,6 +364,12 @@ export class PixelAvatar implements Avatar {
 
   bolt(dir: number, onDone?: () => void, calm = false, reason?: string) {
     if (this.trip || this.isHidden) return;
+    if (this.perched) {
+      // down off the sill first
+      this.afterPerch = () => this.bolt(dir, onDone, calm, reason);
+      (this.act as Sill).leave();
+      return;
+    }
     const m = this.cat.motor;
     const spot = !calm || !this.spots ? null : reason === 'eat' ? this.spots.food : reason === 'drink' ? this.spots.water : reason === 'litter' ? this.spots.litter : null;
     if (spot) {

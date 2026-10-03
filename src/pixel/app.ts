@@ -71,6 +71,7 @@ export class PixelApp {
     this.cat.groundAt = (x, z) => this.room.groundAt(x, z);
     this.avatar.sunSpot = () => this.room.sunSpot();
     this.avatar.toys = { yarn: () => this.room.yarnAt(), kick: (d, v) => this.room.kickYarn(d, v) };
+    this.avatar.sillSpot = () => this.room.sillSpot();
     this.frame3d();
 
     const now = Date.now();

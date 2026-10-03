@@ -246,6 +246,10 @@ export class Cat3D {
 
   /** the height of the floor at a point (a bed's cushion and rim), if it is not flat */
   groundAt: ((x: number, z: number) => number) | null = null;
+  /** up on something (the windowsill): the floor is this high under every paw */
+  perch: number | null = null;
+  /** in the air (a jump): the body exactly this high, whatever is under it */
+  liftHold: number | null = null;
   private lift = 0;
 
   update(dt: number) {
@@ -257,17 +261,23 @@ export class Cat3D {
 
     // over a raised floor (a bed's cushion) the whole cat stands or lies that much higher: from
     // the floor under its planted paws, or under its middle when lying
-    if (this.groundAt) {
+    const perch = this.perch;
+    const ground = perch !== null ? () => perch : this.groundAt;
+    if (this.liftHold !== null) {
+      this.lift = this.liftHold;
+      stepper.ground = ground;
+      stepper.lift = this.lift;
+    } else if (ground) {
       let sum = 0, n = 0;
       for (const l of LEGS) {
         if (!this.planted[l]) continue;
         const F = stepper.feet[l];
-        sum += this.groundAt(F.pos.x, F.pos.z);
+        sum += ground(F.pos.x, F.pos.z);
         n++;
       }
-      const want = n >= 2 ? sum / n : 0.8 * this.groundAt(motor.pos.x, motor.pos.z);
+      const want = perch !== null ? perch : n >= 2 ? sum / n : 0.8 * ground(motor.pos.x, motor.pos.z);
       this.lift += (want - this.lift) * (1 - Math.exp(-dt * 6));
-      stepper.ground = this.groundAt;
+      stepper.ground = ground;
       stepper.lift = this.lift;
     }
     group.position.copy(motor.pos);
