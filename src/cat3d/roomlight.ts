@@ -156,10 +156,11 @@ export function dayLight(hour: number, out?: DayLight, rain = 0): DayLight {
   const rise = 6.4, set = 19.1;
   const u = Math.max(0, Math.min(1, (hour - rise) / (set - rise)));
   const up = hour > rise && hour < set ? 1 : 0;
-  // across the sky from the left to the right, highest at midday
-  // (kept within what the window lets in, so the sun lies on the floor in the room all day)
-  const az = THREE.MathUtils.degToRad(-35 + 70 * u);
-  const el = THREE.MathUtils.degToRad(up ? 6 + 44 * Math.pow(Math.sin(Math.PI * u), 0.7) : 6);
+  // across the sky from the left to the right, highest at midday (as a painter would have it:
+  // never so low that its patch on the floor leaves the room you see, so that morning and evening
+  // it lies long across the floor toward you, the window's cross in it)
+  const az = THREE.MathUtils.degToRad(-20 + 40 * u);
+  const el = THREE.MathUtils.degToRad(up ? 24 + 26 * Math.pow(Math.sin(Math.PI * u), 0.7) : 24);
   const keyDir = (out?.keyDir ?? new THREE.Vector3()).set(Math.sin(az) * Math.cos(el), Math.sin(el), -Math.cos(az) * Math.cos(el)).normalize();
   // the sun through the window fades in after it rises and out before it sets
   const sun = ss(rise, rise + 0.8, hour) * (1 - ss(set - 0.9, set - 0.1, hour));
@@ -169,8 +170,9 @@ export function dayLight(hour: number, out?: DayLight, rain = 0): DayLight {
   // how gold the light is: the first and last hours of the sun (none under rain clouds)
   const gold = Math.max(1 - ss(rise + 0.3, rise + 2.4, hour), ss(set - 2.6, set - 0.4, hour)) * up * (1 - rain);
   const dusk = Math.max(0, 1 - Math.abs(hour - 19.4) / 1.1) * (1 - up * 0.5);
-  const tintSun = lerp3([1.02, 1.0, 0.96], [1.1, 0.94, 0.74], gold);
-  let tintShade = lerp3([0.97, 0.98, 1.03], [1.02, 0.94, 0.94], gold);
+  const tintSun = lerp3([1.07, 1.0, 0.88], [1.2, 0.88, 0.62], gold);
+  // (in the gold hours the shade leans the other way, to violet)
+  let tintShade = lerp3([0.97, 0.98, 1.03], [0.98, 0.9, 1.0], gold);
   tintShade = lerp3(tintShade, [0.94, 0.84, 1.0], dusk);
   // rain: a grey, blue-ish day
   tintShade = lerp3(tintShade, [0.9, 0.94, 1.04], rain * day);
@@ -180,11 +182,14 @@ export function dayLight(hour: number, out?: DayLight, rain = 0): DayLight {
   // under rain the sun is hidden, the sky gives less light, and the lamp is lit even by day
   const dim = 1 - 0.3 * rain;
   o.keyDir = keyDir;
-  o.sun = 0.8 * sun * (1 - rain);
-  o.sky = (0.9 * day + 0.12 * night) * (1 - 0.45 * rain);
-  o.amb = (0.14 * day + 0.05) * dim;
+  // the light is the window's: bright near it and less and less toward you, the room behind you
+  // giving back only a little; in the gold hours the sky dims and the room with it, and the low
+  // sun is all the stronger for it
+  o.sun = 0.8 * sun * (1 - rain) * (1 + 0.6 * gold);
+  o.sky = (0.9 * day + 0.12 * night) * (1 - 0.45 * rain) * (1 - 0.4 * gold);
+  o.amb = (0.1 * day + 0.045) * dim * (1 - 0.35 * gold);
   o.floorB = 0.45 * day * dim;
-  o.fill = (0.3 * day + 0.03) * dim;
+  o.fill = (0.22 * day + 0.03) * dim * (1 - 0.35 * gold);
   o.lamp = Math.max(1.5 * ss(0.35, 0.8, night), 1.2 * rain);
   o.fairy = Math.max(0.5 * ss(0.4, 0.8, night), 0.45 * rain);
   o.tintSun = (o.tintSun ?? new THREE.Vector3()).set(tintSun[0], tintSun[1], tintSun[2]);

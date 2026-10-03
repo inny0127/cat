@@ -153,6 +153,22 @@ bool dithers(int m) {
   return false;
 }
 
+// the sunbeam in the air at a point: in the sun through the window, the light streaky (rays
+// fanning from the panes, as through old glass and dust) and fading as it goes into the room
+float beamAt(vec3 P) {
+  if (uKeyDir.z > -0.02) return 0.0;
+  float t = (uWinZ - P.z) / uKeyDir.z;
+  if (t < 0.0) return 0.0;
+  vec2 q = P.xy + uKeyDir.xy * t;
+  const float e = 0.01;
+  float s = smoothstep(uWin.x - e, uWin.x + e, q.x) * smoothstep(uWin.y + e, uWin.y - e, q.x)
+          * smoothstep(uWin.z - e, uWin.z + e, q.y) * smoothstep(uWin.w + e, uWin.w - e, q.y);
+  s *= smoothstep(uWinBar.z - e, uWinBar.z + 2.0 * e, abs(q.x - uWinBar.x));
+  s *= smoothstep(uWinBar.z - e, uWinBar.z + 2.0 * e, abs(q.y - uWinBar.y));
+  float streak = 0.15 + 0.85 * smoothstep(0.05, 0.75, sin(q.x * 31.0 + 1.7 * sin(q.y * 7.0)) * 0.6 + sin(q.x * 13.0 - q.y * 5.0) * 0.4);
+  return s * streak * exp(-t * 1.1);
+}
+
 // what lies under an art pixel: 1 the cat, 2 the room, 0 anything else; its material and light
 int kindAt(ivec2 q, out int mat, out float light, out float third) {
   vec4 t = texelFetch(uColor, q, 0);
@@ -261,13 +277,13 @@ void main() {
     vec3 C = (uViewInv * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
     vec3 D = P - C;
     float acc = 0.0;
-    for (int i = 0; i < 24; i++) acc += sunThrough(C + D * ((float(i) + 0.5) / 24.0));
+    for (int i = 0; i < 24; i++) acc += beamAt(C + D * ((float(i) + 0.5) / 24.0));
     float hz = acc / 24.0 * length(D) * uBeam;
-    // lighter air in two layers, the thicker the brighter, dithered where one gives way to the
-    // next; and a soft glow all through it
-    float lv = clamp(floor(hz * 7.0 + (bayer(p) - 0.5) * 0.7), 0.0, 2.0);
-    col = mix(col, uBeamCol, lv * 0.075);
-    glow = max(glow, clamp(hz, 0.0, 1.0) * 0.7);
+    // lighter air in three layers, the thicker the brighter, dithered where one gives way to the
+    // next (lit, not greyed: the light adds to what is behind it); and a soft glow all through it
+    float lv = clamp(floor(hz * 22.0 + (bayer(p) - 0.5) * 0.9), 0.0, 3.0);
+    col = 1.0 - (1.0 - col) * (1.0 - uBeamCol * lv * 0.085);
+    glow = max(glow, clamp(hz * 2.5, 0.0, 1.0) * 0.75);
   }
   // steam curling up off a hot drink, and dust turning in the sunlight: a soft warm white over
   // whatever is behind
@@ -552,7 +568,7 @@ export class Stage {
     u.uTintShade.value.copy(d.tintShade);
     u.uTintLamp.value.copy(d.tintLamp);
     u.uBeam.value = 0.8 * d.beam;
-    u.uBeamCol.value.set(1, 0.93, 0.78).lerp(new THREE.Vector3(1, 0.86, 0.62), Math.max(0, d.tintSun.x - 1.02) / 0.08);
+    u.uBeamCol.value.set(1, 0.93, 0.78).lerp(new THREE.Vector3(1, 0.8, 0.5), Math.min(1, Math.max(0, d.tintSun.x - 1.07) / 0.13));
   }
 
   /** a world point in art pixels (x, y from the bottom left) */
