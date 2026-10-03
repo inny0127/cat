@@ -238,7 +238,10 @@ export function dayLight(hour: number, out?: DayLight, rain = 0, moon = 1, fog =
   o.floorB = 0.45 * day * dim;
   o.fill = (0.22 * day + 0.03) * dim * (1 - 0.5 * gold);
   const lit = Math.max(ss(set - 0.55, set - 0.4, hour), 1 - ss(rise + 0.3, rise + 0.45, hour));
-  o.lamp = Math.max(2.0 * lit, 1.55 * rain);
+  // in the small hours whoever lives here has gone to bed: the lamp is out, the fairy lights left
+  // on to see by, and the room is the moon's
+  const abed = ss(0.9, 1.1, hour) * (1 - ss(5.8, 6.0, hour));
+  o.lamp = Math.max(2.0 * lit, 1.55 * rain) * (1 - abed);
   o.fairy = Math.max(0.5 * lit, 0.45 * rain);
   o.tintSun = (o.tintSun ?? new THREE.Vector3()).set(tintSun[0], tintSun[1], tintSun[2]);
   o.tintShade = (o.tintShade ?? new THREE.Vector3()).set(tintShade[0], tintShade[1], tintShade[2]);
