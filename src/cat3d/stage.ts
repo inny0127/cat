@@ -236,7 +236,9 @@ void main() {
     int level = stepOf(L, kind == 2 && dithers(mat), p, max(sx, sy));
     // the cat: the light catching an edge from behind lifts it a step
     if (kind == 1 && third > 0.4) level += 1;
-    bool glows = kind == 2 && third > 0.5;
+    // (the room: a third value over a quarter glows that much; nearly one, at its brightest)
+    bool glows = kind == 2 && third > 0.9;
+    float partGlow = kind == 2 && third > 0.25 ? (third - 0.25) / 0.74 : 0.0;
     if (glows) level = 4;
     // just behind something nearer (a leg across the chest, the bed's rim on the floor): a line in
     // this colour's own shade, never black
@@ -248,6 +250,7 @@ void main() {
     vec3 tint = (flags & 1) != 0 ? uTintLamp : (flags & 2) != 0 ? uTintSun : uTintShade;
     col = clamp(col * tint, 0.0, 1.0);
     if (glows) glow = 1.0;
+    else if (partGlow > 0.0) glow = partGlow;
     else if ((flags & 2) != 0 && level >= 4) glow = 0.16;
   }
   // the sunlight in the air: how far the line of sight runs through the beam from the window

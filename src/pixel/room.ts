@@ -136,7 +136,15 @@ void main() {
   float ao = capsuleAO(vWorld, N) * roomAO(vWorld, N);
   vec3 lt = roomLight(vWorld, N, sh, ao);
   lt.x = max(lt.x * (1.0 + 1.3 * tone) + 0.25 * tone, 0.0);
-  gl_FragColor = pixRoomLit(m, lt, uGlow > 0.5 ? 0.99 : 0.0);
+  // what glows: all of it at once (a candle's jar, the radio's dial), or a lit lamp's shade, which
+  // is brightest at its open foot and dimmer up toward its top
+  float glowAmt = 0.0;
+  if (uGlow > 1.5) {
+    float foot = 1.0 - smoothstep(uLampPos.y - 0.04, uLampPos.y + 0.12, vWorld.y);
+    lt.x = 0.62 + 0.4 * foot;
+    glowAmt = 0.35 + 0.64 * foot;
+  } else if (uGlow > 0.5) glowAmt = 0.99;
+  gl_FragColor = pixRoomLit(m, lt, glowAmt);
 }`;
 
 /** the sky through the window: written as finished colours (alpha 0.15), in art pixels */
@@ -1265,7 +1273,7 @@ export class Room {
       P.set((l + r) / 2 - (K.x * cy) / K.y, z - (K.z * cy) / K.y, Math.min(1.5, ((r - l) * (t - b) * -K.z) / K.y), d.sun * 0.45 * K.y);
     } else P.set(0, 0, 0, 0);
     // the lamp's shade glows when it is lit; the fairy lights and the candles come on with it
-    this.shade.uniforms.uGlow.value = d.lamp > 0.5 ? 1 : 0;
+    this.shade.uniforms.uGlow.value = d.lamp > 0.5 ? 2 : 0;
     for (const c of this.candles) {
       const lit = d.lamp > 0.5;
       c.flame.visible = lit;
