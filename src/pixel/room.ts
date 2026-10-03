@@ -1658,6 +1658,8 @@ export class Room {
   private hourHand: THREE.Mesh | null = null;
   private minHand: THREE.Mesh | null = null;
 
+  /** snow falling past the window now */
+  snowing = false;
   /** the radio on the sill (tapping it switches the music on and off), and its dial */
   radio: THREE.Object3D = new THREE.Group();
   private dial!: THREE.ShaderMaterial;
@@ -2153,6 +2155,7 @@ export class Room {
     (su.uLeafC.value as THREE.Vector3).set(...se.leafC);
     (su.uLeafs.value as THREE.Vector2).set(se.full, se.other);
     su.uSnowing.value = se.snowing ? 1 : 0;
+    this.snowing = se.snowing && rain > 0.15;
     (su.uFall.value as THREE.Vector2).set(se.falling * (1 - rain), se.petals ? 1 : 0);
     // a rainbow for a while after rain stops by day (not in winter's snow)
     const before = rainAt(new Date(date.getTime() - 30 * 60e3));

@@ -579,6 +579,7 @@ export class PixelApp {
     // a bird outside: the cat's ear goes to it, and if it is awake, a glance at the window
     if (this.audio.setOutside(dt, { day: 1 - dark, hour, month: clock.getMonth(), rain })) this.avatar.hear(this.room.windowMiddle);
     this.avatar.rain = rain;
+    this.avatar.snow = this.room.snowing;
     this.avatar.night = dark;
     // (the moon's light is never strong enough to hide from)
     this.avatar.glare = dark > 0.5 ? 0 : dl.sun;

@@ -53,6 +53,8 @@ export interface Ctx {
   sound: (name: string, gain: number) => void;
   /** how hard it is raining (0 .. 1): a grey day is for watching it from the sill */
   rain: number;
+  /** what is falling is snow */
+  snow: boolean;
   /** how dark it is outside (0 day .. 1 night): the lit town is for watching too */
   night: number;
   /** birds going by outside the window (where, on the glass), if any; a chirp at them */
@@ -1177,6 +1179,9 @@ export class Sill implements Act {
   private drop: { p: THREE.Vector3; t: number; pats: number; patT: number; next: number; side: number } | null = null;
   private dropIn = rand(2, 6);
   private readonly gaze = new THREE.Vector3();
+  /** snow going by: one flake after another followed down with the head (how far after this one,
+   *  how long it takes to fall from sight, which way it is) */
+  private flake = { t: 0, len: 1.8, yaw: 0 };
   constructor(private readonly spot: SillSpot) {}
 
   /** asked down: it comes down as soon as it can, and stops there */
@@ -1277,6 +1282,20 @@ export class Sill implements Act {
           if ((this.chirpIn -= dt) <= 0) { c.chirp(); this.chirpIn = rand(1.5, 3.5); }
         } else m.lookAt(null);
         const chatter = birds ? 0.1 + 0.09 * Math.max(0, Math.sin(this.watch * Math.PI * 2 * 11)) : 0;
+        // snow coming down past the glass: the head goes up to a flake, follows it down, and up
+        // again to the next, this way and that
+        let fall = 0;
+        const snowing = c.snow && !birds && !this.drop;
+        if (snowing) {
+          const F = this.flake;
+          if ((F.t += dt) > F.len) {
+            F.t = 0;
+            F.len = rand(1.3, 2.6);
+            F.yaw = rand(-0.55, 0.55);
+          }
+          const u = F.t / F.len;
+          fall = u < 0.15 ? -0.28 + 0.6 * ease(u / 0.15) : 0.32 - 0.62 * ease((u - 0.15) / 0.85);
+        }
         // rain on the glass: now and then a drop runs down it right in front, stopping and going,
         // watched all the way down and patted at through the glass
         let patPaw: Record<string, unknown> = {};
@@ -1306,8 +1325,9 @@ export class Sill implements Act {
         c.drop(this.drop?.p ?? null);
         m.layer = {
           pose: {
-            neckYaw: D ? 0 : look, headYaw: D ? 0 : 0.4 * look, neckPitch: 0.1, headPitch: -0.05 + 0.05 * Math.sin(this.watch * 0.5),
-            earFwd: birds || D ? 1 : 0.6, pupil: birds || D ? 0.95 : 0.6, whisker: birds || D ? 1 : 0, jaw: chatter,
+            neckYaw: D ? 0 : snowing ? 0.7 * this.flake.yaw + 0.3 * look : look, headYaw: D ? 0 : snowing ? 0.4 * this.flake.yaw : 0.4 * look,
+            neckPitch: 0.1 + 0.4 * fall, headPitch: -0.05 + 0.05 * Math.sin(this.watch * 0.5) + 0.6 * fall,
+            earFwd: birds || D || snowing ? 1 : 0.6, pupil: birds || D ? 0.95 : snowing ? 0.85 : 0.6, whisker: birds || D ? 1 : snowing ? 0.5 : 0, jaw: chatter,
             tailLift: -1.35, tailSide: 0.1, tailCurve: 0.25, tailCurl: (birds || D ? 0.8 : 0.35) * Math.sin(this.watch * (birds ? 3 : 0.8)), tailSag: 1,
             ...patPaw,
           },

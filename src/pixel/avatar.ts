@@ -91,6 +91,10 @@ export class PixelAvatar implements Avatar {
   set night(n: number) {
     this.ctx.night = n;
   }
+  /** snow falling outside */
+  set snow(s: boolean) {
+    this.ctx.snow = s;
+  }
   /** what goes by outside the window, and the chirp it gets */
   outside: {
     birds: () => THREE.Vector3 | null; chirp: () => void; sound: (name: string, gain: number) => void;
@@ -223,6 +227,7 @@ export class PixelAvatar implements Avatar {
       mode: this.mode, mood: this.mood, kneading: false,
       bed: (p) => this.bedSpot(p),
       rain: 0,
+      snow: false,
       night: 0,
       sniff: () => this.spots?.sniff ?? [],
       posts: () => this.spots?.posts ?? [],
