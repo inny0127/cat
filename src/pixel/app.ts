@@ -67,6 +67,7 @@ export class PixelApp {
     // the room has a floor of its own
     this.stage.floor.visible = false;
     this.avatar.spots = this.room.spots;
+    this.cat.groundAt = (x, z) => this.room.groundAt(x, z);
     this.frame3d();
 
     const now = Date.now();
@@ -191,10 +192,12 @@ export class PixelApp {
     const want = new THREE.Vector3(m.pos.x + fp.x * c + fp.z * sn, 0.11, m.pos.z - fp.x * sn + fp.z * c);
     if (this.focus < 0.01) this.catAim.copy(want);
     else this.catAim.lerp(want, 1 - Math.exp(-dt * 2.5));
-    // the room view follows once the cat is near an edge, slowly, never past the room's ends
-    const off = want.x - this.panX, dead = 0.13;
-    const goal = Math.max(-0.3, Math.min(0.46, off > dead ? want.x - dead : off < -dead ? want.x + dead : this.panX));
-    this.panX += (goal - this.panX) * (1 - Math.exp(-dt * 1.2));
+    // the room view follows as the cat goes off toward an edge, a little ahead of it the way it is
+    // walking, never past the room's ends
+    const lead = want.x + m.vel.x * 0.7;
+    const off = lead - this.panX, dead = 0.07;
+    const goal = Math.max(-0.3, Math.min(0.46, off > dead ? lead - dead : off < -dead ? lead + dead : this.panX));
+    this.panX += (goal - this.panX) * (1 - Math.exp(-dt * 1.8));
     const rate = this.focusT > this.focus ? 1.6 : 0.8;
     this.focus += Math.max(-rate * dt, Math.min(rate * dt, this.focusT - this.focus));
     this.placeCamera();

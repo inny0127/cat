@@ -85,6 +85,11 @@ export class Stepper {
   duty = 0.7;
   /** stride length at the present speed (m) */
   stride = 0.2;
+  /** how high the floor is at a point (the cushion and rim of a bed, a box's sides); 0 if flat */
+  ground: ((x: number, z: number) => number) | null = null;
+  /** how far the whole body stands lifted off the floor (over a cushion): the pose's paws are that
+   *  much above where the floor is */
+  lift = 0;
   private settleCooldown = 0;
   private moving = 0;
   private still = 1;
@@ -168,7 +173,7 @@ export class Stepper {
       if (!F.wasPlanted) {
         // just came down to the floor: start from wherever the pose put it
         F.pos.copy(home[l]);
-        F.pos.y = Math.min(F.pos.y, home[l].y);
+        F.pos.y = this.floorAt(home[l]);
         F.wasPlanted = true;
       }
       const off = this.offset(l);
@@ -244,13 +249,26 @@ export class Stepper {
       out.x = centre.x + dx * c + dz * s;
       out.z = centre.z - dx * s + dz * c;
     }
-    out.y = home.y;
+    out.y = this.floorAt(out);
+  }
+
+  /** where a paw stands on the floor at a point: the pose's height over the floor there */
+  private floorAt(p: THREE.Vector3) {
+    return p.y - this.lift + (this.ground ? this.ground(p.x, p.z) : 0);
   }
 
   private begin(F: FootState, home: THREE.Vector3, vel: THREE.Vector3, yawRate: number, centre: THREE.Vector3, dur: number, lead: number, height: number, settle: boolean) {
     F.from.copy(F.pos);
-    F.from.y = Math.max(F.from.y, home.y);
     this.aim(F.to, home, vel, yawRate, centre, lead);
+    // high enough to clear whatever lies between (a bed's rim)
+    if (this.ground) {
+      for (let i = 1; i < 10; i++) {
+        const s = i / 10, t = ease(s);
+        const g = this.ground(F.from.x + (F.to.x - F.from.x) * t, F.from.z + (F.to.z - F.from.z) * t);
+        const need = g + home.y - this.lift + 0.012 - (F.from.y + (F.to.y - F.from.y) * t);
+        if (need > 0) height = Math.max(height, need / Math.max(0.3, hump(s, 0.42)));
+      }
+    }
     F.s = 0;
     F.dur = dur;
     F.height = height;

@@ -52,7 +52,7 @@ export class PixelAvatar implements Avatar {
   /** an errand in the room: to the bowl, eat or drink there, then off out of the room */
   private errand: { reason: string; phase: 'go' | 'do' | 'off'; t: number; dur: number; dir: number } | null = null;
   /** the room's places (bowls, box), once there is a room */
-  spots: { food: THREE.Vector3; water: THREE.Vector3; litter: THREE.Vector3 } | null = null;
+  spots: { food: THREE.Vector3; water: THREE.Vector3; litter: THREE.Vector3; sniff?: { to: THREE.Vector3; face: number }[] } | null = null;
   private fading: { t: number; dur: number; onDone?: () => void } | null = null;
   private readonly look = new THREE.Vector3();
   /** the brain's mode and the cat's feelings (set by the app each frame) */
@@ -82,6 +82,7 @@ export class PixelAvatar implements Avatar {
       room: { minX: home.x - 0.22, maxX: home.x + 0.22, minZ: home.z - 0.3, maxZ: home.z + 0.2 },
       mode: this.mode, mood: this.mood, kneading: false,
       bed: (p) => this.bedSpot(p),
+      sniff: () => this.spots?.sniff ?? [],
     };
   }
 

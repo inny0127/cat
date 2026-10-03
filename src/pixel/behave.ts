@@ -23,6 +23,8 @@ export interface Ctx {
   kneading: boolean;
   /** where to stand and which way to face to lie down in a posture in the middle of the bed */
   bed: (p: PoseName) => { to: THREE.Vector3; yaw: number };
+  /** places in the room worth a sniff */
+  sniff: () => { to: THREE.Vector3; face: number }[];
 }
 
 /** one thing the cat does: update returns false when it is over; stop cuts it short cleanly */
@@ -149,11 +151,21 @@ export const toWindow = (c: Ctx) => {
 
 /** potter about: a spot or two on the floor, a sniff there, home again */
 export const wander = (c: Ctx) => {
-  const spot = () => new THREE.Vector3(rand(c.room.minX, c.room.maxX), 0, rand(c.room.minZ, c.room.maxZ));
+  // somewhere on the floor round the bed, clear of it
+  const spot = () => {
+    const a = rand(-0.4, Math.PI + 0.4), r = rand(0.3, 0.42);
+    return new THREE.Vector3(c.home.x + r * Math.cos(a), 0, c.home.z + r * Math.sin(a) * 0.8);
+  };
   // sniffing: standing, the head right down to the floor, the nose working
   const sniff = (t: number): PoseLayer => ({ neckPitch: -1.05, headPitch: -0.45 + 0.05 * Math.sin(t * 14), whisker: 0.6, earFwd: 0.4, hipY: 0.19 });
-  const legs: Leg[] = [{ to: spot(), face: null, stay: rand(1.5, 3), posture: 'stand', layer: sniff }];
-  if (Math.random() < 0.5) legs.push({ to: spot(), face: null, stay: rand(2, 5), posture: pick<PoseName>(['sit', 'stand']) });
+  // one or two of the room's places worth a sniff, or a spot on the floor
+  const places = c.sniff().slice().sort(() => Math.random() - 0.5);
+  const first = places.length ? places[0] : { to: spot(), face: null as number | null };
+  const legs: Leg[] = [{ to: first.to, face: first.face, stay: rand(1.5, 3), posture: 'stand', layer: sniff }];
+  if (Math.random() < 0.5) {
+    const next = places.length > 1 && Math.random() < 0.6 ? places[1] : { to: spot(), face: null as number | null };
+    legs.push({ to: next.to, face: next.face, stay: rand(2, 5), posture: pick<PoseName>(['sit', 'stand']) });
+  }
   const bed = c.bed('loaf');
   legs.push({ to: bed.to, face: bed.yaw, stay: 0.1, posture: 'loaf' });
   return new Walk('wander', legs);

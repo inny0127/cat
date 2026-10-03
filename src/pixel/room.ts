@@ -319,6 +319,8 @@ export interface Spots {
   food: THREE.Vector3;
   water: THREE.Vector3;
   litter: THREE.Vector3;
+  /** places worth a sniff on a wander round the room: where to stand, and which way to face */
+  sniff: { to: THREE.Vector3; face: number }[];
 }
 
 export class Room {
@@ -344,6 +346,7 @@ export class Room {
       food: new THREE.Vector3(bx - 0.3, 0, wallZ + 0.16),
       water: new THREE.Vector3(bx - 0.15, 0, wallZ + 0.13),
       litter: new THREE.Vector3(bx + 0.62, 0, wallZ + 0.2),
+      sniff: [],
     };
     const S = this.spots;
     const add = (m: THREE.Object3D, x: number, y: number, z: number) => {
@@ -672,6 +675,14 @@ export class Room {
     cap(V(winL - 0.07, winB - 0.02, wallZ + 0.04), V(winR + 0.07, winB - 0.02, wallZ + 0.04), 0.04, 0.5);
     cap(V(bx - 2, 0.318, wallZ + 0.01), V(bx + 2, 0.318, wallZ + 0.01), 0.015, 0.4);
     cap(V(bx - 0.2, 0.16, wallZ + 0.055), V(bx + 0.2, 0.16, wallZ + 0.055), 0.07, 0.5);   // the radiator
+    // worth a sniff: the monstera's pot, the radiator, the yarn, the books with the mug on them
+    const face = (from: THREE.Vector3, at: THREE.Vector3) => Math.atan2(at.x - from.x, at.z - from.z);
+    for (const [sx2, sz2, ax, az] of [
+      [px - 0.22, pz + 0.14, px, pz], [bx - 0.06, wallZ + 0.26, bx - 0.06, wallZ], [bx - 0.12, bz + 0.33, bx - 0.3, bz + 0.26], [fx - 0.17, fz + 0.03, fx, fz],
+    ]) {
+      const to = V(sx2, 0, sz2);
+      S.sniff.push({ to, face: face(to, V(ax, 0, az)) });
+    }
     const O = L.uOcc.value as THREE.Vector4[];
     occ.slice(0, NOCC).forEach(([a, b2, r, k], i) => { O[2 * i].set(a.x, a.y, a.z, r); O[2 * i + 1].set(b2.x, b2.y, b2.z, k); });
   }
@@ -704,6 +715,16 @@ export class Room {
     });
     this.mats.push(m);
     return m;
+  }
+
+  /** how high the floor is at a point: the bed's cushion and its soft rim (paws stand on them) */
+  groundAt(x: number, z: number) {
+    const b = this.spots.bed;
+    const r = Math.hypot(x - b.x, z - b.z);
+    let y = r < 0.15 ? 0.03 : 0;
+    const u = Math.abs(r - 0.172) / 0.04;
+    if (u < 1) y = Math.max(y, 0.03 + 0.03 * Math.sqrt(1 - u * u));
+    return y;
   }
 
   /** dust motes drifting in the sunbeam (world points and how bright each is) */

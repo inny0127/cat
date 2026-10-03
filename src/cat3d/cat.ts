@@ -244,6 +244,10 @@ export class Cat3D {
     if (this.strandUniforms) this.strandUniforms.uPx.value = px;
   }
 
+  /** the height of the floor at a point (a bed's cushion and rim), if it is not flat */
+  groundAt: ((x: number, z: number) => number) | null = null;
+  private lift = 0;
+
   update(dt: number) {
     const { motor, body, kin, stepper, group, tmp } = this;
     motor.gaitPhase = stepper.phase;
@@ -251,7 +255,23 @@ export class Cat3D {
     motor.update(dt);
     const p = motor.pose;
 
+    // over a raised floor (a bed's cushion) the whole cat stands or lies that much higher: from
+    // the floor under its planted paws, or under its middle when lying
+    if (this.groundAt) {
+      let sum = 0, n = 0;
+      for (const l of LEGS) {
+        if (!this.planted[l]) continue;
+        const F = stepper.feet[l];
+        sum += this.groundAt(F.pos.x, F.pos.z);
+        n++;
+      }
+      const want = n >= 2 ? sum / n : 0.8 * this.groundAt(motor.pos.x, motor.pos.z);
+      this.lift += (want - this.lift) * (1 - Math.exp(-dt * 6));
+      stepper.ground = this.groundAt;
+      stepper.lift = this.lift;
+    }
     group.position.copy(motor.pos);
+    group.position.y += this.lift;
     group.rotation.set(0, motor.yaw, 0);
     group.updateMatrixWorld(true);
     this.inv.copy(group.matrixWorld).invert();
