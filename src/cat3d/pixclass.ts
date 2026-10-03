@@ -105,8 +105,12 @@ vec4 pixRoom(int cls, float light, float glow) {
   return vec4((float(cls) + 0.5) / ${NMAT}.0, clamp(light, 0.0, 1.0), clamp(glow, 0.0, 1.0), 0.5);
 }
 // ... and with the light's kind (roomlight.ts: all of it, the lamp's share, the sun's share): the
-// third value's whole part says which light the pixel is in, 1 the lamp's, 2 the sun's
-float pixLights(vec3 lt) { return (lt.y > 0.5 ? 1.0 : 0.0) + (lt.z > 0.4 ? 2.0 : 0.0); }
+// third value's whole part says which light the pixel is in, 1 the lamp's, 2 the sun's (or the
+// moon's); only a light that is really there counts (in the dark, a faint lamp's share of almost
+// nothing would colour a blot)
+float pixLights(vec3 lt) {
+  return (lt.y > 0.5 && lt.x * lt.y > 0.05 ? 1.0 : 0.0) + (lt.z > 0.4 && lt.x * lt.z > 0.05 ? 2.0 : 0.0);
+}
 vec4 pixOutLit(int cls, vec3 lt, float rim) {
   return vec4((float(cls) + 0.5) / ${NMAT}.0, clamp(lt.x, 0.0, 1.0), pixLights(lt) + clamp(rim, 0.0, 0.99), 1.0);
 }

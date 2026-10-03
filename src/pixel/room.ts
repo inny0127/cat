@@ -223,7 +223,7 @@ void main() {
     // stars that twinkle, and the moon
     float st = hash2(sp);
     if (y > 0.4 && st > 0.986 && sin(uTime * (1.0 + st * 3.0) + st * 40.0) > -0.3) { c = hex(255.0, 246.0, 214.0); a = 0.17; }
-    vec2 mc = vec2(0.72 * Wd, 0.84 * H);
+    vec2 mc = vec2(0.26 * Wd, 0.84 * H);
     float md = length(sp - mc), md2 = length(sp - mc - vec2(2.0, 1.0));
     if (md < 3.6 && md2 > 3.0) { c = hex(246.0, 231.0, 168.0); a = 0.2; }
     // now and then a plane's light crossing, blinking

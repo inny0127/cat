@@ -288,7 +288,8 @@ void main() {
     vec3 D = P - C;
     float acc = 0.0;
     for (int i = 0; i < 24; i++) acc += beamAt(C + D * ((float(i) + 0.5) / 24.0));
-    float hz = acc / 24.0 * length(D) * uBeam;
+    // (a weak light, the sun just up, shows nothing in the air: a faint haze would only be a blot)
+    float hz = acc / 24.0 * length(D) * uBeam * smoothstep(0.12, 0.3, uBeam);
     // lighter air in three layers, the thicker the brighter, dithered where one gives way to the
     // next (lit, not greyed: the light adds to what is behind it); and a soft glow all through it
     float lv = clamp(floor(hz * 22.0 + (bayer(p) - 0.5) * 0.9), 0.0, 3.0);
@@ -578,7 +579,9 @@ export class Stage {
     u.uTintShade.value.copy(d.tintShade);
     u.uTintLamp.value.copy(d.tintLamp);
     u.uBeam.value = 0.8 * d.beam;
-    u.uBeamCol.value.set(1, 0.93, 0.78).lerp(new THREE.Vector3(1, 0.8, 0.5), Math.min(1, Math.max(0, d.tintSun.x - 1.07) / 0.13));
+    // (the colour of the light it is: sun, low sun, moon)
+    const t = d.tintSun, tm = Math.max(t.x, t.y, t.z);
+    u.uBeamCol.value.set(t.x / tm, t.y / tm, t.z / tm);
   }
 
   /** a world point in art pixels (x, y from the bottom left) */
