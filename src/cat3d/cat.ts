@@ -78,6 +78,8 @@ export class Cat3D {
   private first = true;
   private readonly inv = new THREE.Matrix4();
   private readonly tmp = { a: v(), b: v(), q: new THREE.Quaternion() };
+  /** the eyeball's radius (m) */
+  private eyeRadius = 0.007;
   private breathT = 0;
   private readonly corrPoses: string[];
   strandUniforms: { uPx: { value: number }; uStrandWidth: { value: number }; uStrandLen: { value: number }; uStrandAlpha: { value: number } } | null = null;
@@ -145,6 +147,7 @@ export class Cat3D {
     const head = byName.get('head')!;
     const headRest = new THREE.Vector3(...asset.bones.find((b) => b.name === 'head')!.pos);
     const LM = asset.landmarks;
+    this.eyeRadius = LM.eyeRadius;
     const v3 = (a: number[]) => new THREE.Vector3(a[0], a[1], a[2]);
     for (const [p, x, eu] of [[LM.eyeL, 1, LM.eyeEulerL], [LM.eyeR, -1, LM.eyeEulerR]] as const) {
       const e = makeEye(LM.eyeRadius, x, shared);
@@ -239,9 +242,17 @@ export class Cat3D {
   }
 
   /** the camera's pixel size, for the whiskers */
-  setPixel(px: number) {
+  setPixel(px: number, eye?: THREE.Vector3) {
     this.whiskers.setPixel(px);
     if (this.strandUniforms) this.strandUniforms.uPx.value = px;
+    // the eyes' highlight about an art pixel at least, wherever the cat is
+    if (eye) {
+      for (const e of this.eyes) {
+        const at = e.group.getWorldPosition(this.tmp.a);
+        const world = px * eye.distanceTo(at);
+        e.eyeMat.uniforms.uGlint.value = Math.max(0.12, (0.55 * world) / this.eyeRadius);
+      }
+    }
   }
 
   /** the height of the floor at a point (a bed's cushion and rim), if it is not flat */

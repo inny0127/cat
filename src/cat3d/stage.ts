@@ -633,7 +633,7 @@ export class Stage {
       this.key.target.position.set(c.x, 0.1, c.z);
       this.key.position.copy(cat.shared.uKeyDir.value).multiplyScalar(2.5).add(this.key.target.position);
       this.key.target.updateMatrixWorld();
-      cat.setPixel((2 * Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2)) / this.pixelRows());
+      cat.setPixel((2 * Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2)) / this.pixelRows(), this.camera.position);
     }
     this.draw();
     // the shadow map exists after the first frame; hand it to the shaders that filter it themselves

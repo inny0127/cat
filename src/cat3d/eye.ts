@@ -48,6 +48,7 @@ ${LID_GLSL}
 uniform float uPupil;      // 0 slit .. 1 round
 uniform float uShine;      // 1 bright, wet eyes .. 0 dull (an ill cat)
 uniform float uFlat;       // pixel art: a flat iris and a pupil wide enough to survive the low resolution
+uniform float uGlint;      // pixel art: half the size of the highlight (eyeball radii)
 uniform vec3 uIrisA;       // round the pupil
 uniform vec3 uIrisB;       // the body of the iris
 uniform vec3 uIrisC;       // toward the rim
@@ -197,7 +198,8 @@ void main() {
     iris = mix(iris, uIrisC * 0.9, smoothstep(0.82, 0.98, rr));
     vec2 q = ip / vec2(0.15 + 0.26 * uPupil, 0.46 + 0.1 * uPupil);
     float pupil = step(length(q), 1.0);
-    vec2 gq = abs(ip - vec2(-0.2, 0.22));
+    // (never smaller than about an art pixel, so even a small eye keeps its spark)
+    vec2 gq = abs(ip - vec2(-0.2, 0.22) - vec2(-0.5, 0.5) * max(0.0, uGlint - 0.12)) * 0.12 / uGlint;
     vec2 gq2 = abs(ip - vec2(0.2, -0.2));
     float glint = max(step(max(gq.x, gq.y), 0.12) * step(0.3, uShine), step(max(gq2.x, gq2.y), 0.05) * step(0.75, uShine));
     vec3 c = mix(iris, vec3(0.004), pupil);
@@ -267,6 +269,7 @@ export function makeEye(radius: number, side: 1 | -1, lights: EyeLights): CatEye
       uPupil: { value: 0.15 },
       uShine: { value: 1 },
       uFlat: { value: 0 },
+      uGlint: { value: 0.12 },
       // amber, sampled from a photograph of a ginger tabby's eye
       // golden amber, between the photographs' copper and hazel
       // olive gold, as in the photographs of ginger tabbies in daylight
