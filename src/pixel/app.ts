@@ -96,6 +96,7 @@ export class PixelApp {
     this.state.lastTick = now;
     this.state.stats.visits++;
     this.makeBrain();
+    this.stage.setCoat(this.state.personality.coat);
     this.brain.wake(performance.now() / 1000, firstEver);
     this.avatar.settle();
 
@@ -400,6 +401,7 @@ export class PixelApp {
       this.state.hints = hints;
       this.state.notifyAsked = true;
       this.makeBrain();
+      this.stage.setCoat(this.state.personality.coat);
       this.avatar.alive = true;
       this.avatar.arrive(() => this.audio.play('trill', { gain: 0.6 }));
       this.brain.wake(performance.now() / 1000, false);

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { Cat3D } from './cat';
-import { NMAT, PIX, PIX_GLSL, rampTexture } from './pixclass';
+import { NMAT, PIX, PIX_GLSL, rampTexture, setCoatRamps } from './pixclass';
 import { ROOM_LIGHT_GLSL, roomLightUniforms, type DayLight } from './roomlight';
 
 const FLOOR_VERT = /* glsl */ `
@@ -665,6 +665,11 @@ export class Stage {
       this.toArt(m.p, a);
       u[i].set(a.x - 2, a.y, m.b);
     }
+  }
+
+  /** the cat's coat (ginger, cream, silver, smoke): its colours in the pixel ramps */
+  setCoat(coat: string) {
+    if (this.pixel) setCoatRamps(this.pixel.mat.uniforms.uRampTex.value as THREE.DataTexture, coat);
   }
 
   /** a moth or a fly at a world point (null: none), its wings up or down, in a light of a colour */

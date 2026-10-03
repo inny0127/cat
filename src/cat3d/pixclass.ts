@@ -66,10 +66,31 @@ export const RAMPS: string[][] = [
 ];
 export const NMAT = 32;
 
-/** the ramps as a texture: x the step (0..4), y the material; raw display sRGB */
-export function rampTexture() {
-  const data = new Uint8Array(5 * NMAT * 4);
-  RAMPS.forEach((ramp, m) => ramp.forEach((hex, i) => {
+/** other coats than ginger (a cat adopted later may be any of them): the ramps for the coat's own
+ *  colour, its stripes and its lighter parts (the white stays white) */
+export const COATS: Record<string, { ginger: string[]; stripe: string[]; cream: string[] }> = {
+  cream: {
+    ginger: ['#7a5560', '#b48a7c', '#dcb492', '#f1d2a8', '#fdebc8'],
+    stripe: ['#5e3a44', '#8d5f5a', '#b98468', '#d9a57c', '#ecc396'],
+    cream: RAMPS[1],
+  },
+  silver: {
+    ginger: ['#4a4a5e', '#76788a', '#a5a7b4', '#cfd0d6', '#eeeef0'],
+    stripe: ['#1e1d2a', '#2e2d3b', '#44434f', '#5d5c66', '#7a7880'],
+    cream: ['#5e5a6c', '#8c8896', '#b9b5bd', '#dcd9dc', '#f3f1f0'],
+  },
+  smoke: {
+    ginger: ['#17141c', '#26222c', '#3a3540', '#534c56', '#716870'],
+    stripe: ['#0e0c12', '#17141c', '#221e27', '#2f2a34', '#3f3944'],
+    cream: ['#3a3542', '#5d5764', '#857e8a', '#ada6b0', '#d1cbd2'],
+  },
+};
+
+/** write the ramps into texture data (a coat other than ginger recolours the cat's own) */
+function fillRamps(data: Uint8Array, coat = 'ginger') {
+  const C = COATS[coat];
+  const ramps = RAMPS.map((r, m) => (C && m === PIX.ginger ? C.ginger : C && m === PIX.stripe ? C.stripe : C && m === PIX.cream ? C.cream : r));
+  ramps.forEach((ramp, m) => ramp.forEach((hex, i) => {
     const c = parseInt(hex.slice(1), 16);
     const o = (m * 5 + i) * 4;
     data[o] = (c >> 16) & 255;
@@ -77,6 +98,18 @@ export function rampTexture() {
     data[o + 2] = c & 255;
     data[o + 3] = 255;
   }));
+}
+
+/** recolour a ramp texture for a coat */
+export function setCoatRamps(tex: THREE.DataTexture, coat: string) {
+  fillRamps(tex.image.data as Uint8Array, coat);
+  tex.needsUpdate = true;
+}
+
+/** the ramps as a texture: x the step (0..4), y the material; raw display sRGB */
+export function rampTexture() {
+  const data = new Uint8Array(5 * NMAT * 4);
+  fillRamps(data);
   const tex = new THREE.DataTexture(data, 5, NMAT, THREE.RGBAFormat, THREE.UnsignedByteType);
   tex.colorSpace = THREE.NoColorSpace;
   tex.minFilter = tex.magFilter = THREE.NearestFilter;
