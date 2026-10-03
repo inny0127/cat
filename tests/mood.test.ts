@@ -86,7 +86,7 @@ describe('feelings in the body', () => {
   it('a happy cat that trusts you carries its tail up with a hook, and breathes slow', () => {
     const b = body(MOODS.happy);
     expect(b.tailLift).toBeGreaterThan(0.5);
-    expect(b.tailCurl).toBeGreaterThan(0.3);
+    expect(b.tailHook).toBeGreaterThan(0.3);
     expect(b.breathRate).toBeLessThan(1);
     expect(body({ pleasure: 0.9, trust: -0.8 }).tailLift).toBeLessThan(0.1);
     expect(body(MOODS.curious).earFwd).toBeGreaterThan(0.2);

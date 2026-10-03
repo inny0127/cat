@@ -91,6 +91,7 @@ export interface BodyLook {
   tailLift: number;
   tailCurve: number;
   tailCurl: number;
+  tailHook: number;
   tailSag: number;
   /** fur on end */
   puff: number;
@@ -130,7 +131,8 @@ export function bodyFor(m: Mood): BodyLook {
     whisker: 0.8 * m.arousal - 0.25 * m.pleasure - 0.9 * m.fear - 0.6 * cross - 0.3 * m.sick,
     tailLift: 0.75 * friendly + 0.3 * m.arousal - 1.0 * scared + 0.6 * threat - 0.2 * cross - 0.5 * m.sick,
     tailCurve: -0.35 * friendly + 0.35 * scared,
-    tailCurl: 0.45 * friendly + 0.2 * m.arousal,
+    tailCurl: 0,
+    tailHook: 0.7 * friendly + 0.2 * m.arousal,
     tailSag: 0.5 * m.sick + 0.3 * m.sleepy,
     puff: 0.65 * m.fear + 0.6 * threat + 0.15 * cross,
     jaw: 0.9 * threat,

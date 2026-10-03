@@ -32,15 +32,21 @@ export class Tail {
     this.seg = this.idx.map((b, i) => (i + 1 < this.n ? kin.offset[this.idx[i + 1]].clone() : kin.offset[b].clone()));
     this.radius = this.idx.map((_, i) => 0.0175 - 0.0065 * (i / this.n) + 0.006);
     this.wave = this.idx.map(() => 0);
+    // the hook's share of each joint: none at the root, gathering over the last third
+    const sm = (u: number) => { const x = Math.max(0, Math.min(1, (u - 0.45) / 0.55)); return x * x * (3 - 2 * x); };
+    const raw = this.idx.map((_, i) => (i === 0 ? 0 : sm(i / (this.n - 1))));
+    const tot = raw.reduce((a, b) => a + b, 0) || 1;
+    this.hookW = raw.map((r) => r / tot);
   }
+  private readonly hookW: number[];
 
   /** the shape the pose asks for, as local rotations */
   private target(p: Pose, i: number, out: THREE.Quaternion) {
     const n = this.n;
     const u = i / (n - 1);
     if (i === 0) return euler(-p.tailLift, -p.tailSide + this.wave[0], 0, out);
-    // bend grows along the tail; curl concentrates toward the tip
-    const bend = p.tailCurve / (n - 1) * (0.6 + 0.8 * u);
+    // bend grows along the tail; curl and hook concentrate toward the tip
+    const bend = p.tailCurve / (n - 1) * (0.6 + 0.8 * u) - p.tailHook * this.hookW[i];
     const wrap = -p.tailCurl / (n - 1) * (0.5 + 1.0 * u);
     return euler(bend, wrap + this.wave[i], 0, out);
   }

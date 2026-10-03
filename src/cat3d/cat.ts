@@ -65,6 +65,9 @@ export class Cat3D {
   private readonly homeW: Record<Leg, THREE.Vector3> = { LF: v(), RF: v(), LH: v(), RH: v() };
   private readonly targ: Record<Leg, THREE.Vector3> = { LF: v(), RF: v(), LH: v(), RH: v() };
   private readonly planted = { LF: 1, RF: 1, LH: 1, RH: 1 };
+  private readonly reachW = { LF: 0, RF: 0, LH: 0, RH: 0 };
+  private readonly need = { hind: 0, front: 0 };
+  private readonly drop = { hind: 0, front: 0 };
   private readonly flex = { LF: 0, RF: 0, LH: 0, RH: 0 };
   private readonly ground = { LF: 1, RF: 1, LH: 1, RH: 1 };
   private first = true;
@@ -232,6 +235,7 @@ export class Cat3D {
   update(dt: number) {
     const { motor, body, kin, stepper, group, tmp } = this;
     motor.gaitPhase = stepper.phase;
+    motor.gait = stepper.signals;
     motor.update(dt);
     const p = motor.pose;
 
@@ -261,11 +265,31 @@ export class Cat3D {
       stepper.reset(this.homeW);
       this.first = false;
     }
-    stepper.update(dt, this.homeW, this.planted, motor.vel, motor.yawRate, motor.pos);
+    stepper.update(dt, this.homeW, this.planted, motor.vel, motor.yawRate, motor.pos, motor.yaw, motor.goal ? motor.wantSpeed : 0);
+    body.scapLift.L = stepper.signals.scapL;
+    body.scapLift.R = stepper.signals.scapR;
     for (const l of LEGS) {
-      this.targ[l].copy(stepper.feet[l].pos).applyMatrix4(this.inv);
-      this.flex[l] = Math.max(p[l].flex, stepper.feet[l].flex);
+      const F = stepper.feet[l];
+      this.targ[l].copy(F.pos).applyMatrix4(this.inv);
+      this.flex[l] = F.stepping ? F.flex : Math.max(p[l].flex, F.flex);
       this.ground[l] = p[l].planted;
+      // legs on the floor, and those coming down to it, must reach their paws
+      this.reachW[l] = this.planted[l] ? (F.stepping ? Math.max(0, (F.s - 0.6) / 0.4) : 1) : 0;
+    }
+    // sink between the legs where they could not: the body rises and falls through the stride
+    // from its own legs (quick to come down, easing back up)
+    const need = body.reachDrop(this.targ, this.reachW, this.need);
+    const ka = 1 - Math.exp(-dt * 30), kr = 1 - Math.exp(-dt * 8);
+    this.drop.hind += (need.hind - this.drop.hind) * (need.hind > this.drop.hind ? ka : kr);
+    this.drop.front += (need.front - this.drop.front) * (need.front > this.drop.front ? ka : kr);
+    if (this.drop.hind > 1e-4 || this.drop.front > 1e-4) {
+      p.hipY -= this.drop.hind;
+      // the shoulders come down by tipping the spine, the head keeping its line
+      const tip = (this.drop.front - this.drop.hind) / 0.26;
+      p.chestPitch -= tip;
+      p.neckPitch += tip;
+      body.trunk(p);
+      if (motor.lookW > 0.01) body.look(tmp.a.copy(motor.gaze).applyMatrix4(this.inv), motor.lookW, p.headRoll);
     }
     body.legsTo(p, this.targ, this.flex, this.ground);
     body.face(p, motor.twitch);

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { POSES, blendPose, clonePose, copyPose, GROUPS, type Foot, type Group, type Pose, type PoseLayer, type PoseName } from './pose';
 import { Wobble, noise1, clamp } from '../util/math';
 import { NEUTRAL, bodyFor, eyesFor, type BodyLook, type Mood } from './mood';
+import type { GaitSignals } from './stepper';
 
 /** Which postures can go straight to which, and how long it takes (seconds). */
 const EDGES: [PoseName, PoseName, number][] = [
@@ -78,6 +79,8 @@ export class Motor {
   readonly vel = new THREE.Vector3();
   yawRate = 0;
   speed = 0;
+  /** the speed it means to go at (the stride sets its pace by this while it gets going) */
+  wantSpeed = 0;
 
   posture: PoseName = 'stand';
   private target: PoseName = 'stand';
@@ -285,17 +288,24 @@ export class Motor {
       } else {
         const want_yaw = Math.atan2(dx, dz);
         const e = wrap(want_yaw - this.yaw);
-        turn = clamp(e * 3.2, -2.4, 2.4);
-        // slow for sharp turns, and ease in to the stop
-        const facing = Math.max(0, Math.cos(e));
-        want = this.goalSpeed * Math.pow(facing, this.goalPass ? 1.5 : 3) * (this.goalPass ? 1 : clamp(dist / 0.25, 0.15, 1));
+        // (on the spot a little slower than on the move)
+        const maxTurn = 1.35 + 0.45 * clamp(this.speed / 0.2);
+        turn = clamp(e * 3.2, -maxTurn, maxTurn);
+        // a cat walks round in an arc rather than stopping to pivot, slowing for the sharper
+        // turns (near the goal too, so as not to circle it); the way behind it, it all but turns
+        // on the spot. It eases into the stop over the last step or two
+        const facing = Math.cos(e);
+        const steer = this.goalPass ? clamp(0.45 + 0.55 * facing, 0.15, 1)
+          : clamp(0.35 + 0.65 * facing, 0.1, 1) * (Math.abs(e) > 0.6 ? clamp(dist / 0.25, 0.35, 1) : 1);
+        want = this.goalSpeed * steer * (this.goalPass ? 1 : clamp(dist / 0.14, 0.3, 1));
         if (dist < 0.025) want = 0;
       }
     }
+    this.wantSpeed = want;
     // accelerate like an animal: quick to start, a couple of steps to stop
-    const acc = want > this.speed ? 1.6 : 2.4;
+    const acc = want > this.speed ? 0.7 : 1.4;
     this.speed += clamp(want - this.speed, -acc * dt, acc * dt);
-    this.yawRate += (turn - this.yawRate) * Math.min(1, dt * 8);
+    this.yawRate += (turn - this.yawRate) * Math.min(1, dt * 5);
     this.yaw = wrap(this.yaw + this.yawRate * dt);
     this.vel.set(Math.sin(this.yaw) * this.speed, 0, Math.cos(this.yaw) * this.speed);
     this.pos.addScaledVector(this.vel, dt);
@@ -324,23 +334,43 @@ export class Motor {
       }
     }
     const t = this.time;
-    // gait: the body rises and rolls with the steps; the spine waves side to side
-    const moving = clamp(this.speed / 0.25);
-    const ph = this.gaitPhase * Math.PI * 2;
-    p.hipY += moving * 0.004 * Math.sin(2 * ph + 0.6);
-    p.hipRoll += moving * 0.045 * Math.sin(ph);
-    p.hipYaw += moving * 0.05 * Math.sin(ph + 1.3);
-    p.chestYaw -= moving * 0.07 * Math.sin(ph + 1.3);
-    p.chestRoll -= moving * 0.03 * Math.sin(ph + 0.4);
-    p.hipPitch += moving * 0.025 * Math.sin(2 * ph);
+    // the stride: the body rises over each leg as it stands straight under it, dips over the
+    // swinging side and turns with the legs; the head rides it out
+    const g = this.gait;
+    const moving = g ? g.moving : 0;
+    if (g) {
+      p.hipY += g.hipHeave;
+      p.hipRoll += g.hipRoll;
+      p.hipYaw += g.hipYaw;
+      p.chestRoll += g.chestRoll;
+      p.chestYaw += g.chestYaw;
+      // (pitch is nose-up positive)
+      p.chestPitch += (g.chestHeave - g.hipHeave) / 0.26;
+      p.neckPitch -= 0.5 * g.chestHeave / 0.12;
+      // walking, the head comes down to about the line of the back, the face still level; the
+      // body goes a little lower on softer legs, the hind paws under the hips
+      p.neckPitch -= 0.3 * moving;
+      p.headPitch += 0.22 * moving;
+      p.hipY -= 0.01 * moving;
+      p.LH.z += 0.01 * moving;
+      p.RH.z += 0.01 * moving;
+    }
     // turning: the spine bends into the curve and the head leads
     const yr = clamp(this.yawRate, -2.5, 2.5);
     p.lumbarYaw += yr * 0.12;
     p.chestYaw += yr * 0.1;
     p.neckYaw += yr * 0.12;
-    // walking: tail carried higher
-    p.tailLift += moving * 0.35;
-    p.tailCurve -= moving * 0.2;
+    // walking, the tail is carried: up with a hook at the tip in a cat at ease with you, lower
+    // and easy otherwise
+    const m = this.mood;
+    const ease01 = clamp((m.trust + 0.1) / 0.7) * (1 - m.fear) * (1 - 0.7 * m.sick) * (1 - 0.5 * m.sleepy);
+    const wl = moving * (1 - clamp(p.tailSag));
+    p.tailLift += (0.45 + 0.85 * ease01 - p.tailLift) * wl;
+    p.tailCurve += (0.35 - 0.5 * ease01 - p.tailCurve) * wl;
+    p.tailHook += (0.45 + 0.45 * ease01 - p.tailHook) * wl;
+    p.tailCurl += (0 - p.tailCurl) * wl;
+    this.swayW = moving;
+    this.swayA = g ? g.angle : 0;
     // alive: slow weight shifts and head drift
     p.hipRoll += 0.012 * noise1(t * 0.23 + 3);
     p.chestYaw += 0.02 * noise1(t * 0.19 + 7);
@@ -365,6 +395,8 @@ export class Motor {
     p.tailLift += f.tailLift * up;
     p.tailCurve += f.tailCurve * up;
     p.tailCurl += f.tailCurl;
+    p.tailHook += f.tailHook * up;
+    p.tailLift = Math.min(1.45, p.tailLift);
     p.tailSag = clamp(p.tailSag + f.tailSag);
     p.puff = clamp(p.puff + f.puff);
     p.jaw = clamp(p.jaw + f.jaw);
@@ -435,6 +467,10 @@ export class Motor {
 
   /** gait phase is kept by the stepper; the cat object copies it in */
   gaitPhase = 0;
+  /** what the stride does to the body this frame (the stepper's, copied in by the cat) */
+  gait: GaitSignals | null = null;
+  private swayW = 0;
+  private swayA = 0;
 
   /** the tail's sway: the motor's own, plus the feeling's */
   private get waveAmp() {
@@ -444,7 +480,9 @@ export class Motor {
   /** time-varying tail yaw for segment i of n */
   tailWaveAt(i: number, n: number) {
     const u = i / (n - 1);
-    return this.waveAmp * 0.22 * Math.sin(this.wavePhase - u * 2.2) * (0.3 + u) + 0.18 * this.tailFlickW.x * u * u;
+    // walking, it swings across once a stride, the tip a beat behind the root
+    const sway = 0.12 * this.swayW * Math.sin(this.swayA + 0.6 - u * 1.8) * (0.35 + u);
+    return this.waveAmp * 0.22 * Math.sin(this.wavePhase - u * 2.2) * (0.3 + u) + 0.18 * this.tailFlickW.x * u * u + sway;
   }
 }
 

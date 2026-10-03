@@ -33,6 +33,8 @@ export interface Pose {
   hindFlat: number;
   /** tail: lift at the root (+ up), sideways sweep (+ left), bend along it, extra curl at the tip */
   tailLift: number; tailSide: number; tailCurve: number; tailCurl: number;
+  /** the last third of the tail bent forward over itself (the hook of a happy cat's tail up) */
+  tailHook: number;
   /** 0 the tail holds its shape .. 1 it lies limp under its own weight */
   tailSag: number;
   /** ears: forward (+) / back (-), out to the sides (airplane), flattened */
@@ -56,7 +58,7 @@ const BASE: Pose = {
   LF: foot(0.036, 0.012, 0.104), RF: foot(0.036, 0.012, 0.104),
   LH: foot(0.041, 0.013, -0.158), RH: foot(0.041, 0.013, -0.158),
   pastern: 0.35, hindFlat: 0,
-  tailLift: 0.25, tailSide: 0, tailCurve: -0.5, tailCurl: 0.3, tailSag: 0,
+  tailLift: 0.25, tailSide: 0, tailCurve: -0.5, tailCurl: 0.3, tailHook: 0, tailSag: 0,
   earFwd: 0.2, earOut: 0, earFlat: 0,
   eyeOpen: 0.95, squint: 0.03, pupil: 0.62, whisker: 0, jaw: 0,
   breath: 0.6, puff: 0,
@@ -68,7 +70,8 @@ const make = (over: Partial<Pose>): Pose => {
 };
 
 export const POSES = {
-  stand: make({}),
+  /** standing easy: legs a little bent, not locked straight */
+  stand: make({ hipY: 0.204 }),
 
   /** alert stand, head up, tail up */
   alert: make({
@@ -183,7 +186,7 @@ export const GROUPS = {
   head: ['neckPitch', 'neckYaw', 'headPitch', 'headYaw', 'headRoll'],
   front: ['LF', 'RF', 'pastern'],
   hind: ['LH', 'RH', 'hindFlat'],
-  tail: ['tailLift', 'tailSide', 'tailCurve', 'tailCurl', 'tailSag'],
+  tail: ['tailLift', 'tailSide', 'tailCurve', 'tailCurl', 'tailHook', 'tailSag'],
   ears: ['earFwd', 'earOut', 'earFlat'],
   face: ['eyeOpen', 'squint', 'pupil', 'whisker', 'jaw', 'breath', 'puff'],
 } as const;

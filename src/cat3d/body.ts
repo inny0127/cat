@@ -16,6 +16,7 @@ interface LegRig {
   restDir: THREE.Vector3[];
   restSide: THREE.Vector3;
   scapRest?: THREE.Vector3;   // scapula -> shoulder joint, rest
+  scapOffset?: THREE.Vector3; // scapula from its parent, rest
   lastCannon: THREE.Vector3;  // pantograph warm start
 }
 
@@ -65,7 +66,10 @@ export class Body {
         restDir, restSide,
         lastCannon: restDir[2].clone(),
       };
-      if (front) rig.scapRest = R[b[0]].clone().sub(R[I['scap' + s]]);
+      if (front) {
+        rig.scapRest = R[b[0]].clone().sub(R[I['scap' + s]]);
+        rig.scapOffset = kin.offset[I['scap' + s]].clone();
+      }
       return rig;
     };
     this.legs = { LF: mk('LF'), RF: mk('RF'), LH: mk('LH'), RH: mk('RH') };
@@ -111,6 +115,9 @@ export class Body {
     ring(I.head, 0, -0.02, 0.03, 0.03, 0.03);
     return Math.max(0, 0.006 - lowest);
   }
+
+  /** how far each shoulder blade rides up this frame (m; the stride's doing) */
+  readonly scapLift = { L: 0, R: 0 };
 
   /** the point between the eyes from the head joint, at rest (the cat sets it from its model) */
   readonly eyeOffset = new THREE.Vector3(0, 0.015, 0.052);
@@ -170,6 +177,34 @@ export class Body {
   }
   private readonly lookF = new THREE.Vector3();
 
+
+  /**
+   * How far the hips and the shoulders must come down for every leg that is on the floor (or
+   * about to land: `weight` 0..1 per leg) to reach its paw without locking straight. A walking
+   * cat sinks a little between its legs as they spread; this is that, from the legs themselves.
+   * Paw targets in model space; returns metres of drop at the hips and at the shoulders.
+   */
+  reachDrop(target: Record<Leg, THREE.Vector3>, weight: Record<Leg, number>, out: { hind: number; front: number }) {
+    out.hind = 0;
+    out.front = 0;
+    for (const leg of LEGS) {
+      const w = weight[leg];
+      if (w <= 0) continue;
+      const L = this.legs[leg];
+      const J = this.kin.wp[L.b[0]];
+      const T = target[leg];
+      // front: the shoulder blade's lift rides on top; the leg may open almost straight. Hind:
+      // the hock keeps an angle (the cannon stays near parallel to the thigh)
+      const lift = L.front ? (L.side > 0 ? this.scapLift.L : this.scapLift.R) : 0;
+      const reach = (L.len[0] + L.len[1] + L.len[2]) * (L.front ? 0.95 : 0.9);
+      const hd = Math.hypot(T.x - J.x, T.z - J.z);
+      const dv = Math.sqrt(Math.max(0, reach * reach - hd * hd));
+      const drop = Math.min(0.03, Math.max(0, J.y + lift - T.y - dv)) * w;
+      if (L.front) out.front = Math.max(out.front, drop);
+      else out.hind = Math.max(out.hind, drop);
+    }
+    return out;
+  }
 
   /** foot target of a pose for one leg, model space (needs the trunk solved) */
   footTarget(p: Pose, leg: Leg, out: THREE.Vector3) {
@@ -235,6 +270,9 @@ export class Body {
     const r = L.scapRest!;
     const swing = Math.atan2(toT.z, -toT.y) - Math.atan2(r.z, -r.y);
     kin.setLocal(L.root, this.t.q1.setFromAxisAngle(AX, -Math.max(-0.5, Math.min(0.5, swing * 0.35))));
+    // and rides up between the ribs as its leg takes the weight
+    kin.offset[L.root].copy(L.scapOffset!).addScaledVector(UP, L.side > 0 ? this.scapLift.L : this.scapLift.R);
+    kin.fk(L.root);
     kin.fk(L.b[0]);
     const S = kin.wp[L.b[0]];
     // pastern: from straight down, toes forward by `pastern`, folded back by flex
@@ -252,8 +290,9 @@ export class Body {
     kin.setWorld(L.b[1], aim(L.restDir[1], L.restSide, d.copy(W2).sub(E), side, this.t.q1));
     kin.setWorld(L.b[2], aim(L.restDir[2], L.restSide, M, side, this.t.q1));
     kin.fk(L.b[3]);
-    // paw: flat along the floor, curling under as it flexes
-    const paw = this.pawDir(girdleQ, ground, flex * 1.3, side, d);
+    // paw: flat along the floor; the toes hang a little as the wrist folds, and lift as they
+    // reach to land
+    const paw = this.pawDir(girdleQ, ground, flex > 0 ? flex * 0.45 : flex * 0.6, side, d);
     kin.setWorld(L.b[3], aim(L.restDir[3], L.restSide, paw, side, this.t.q1));
     this.reached[L.leg].copy(kin.wp[L.b[3]]);
   }
@@ -292,7 +331,7 @@ export class Body {
     kin.setWorld(L.b[1], aim(L.restDir[1], L.restSide, d.copy(Hk2).sub(K), side, this.t.q1));
     kin.setWorld(L.b[2], aim(L.restDir[2], L.restSide, M, side, this.t.q1));
     kin.fk(L.b[3]);
-    const paw = this.pawDir(girdleQ, ground, flex * 1.1, side, d);
+    const paw = this.pawDir(girdleQ, ground, flex > 0 ? flex * 0.5 : flex * 0.5, side, d);
     kin.setWorld(L.b[3], aim(L.restDir[3], L.restSide, paw, side, this.t.q1));
     this.reached[L.leg].copy(kin.wp[L.b[3]]);
   }
@@ -328,3 +367,4 @@ export class Body {
 }
 
 const AX = new THREE.Vector3(1, 0, 0), AY = new THREE.Vector3(0, 1, 0), AZ = new THREE.Vector3(0, 0, 1);
+const UP = AY;
