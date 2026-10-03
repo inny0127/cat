@@ -186,6 +186,7 @@ export function dayLight(hour: number, out?: DayLight): DayLight {
   o.tintSun = (o.tintSun ?? new THREE.Vector3()).set(tintSun[0], tintSun[1], tintSun[2]);
   o.tintShade = (o.tintShade ?? new THREE.Vector3()).set(tintShade[0], tintShade[1], tintShade[2]);
   o.tintLamp = (o.tintLamp ?? new THREE.Vector3()).set(tintLamp[0], tintLamp[1], tintLamp[2]);
-  o.beam = sun * (0.6 + 0.4 * gold);
+  // the beam shows in the air most when the sun is low and its light comes in long
+  o.beam = sun * (0.15 + 0.85 * Math.max(gold, 1 - Math.min(1, keyDir.y / 0.6)));
   return o;
 }

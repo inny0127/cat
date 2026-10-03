@@ -256,10 +256,9 @@ void main() {
     vec3 P = (uViewInv * vec4(v.xyz / v.w, 1.0)).xyz;
     vec3 C = (uViewInv * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
     vec3 D = P - C;
-    float j = fract(52.9829189 * fract(dot(vec2(p), vec2(0.06711056, 0.00583715))));
     float acc = 0.0;
-    for (int i = 0; i < 16; i++) acc += sunThrough(C + D * ((float(i) + j) / 16.0));
-    float hz = acc / 16.0 * length(D) * uBeam;
+    for (int i = 0; i < 24; i++) acc += sunThrough(C + D * ((float(i) + 0.5) / 24.0));
+    float hz = acc / 24.0 * length(D) * uBeam;
     // a clean shape of lighter air where it is thick enough, and a soft glow all through it
     col = mix(col, uBeamCol, hz > 0.1 ? 0.16 : 0.0);
     glow = max(glow, clamp(hz, 0.0, 1.0) * 0.7);

@@ -176,6 +176,7 @@ export class PixelApp {
     if (this.room) {
       const tv = Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2);
       this.room.setPixel(2 * tv * cam.position.distanceTo(this.room.spots.bed.clone().setZ(this.room.spots.bed.z - 0.62)) / this.stage.pixelRows());
+      this.room.setView(cam.position.x);
     }
   }
 

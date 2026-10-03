@@ -124,9 +124,12 @@ void main() {
 const SKY_FRAG = /* glsl */ `
 uniform float uTime;
 uniform float uHour;
-uniform vec2 uSkyPx;     // the window's size in art pixels (for the town and the stars)
+uniform vec2 uSkyPx;     // the window's size in art pixels
+uniform float uPxSize;   // an art pixel at the window, in metres
+uniform float uPar;      // where you look from, across the room from the window's middle (metres)
 varying vec2 vUv;
 float hash2(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float h1(float n) { return fract(sin(n * 127.1 + 31.7) * 43758.5453); }
 float noise(vec2 p) {
   vec2 i = floor(p), f = fract(p);
   f = f * f * (3.0 - 2.0 * f);
@@ -141,52 +144,151 @@ int band4(float t, vec2 px) {
   return int(clamp(floor(s + 0.5), 0.0, 3.0));
 }
 vec3 pick(int i, vec3 a, vec3 b, vec3 c, vec3 d) { return i == 0 ? a : i == 1 ? b : i == 2 ? c : d; }
+// the hours' weights: day, gold, dusk, night
+vec4 W;
+vec3 tod(vec3 day, vec3 gold, vec3 dusk, vec3 night) { return W.x * day + W.y * gold + W.z * dusk + W.w * night; }
+// how far a layer at a distance seems to slide as you move across the room (whole pixels)
+float slide(float f) { return floor(uPar * f / uPxSize + 0.5); }
+
 void main() {
   vec2 px = floor(vUv * uSkyPx);
+  float H = uSkyPx.y, Wd = uSkyPx.x;
   float y = vUv.y;
   float h = uHour;
-  // the sky's hours: day, the gold of the first and last of the sun, dusk (and dawn), night
   float night = 1.0 - smoothstep(5.4, 6.6, h) * (1.0 - smoothstep(19.6, 20.6, h));
   float dusk = min(1.0, max(0.0, 1.0 - abs(h - 19.2) / 0.9) + max(0.0, 1.0 - abs(h - 6.2) / 0.7)) * (1.0 - night);
   float gold = clamp(smoothstep(16.0, 17.6, h) * (1.0 - smoothstep(18.7, 19.5, h)) + (1.0 - smoothstep(6.6, 8.2, h)) * smoothstep(5.5, 6.2, h), 0.0, 1.0) * (1.0 - night - dusk);
   float day = max(0.0, 1.0 - night - dusk - gold);
-  int i = band4(y, px);
+  W = vec4(day, gold, dusk, night);
   // alpha: 0.15 shown as it is; 0.17 a small light that glows a little (a star, a lit window);
-  // 0.2 one that glows (the moon)
+  // 0.2 one that glows (the moon, a beacon)
   float a = 0.15;
-  vec3 c = day * pick(i, hex(214.0, 234.0, 242.0), hex(178.0, 218.0, 238.0), hex(141.0, 196.0, 230.0), hex(112.0, 172.0, 220.0))
-         + gold * pick(i, hex(255.0, 220.0, 156.0), hex(250.0, 196.0, 150.0), hex(206.0, 182.0, 190.0), hex(138.0, 156.0, 206.0))
-         + dusk * pick(i, hex(255.0, 196.0, 140.0), hex(240.0, 140.0, 118.0), hex(176.0, 112.0, 148.0), hex(108.0, 92.0, 150.0))
-         + night * pick(i, hex(59.0, 52.0, 98.0), hex(44.0, 42.0, 82.0), hex(33.0, 34.0, 66.0), hex(24.0, 26.0, 52.0));
+
+  // the sky, far off: it slides with you
+  vec2 sp = px - vec2(slide(1.0), 0.0);
+  int i = band4(y, px);
+  vec3 c = tod(pick(i, hex(214.0, 234.0, 242.0), hex(178.0, 218.0, 238.0), hex(141.0, 196.0, 230.0), hex(112.0, 172.0, 220.0)),
+               pick(i, hex(255.0, 220.0, 156.0), hex(250.0, 196.0, 150.0), hex(206.0, 182.0, 190.0), hex(138.0, 156.0, 206.0)),
+               pick(i, hex(255.0, 196.0, 140.0), hex(240.0, 140.0, 118.0), hex(176.0, 112.0, 148.0), hex(108.0, 92.0, 150.0)),
+               pick(i, hex(59.0, 52.0, 98.0), hex(44.0, 42.0, 82.0), hex(33.0, 34.0, 66.0), hex(24.0, 26.0, 52.0)));
   // toward the sun, low over the town at the ends of the day, the sky is brighter
   float side = h < 12.0 ? 1.0 - vUv.x : vUv.x;
   c = mix(c, hex(255.0, 236.0, 190.0), (gold + 0.6 * dusk) * 0.35 * smoothstep(0.35, 1.0, side) * smoothstep(0.75, 0.2, y));
   if (night > 0.5) {
     // stars that twinkle, and the moon
-    float st = hash2(px);
-    if (y > 0.35 && st > 0.985 && sin(uTime * (1.0 + st * 3.0) + st * 40.0) > -0.3) { c = hex(255.0, 246.0, 214.0); a = 0.17; }
-    vec2 mc = vec2(0.72, 0.8) * uSkyPx;
-    float md = length(px - mc), md2 = length(px - mc - vec2(2.0, 1.0));
+    float st = hash2(sp);
+    if (y > 0.4 && st > 0.986 && sin(uTime * (1.0 + st * 3.0) + st * 40.0) > -0.3) { c = hex(255.0, 246.0, 214.0); a = 0.17; }
+    vec2 mc = vec2(0.72 * Wd, 0.84 * H);
+    float md = length(sp - mc), md2 = length(sp - mc - vec2(2.0, 1.0));
     if (md < 3.6 && md2 > 3.0) { c = hex(246.0, 231.0, 168.0); a = 0.2; }
+    // now and then a plane's light crossing, blinking
+    float tp = mod(uTime, 70.0);
+    vec2 pl = vec2(-6.0 + tp * (Wd + 12.0) / 40.0, H * 0.9 - tp * 0.12);
+    if (tp < 40.0 && sp == floor(pl) && fract(uTime * 0.8) < 0.3) { c = hex(255.0, 120.0, 100.0); a = 0.2; }
   } else {
     // slow clouds, lit gold and pink at the ends of the day
-    float n = noise(px * vec2(0.09, 0.18) + vec2(uTime * 0.02, 0.0)) * 0.7 + noise(px * vec2(0.2, 0.4) + vec2(uTime * 0.03, 3.0)) * 0.3;
-    float bandC = smoothstep(0.35, 0.95, y);
-    vec3 lit = day * hex(246.0, 249.0, 252.0) + gold * hex(255.0, 238.0, 205.0) + dusk * hex(255.0, 214.0, 190.0) + night * hex(60.0, 56.0, 96.0);
-    vec3 shade = day * hex(214.0, 228.0, 240.0) + gold * hex(236.0, 186.0, 170.0) + dusk * hex(232.0, 160.0, 150.0) + night * hex(44.0, 42.0, 80.0);
-    if (n * bandC > 0.42) c = lit;
-    else if (n * bandC > 0.37) c = shade;
-  }
-  // the town across the way: roofs, and lit windows once it is getting dark
-  float col = floor(px.x / 5.0);
-  float roof = (0.16 + 0.22 * hash2(vec2(col, 1.0))) * uSkyPx.y;
-  if (px.y < roof) {
-    c = day * hex(126.0, 150.0, 176.0) + gold * hex(150.0, 128.0, 150.0) + dusk * hex(96.0, 70.0, 104.0) + night * hex(22.0, 22.0, 40.0);
-    if (night + dusk > 0.5 && mod(px.x, 5.0) > 0.5 && mod(px.x, 5.0) < 3.5 && mod(px.y, 3.0) > 1.0 && px.y < roof - 1.0) {
-      float w = hash2(floor(px / vec2(1.0, 3.0)) + floor(uTime / 23.0) * 0.01);
-      if (w > 1.0 - 0.4 * night - 0.15 * dusk) { c = w > 0.85 ? hex(255.0, 160.0, 92.0) : hex(255.0, 210.0, 120.0); a = 0.17; }
+    float n = noise(sp * vec2(0.09, 0.18) + vec2(uTime * 0.02, 0.0)) * 0.7 + noise(sp * vec2(0.2, 0.4) + vec2(uTime * 0.03, 3.0)) * 0.3;
+    float bandC = smoothstep(0.45, 0.95, y);
+    if (n * bandC > 0.42) c = tod(hex(246.0, 249.0, 252.0), hex(255.0, 238.0, 205.0), hex(255.0, 214.0, 190.0), hex(60.0, 56.0, 96.0));
+    else if (n * bandC > 0.37) c = tod(hex(214.0, 228.0, 240.0), hex(236.0, 186.0, 170.0), hex(232.0, 160.0, 150.0), hex(44.0, 42.0, 80.0));
+    // a few birds crossing now and then, wings up, wings down
+    float tb = mod(uTime + 20.0, 47.0);
+    if (tb < 16.0) {
+      for (int k = 0; k < 4; k++) {
+        float fk = float(k);
+        vec2 bc = floor(vec2(-8.0 + tb * (Wd + 16.0) / 16.0 - fk * 5.0 - h1(fk) * 3.0, H * 0.74 + fk * 2.0 + 2.0 * sin(tb * 0.7 + fk * 1.7)));
+        vec2 q = px - bc;
+        bool upw = fract(uTime * 2.6 + fk * 0.37) > 0.5;
+        bool hit = upw ? ((q.y == 0.0 && abs(q.x) == 1.0) || (q.y == -1.0 && q.x == 0.0)) : ((q.y == -1.0 && abs(q.x) == 1.0) || (q.y == 0.0 && q.x == 0.0));
+        if (hit) c = tod(hex(70.0, 78.0, 96.0), hex(96.0, 70.0, 70.0), hex(80.0, 56.0, 76.0), c);
+      }
     }
   }
+
+  // far away: a hill with a tower on it, and the hazy tops of tall buildings
+  float fx = px.x - slide(0.96);
+  float fcell = floor(fx / 7.0);
+  float farH = H * (0.27 + 0.09 * h1(fcell * 3.1)) + (h1(fcell * 7.7) > 0.8 ? H * 0.09 * h1(fcell) : 0.0);
+  float hx = (fx - Wd * 0.7) / (Wd * 0.3);
+  float hill = H * (0.31 + 0.09 * max(0.0, 1.0 - hx * hx));
+  vec3 farCol = tod(hex(170.0, 196.0, 214.0), hex(210.0, 178.0, 168.0), hex(150.0, 108.0, 138.0), hex(38.0, 38.0, 70.0));
+  if (px.y < max(farH, hill)) {
+    c = farCol;
+    if (night > 0.5 && px.y < farH && hash2(vec2(fx, px.y) * 0.37) > 0.985) { c = hex(255.0, 214.0, 150.0); a = 0.17; }
+  }
+  // the tower on the hill: a mast, a pod, a light on top
+  float tx = fx - floor(Wd * 0.7);
+  float tBase = H * 0.395;
+  if (abs(tx) < 1.0 && px.y >= tBase && px.y < tBase + H * 0.17) c = farCol * 0.88;
+  if (abs(tx) < 2.5 && px.y >= tBase + H * 0.11 && px.y < tBase + H * 0.13) {
+    c = farCol * 0.85;
+    if (night > 0.5 && abs(tx) < 2.0 && mod(px.x, 2.0) < 1.0) { c = hex(255.0, 236.0, 200.0); a = 0.17; }
+  }
+  if (tx == 0.0 && px.y == floor(tBase + H * 0.17) && (night + dusk) > 0.5 && fract(uTime * 0.5) < 0.5) { c = hex(255.0, 90.0, 70.0); a = 0.2; }
+
+  // nearer, the town: blocks side by side with gaps between, rows of windows, water tanks and
+  // aerials on their roofs; at dusk the windows begin to light
+  float mx = px.x - slide(0.88);
+  float cell = 17.0;
+  float mc = floor(mx / cell);
+  float x0 = mc * cell + floor(1.0 + 3.0 * h1(mc * 5.3));
+  float bw = cell - (x0 - mc * cell) - floor(1.0 + 2.0 * h1(mc * 2.9));
+  float top = floor(H * (0.15 + 0.15 * h1(mc * 9.1)));
+  float lx = mx - x0;
+  bool inB = lx >= 0.0 && lx < bw && px.y < top;
+  vec3 facade = tod(hex(118.0, 138.0, 164.0), hex(176.0, 128.0, 118.0), hex(98.0, 70.0, 102.0), hex(26.0, 26.0, 46.0));
+  facade *= 0.92 + 0.12 * h1(mc * 4.4);
+  if (inB) {
+    c = facade;
+    // the lit side and the shaded side
+    if (lx >= bw - 2.0) c *= 0.86;
+    if (lx < 1.0) c = mix(c, vec3(1.0), 0.08 * (1.0 - night));
+    // windows: two wide, two tall, in rows
+    float wx = mod(lx - 2.0, 4.0), wy = mod(px.y - 2.0, 5.0);
+    if (lx >= 2.0 && lx < bw - 2.0 && px.y < top - 3.0 && px.y > 1.0 && wx < 2.0 && wy < 2.0) {
+      vec2 wid = vec2(mc * 31.0 + floor((lx - 2.0) / 4.0), floor((px.y - 2.0) / 5.0));
+      float on = hash2(wid + floor(uTime / 37.0) * 0.013 * step(0.5, h1(wid.x + wid.y)));
+      c = tod(mix(facade, hex(190.0, 214.0, 232.0), 0.45), mix(facade, hex(255.0, 220.0, 170.0), 0.4), facade * 0.75, facade * 0.7);
+      if (on > 1.0 - 0.45 * night - 0.2 * dusk) { c = on > 0.93 ? hex(255.0, 168.0, 96.0) : hex(255.0, 214.0, 132.0); a = 0.17; }
+    }
+  }
+  // on the roofs
+  float rk = h1(mc * 13.7);
+  if (rk > 0.55 && lx >= 3.0 && lx < 7.0 && px.y >= top && px.y < top + 4.0) c = facade * (px.y == top + 3.0 ? 0.95 : 0.8);   // a water tank
+  if (rk < 0.25 && lx == bw - 4.0 && px.y >= top && px.y < top + 7.0) c = facade * 0.75;                                 // an aerial
+
+  // close by, across the street: tiled roofs with chimneys
+  float nx = px.x - slide(0.72);
+  float ncell = 31.0;
+  float nc = floor(nx / ncell);
+  float nl = nx - nc * ncell;
+  float ridge = floor(H * (0.085 + 0.04 * h1(nc * 3.3)));
+  float slope = abs(nl - ncell * 0.5) * 0.45;
+  float roofTop = ridge - floor(slope);
+  if (px.y < roofTop) {
+    c = tod(hex(160.0, 98.0, 84.0), hex(186.0, 104.0, 76.0), hex(112.0, 64.0, 80.0), hex(30.0, 24.0, 38.0));
+    if (mod(px.y + floor(nl * 0.5), 3.0) < 1.0) c *= 0.88;           // rows of tiles
+    if (nl > ncell * 0.5) c *= 0.9;                                   // the far side of the ridge
+  }
+  float chx = nl - floor(ncell * (0.25 + 0.4 * h1(nc * 8.1)));
+  if (chx >= 0.0 && chx < 3.0 && px.y >= roofTop && px.y < ridge + 3.0) c = tod(hex(140.0, 90.0, 80.0), hex(160.0, 96.0, 74.0), hex(96.0, 60.0, 76.0), hex(26.0, 22.0, 34.0));
+
+  // a tree in the corner, its leaves stirring
+  vec2 tp = px - vec2(slide(0.6), 0.0);
+  float sway = floor(sin(uTime * 0.9 + tp.y * 0.08) * 1.0 + 0.5);
+  vec2 tq = (tp - vec2(-Wd * 0.04 + sway, H * 0.05)) / vec2(Wd * 0.3, H * 0.3);
+  float leaf = noise(tp * 0.22) * 0.6 + noise(tp * 0.5 + 9.0) * 0.4;
+  float canopy = 1.0 - length(tq) + (leaf - 0.5) * 0.5;
+  if (canopy > 0.0) {
+    float lit = noise(tp * 0.3 + 3.0) + (tq.y - tq.x) * 0.5;
+    c = lit > 0.55 ? tod(hex(122.0, 162.0, 96.0), hex(172.0, 166.0, 82.0), hex(92.0, 82.0, 88.0), hex(26.0, 40.0, 40.0))
+                   : tod(hex(76.0, 116.0, 76.0), hex(112.0, 110.0, 62.0), hex(62.0, 52.0, 70.0), hex(18.0, 28.0, 32.0));
+  }
+
+  // the glass catches the light: two thin streaks across the top corner of each pane
+  float g = mod(px.x + px.y, 40.0);
+  vec2 pane = mod(px, vec2(Wd * 0.5, H * 0.62));
+  if ((g < 2.0 || (g > 4.0 && g < 5.0)) && pane.y > H * 0.62 * 0.45 && pane.x < Wd * 0.25) c = mix(c, vec3(1.0), 0.18 * (1.0 - night * 0.7));
   gl_FragColor = vec4(c, a);
 }`;
 
@@ -276,7 +378,7 @@ export class Room {
     const ww = winR - winL, wh = winT - winB;
     // (drawn after the sunbeam, so its light does not tint the sky)
     this.sky = new THREE.ShaderMaterial({
-      uniforms: { uTime: { value: 0 }, uHour: { value: 12 }, uSkyPx: { value: new THREE.Vector2(48, 56) } },
+      uniforms: { uTime: { value: 0 }, uHour: { value: 12 }, uSkyPx: { value: new THREE.Vector2(48, 56) }, uPxSize: { value: 0.01 }, uPar: { value: 0 } },
       vertexShader: SKY_VERT, fragmentShader: SKY_FRAG,
       transparent: true, blending: THREE.NoBlending,
     });
@@ -437,11 +539,11 @@ export class Room {
     }
 
     // the lamp: a bronze stand, a linen shade
-    const lx = bx - 0.4, lz = bz - 0.34;
+    const lx = bx - 0.3, lz = bz - 0.2;
     add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.08, 0.02, 20), this.mat('metal'))), lx, 0.01, lz);
     add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 1.0, 8), this.mat('metal'))), lx, 0.5, lz);
     this.shade = this.mat('shade');
-    add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.14, 0.17, 24, 1, true), this.shade)), lx, 1.02, lz);
+    add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.12, 0.16, 24, 1, true), this.shade)), lx, 1.02, lz);
     this.lampPos = new THREE.Vector3(lx, 0.97, lz);
 
     // a monstera in a terracotta pot by the box: big split leaves fanned out toward the room
@@ -626,6 +728,13 @@ export class Room {
   /** the size of an art pixel at the window (metres), so the sky is drawn in whole art pixels */
   setPixel(px: number) {
     this.sky.uniforms.uSkyPx.value.set(0.68 / px, 0.8 / px);
+    this.sky.uniforms.uPxSize.value = px;
+  }
+
+  /** where you look from (the camera's x): the town and the sky outside slide against the window,
+   *  the far off more than the near */
+  setView(x: number) {
+    this.sky.uniforms.uPar.value = x - (this.win.l + this.win.r) / 2;
   }
 
   /** how dark it is outside at an hour (0 day .. 1 night): light in the sky from before the sun
