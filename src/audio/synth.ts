@@ -369,6 +369,26 @@ export function scrabble(sr: number) {
   return fade(normalize(out, 0.6), sr);
 }
 
+/** claws drawn back through a rug's pile: one pull, a dry rasp of fibres catching and letting go */
+export function rugScratch(sr: number) {
+  const dur = rnd(0.2, 0.28);
+  const out = new Float32Array(Math.floor((dur + 0.05) * sr));
+  const n = Math.floor(rnd(40, 60));
+  for (let i = 0; i < n; i++) {
+    const u = i / n;
+    clicks(out, sr, u * dur, 2, 0.006, 1800, 5200, 0.1 + 0.5 * Math.sin(Math.PI * Math.min(1, u * 1.1)), 0.0009);
+  }
+  // (the rasp under the catches, swelling with the pull)
+  const nz = new Float32Array(out.length);
+  for (let i = 0; i < nz.length; i++) {
+    const u = i / (dur * sr);
+    nz[i] = u < 1 ? noise() * Math.sin(Math.PI * u) : 0;
+  }
+  filter(nz, sr, 'bp', 2600, 0.9);
+  for (let i = 0; i < out.length; i++) out[i] += nz[i] * 0.35;
+  return fade(normalize(out, 0.5), sr, 0.003, 0.03);
+}
+
 /** a soft landing / settling thump */
 export function thump(sr: number) {
   const out = new Float32Array(Math.floor(0.2 * sr));

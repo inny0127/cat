@@ -705,6 +705,8 @@ export interface Spots {
   litter: THREE.Vector3;
   /** places worth a sniff on a wander round the room: where to stand, and which way to face */
   sniff: { to: THREE.Vector3; face: number }[];
+  /** upright things to rub a cheek on: the lamp's pole */
+  posts: THREE.Vector3[];
 }
 
 export class Room {
@@ -733,6 +735,7 @@ export class Room {
       water: new THREE.Vector3(bx - 0.15, 0, wallZ + 0.13),
       litter: new THREE.Vector3(bx + 0.62, 0, wallZ + 0.2),
       sniff: [],
+      posts: [],
     };
     const S = this.spots;
     const add = (m: THREE.Object3D, x: number, y: number, z: number) => {
@@ -1324,6 +1327,7 @@ export class Room {
       const to = V(sx2, 0, sz2);
       S.sniff.push({ to, face: face(to, V(ax, 0, az)) });
     }
+    S.posts.push(V(lx, 0, lz));
     const O = L.uOcc.value as THREE.Vector4[];
     occ.slice(0, NOCC).forEach(([a, b2, r, k], i) => { O[2 * i].set(a.x, a.y, a.z, r); O[2 * i + 1].set(b2.x, b2.y, b2.z, k); });
   }
@@ -1683,8 +1687,11 @@ export class Room {
   /** where the ball of wool was left (it is among the things on the floor) */
   private readonly yarnHome = new THREE.Vector3();
 
-  /** how high the floor is at a point: the bed's cushion and its soft rim (paws stand on them) */
+  /** how high the floor is at a point: the bed's cushion and its soft rim, the lamp's domed foot
+   *  (paws stand on them) */
   groundAt(x: number, z: number) {
+    const L = this.lampPos, rl = Math.hypot(x - L.x, z - L.z);
+    if (rl < 0.083) return rl < 0.08 ? 0.004 + 0.0256 * Math.sqrt(1 - (rl / 0.08) ** 2) : 0.006;
     // inside the box: its cardboard floor
     const B = this.box;
     if (B && B.here) {

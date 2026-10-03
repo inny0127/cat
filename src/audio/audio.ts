@@ -184,6 +184,7 @@ export class CatAudio {
       ['lap', () => S.lap(sr), 4],
       ['scratch', () => S.scratch(sr), 3],
       ['scrabble', () => S.scrabble(sr), 2],
+      ['rugScratch', () => S.rugScratch(sr), 3],
       ['thump', () => S.thump(sr), 2],
       ['step', () => S.step(sr), 4],
       ['rain', () => S.rain(sr), 1],

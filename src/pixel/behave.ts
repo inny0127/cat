@@ -25,6 +25,8 @@ export interface Ctx {
   bed: (p: PoseName) => { to: THREE.Vector3; yaw: number };
   /** places in the room worth a sniff */
   sniff: () => { to: THREE.Vector3; face: number }[];
+  /** upright things to rub a cheek on (where they stand on the floor) */
+  posts: () => THREE.Vector3[];
   /** a place on the floor in the sun, if the sun is in; and whether a point is in it */
   sun: () => THREE.Vector3 | null;
   sunlit: (p: THREE.Vector3) => boolean;
@@ -96,6 +98,31 @@ class Layered implements Act {
   }
 }
 
+/** an act that needs the cat in a posture first (a hind foot up to an ear wants it sitting, not
+ *  still halfway up from lying): into it, settled, and only then the act */
+class Settled implements Act {
+  private ready = false;
+  private wait = 0;
+  constructor(private readonly inner: Act, private readonly posture: PoseName) {}
+  get name() {
+    return this.inner.name;
+  }
+  update(dt: number, c: Ctx) {
+    if (!this.ready) {
+      c.m.setPosture(this.posture);
+      c.m.layer = null;
+      this.wait += dt;
+      // (if it cannot get there, it gives up on it)
+      if (c.m.settled && c.m.posture === this.posture) this.ready = true;
+      else return this.wait < 4;
+    }
+    return this.inner.update(dt, c);
+  }
+  stop(c: Ctx) {
+    this.inner.stop(c);
+  }
+}
+
 /** a big yawn: the mouth wide, eyes squeezed, head back, ears out */
 export const yawn = () => new Layered('yawn', 2.4, 0.7, () => ({
   jaw: 1, eyeOpen: 0.08, squint: 0.8, headPitch: 0.35, neckPitch: 0.1, earOut: 0.35, earFwd: -0.3,
@@ -123,7 +150,7 @@ export const washFace = () => {
   const cyc = rand(1.3, 1.7), n = 3 + Math.floor(Math.random() * 3);
   const both = Math.random() < 0.6;
   const d = cyc * n * (both ? 2 : 1) + 0.6;
-  return new Layered('wash', d, 0.5, (t) => {
+  return new Settled(new Layered('wash', d, 0.5, (t) => {
     const k = Math.floor(t / cyc), u = (t % cyc) / cyc;
     const s = both && k >= n ? -first : first;
     const paw = s > 0 ? 'LF' : 'RF';
@@ -143,7 +170,33 @@ export const washFace = () => {
       eyeOpen: 0.3, squint: 0.55, earFwd: -0.2 * w,
     };
     return pose;
-  }, 'sit');
+  }, 'sit'), 'sit');
+};
+
+/** a scratch behind the ear with a hind foot: sitting, leaning a little the other way, the head
+ *  tipped down and round into the raised foot, which goes at it in quick strokes, the eyes shut;
+ *  perhaps a pause and another go; then the foot down, and a shake of the head */
+export const scratchEar = () => {
+  const s = Math.random() < 0.5 ? 1 : -1;
+  const paw = s > 0 ? 'LH' : 'RH';
+  const bouts = Math.random() < 0.5 ? 2 : 1, bout = rand(1.1, 1.8), gap = 0.45;
+  const down = 0.4 + bouts * bout + (bouts - 1) * gap;
+  return new Settled(new Layered('scratch', down + 1.0, 0.35, (t) => {
+    // the foot up (and down again after), the strokes about seven a second while it goes at it
+    const up = ease(t / 0.4) * (1 - ease((t - down) / 0.3));
+    const tb = t - 0.4, k = Math.floor(tb / (bout + gap)), u = tb - k * (bout + gap);
+    const st = tb > 0 && k < bouts && u < bout ? Math.sin(u * Math.PI * 2 * 7) : 0;
+    // the shake: the head whipped side to side a few times, the ears flapping
+    const sh = t > down + 0.3 && t < down + 0.75 ? Math.sin((t - down - 0.3) / 0.45 * Math.PI * 4) * Math.sin((t - down - 0.3) / 0.45 * Math.PI) : 0;
+    return {
+      [paw]: {
+        planted: up > 0.05 ? 0 : 1, frame: 0, x: 0.04 + 0.025 * up, y: 0.012 + (0.188 + 0.012 * st) * up,
+        z: -0.064 + (0.104 - 0.012 * st) * up, flex: (0.2 + 0.1 * st) * up,
+      },
+      neckYaw: s * 0.6 * up, headRoll: (-s * 0.55 + 0.05 * st) * up + 0.45 * sh, neckPitch: -0.15 * up, headPitch: -0.1 * up,
+      hipRoll: s * 0.12 * up, eyeOpen: 1 - 0.7 * up - 0.3 * Math.abs(sh), squint: 0.6 * up, earOut: 0.3 * up + 0.4 * Math.abs(sh), earFwd: -0.2 * up,
+    };
+  }, 'sit'), 'sit');
 };
 
 /** kneading: the front paws treading in turn, as kittens do at their mother */
@@ -200,17 +253,120 @@ export class Stare implements Act {
   }
 }
 
-/** a stretch: up, forelegs out and rump high, then back down */
+/**
+ * Marking its things: along to the lamp's pole and slowly past it with the cheek pressed to it,
+ * the head turned and tipped into it, the eyes half shut, the tail up; then the side of the neck,
+ * the flank brushing along after, the tail curling round the pole as it goes by. As often as not
+ * it turns and comes back past it the other way, the other cheek. (It passes behind the pole, so
+ * it is the face you see.)
+ */
+export class Rub implements Act {
+  readonly name = 'rub';
+  private phase: 'go' | 'rub' | 'done' = 'go';
+  private passes = Math.random() < 0.6 ? 2 : 1;
+  private dir: number;
+  private readonly lineZ: number;
+  private t = 0;
+  private trill = Math.random() < 0.3;
+  private set = false;
+  /** afterwards, back to bed */
+  private home: Act | null = null;
+  constructor(c: Ctx, private readonly post: THREE.Vector3) {
+    // (the line it walks: just behind the pole, the cheek's reach from it; from the nearer end)
+    this.lineZ = post.z - 0.068;
+    this.dir = c.m.pos.x < post.x ? 1 : -1;
+  }
+  /** a point on the line, so far past the pole (m) */
+  private at(x: number) {
+    return new THREE.Vector3(this.post.x + this.dir * x, 0, this.lineZ);
+  }
+  update(dt: number, c: Ctx) {
+    const m = c.m;
+    if (this.phase === 'done') {
+      this.home ??= toBed(c, 'loaf');
+      return this.home.update(dt, c);
+    }
+    this.t += dt;
+    const face = this.dir * Math.PI / 2;
+    m.setPosture('stand');
+    if (this.phase === 'go') {
+      // to the start of the line (after a pass: a step on, and round to come back)
+      m.layer = null;
+      if (!this.set) {
+        this.set = true;
+        m.walkTo(this.at(-0.33), 0.25, face, () => {
+          this.phase = 'rub';
+          this.t = 0;
+          this.set = false;
+        });
+      }
+      return true;
+    }
+    if (!this.set) {
+      this.set = true;
+      // (now and then a little trill to it, the mouth with it)
+      if (this.trill) { this.trill = false; c.sound('trill', 0.2); c.m.vocalize('trill', 0.29); }
+      m.walkTo(this.at(0.42), 0.11, face, () => {
+        m.layer = null;
+        this.set = false;
+        if (--this.passes > 0) {
+          this.dir = -this.dir;
+          this.phase = 'go';
+        } else this.phase = 'done';
+      });
+    }
+    // slowly past it: how far the cheek (and after it the ribs, the root of the tail) is past the
+    // pole
+    const s = (m.pos.x - this.post.x) * this.dir;
+    const cheek = s + 0.16, flank = s - 0.05, tail = s - 0.2;
+    // the pole on the cat's left (+1) or its right (-1)
+    const side = this.dir > 0 ? -1 : 1;
+    const bell = (x: number, a: number, b: number) => ease((x - a + 0.12) / 0.12) * (1 - ease((x - b) / 0.14));
+    const k = bell(cheek, -0.03, 0.1), kf = bell(flank, -0.06, 0.08), kt = bell(tail, -0.02, 0.1);
+    m.layer = {
+      pose: {
+        neckYaw: side * 0.65 * k, headYaw: side * 0.35 * k, headRoll: -side * 0.4 * k, neckPitch: -0.12 * k,
+        squint: 0.55 * k, eyeOpen: 1 - 0.5 * k, earOut: 0.3 * k, earFwd: 0.1,
+        chestRoll: -side * 0.1 * kf, lumbarYaw: side * 0.12 * kf,
+        tailLift: 1.15, tailHook: 0.45, tailSide: side * 0.9 * kt,
+      },
+      w: Math.min(1, this.t / 0.6),
+    };
+    return true;
+  }
+  stop(c: Ctx) {
+    if (this.home) this.home.stop(c);
+    c.m.layer = null;
+    c.m.stop();
+  }
+}
+
+/** a stretch: up, forelegs out and rump high, then back down; now and then, stretched out, it
+ *  drags its claws back through the rug (or the bed) a few times, one paw and then the other */
 export class Stretch implements Act {
   readonly name = 'stretch';
   private t = 0;
+  private readonly claws = Math.random() < 0.45;
+  private pulls = 0;
   constructor(private readonly then: PoseName) {}
   update(dt: number, c: Ctx) {
     this.t += dt;
     c.m.setPosture(this.t < 3.6 ? 'stretch' : this.then);
+    if (this.claws && this.t > 1.4 && this.t < 3.3) {
+      // each pull: the paw put out a little further, then drawn back along the floor, claws in
+      const ph = (this.t - 1.4) * 2.4, k = Math.floor(ph), u = ph - k;
+      if (k >= this.pulls) { this.pulls = k + 1; c.sound('rugScratch', 0.2); }
+      const reach = u < 0.25 ? u / 0.25 : 1 - (u - 0.25) / 0.75;
+      c.m.layer = {
+        pose: { [k % 2 ? 'RF' : 'LF']: { planted: 0, z: 0.2 + 0.06 * reach, y: 0.012 + (u < 0.25 ? 0.015 * Math.sin(Math.PI * u / 0.25) : 0), flex: u < 0.25 ? 0 : 0.25 } },
+        w: ease((this.t - 1.4) / 0.2) * ease((3.3 - this.t) / 0.2),
+      };
+    } else c.m.layer = null;
     return this.t < 5;
   }
-  stop() {}
+  stop(c: Ctx) {
+    c.m.layer = null;
+  }
 }
 
 interface Leg {
@@ -1187,9 +1343,13 @@ export function chooseAct(c: Ctx, atHome: boolean, posture: PoseName): Act | nul
     if (lying) opts.push([1 + m.pleasure, groomFlank], [0.6, groomChest], [0.8, washFace]);
     opts.push([0.35, () => new Stretch(posture === 'sit' ? 'sit' : 'loaf')]);
     opts.push([0.1, () => sneeze(c)]);
+    opts.push([0.22, scratchEar]);
     opts.push([0.25 * (0.5 + m.arousal) * (1 - m.sleepy), () => new Stare(c)]);
     if (atHome) opts.push([0.9 * Math.max(0, Math.min(1, m.trust + 0.3)) * (1 + m.arousal) + (c.mode === 'alert' ? 0.8 : 0), () => toWindow(c)]);
     if (atHome) opts.push([0.5 * (1 + m.arousal) * (1 - m.sleepy), () => wander(c)]);
+    // content and about, it goes and marks its things
+    const posts = c.posts();
+    if (atHome && posts.length) opts.push([0.3 * (0.4 + m.pleasure) * (1 - m.sleepy), () => new Rub(c, pick(posts))]);
     if (atHome && c.mode === 'rest') opts.push([0.7 + 0.8 * m.sleepy, () => sunbathe(c)]);
     if (atHome && c.mode === 'rest' && c.warm()) opts.push([0.8 + 0.8 * m.sleepy, () => warmUp(c)]);
     if (atHome && c.yarn()) opts.push([0.6 * (0.4 + m.arousal) * (1 - m.sleepy) * (c.mode === 'rest' ? 1 : 0.4), () => new Play()]);
