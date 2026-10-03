@@ -528,6 +528,28 @@ export class Room {
     add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.06, 14), jar)), winR - 0.12, winB + 0.03, wallZ + 0.02);
     this.candle(jar, new THREE.Vector3(winR - 0.12, winB + 0.068, wallZ + 0.02));
 
+    // October (to early November): a little pumpkin at the end of the sill
+    {
+      const pk = new THREE.Group();
+      const g = new THREE.SphereGeometry(0.04, 18, 12);
+      const pos = g.attributes.position as THREE.BufferAttribute;
+      for (let i = 0; i < pos.count; i++) {
+        const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+        // squat, with ribs
+        const a = Math.atan2(z, x), rib = 1 + 0.07 * Math.cos(a * 8);
+        pos.setXYZ(i, x * rib * 1.15, y * 0.72, z * rib * 1.15);
+      }
+      g.computeVertexNormals();
+      pk.add(shadowy(new THREE.Mesh(g, this.mat('ginger', { tone: 0.04 }))));
+      const stem = shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.006, 0.02, 6), this.mat('leaf', { tone: -0.1 })));
+      stem.position.y = 0.033;
+      stem.rotation.z = 0.3;
+      pk.add(stem);
+      pk.position.set(winL + 0.075, winB + 0.029, wallZ + 0.115);
+      this.group.add(pk);
+      this.decor.push({ obj: pk, from: [9, 1], to: [10, 6] });
+    }
+
     // under the window, an old column radiator painted white: its fins, the pipes along its top
     // and foot, its legs, and the pipe and valve at its end
     const radW = 0.46, radB = 0.07, radH = 0.19, radZ = wallZ + 0.055;
@@ -999,6 +1021,9 @@ export class Room {
     this.candles.push({ body, flame, seed: Math.random() * 10 });
   }
 
+  /** things put out for a time of the year: shown from a (month, day) to another */
+  private readonly decor: { obj: THREE.Object3D; from: [number, number]; to: [number, number] }[] = [];
+
   /** the clock's hands */
   private hourHand: THREE.Mesh | null = null;
   private minHand: THREE.Mesh | null = null;
@@ -1145,7 +1170,9 @@ export class Room {
   update(s: CatState, hour = 12, dt = 0, rain = 0, date: Date = new Date()): DayLight {
     const d = dayLight(hour, this.light, rain);
     this.sky.uniforms.uRain.value = rain;
-    // the year outside: the tree's leaves, snow
+    // the year outside: the tree's leaves, snow; and what is put out for the time of year
+    const md = date.getMonth() * 100 + date.getDate();
+    for (const d of this.decor) d.obj.visible = md >= d.from[0] * 100 + d.from[1] && md <= d.to[0] * 100 + d.to[1];
     const se = seasonAt(date, rain);
     const su = this.sky.uniforms;
     (su.uLeafA.value as THREE.Vector3).set(...se.leafA);
