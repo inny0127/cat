@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { Cat3D } from '../cat3d/cat';
-import { POSES, type PoseName } from '../cat3d/pose';
+import { POSES, type PoseLayer, type PoseName } from '../cat3d/pose';
 import { NEUTRAL, type Mood } from '../cat3d/mood';
 import type { Avatar } from '../sim/avatar';
 import type { EarMood, TailMood } from '../rig/animator';
@@ -8,6 +8,7 @@ import { Stretch, chooseAct, groomChest, groomFlank, knead, restingPose, sneeze,
 
 const LYING: PoseName[] = ['loaf', 'sphinx', 'side', 'curl'];
 const wrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
+const ease = (x: number) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x));
 
 export interface Spot {
   x: number;
@@ -71,6 +72,9 @@ export class PixelAvatar implements Avatar {
   lureMoving = false;
   /** a bird on the ledge outside, if there is one (where, on the glass) */
   visitor: THREE.Vector3 | null = null;
+  /** how strong the sun in the room is (set by the app): asleep in it, a cat draws a paw over its
+   *  eyes */
+  glare = 0;
   private chatterIn = 2;
   private lureT = 0;
   private lureNeed = 0.8;
@@ -356,6 +360,7 @@ export class PixelAvatar implements Avatar {
     const atHome = Math.hypot(m.pos.x - c.home.x, m.pos.z - c.home.z) < 0.2;
     // (woken in the middle of a stretch in its sleep: that is over)
     if (this.stretchT > 0 && (this.sleep <= 0.3 || !this.alive)) this.sleepStretch(0, false);
+    this.shadeEyes(dt, this.alive && this.sleep > 0.75 && atHome && !this.touched && !this.act && this.stretchT <= 0 && this.glare > 0.4);
     if (!this.alive) {
       this.stopAct();
       m.setPosture('side');
@@ -503,7 +508,7 @@ export class PixelAvatar implements Avatar {
     const m = this.cat.motor;
     const posture = m.posture;
     if (this.stretchT <= 0) {
-      if (!may || (this.stretchIn -= dt) > 0 || (posture !== 'side' && posture !== 'curl') || !m.settled) return;
+      if (!may || (this.stretchIn -= dt) > 0 || (posture !== 'side' && posture !== 'curl') || !m.settled || this.shade.u > 0) return;
       this.stretchT = 1e-3;
       this.stretchIn = 150 + Math.random() * 420;
     }
@@ -514,7 +519,6 @@ export class PixelAvatar implements Avatar {
       return;
     }
     const t = (this.stretchT += dt), P = POSES[posture];
-    const ease = (x: number) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x));
     const tr = 0.005 * Math.sin(t * 38) * ease((t - 1.1) / 0.3) * (1 - ease((t - 2.2) / 0.25));
     m.layer = {
       pose: {
@@ -531,6 +535,46 @@ export class PixelAvatar implements Avatar {
       this.stretchT = 0;
       m.layer = null;
     }
+  }
+
+  /** asleep curled up in the sun, now and then it draws its upper forepaw up over its head and
+   *  down over its eyes, and leaves it there a good while; it takes it away again when the sun
+   *  goes, when it stirs, or just to shift */
+  private shade = { u: 0, on: false, in: 20 + Math.random() * 60, hold: 0 };
+  private shadeLayer: { pose: PoseLayer; w: number } | null = null;
+  private shadeEyes(dt: number, may: boolean) {
+    const m = this.cat.motor, s = this.shade;
+    // (its layer taken for something else: whatever that is has the paws now)
+    if (this.shadeLayer && m.layer !== this.shadeLayer) {
+      this.shadeLayer = null;
+      s.u = 0;
+      s.on = false;
+    }
+    const curled = m.posture === 'curl' && m.targetPosture === 'curl';
+    if (!s.on && s.u <= 0) {
+      if (!may || !curled || !m.settled || (s.in -= dt) > 0) return;
+      s.on = true;
+      s.hold = 50 + Math.random() * 200;
+    }
+    if (s.on && (!may || !curled || (s.hold -= dt) <= 0)) {
+      s.on = false;
+      s.in = 30 + Math.random() * 150;
+    }
+    // up and over slowly; down a little quicker, and at once if it is getting up
+    s.u = Math.max(0, Math.min(1, s.u + (s.on ? dt / 2.4 : -dt / (curled ? 1.6 : 0.35))));
+    if (s.u <= 0) {
+      if (m.layer === this.shadeLayer) m.layer = null;
+      this.shadeLayer = null;
+      return;
+    }
+    // from where it lies to the eyes, over the top of the head, the paw curling as it comes down
+    const e = ease(s.u), A = POSES.curl.LF;
+    const L = (this.shadeLayer ??= { pose: { LF: {} }, w: 1 });
+    Object.assign(L.pose.LF as object, {
+      x: A.x + (0.28 - A.x) * e, y: A.y + (0.06 - A.y) * e + 0.045 * Math.sin(Math.PI * e), z: A.z + (-0.08 - A.z) * e,
+      flex: A.flex + (1 - A.flex) * e,
+    });
+    m.layer = L;
   }
 
   doBlink(slow = false) {
