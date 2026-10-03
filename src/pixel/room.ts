@@ -597,6 +597,31 @@ export class Room {
       pk.position.set(winL + 0.075, winB + 0.029, wallZ + 0.115);
       this.group.add(pk);
       this.decor.push({ obj: pk, from: [9, 1], to: [10, 6] });
+      // Halloween week: a face carved in it, dark by day, lit from within at night
+      const face = new THREE.Shape();
+      const tri = (sh: THREE.Shape | THREE.Path, cx: number, cy: number, w: number, h: number, up = true) => {
+        sh.moveTo(cx - w / 2, cy - (up ? h / 2 : -h / 2));
+        sh.lineTo(cx + w / 2, cy - (up ? h / 2 : -h / 2));
+        sh.lineTo(cx, cy + (up ? h / 2 : -h / 2));
+        sh.closePath();
+      };
+      tri(face, -0.016, 0.009, 0.014, 0.012);
+      const shapes = [face];
+      const eyeR = new THREE.Shape(); tri(eyeR, 0.016, 0.009, 0.014, 0.012); shapes.push(eyeR);
+      const nose = new THREE.Shape(); tri(nose, 0, -0.002, 0.007, 0.006); shapes.push(nose);
+      // a grin with two teeth
+      const grin = new THREE.Shape();
+      grin.moveTo(-0.024, -0.009);
+      grin.lineTo(-0.012, -0.013); grin.lineTo(-0.008, -0.009); grin.lineTo(-0.004, -0.014); grin.lineTo(0.004, -0.014);
+      grin.lineTo(0.008, -0.009); grin.lineTo(0.012, -0.013); grin.lineTo(0.024, -0.009);
+      grin.lineTo(0.016, -0.021); grin.lineTo(-0.016, -0.021);
+      grin.closePath();
+      shapes.push(grin);
+      this.lantern = this.mat('shade', { tone: -0.75 });
+      const fm = new THREE.Mesh(new THREE.ShapeGeometry(shapes), this.lantern);
+      fm.position.set(winL + 0.075, winB + 0.029, wallZ + 0.115 + 0.047);
+      this.group.add(fm);
+      this.decor.push({ obj: fm, from: [9, 24], to: [10, 1] });
     }
 
     // December: a little fir in a pot at that end of the sill, a star on top and lights on it
@@ -1210,6 +1235,9 @@ export class Room {
   /** things put out for a time of the year: shown from a (month, day) to another */
   private readonly decor: { obj: THREE.Object3D; from: [number, number]; to: [number, number] }[] = [];
 
+  /** the jack-o'-lantern's carved face (lit from within when the lamp is) */
+  private lantern: THREE.ShaderMaterial | null = null;
+
   /** the little fir's star (it glows when the lights are lit) */
   private xmasStar: THREE.ShaderMaterial | null = null;
 
@@ -1532,6 +1560,7 @@ export class Room {
     } else P.set(0, 0, 0, 0);
     // the lamp's shade glows when it is lit; the fairy lights and the candles come on with it
     this.shade.uniforms.uGlow.value = d.lamp > 0.5 ? 2 : 0;
+    if (this.lantern) this.lantern.uniforms.uGlow.value = d.lamp > 0.5 ? 1 : 0;
     for (const c of this.candles) {
       const lit = d.lamp > 0.5;
       c.flame.visible = lit;

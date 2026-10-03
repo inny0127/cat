@@ -276,6 +276,8 @@ void main() {
     // the colour of the light it is in: the lamp's, the sun's (the moon's), the shade's, mixed as
     // they are mixed on it
     vec3 tint = uTintShade * max(0.0, 1.0 - wl - ws) + uTintLamp * wl + uTintSun * ws;
+    // (what glows of itself, a candle's jar, a lit dial, a lantern, is its own warm light)
+    if (glows) tint = vec3(1.05, 0.97, 0.86);
     col = clamp(col * tint, 0.0, 1.0);
     // richer: a little more colour in the lights and middle tones (not the darks, which would go
     // garish), the darks a little deeper
