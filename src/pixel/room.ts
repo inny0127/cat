@@ -781,10 +781,11 @@ void main() {
     else if ((dq.x == 0.0 || dq.x == 1.0) && dq.y == -1.0) c *= 0.8;
     else if (dq.x == 0.0 && dq.y > 0.0 && dq.y < 12.0) c = mix(c, vec3(1.0), 0.2 * (1.0 - dq.y / 12.0));
   }
-  // the glass catches the light: two thin streaks across the top corner of each pane
+  // the glass catches the light: two thin streaks across the top corner of each pane (by day: at
+  // night, across the dark, they would only look like rain)
   float g = mod(px.x + px.y, 40.0);
   vec2 pane = mod(px, vec2(Wd * 0.5, H * 0.62));
-  if ((g < 2.0 || (g > 4.0 && g < 5.0)) && pane.y > H * 0.62 * 0.45 && pane.x < Wd * 0.25) c = mix(c, vec3(1.0), 0.18 * (1.0 - night * 0.7));
+  if ((g < 2.0 || (g > 4.0 && g < 5.0)) && pane.y > H * 0.62 * 0.45 && pane.x < Wd * 0.25) c = mix(c, vec3(1.0), 0.18 * (1.0 - night));
   gl_FragColor = vec4(c, a);
 }`;
 
