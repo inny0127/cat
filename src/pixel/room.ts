@@ -370,6 +370,7 @@ export class Room {
     print.rotation.x = -0.12;
     print.position.set(bx + 0.13, ty + 0.072, wallZ + 0.04);
     this.group.add(print);
+    this.print = print;
     pot(bx + 0.27, 0.03, 0.055, 'pot');
     tuft(bx + 0.27, ty + 0.085, 8, 0.02, 0.016, 0.05);
     add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.05, 12), this.mat('rugCream', { tone: 0.15 }))), bx + 0.38, ty + 0.036, wallZ + 0.05);
@@ -503,6 +504,8 @@ export class Room {
   private readonly win: { l: number; r: number; b: number; t: number; z: number };
   private readonly motes: { p: THREE.Vector3; v: THREE.Vector3; b: number; life: number }[] = [];
   private readonly timeU = { value: 0 };
+  /** the little print on the shelf (tapping it shows the credits) */
+  print: THREE.Object3D = new THREE.Group();
   /** where the mug's steam rises from */
   mugTop = new THREE.Vector3();
   private readonly nightU = { value: 0 };
@@ -573,8 +576,16 @@ export class Room {
     this.sky.uniforms.uSkyPx.value.set(0.68 / px, 0.8 / px);
   }
 
+  /** how dark it is outside at an hour (0 day .. 1 night): the sun is up from about half past six
+   *  and down by about eight in the evening (the sky in the window follows the same hours) */
+  static dark(hour: number) {
+    const ss = (a: number, b: number, x: number) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+    return 1 - ss(5.5, 7.2, hour) * (1 - ss(18.6, 20.2, hour));
+  }
+
   /** the bowls and box as the cat's state has them; the light and the sky by the hour */
-  update(s: CatState, night = 0, hour = 12, dt = 0) {
+  update(s: CatState, hour = 12, dt = 0) {
+    const night = Room.dark(hour);
     this.time += dt;
     this.timeU.value = this.time;
     this.sky.uniforms.uTime.value = this.time;

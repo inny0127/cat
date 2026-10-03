@@ -61,6 +61,8 @@ export class Cat3D {
   readonly meshes: THREE.SkinnedMesh[] = [];
   /** the painted coat's material, for a painted model */
   private skin: THREE.ShaderMaterial | null = null;
+  /** the model's attribution, as its licence asks */
+  credit: string | null = null;
   /** its coat in flat material colours, for pixel art */
   private pixTexture: THREE.Texture | null = null;
   private painted: THREE.Texture | null = null;
@@ -96,6 +98,7 @@ export class Cat3D {
     // a model with its own painted coat is drawn as one textured surface instead of fur
     const painted = asset.texture;
     this.painted = painted;
+    this.credit = asset.credit;
     const shells = painted ? 1 : opts.shells ?? 24;
     const LMa = asset.landmarks;
     const { mats, shared, defines } = makeFurMaterials({ shells, density: opts.density ?? 2400 }, { ...LMa, head: LMa.head }, asset.correctives);

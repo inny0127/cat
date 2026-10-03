@@ -10,7 +10,7 @@ import { Notifier, forecast } from '../platform/notify';
 import { Hint } from '../ui/hint';
 import { Brain } from '../sim/brain';
 import { loadState, newCat, saveState, type CatState } from '../sim/state';
-import { stepLife, nightness, THRESH } from '../sim/life';
+import { stepLife, THRESH } from '../sim/life';
 import { clamp } from '../util/math';
 import { PixelAvatar } from './avatar';
 import { Senses3D } from './senses';
@@ -81,7 +81,12 @@ export class PixelApp {
       toP: (sx, sy) => [sx * this.senses.k, sy * this.senses.k],
       catTouchStart: (c) => this.brain.touchStart(c),
       catTouchEnd: (c, tap) => { this.gestureEnd(); this.brain.touchEnd(c, tap); },
-      glassTap: (x, y) => { this.gestureEnd(); this.brain.glassTap(x, y); },
+      glassTap: (x, y) => {
+        this.gestureEnd();
+        if (this.creditsOpen) { this.showCredits(false); return; }
+        if (this.hitPrint(x, y)) { this.showCredits(true); return; }
+        this.brain.glassTap(x, y);
+      },
       glassKnock: (x, y) => { this.gestureEnd(); this.brain.knock(x, y); },
       pourStart: () => this.brain.pourStart(),
       pourEnd: () => { this.gestureEnd(); this.brain.pourEnd(); },
@@ -195,6 +200,38 @@ export class PixelApp {
     this.brain.onWantMotion = () => { if (this.motion.canAsk) this.askMotion = true; };
   }
 
+  /** the credits: the 3D cat is someone's model, shared under CC BY 4.0, changed for this app */
+  private creditsOpen = false;
+  private showCredits(on: boolean) {
+    const el = document.getElementById('credits');
+    if (!el) return;
+    if (on && !el.childElementCount) {
+      el.innerHTML = `
+        <h2>창가의 고양이</h2>
+        <p>고양이 3D 모델 <b>“3d modelling my cat: Fripouille”</b><br>
+        만든 이 <a href="https://sketchfab.com/guillaume.bolis.neko" target="_blank" rel="noopener">guillaume bolis</a> ·
+        <a href="https://sketchfab.com/3d-models/3d-modelling-my-cat-fripouille-0ab14bf98e754f8d90fe1bf1c84ca66c" target="_blank" rel="noopener">원본</a><br>
+        <a href="https://creativecommons.org/licenses/by/4.0/deed.ko" target="_blank" rel="noopener">CC BY 4.0</a> 라이선스로 공유된 모델이에요.</p>
+        <p>이 앱을 위해 뼈대를 새로 심고, 자세와 걸음, 입과 눈을 새로 만들고, 픽셀아트로 다시 칠했어요. (원작자가 이 앱을 보증하는 것은 아니에요.)</p>
+        <p class="small">방, 그림, 소리는 이 앱을 위해 만들었어요. 아무 곳이나 누르면 닫혀요.</p>`;
+      el.addEventListener('pointerdown', (e) => { if ((e.target as HTMLElement).tagName !== 'A') this.showCredits(false); });
+    }
+    this.creditsOpen = on;
+    el.classList.toggle('on', on);
+  }
+
+  /** is the little print on the shelf under a screen point */
+  private hitPrint(sx: number, sy: number) {
+    const ray = new THREE.Raycaster();
+    ray.setFromCamera(new THREE.Vector2((sx / innerWidth) * 2 - 1, -(sy / innerHeight) * 2 + 1), this.stage.camera);
+    const hits = ray.intersectObject(this.room.print, true);
+    if (hits.length) return true;
+    // a finger is wider than the print: near it counts
+    const p = this.room.print.getWorldPosition(new THREE.Vector3()).project(this.stage.camera);
+    const dx = (p.x * 0.5 + 0.5) * innerWidth - sx, dy = (-p.y * 0.5 + 0.5) * innerHeight - sy;
+    return Math.hypot(dx, dy) < 26;
+  }
+
   /** permission prompts must come from inside a tap */
   private gestureEnd() {
     this.audio.start();
@@ -298,8 +335,11 @@ export class PixelApp {
     const s = this.state;
     const sick = s.alive ? clamp((THRESH.sick - s.health) / THRESH.sick * 1.6) : 1;
     const clock = this.clock();
-    const night = nightness(clock.getTime());
-    const mood = moodFromBrain(this.brain, sick, s.trust, night);
+    const hour = clock.getHours() + clock.getMinutes() / 60;
+    // the room's own light: dark outside after sunset (not the cat's bedtime); the lamp keeps it
+    // from being quite dark, but the pupils open in it
+    const dark = Room.dark(hour);
+    const mood = moodFromBrain(this.brain, sick, s.trust, 0.75 * dark);
     this.cat.motor.setMood(mood, true);
     this.avatar.mode = this.brain.mode;
     this.avatar.mood = mood;
@@ -307,17 +347,17 @@ export class PixelApp {
     this.avatar.touched = now - this.touchedAt < 4;
     this.avatar.update(dt);
     this.cat.update(dt);
-    this.room.update(s, night, clock.getHours() + clock.getMinutes() / 60, dt);
+    this.room.update(s, hour, dt);
     // the phone's bar the colour of the wall at the top of the room
-    const tc = night > 0.5 ? '#3b3150' : '#c99486';
+    const tc = dark > 0.5 ? '#3b3150' : '#c99486';
     if (tc !== this.themeColor) {
       this.themeColor = tc;
       document.querySelector('meta[name="theme-color"]')?.setAttribute('content', tc);
     }
     // at night the lamp has a halo; the tea on the books steams; by day dust turns in the sun
-    this.stage.setGlow(night > 0.5 ? this.room.lampPos.clone().add(new THREE.Vector3(0, 0.05, 0)) : null, 0.42);
+    this.stage.setGlow(dark > 0.5 ? this.room.lampPos.clone().add(new THREE.Vector3(0, 0.05, 0)) : null, 0.42);
     this.stage.setSteam(this.room.mugTop, 1);
-    this.stage.setMotes(this.room.dust(dt, 1 - night));
+    this.stage.setMotes(this.room.dust(dt, 1 - dark));
     this.stage.setTime(now);
     this.hints(dt, contacts.length > 0);
     this.moveCamera(dt, contacts.length > 0);
