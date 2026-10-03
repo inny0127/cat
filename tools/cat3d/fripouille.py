@@ -347,6 +347,31 @@ def hug_eyes(V, faces, inv, isl, eyes, sockets):
     return U[inv]
 
 
+def pink_ears(tex8, V, faces, uv, Nn, earw, B):
+    """The inside of the ears: the painting has pale fur there; make it the pink of the thin skin
+    (as a cat's inner ear is), keeping the painting's light and dark so the fur still shows."""
+    import cv2
+    H, Wd = tex8.shape[:2]
+    m = np.zeros((H, Wd), np.float32)
+    fn = Nn[faces].mean(1)
+    fn /= np.linalg.norm(fn, axis=1, keepdims=True)
+    w = earw[faces].mean(1)
+    for side, x in (('L', 1), ('R', -1)):
+        # the ear's front faces forward and a little in toward the midline
+        inward = fn @ np.array([-0.35 * x, 0.0, 1.0]) / np.hypot(0.35, 1.0)
+        sel = (w > 0.6) & (inward > 0.45) & (V[faces][:, :, 0].mean(1) * x > 0)
+        for f, a in zip(faces[sel], np.clip((inward[sel] - 0.45) / 0.25, 0, 1) * np.clip((w[sel] - 0.6) / 0.3, 0, 1)):
+            cv2.fillPoly(m, [np.round(uv[f] * [Wd - 1, H - 1]).astype(np.int32)], float(a))
+    m = cv2.GaussianBlur(m, (0, 0), 3)
+    col = tex8.astype(np.float32) / 255
+    lum = col @ np.array([0.3, 0.59, 0.11], np.float32)
+    ref = np.median(lum[m > 0.5]) if (m > 0.5).any() else 0.7
+    pink = np.array([0.97, 0.70, 0.70], np.float32) * np.clip(lum / max(ref, 1e-3), 0.55, 1.15)[..., None]
+    out = col * (1 - 0.85 * m[..., None]) + np.clip(pink, 0, 1) * (0.85 * m[..., None])
+    print('inner ears pinked: %d texels' % (m > 0.3).sum())
+    return np.round(out * 255).astype(np.uint8)
+
+
 def lid_uv(V, uv, isl, o, eye, R, r):
     """An affine map from the eye's lid frame (x, y in ball radii) to texture UV, fitted on the
     face's island round the socket: the eye's own lids show the fur the head has there."""
@@ -487,9 +512,6 @@ def main():
     isl = uv_islands(faces, len(V))
     tex8 = paint_out_eyes((tex * 255).round().astype(np.uint8), V, faces, F['uv'], sockets, isl)
     V = hug_eyes(V, faces, inv, isl, eyes, sockets)
-    buf = io.BytesIO()
-    Image.fromarray(tex8).save(buf, 'PNG', optimize=True)
-    png = buf.getvalue()
     eyeMid = (eyes['L']['c'] + eyes['R']['c']) / 2
     # jaw hinge: back under the eye, a little above the corner of the mouth (as in our own head)
     B['jaw'] = np.array([0, nose[1] - 0.008, eyeMid[2] - 0.04])
@@ -529,6 +551,10 @@ def main():
     w4 /= w4.sum(1, keepdims=True)
 
     Nn = normals(V, faces, inv)
+    tex8 = pink_ears(tex8, V, faces, F['uv'], Nn, Wo[:, bi['earL']] + Wo[:, bi['earR']], B)
+    buf = io.BytesIO()
+    Image.fromarray(tex8).save(buf, 'PNG', optimize=True)
+    png = buf.getvalue()
     out_frac = np.mean(np.einsum('ij,ij->i', Nn, V - V.mean(0)) > 0)
     print('vertices', len(V), 'triangles', len(faces), 'normals outward %.2f' % out_frac)
 
@@ -539,7 +565,8 @@ def main():
         return [float(np.arctan2(-g[1], g[2])), float(np.arcsin(np.clip(g[0], -1, 1))), roll]
     pad = np.array([0.0128, -0.0079, -0.0055])
     lm = dict(head=E((eyeMid + B['head']) / 2), eyeL=E(eyes['L']['c']), eyeR=E(eyes['R']['c']), eyeRadius=round(float(R_eye), 5), headScale=1.0,
-              eyeEulerL=euler(eyes['L']['gaze'], M.EYE_EULER[2]), eyeEulerR=euler(eyes['R']['gaze'], -M.EYE_EULER[2]),
+              # the eyes' corners level (our own eyes tip the outer corner up, which on this face reads as a glare)
+              eyeEulerL=euler(eyes['L']['gaze'], -0.02), eyeEulerR=euler(eyes['R']['gaze'], 0.02),
               # the opening the eye's own lids leave, against our default lids (eye.ts), and their skin
               lidScale=E([np.mean([eyes[s]['half'][0] / eyes[s]['r'] for s in 'LR']) / 0.62, np.mean([eyes[s]['half'][1] / eyes[s]['r'] for s in 'LR']) / 0.465]),
               lidCol=E(np.mean([eyes[s]['skin'] for s in 'LR'], 0)),

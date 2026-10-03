@@ -120,6 +120,18 @@ vec3 irisAt(vec2 ip) {
   return mix(c, vec3(0.045, 0.03, 0.02), smoothstep(1.0, 1.05, rr));
 }
 
+// a painted model's own lids: level corners and a rounder upper lid, a gentle face rather than the
+// sharp upswept almond (a slant at the outer corner reads as a glare); the same size of opening
+vec2 lidCurvesSoft(float xo, vec2 ul) {
+  float u = xo / LID_XC;
+  float e = max(0.0, 1.0 - u * u);
+  float inner = max(-u, 0.0);
+  float cy = -0.02 + 0.015 * u;
+  float fu = pow(e, 0.4 + 0.25 * inner);
+  float fl = pow(e, 0.55 + 0.35 * inner);
+  return vec2(cy + (ul.x + 0.03) * fu, cy + (ul.y + 0.03) * fl);
+}
+
 // the lid skin over the ball (dl: lid frame), lit as the painted coat is (skin.ts)
 vec3 lidSkin(vec3 N, vec3 dl) {
   vec3 col = uLidCol;
@@ -138,12 +150,19 @@ void main() {
   float lidIn = 1.0;
   bool seam = false;
   vec3 dlo = uGaze * d;
+  // the upper lid's edge is a dark line; the lower lid's is finer and browner
+  vec3 rimCol = vec3(0.02, 0.012, 0.008);
   if (uOwnLids > 0.5) {
     float xs = dlo.x / uLidScale.x;
-    vec2 lco = lidCurves(xs, xs * uSide, vec2(uUpper, uLower)) * uLidScale.y;
-    lidIn = min(lco.x - dlo.y, dlo.y - lco.y);
+    vec2 lco = lidCurvesSoft(xs * uSide, vec2(uUpper, uLower)) * uLidScale.y;
+    float inU = lco.x - dlo.y, inL = dlo.y - lco.y;
+    lidIn = min(inU, inL);
     float u = xs * uSide / LID_XC;
     seam = lco.x - lco.y < rim && abs(dlo.y - 0.5 * (lco.x + lco.y)) < rim * 0.7 && abs(u) < 0.92;
+    if (!seam && inL < inU && lidIn >= 0.0) {
+      lidIn = lidIn * 2.0;
+      rimCol = vec3(0.09, 0.05, 0.035);
+    }
   }
   // the iris sits ~35% of the radius behind the cornea: refract the view onto it
   vec3 v = -normalize(vViewLocal);
@@ -168,11 +187,12 @@ void main() {
     iris = mix(iris, uIrisC * 0.9, smoothstep(0.82, 0.98, rr));
     vec2 q = ip / vec2(0.15 + 0.26 * uPupil, 0.46 + 0.1 * uPupil);
     float pupil = step(length(q), 1.0);
-    vec2 gq = abs(ip - vec2(-0.2, 0.2));
-    float glint = step(max(gq.x, gq.y), 0.1);
+    vec2 gq = abs(ip - vec2(-0.2, 0.22));
+    vec2 gq2 = abs(ip - vec2(0.2, -0.2));
+    float glint = max(step(max(gq.x, gq.y), 0.12), step(max(gq2.x, gq2.y), 0.05));
     vec3 c = mix(iris, vec3(0.004), pupil);
     c = mix(c, vec3(1.0), glint);
-    if (lidIn < rim) c = lidIn < 0.0 && !seam ? lidSkin(normalize(vN), dlo) : vec3(0.02, 0.012, 0.008);
+    if (lidIn < rim) c = lidIn < 0.0 && !seam ? lidSkin(normalize(vN), dlo) : rimCol;
     // alpha 0.75 tells the pixel pass to use the eyes' palette; lids are coat
     gl_FragColor = vec4(c, lidIn < rim ? 1.0 : 0.75);
     return;
@@ -193,7 +213,7 @@ void main() {
   vec3 R = reflect(-V, N);
   float fres = 0.025 + 0.975 * pow(1.0 - max(dot(N, V), 0.0), 5.0);
   col += env(R) * fres * mix(0.3, 1.0, shade);
-  if (uOwnLids > 0.5) col = seam ? vec3(0.02, 0.012, 0.008) : lidIn < 0.0 ? lidSkin(N, dlo) : mix(vec3(0.02, 0.012, 0.008), col, smoothstep(0.0, rim, lidIn));
+  if (uOwnLids > 0.5) col = seam ? rimCol : lidIn < 0.0 ? lidSkin(N, dlo) : mix(rimCol, col, smoothstep(0.0, rim, lidIn));
   gl_FragColor = vec4(col, 1.0);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
@@ -225,10 +245,11 @@ export function makeEye(radius: number, side: 1 | -1, lights: EyeLights): CatEye
       // amber, sampled from a photograph of a ginger tabby's eye
       // golden amber, between the photographs' copper and hazel
       // olive gold, as in the photographs of ginger tabbies in daylight
-      uIrisA: { value: srgb(0.74, 0.76, 0.42) },
-      uIrisB: { value: srgb(0.56, 0.62, 0.3) },
-      uIrisC: { value: srgb(0.3, 0.34, 0.15) },
-      uFleck: { value: srgb(0.8, 0.78, 0.55) },
+      // gold round the pupil into olive green: a ginger tabby's eye in soft daylight
+      uIrisA: { value: srgb(0.85, 0.77, 0.4) },
+      uIrisB: { value: srgb(0.6, 0.63, 0.3) },
+      uIrisC: { value: srgb(0.32, 0.34, 0.15) },
+      uFleck: { value: srgb(0.86, 0.8, 0.56) },
       ...lights,
       uRadius: { value: radius },
       uGaze: { value: new THREE.Matrix3() },
