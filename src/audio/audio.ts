@@ -156,11 +156,12 @@ export class CatAudio {
     return this.ready;
   }
 
+  /** play a sound from the bank; how long it lasts (s), 0 if it was not played */
   play(name: string, o: PlayOpts = {}) {
     const ctx = this.ctx;
-    if (!ctx || !this.ready || this.muted) return;
+    if (!ctx || !this.ready || this.muted) return 0;
     const list = this.bank[name];
-    if (!list?.length) return;
+    if (!list?.length) return 0;
     const src = ctx.createBufferSource();
     src.buffer = pick(list);
     src.playbackRate.value = (o.rate ?? 1) * rand(0.97, 1.03);
@@ -174,6 +175,7 @@ export class CatAudio {
     }
     node.connect(o.far ? this.far : this.near);
     src.start(ctx.currentTime + (o.delay ?? 0));
+    return src.buffer.duration / src.playbackRate.value;
   }
 
   /** a sequence of the same sound, e.g. chewing or lapping, spread over `seconds` */

@@ -400,6 +400,10 @@ export class PixelAvatar implements Avatar {
     this.cat.motor.hiss();
   }
 
+  vocalize(kind: 'trill' | 'meow' | 'meowSoft' | 'meowPlead' | 'chirp', dur: number, delay: number) {
+    if (!this.isHidden) this.cat.motor.vocalize(kind, dur, delay);
+  }
+
   /** eating and drinking where you can see: crouched with the head in the bowl, chewing or lapping */
   private doErrand(dt: number) {
     const e = this.errand!, m = this.cat.motor;

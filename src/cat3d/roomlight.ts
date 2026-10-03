@@ -184,7 +184,7 @@ export function dayLight(hour: number, out?: DayLight, rain = 0): DayLight {
   tintShade = lerp3(tintShade, [0.94, 0.84, 1.0], dusk);
   // rain: a grey, blue-ish day
   tintShade = lerp3(tintShade, [0.9, 0.94, 1.04], rain * day);
-  tintShade = lerp3(tintShade, [0.62, 0.66, 0.98], night * (1 - dusk * 0.5));
+  tintShade = lerp3(tintShade, [0.66, 0.68, 0.92], night * (1 - dusk * 0.5));
   const tintLamp = [1.08, 0.95, 0.8];
   const o = out ?? ({} as DayLight);
   // under rain the sun is hidden, the sky gives less light, and the lamp is lit even by day

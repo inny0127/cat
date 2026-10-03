@@ -240,10 +240,12 @@ void main() {
     float sumL = L0 * 4.0, sumW = 4.0;
     for (int i = 0; i < 8; i++) if (nm[i] == mat) { sumL += nl[i]; sumW += 1.0; }
     float L = sumL / sumW;
-    // the third channel: its whole part, which light this is in (1 the lamp's, 2 the sun's); its
-    // fraction, the rim light (the cat) or how much it glows (the room)
-    int flags = int(floor(B0 + 1e-3));
-    float third = B0 - float(flags);
+    // the third channel: its whole part, how much of its light is the lamp's and how much the
+    // sun's (or the moon's), in fifths; its fraction, the rim light (the cat) or how much it glows
+    // (the room)
+    int code = int(floor(B0 + 1e-3));
+    float third = B0 - float(code);
+    float wl = float(code / 6) / 5.0, ws = float(code - (code / 6) * 6) / 5.0;
     // (nm, nl: 0 1 2 below, 3 left, 4 right, 5 6 7 above)
     // (the gentler side of each way, so a groove or a speck of texture is not taken for a slope)
     float s0 = stepPos(L0);
@@ -268,16 +270,18 @@ void main() {
     // step lighter, as a pixel artist picks out an edge (not on what glows, nor in the dark)
     else if (!glows && w > 0.25 && w - invDepth(p + ivec2(0, 1)) > 0.035 * w && L > 0.2) level += 1;
     col = ramp(mat, level);
-    // the colour of the light it is in
-    vec3 tint = (flags & 1) != 0 ? uTintLamp : (flags & 2) != 0 ? uTintSun : uTintShade;
+    // the colour of the light it is in: the lamp's, the sun's (the moon's), the shade's, mixed as
+    // they are mixed on it
+    vec3 tint = uTintShade * max(0.0, 1.0 - wl - ws) + uTintLamp * wl + uTintSun * ws;
     col = clamp(col * tint, 0.0, 1.0);
-    // richer: a little more colour, the darks a little deeper
+    // richer: a little more colour in the lights and middle tones (not the darks, which would go
+    // garish), the darks a little deeper
     float lu = dot(col, vec3(0.299, 0.587, 0.114));
-    col = clamp(mix(vec3(lu), col, 1.22), 0.0, 1.0);
+    col = clamp(mix(vec3(lu), col, mix(1.0, 1.22, smoothstep(0.12, 0.45, lu))), 0.0, 1.0);
     col = col * col * (3.0 - 2.0 * col) * 0.35 + col * 0.65;
     if (glows) glow = 1.0;
     else if (partGlow > 0.0) glow = partGlow;
-    else if ((flags & 2) != 0 && level >= 4) glow = 0.16;
+    else if (ws > 0.5 && level >= 4) glow = 0.16;
   }
   // the sunlight in the air: how far the line of sight runs through the beam from the window
   if (uBeam > 0.001) {

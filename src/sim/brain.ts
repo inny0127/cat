@@ -35,6 +35,9 @@ const HINT = {
   notify: '고양이가 당신을 부를 수 있게 알림을 허용해 주세요',
 };
 
+/** how long each voice lasts (s), for a mouth to move with when the sound itself is not playing */
+const VOICE_LEN: Record<string, number> = { trill: 0.29, meow: 0.65, meowSoft: 0.44, meowPlead: 0.92, chirp: 0.11 };
+
 /**
  * The cat's mind while you're looking: moods that rise and fade, a body that wants food and
  * sleep, and a relationship with you that every touch nudges.
@@ -791,7 +794,9 @@ export class Brain {
     this.lastSay = this.time;
     const sick = this.s.health < THRESH.sick;
     const name = sick && what !== 'trill' ? 'meowSoft' : what;
-    this.audio.play(name, { gain: (o.far ? 0.5 : 0.75) * (sick ? 0.6 : 1), far: o.far, delay: o.delay, pan: o.far ? rand(-0.7, 0.7) : -0.25 });
+    const dur = this.audio.play(name, { gain: (o.far ? 0.5 : 0.75) * (sick ? 0.6 : 1), far: o.far, delay: o.delay, pan: o.far ? rand(-0.7, 0.7) : -0.25 });
+    // (and its mouth says it, sound or no sound; from out of the room, nothing to see)
+    if (!o.far) this.anim.vocalize?.(name, dur || VOICE_LEN[name], o.delay ?? 0);
   }
 
   // ------------------------------------------------------------------ timers in brain time

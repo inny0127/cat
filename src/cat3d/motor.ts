@@ -251,6 +251,12 @@ export class Motor {
     this.hissT = 0;
   }
 
+  /** something said (a meow, a trill, a chirp), how long it lasts and when it starts */
+  private voice: { kind: string; t: number; dur: number } | null = null;
+  vocalize(kind: string, dur: number, delay = 0) {
+    this.voice = { kind, t: -delay, dur: Math.max(0.08, dur) };
+  }
+
   /** asleep and dreaming: a forepaw twitches, the whiskers quiver */
   dreamTwitch() {
     this.dreamPaw = Math.random() < 0.5 ? 'LF' : 'RF';
@@ -436,6 +442,35 @@ export class Motor {
       p.headPitch += 0.16 * env;
       p.neckPitch -= 0.12 * env;
     } else this.hissNow = 0;
+    // talking: the mouth shaped by the sound, in time with it. A meow is "mi-aow", lips parting on
+    // the "m", wide on the "aow" and closing as it trails off, the head lifting a little toward
+    // whoever it is said to; a plea longer and wider, a soft one small; a trill is said with the
+    // mouth all but shut, a hum in the throat; a chirp a quick little open and shut
+    const v = this.voice;
+    if (v) {
+      v.t += dt;
+      if (v.t >= 0) {
+        const x = v.t / v.dur;
+        const out = x > 1 ? Math.max(0, 1 - (x - 1) / 0.25) : 1;
+        let jaw = 0, lift = 0;
+        if (v.kind.startsWith('meow')) {
+          const wide = v.kind === 'meowPlead' ? 0.75 : v.kind === 'meowSoft' ? 0.4 : 0.66;
+          const open = Math.sin(Math.PI * Math.min(1, x * 1.25));
+          jaw = (x < 0.08 ? 0.12 * (x / 0.08) : wide * Math.max(0.2, open)) * out;
+          lift = (v.kind === 'meowPlead' ? 0.22 : 0.1) * Math.sin(Math.PI * Math.min(1, x)) * out;
+        } else if (v.kind === 'trill') {
+          jaw = (0.06 + 0.04 * Math.max(0, Math.sin(v.t * Math.PI * 2 * 9))) * Math.sin(Math.PI * Math.min(1, x)) * out;
+          lift = 0.08 * Math.sin(Math.PI * Math.min(1, x)) * out;
+        } else {
+          jaw = 0.35 * Math.sin(Math.PI * Math.min(1, x));
+          lift = 0.04 * Math.sin(Math.PI * Math.min(1, x));
+        }
+        p.jaw = Math.max(p.jaw, jaw);
+        p.headPitch += lift;
+        p.earFwd += 0.4 * lift;
+        if (x > 1.25) this.voice = null;
+      }
+    }
     // tail: a lazy swish, more when the motor asks for it or the cat is cross or keen
     this.wavePhase += dt * (1.1 + 1.6 * this.waveAmp) * this.tailWaveSpeed * Math.max(0.2, f.tailWaveSpeed);
     // ears: flick now and then, often when annoyed
