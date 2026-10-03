@@ -83,8 +83,8 @@ void main() {
     if (fx < 0.055 || fz < 0.012) { m = ${PIX.floorDark}; tone -= 0.16; }
     else if (fx < 0.11) tone += 0.07;
   } else if (uPattern == 2) {
-    // a round rug: a fringe of tassels, a cream border, a band of cream diamonds on the indigo,
-    // a cream ring, indigo within
+    // a round rug: a fringe of tassels, a cream border, a band of terracotta diamonds on the
+    // indigo, a cream ring, indigo within
     vec2 d = vWorld.xz - uRug.xy;
     float r = length(d) / uRug.z;
     float th = atan(d.y, d.x);
@@ -96,10 +96,9 @@ void main() {
       bool cream = r > 0.92 || (r > 0.78 && r < 0.81);
       float t = (r - 0.6) / 0.15;
       float cell = fract(th / 6.2832 * 28.0);
-      if (t > 0.0 && t < 1.0 && abs(cell - 0.5) * 2.0 + abs(t - 0.5) * 2.0 < 0.55) cream = true;
-      m = cream ? ${PIX.rugCream} : ${PIX.rug};
-      // a tufted texture: every so often a stitch a shade lighter
-      if (!cream && hash2(floor(vWorld.xz / 0.016)) > 0.84) tone += 0.06;
+      bool diamond = t > 0.0 && t < 1.0 && abs(cell - 0.5) * 2.0 + abs(t - 0.5) * 2.0 < 0.55;
+      m = cream ? ${PIX.rugCream} : diamond ? ${PIX.pot} : ${PIX.rug};
+      if (diamond) tone += 0.04;
     }
   } else if (uPattern == 3) {
     if (vWorld.y < 0.3) {
@@ -119,6 +118,9 @@ void main() {
   } else if (uPattern == 4) {
     // fleece: soft and a little uneven
     tone += (vnoise(vWorld.xz * 70.0) - 0.5) * 0.08;
+  } else if (uPattern == 6) {
+    // plush: the deep pile of a cat's bed, in soft tufts
+    tone += (vnoise(vWorld.xz * 95.0 + vWorld.y * 40.0) - 0.5) * 0.16 + (vnoise(vWorld.xz * 31.0 - 3.0) - 0.5) * 0.08;
   } else if (uPattern == 5) {
     // a ball of wool: strands wound round it in bands, one way over another (they turn with it
     // as it rolls)
@@ -885,7 +887,21 @@ export class Room {
     const cushion = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.03, 32), this.mat('fleece', { pattern: 4 }));
     cushion.receiveShadow = true;
     add(cushion, S.bed.x, 0.015, S.bed.z);
-    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.172, 0.04, 12, 40), this.mat('bed'));
+    // (stuffed in eight puffy sections, a little uneven)
+    const rimGeo = new THREE.TorusGeometry(0.172, 0.04, 12, 64);
+    {
+      const pos = rimGeo.attributes.position as THREE.BufferAttribute, v = new THREE.Vector3(), c = new THREE.Vector3();
+      for (let i = 0; i < pos.count; i++) {
+        v.fromBufferAttribute(pos, i);
+        const a = Math.atan2(v.y, v.x);
+        c.set(Math.cos(a) * 0.172, Math.sin(a) * 0.172, 0);
+        const puff = 1 + 0.13 * Math.pow(Math.abs(Math.cos(a * 4)), 0.6) - 0.06 + 0.04 * Math.sin(a * 3 + 1);
+        v.sub(c).multiplyScalar(puff).add(c);
+        pos.setXYZ(i, v.x, v.y, v.z);
+      }
+      rimGeo.computeVertexNormals();
+    }
+    const rim = new THREE.Mesh(rimGeo, this.mat('bed', { pattern: 6 }));
     rim.rotation.x = Math.PI / 2;
     rim.scale.z = 0.75;
     shadowy(rim);

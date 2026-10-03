@@ -99,6 +99,9 @@ void main() {
       // lights its edges only while there is daylight in it
       lt = roomLight(vWorld, Np, shp, mix(0.55, 1.0, vAO) * roomAO(vWorld, Np));
       rim *= clamp(uSkyI + uSun, 0.0, 1.0);
+      // modelled as a painter models a figure, whatever the room's light: lighter where the body
+      // turns up and toward you from the left, darker where it turns down and away
+      lt.x *= mix(0.78, 1.14, smoothstep(-0.45, 0.75, dot(Np, normalize(vec3(-0.45, 0.8, 0.4)))));
     } else {
       float direct = smoothstep(-0.15, 0.55, dot(Np, uKeyDir)) * mix(0.25, 1.0, shp);
       // key, sky, fill, and the warm floor bouncing light up under the chin and belly
