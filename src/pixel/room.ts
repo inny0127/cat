@@ -115,6 +115,13 @@ void main() {
     }
     // the floor's shadow along the foot of the wall
     tone -= 0.12 * (1.0 - smoothstep(0.0, 0.06, vWorld.y));
+  } else if (uPattern == 8) {
+    // a monstera leaf: its midrib and the veins running out between the slits, paler
+    float ax = abs(vLocal.x);
+    if (ax < 0.003 && vLocal.y < 0.215) tone += 0.13;
+    else for (int k = 0; k < 5; k++) {
+      if (abs(vLocal.y - (0.04 + 0.0415 * float(k)) - 0.35 * ax) < 0.0022 && ax > 0.006) tone += 0.06;
+    }
   } else if (uPattern == 4) {
     // fleece: soft and a little uneven
     tone += (vnoise(vWorld.xz * 70.0) - 0.5) * 0.08;
@@ -142,6 +149,12 @@ void main() {
   float sh = keyShadow(vWorld, N);
   float ao = capsuleAO(vWorld, N) * roomAO(vWorld, N);
   vec3 lt = roomLight(vWorld, N, sh, ao);
+  if (uPattern == 8) {
+    // a leaf lets the light through: with the sun or the bright window behind it, it glows
+    float back = uSun * max(-dot(N, uKeyDir), 0.0) * sunThrough(vWorld) * keyShadow(vWorld, -N) * 0.7 + uSkyI * skyThrough(vWorld, -N) * 0.45;
+    float tot = lt.x + back;
+    lt = vec3(tot, lt.y * lt.x / max(tot, 1e-4), (lt.z * lt.x + back) / max(tot, 1e-4));
+  }
   lt.x = max(lt.x * (1.0 + 1.3 * tone) + 0.25 * tone, 0.0);
   // what glows: all of it at once (a candle's jar, the radio's dial), or a lit lamp's shade, which
   // is brightest at its open foot and dimmer up toward its top
@@ -1068,7 +1081,7 @@ export class Room {
       const tip = new THREE.Vector3(px, 0.2, pz).addScaledVector(dir, lean * 0.22).add(new THREE.Vector3(0, h, 0));
       const stemC = new THREE.QuadraticBezierCurve3(new THREE.Vector3(px + dir.x * 0.02, 0.19, pz + dir.z * 0.02), new THREE.Vector3(px + dir.x * 0.04, 0.2 + h * 0.8, pz + dir.z * 0.04), tip);
       add(shadowy(new THREE.Mesh(new THREE.TubeGeometry(stemC, 8, 0.0045, 4), this.mat('leaf', { tone: -0.08 }))), 0, 0, 0);
-      const leaf = new THREE.Mesh(leafGeo, this.mat('leaf', { tone: (sz - 0.85) * 0.4 }));
+      const leaf = new THREE.Mesh(leafGeo, this.mat('leaf', { tone: (sz - 0.85) * 0.4, pattern: 8 }));
       leaf.scale.setScalar(sz);
       leaf.position.copy(tip);
       // the leaf sits on the end of its stem, its face toward the room (and a little up), leaning
