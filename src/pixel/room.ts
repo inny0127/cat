@@ -452,7 +452,9 @@ export class Room {
       l.rotation.x = Math.sin(a) * 0.5;
       add(l, winL + 0.11 + Math.cos(a) * 0.014, winB + 0.06, wallZ + 0.02 + Math.sin(a) * 0.014);
     }
-    add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.06, 14), this.mat('bookMustard', { tone: 0.1 }))), winR - 0.12, winB + 0.03, wallZ + 0.02);
+    const jar = this.mat('bookMustard', { tone: 0.1 });
+    add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.06, 14), jar)), winR - 0.12, winB + 0.03, wallZ + 0.02);
+    this.candle(jar, new THREE.Vector3(winR - 0.12, winB + 0.068, wallZ + 0.02));
 
     // under the window, an old column radiator painted white: its fins, the pipes along its top
     // and foot, its legs, and the pipe and valve at its end
@@ -598,7 +600,9 @@ export class Room {
     this.print = print;
     pot(bx + 0.27, 0.03, 0.055, 'pot');
     tuft(bx + 0.27, ty + 0.085, 8, 0.02, 0.016, 0.05);
-    add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.05, 12), this.mat('rugCream', { tone: 0.15 }))), bx + 0.38, ty + 0.036, wallZ + 0.05);
+    const wax = this.mat('rugCream', { tone: 0.15 });
+    add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.05, 12), wax)), bx + 0.38, ty + 0.036, wallZ + 0.05);
+    this.candle(wax, new THREE.Vector3(bx + 0.38, ty + 0.07, wallZ + 0.05));
 
     // a shelf to the right of the window: books, a jar, a trailing plant
     const sx = winR + 0.32, sy = 0.92;
@@ -769,6 +773,21 @@ export class Room {
   private readonly win: { l: number; r: number; b: number; t: number; z: number };
   private readonly motes: { p: THREE.Vector3; v: THREE.Vector3; b: number; life: number }[] = [];
   private readonly timeU = { value: 0 };
+  /** the candles: lit in the evening and on grey days, their flames trembling, their jars aglow */
+  private readonly candles: { body: THREE.ShaderMaterial; flame: THREE.Mesh; seed: number }[] = [];
+  private candle(body: THREE.ShaderMaterial, top: THREE.Vector3) {
+    const m = new THREE.ShaderMaterial({
+      uniforms: { uTime: this.timeU, uOn: { value: 1 }, uCol: { value: new THREE.Color(1, 0.86, 0.5) }, uSeed: { value: Math.random() } },
+      vertexShader: SKY_VERT, fragmentShader: BULB_FRAG, transparent: true, blending: THREE.NoBlending,
+    });
+    const flame = new THREE.Mesh(new THREE.SphereGeometry(0.0055, 6, 4), m);
+    flame.position.copy(top);
+    flame.scale.set(1, 2, 1);
+    flame.renderOrder = 20;
+    this.group.add(flame);
+    this.candles.push({ body, flame, seed: Math.random() * 10 });
+  }
+
   /** the radio on the sill (tapping it switches the music on and off), and its dial */
   radio: THREE.Object3D = new THREE.Group();
   private dial!: THREE.ShaderMaterial;
@@ -932,8 +951,15 @@ export class Room {
       const cy = (b + t) / 2;
       P.set((l + r) / 2 - (K.x * cy) / K.y, z - (K.z * cy) / K.y, Math.min(1.5, ((r - l) * (t - b) * -K.z) / K.y), d.sun * 0.45 * K.y);
     } else P.set(0, 0, 0, 0);
-    // the lamp's shade glows when it is lit; the fairy lights come on with it
+    // the lamp's shade glows when it is lit; the fairy lights and the candles come on with it
     this.shade.uniforms.uGlow.value = d.lamp > 0.5 ? 1 : 0;
+    for (const c of this.candles) {
+      const lit = d.lamp > 0.5;
+      c.flame.visible = lit;
+      c.body.uniforms.uGlow.value = lit ? 1 : 0;
+      const f = Math.sin(this.time * 9 + c.seed) * 0.5 + Math.sin(this.time * 23 + c.seed * 3) * 0.3;
+      c.flame.scale.set(1 + 0.15 * f, 2 + 0.5 * f, 1);
+    }
     this.nightU.value = d.fairy > 0.2 ? 1 : 0;
     const f = Math.max(0, Math.min(1, s.food));
     this.kibble.visible = f > 0.02;
