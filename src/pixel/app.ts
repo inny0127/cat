@@ -68,6 +68,7 @@ export class PixelApp {
     this.stage.floor.visible = false;
     this.avatar.spots = this.room.spots;
     this.cat.groundAt = (x, z) => this.room.groundAt(x, z);
+    this.avatar.sunSpot = () => this.room.sunSpot();
     this.frame3d();
 
     const now = Date.now();

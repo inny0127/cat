@@ -616,7 +616,7 @@ export class Room {
     }
 
     // in front: a stack of books with a mug on top, and a ball of yarn the cat plays with
-    const fx = bx + 0.36, fz = bz + 0.3;
+    const fx = bx + 0.42, fz = bz + 0.38;
     const stack: [Material, number, number][] = [['bookBlue', 0.2, 0.03], ['bookRed', 0.18, 0.025], ['bookMustard', 0.17, 0.028]];
     let fy = 0;
     stack.forEach(([mname, w, t], i) => {
@@ -709,6 +709,8 @@ export class Room {
     cap(V(winL - 0.07, winB - 0.02, wallZ + 0.04), V(winR + 0.07, winB - 0.02, wallZ + 0.04), 0.04, 0.5);
     cap(V(bx - 2, 0.318, wallZ + 0.01), V(bx + 2, 0.318, wallZ + 0.01), 0.015, 0.4);
     cap(V(bx - 0.2, 0.16, wallZ + 0.055), V(bx + 0.2, 0.16, wallZ + 0.055), 0.07, 0.5);   // the radiator
+    this.things.push([V(px, 0, pz), 0.11], [V(lx, 0, lz), 0.08], [V(fx, 0, fz), 0.14], [V(bx - 0.3, 0, bz + 0.26), 0.05]);
+    this.hides.push([V(fx, 0, fz), 0.14]);
     // worth a sniff: the monstera's pot, the radiator, the yarn, the books with the mug on them
     const face = (from: THREE.Vector3, at: THREE.Vector3) => Math.atan2(at.x - from.x, at.z - from.z);
     for (const [sx2, sz2, ax, az] of [
@@ -773,6 +775,38 @@ export class Room {
     this.mats.push(m);
     return m;
   }
+
+  /** a warm place on the floor in the sun, clear of the bed and the room's things, if the sun is
+   *  in: points of the window's opening carried along the light down to the floor */
+  sunSpot(): THREE.Vector3 | null {
+    const L = this.lights;
+    const P = L.uPatch.value as THREE.Vector4;
+    const K = L.uKeyDir.value as THREE.Vector3;
+    if (P.w <= 0.04 || K.y < 0.1) return null;
+    const { l, r, b, t, z } = this.win;
+    const S = this.spots;
+    // (a cat lying down takes a circle about a quarter of a metre round the middle of its body)
+    const things: [THREE.Vector3, number][] = [[S.bed, 0.21], [S.food, 0.07], [S.water, 0.07], [S.litter, 0.19], ...this.things];
+    const clear = things.map(([c, rr]): [THREE.Vector3, number] => [c, rr + 0.19]);
+    const ok: THREE.Vector3[] = [];
+    for (let i = 0; i < 12; i++) for (let j = 0; j < 12; j++) {
+      const w = new THREE.Vector3(l + (r - l) * (i + 0.5) / 12, b + (t - b) * (j + 0.5) / 12, z);
+      const f = w.clone().addScaledVector(K, -w.y / K.y);
+      f.y = 0;
+      if (f.x < -0.62 || f.x > 0.62 || f.z < z + 0.3 || f.z > S.bed.z + 0.3) continue;
+      if (clear.some(([c, d]) => Math.hypot(f.x - c.x, f.z - c.z) < d)) continue;
+      // nor where something standing nearer you would hide it (the books with the mug on them)
+      if (this.hides.some(([c, d]) => c.z > f.z && c.z - f.z < 0.32 && Math.abs(c.x - f.x) < d + 0.2)) continue;
+      ok.push(f);
+    }
+    if (!ok.length) return null;
+    return ok[Math.floor(Math.random() * ok.length)];
+  }
+
+  /** things standing on the floor a cat lying down keeps clear of: where, and how big */
+  private readonly things: [THREE.Vector3, number][] = [];
+  /** ... and those tall enough to hide a cat lying behind them */
+  private readonly hides: [THREE.Vector3, number][] = [];
 
   /** how high the floor is at a point: the bed's cushion and its soft rim (paws stand on them) */
   groundAt(x: number, z: number) {

@@ -4,7 +4,7 @@ import type { PoseName } from '../cat3d/pose';
 import { NEUTRAL, type Mood } from '../cat3d/mood';
 import type { Avatar } from '../sim/avatar';
 import type { EarMood, TailMood } from '../rig/animator';
-import { Stretch, chooseAct, groomChest, groomFlank, knead, restingPose, toBed, toWindow, wander, yawn, type Act, type Ctx } from './behave';
+import { Stretch, chooseAct, groomChest, groomFlank, knead, restingPose, toBed, toWindow, wander, yawn, type Act, type Ctx, sunbathe } from './behave';
 
 const LYING: PoseName[] = ['loaf', 'sphinx', 'side', 'curl'];
 const wrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
@@ -53,6 +53,8 @@ export class PixelAvatar implements Avatar {
   private errand: { reason: string; phase: 'go' | 'do' | 'off'; t: number; dur: number; dir: number } | null = null;
   /** the room's places (bowls, box), once there is a room */
   spots: { food: THREE.Vector3; water: THREE.Vector3; litter: THREE.Vector3; sniff?: { to: THREE.Vector3; face: number }[] } | null = null;
+  /** a place in the sun on the floor, if there is one now */
+  sunSpot: (() => THREE.Vector3 | null) | null = null;
   private fading: { t: number; dur: number; onDone?: () => void } | null = null;
   private readonly look = new THREE.Vector3();
   /** the brain's mode and the cat's feelings (set by the app each frame) */
@@ -83,6 +85,8 @@ export class PixelAvatar implements Avatar {
       mode: this.mode, mood: this.mood, kneading: false,
       bed: (p) => this.bedSpot(p),
       sniff: () => this.spots?.sniff ?? [],
+      sun: () => this.sunSpot?.() ?? null,
+      lieAt: (p, at, face) => this.lieAt(p, at, face),
     };
   }
 
@@ -101,10 +105,16 @@ export class PixelAvatar implements Avatar {
    * ends nose to tail, so it lies down facing the wall.
    */
   bedSpot(p: PoseName) {
+    return this.lieAt(p, this.home, this.home.yaw);
+  }
+
+  /** where to stand and which way to turn so that lying down in posture p puts the middle of the
+   *  body at a point, the face turned to `face` */
+  lieAt(p: PoseName, at: { x: number; z: number }, face: number) {
     const f = this.cat.footprint(p);
-    const yaw = wrap(this.home.yaw - f.face);
+    const yaw = wrap(face - f.face);
     const s = Math.sin(yaw), c = Math.cos(yaw);
-    return { to: new THREE.Vector3(this.home.x - (f.x * c + f.z * s), 0, this.home.z + f.x * s - f.z * c), yaw };
+    return { to: new THREE.Vector3(at.x - (f.x * c + f.z * s), 0, at.z + f.x * s - f.z * c), yaw };
   }
 
   /**
@@ -139,12 +149,12 @@ export class PixelAvatar implements Avatar {
   }
 
   /** start one of its acts now (for the lab and tests) */
-  startAct(name: 'yawn' | 'groom' | 'groom chest' | 'stretch' | 'window' | 'wander' | 'knead' | 'bed') {
+  startAct(name: 'yawn' | 'groom' | 'groom chest' | 'stretch' | 'window' | 'wander' | 'knead' | 'bed' | 'sun') {
     this.stopAct();
     const c = this.ctx;
     this.act = name === 'yawn' ? yawn() : name === 'groom' ? groomFlank() : name === 'groom chest' ? groomChest()
       : name === 'stretch' ? new Stretch('loaf') : name === 'window' ? toWindow(c) : name === 'wander' ? wander(c)
-        : name === 'knead' ? knead() : toBed(c, 'loaf');
+        : name === 'knead' ? knead() : name === 'sun' ? sunbathe(c) : toBed(c, 'loaf');
   }
 
   private stopAct() {

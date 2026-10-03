@@ -25,6 +25,11 @@ export interface Ctx {
   bed: (p: PoseName) => { to: THREE.Vector3; yaw: number };
   /** places in the room worth a sniff */
   sniff: () => { to: THREE.Vector3; face: number }[];
+  /** a place on the floor in the sun, if the sun is in */
+  sun: () => THREE.Vector3 | null;
+  /** where to stand, and which way to face, to lie down in a posture with the middle of the body
+   *  at a point and the face turned a way */
+  lieAt: (p: PoseName, at: THREE.Vector3, face: number) => { to: THREE.Vector3; yaw: number };
 }
 
 /** one thing the cat does: update returns false when it is over; stop cuts it short cleanly */
@@ -171,6 +176,19 @@ export const wander = (c: Ctx) => {
   return new Walk('wander', legs);
 };
 
+/** lie a long while in the patch of sun on the floor, as cats will, then back to bed */
+export const sunbathe = (c: Ctx) => {
+  const spot = c.sun();
+  if (!spot) return null;
+  const bed = c.bed('loaf');
+  const posture = pick<PoseName>(['side', 'side', 'loaf', 'sphinx']);
+  const place = c.lieAt(posture, spot, rand(-0.7, 0.7));
+  return new Walk('sun', [
+    { to: place.to, face: place.yaw, stay: rand(40, 100), posture },
+    { to: bed.to, face: bed.yaw, stay: 0.1, posture: 'loaf' },
+  ]);
+};
+
 /** back to bed (or up, round and down again on it): turn round on it once and settle, lying so
  *  that the body is in the middle and the face toward the window */
 export const toBed = (c: Ctx, settle: PoseName) => {
@@ -202,6 +220,7 @@ export function chooseAct(c: Ctx, atHome: boolean, posture: PoseName): Act | nul
     opts.push([0.35, () => new Stretch(posture === 'sit' ? 'sit' : 'loaf')]);
     if (atHome) opts.push([0.9 * Math.max(0, Math.min(1, m.trust + 0.3)) * (1 + m.arousal) + (c.mode === 'alert' ? 0.8 : 0), () => toWindow(c)]);
     if (atHome) opts.push([0.5 * (1 + m.arousal) * (1 - m.sleepy), () => wander(c)]);
+    if (atHome && c.mode === 'rest') opts.push([0.7 + 0.8 * m.sleepy, () => sunbathe(c)]);
     else opts.push([1.5, () => toBed(c, 'loaf')]);
     opts.push([0.8, () => null]);
   }
