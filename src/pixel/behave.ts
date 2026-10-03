@@ -1433,7 +1433,7 @@ export function chooseAct(c: Ctx, atHome: boolean, posture: PoseName): Act | nul
     // (a bird on the ledge outside: up for a closer look, which, as it is a bird, it will not wait for)
     if (atHome && sill) opts.push([0.55 * (1 + 1.5 * c.rain + 1.2 * c.night) * (1 - 0.6 * m.sleepy) + (c.visitor() ? 3 : 0), () => new Sill(sill)]);
     else opts.push([1.5, () => toBed(c, 'loaf')]);
-    opts.push([0.8, () => null]);
+    opts.push([1.6, () => null]);
   }
   const total = opts.reduce((a, [w]) => a + w, 0);
   let r = Math.random() * total;

@@ -444,7 +444,9 @@ export class PixelAvatar implements Avatar {
     if (this.act) return;
     this.nextActIn -= dt;
     if (this.nextActIn < 0) {
-      this.nextActIn = 4 + Math.random() * 8;
+      // (a cat at its ease mostly just sits there: something now and then, not one thing after
+      // another)
+      this.nextActIn = 6 + Math.random() * 12;
       this.act = chooseAct(c, atHome, m.posture);
       if (!this.act && Math.random() < 0.5) this.rest = restingPose(this.mood, this.mode);
     }
