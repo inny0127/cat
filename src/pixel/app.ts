@@ -168,6 +168,8 @@ export class PixelApp {
 
   /** the room view drifts sideways after the cat, so wherever it goes it stays in view */
   private panX = 0;
+  private readonly tmpR = new THREE.Vector3();
+  private readonly tmpU = new THREE.Vector3();
 
   private placeCamera() {
     const cam = this.stage.camera;
@@ -181,6 +183,16 @@ export class PixelApp {
     cam.position.copy(target).addScaledVector(dir, dist);
     cam.lookAt(target);
     cam.updateMatrixWorld();
+    // keep the camera on the art's grid (an art pixel at the distance looked at), so the room's
+    // pixels hold still as the view drifts, and let the finished picture slide by the rest
+    const tvp = Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2);
+    const px = (2 * tvp * dist) / this.stage.pixelRows();
+    const right = this.tmpR.setFromMatrixColumn(cam.matrixWorld, 0), up = this.tmpU.setFromMatrixColumn(cam.matrixWorld, 1);
+    const rx = cam.position.dot(right), uy = cam.position.dot(up);
+    const sx = Math.round(rx / px) * px, sy = Math.round(uy / px) * px;
+    cam.position.addScaledVector(right, sx - rx).addScaledVector(up, sy - uy);
+    cam.updateMatrixWorld();
+    this.stage.setSubPixel((rx - sx) / px, (uy - sy) / px);
     // the sky through the window, in art pixels
     if (this.room) {
       const tv = Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2);

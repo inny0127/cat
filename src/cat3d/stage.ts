@@ -321,11 +321,12 @@ uniform sampler2D uBloom;
 uniform vec2 uArtSize;
 uniform float uK;
 uniform vec2 uOff;
+uniform vec2 uSub;       // where the view is between whole art pixels (art pixels)
 uniform vec2 uScreen;
 uniform float uBloomAmt;
 uniform float uVignette;
 void main() {
-  vec2 f = gl_FragCoord.xy + uOff;
+  vec2 f = gl_FragCoord.xy + uOff + uSub * uK;
   ivec2 q = clamp(ivec2(floor(f / uK)), ivec2(0), ivec2(uArtSize) - 1);
   vec3 c = texelFetch(uArt, q, 0).rgb;
   vec3 b = texture2D(uBloom, f / (uK * uArtSize)).rgb * uBloomAmt;
@@ -355,6 +356,9 @@ export class Stage {
    *  the glow blurred from it (bloom), and the pass that draws it on the screen */
   private pixel: {
     width: number; k: number; off: THREE.Vector2;
+    /** the screen in art pixels, and the margin of art drawn round it (so it can slide by part
+     *  of a pixel) */
+    nominal: THREE.Vector2; margin: number;
     rt: THREE.WebGLRenderTarget; art: THREE.WebGLRenderTarget; bloomA: THREE.WebGLRenderTarget; bloomB: THREE.WebGLRenderTarget;
     quad: THREE.Mesh; scene: THREE.Scene; cam: THREE.Camera;
     mat: THREE.ShaderMaterial; blur: THREE.ShaderMaterial; present: THREE.ShaderMaterial;
@@ -446,7 +450,7 @@ export class Stage {
     const present = new THREE.ShaderMaterial({
       uniforms: {
         uArt: { value: art.texture }, uBloom: { value: bloomB.texture }, uArtSize: { value: new THREE.Vector2() },
-        uK: { value: 1 }, uOff: { value: new THREE.Vector2() }, uScreen: { value: new THREE.Vector2() },
+        uK: { value: 1 }, uOff: { value: new THREE.Vector2() }, uSub: { value: new THREE.Vector2() }, uScreen: { value: new THREE.Vector2() },
         uBloomAmt: { value: 0.55 }, uVignette: { value: 0.16 },
       },
       vertexShader: PIXEL_VERT, fragmentShader: PRESENT_FRAG, depthTest: false, depthWrite: false, toneMapped: false,
@@ -458,7 +462,7 @@ export class Stage {
     const quad = new THREE.Mesh(tri, mat);
     quad.frustumCulled = false;
     scene.add(quad);
-    this.pixel = { width, k: 1, off: new THREE.Vector2(), rt, art, bloomA, bloomB, quad, scene, cam: new THREE.Camera(), mat, blur, present };
+    this.pixel = { width, k: 1, off: new THREE.Vector2(), nominal: new THREE.Vector2(1, 1), margin: 1, rt, art, bloomA, bloomB, quad, scene, cam: new THREE.Camera(), mat, blur, present };
     this.sizePixel();
   }
 
@@ -469,9 +473,11 @@ export class Stage {
     const P = this.pixel;
     const buf = this.renderer.getDrawingBufferSize(new THREE.Vector2());
     const k = Math.max(1, Math.round(buf.x / P.width));
-    const w = Math.ceil(buf.x / k), h = Math.ceil(buf.y / k);
+    // a pixel of art more than the screen on every side
+    const w = Math.ceil(buf.x / k) + 2 * P.margin, h = Math.ceil(buf.y / k) + 2 * P.margin;
     P.k = k;
-    P.off.set(Math.floor((w * k - buf.x) / 2), Math.floor((h * k - buf.y) / 2));
+    P.nominal.set(buf.x / k, buf.y / k);
+    P.off.set((w * k - buf.x) / 2, (h * k - buf.y) / 2);
     P.rt.setSize(w, h);
     P.art.setSize(w, h);
     const bw = Math.ceil(w / 2), bh = Math.ceil(h / 2);
@@ -490,11 +496,15 @@ export class Stage {
     if (!this.pixel) { this.renderer.render(this.scene, this.camera); return; }
     const P = this.pixel;
     const r = this.renderer;
+    // the art is drawn a little wider than the screen: the same view, with a margin round it
+    const cam = this.camera, n = P.nominal, mg = (P.rt.width - n.x) / 2, mgy = (P.rt.height - n.y) / 2;
+    cam.setViewOffset(n.x, n.y, -mg, -mgy, P.rt.width, P.rt.height);
     r.setRenderTarget(P.rt);
-    r.render(this.scene, this.camera);
+    r.render(this.scene, cam);
     const u = P.mat.uniforms;
-    u.uProjInv.value.copy(this.camera.projectionMatrixInverse);
-    u.uViewInv.value.copy(this.camera.matrixWorld);
+    u.uProjInv.value.copy(cam.projectionMatrixInverse);
+    u.uViewInv.value.copy(cam.matrixWorld);
+    cam.clearViewOffset();
     // paint it
     P.quad.material = P.mat;
     r.setRenderTarget(P.art);
@@ -541,8 +551,15 @@ export class Stage {
   /** a world point in art pixels (x, y from the bottom left) */
   toArt(at: THREE.Vector3, out = new THREE.Vector2()) {
     const v = at.clone().project(this.camera);
-    const size = this.pixel ? (this.pixel.mat.uniforms.uSize.value as THREE.Vector2) : new THREE.Vector2(1, 1);
-    return out.set((v.x * 0.5 + 0.5) * size.x, (v.y * 0.5 + 0.5) * size.y);
+    if (!this.pixel) return out.set(v.x * 0.5 + 0.5, v.y * 0.5 + 0.5);
+    const P = this.pixel, n = P.nominal;
+    return out.set((v.x * 0.5 + 0.5) * n.x + (P.rt.width - n.x) / 2, (v.y * 0.5 + 0.5) * n.y + (P.rt.height - n.y) / 2);
+  }
+
+  /** where the view is between whole art pixels: the camera is kept on the art's grid (so still
+   *  things keep their pixels as it moves) and the finished picture slides by the rest */
+  setSubPixel(x: number, y: number) {
+    if (this.pixel) this.pixel.present.uniforms.uSub.value.set(x, y);
   }
 
   /** steam rising off a hot drink at a world point (amount 0 for none) */
@@ -587,7 +604,7 @@ export class Stage {
 
   /** rows of art pixels (or of screen pixels when not pixel art) */
   pixelRows() {
-    return this.pixel ? this.pixel.rt.height : this.renderer.domElement.height;
+    return this.pixel ? this.pixel.nominal.y : this.renderer.domElement.height;
   }
 
   add(cat: Cat3D) {
@@ -616,8 +633,7 @@ export class Stage {
       this.key.target.position.set(c.x, 0.1, c.z);
       this.key.position.copy(cat.shared.uKeyDir.value).multiplyScalar(2.5).add(this.key.target.position);
       this.key.target.updateMatrixWorld();
-      const rows = this.pixel ? this.pixel.rt.height : this.renderer.domElement.height;
-      cat.setPixel((2 * Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2)) / rows);
+      cat.setPixel((2 * Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2)) / this.pixelRows());
     }
     this.draw();
     // the shadow map exists after the first frame; hand it to the shaders that filter it themselves
