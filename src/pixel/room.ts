@@ -165,6 +165,7 @@ uniform float uRain;     // 0 dry .. 1 raining (or snowing, in winter)
 uniform float uSnowing;  // 1: what falls is snow
 uniform float uSnowLie;  // snow lying on the roofs and the tree (0 .. 1)
 uniform float uRainbow;  // a rainbow, after rain by day (0 .. 1)
+uniform vec3 uDrop;      // one drop running down the glass (window pixels), if z: the one a cat is after
 uniform vec3 uLeafA;     // the tree's leaves by the season: lit,
 uniform vec3 uLeafB;     // ... in shade,
 uniform vec3 uLeafC;     // ... and the season's other colour among them (autumn's red, spring's pink)
@@ -438,6 +439,13 @@ void main() {
       else if (px.y > yd && px.y < yd + 9.0) c = mix(c, vec3(1.0), 0.16);
     }
   }
+  // the drop the cat on the sill is after: a bead, and the wet trail it leaves above it
+  if (uDrop.z > 0.5) {
+    vec2 dq = px - floor(uDrop.xy);
+    if ((dq.x == 0.0 || dq.x == 1.0) && dq.y == 0.0) c = mix(c, vec3(1.0), 0.7);
+    else if ((dq.x == 0.0 || dq.x == 1.0) && dq.y == -1.0) c *= 0.8;
+    else if (dq.x == 0.0 && dq.y > 0.0 && dq.y < 12.0) c = mix(c, vec3(1.0), 0.2 * (1.0 - dq.y / 12.0));
+  }
   // the glass catches the light: two thin streaks across the top corner of each pane
   float g = mod(px.x + px.y, 40.0);
   vec2 pane = mod(px, vec2(Wd * 0.5, H * 0.62));
@@ -538,7 +546,7 @@ export class Room {
     this.sky = new THREE.ShaderMaterial({
       uniforms: {
         uTime: { value: 0 }, uHour: { value: 12 }, uSkyPx: { value: new THREE.Vector2(48, 56) }, uPxSize: { value: 0.01 }, uPar: { value: 0 }, uRain: { value: 0 },
-        uSnowing: { value: 0 }, uSnowLie: { value: 0 }, uRainbow: { value: 0 },
+        uSnowing: { value: 0 }, uSnowLie: { value: 0 }, uRainbow: { value: 0 }, uDrop: { value: new THREE.Vector3() },
         uLeafA: { value: new THREE.Vector3(122 / 255, 162 / 255, 96 / 255) }, uLeafB: { value: new THREE.Vector3(76 / 255, 116 / 255, 76 / 255) },
         uLeafC: { value: new THREE.Vector3(1, 0.7, 0.75) }, uLeafs: { value: new THREE.Vector2(1, 0) },
       },
@@ -1310,6 +1318,14 @@ export class Room {
     rest: number; land: boolean; turn: number; leaving: boolean;
   } | null = null;
   private bugIn = 60 + Math.random() * 180;
+
+  /** one drop running down the glass at a point on it (null: none), the one a cat is after */
+  setDrop(p: THREE.Vector3 | null) {
+    const u = this.sky.uniforms.uDrop.value as THREE.Vector3;
+    if (!p) { u.set(0, 0, 0); return; }
+    const { l, r, b, t } = this.win, px = this.sky.uniforms.uSkyPx.value as THREE.Vector2;
+    u.set(((p.x - l) / (r - l)) * px.x, ((p.y - b) / (t - b)) * px.y, 1);
+  }
 
   /** a rainbow now (the lab, tests), whatever the weather was */
   rainbowOverride: number | null = null;

@@ -51,6 +51,8 @@ export interface Ctx {
    *  it from a point, which sends it off */
   bug: () => { p: THREE.Vector3; resting: boolean } | null;
   scareBug: (from: THREE.Vector3) => void;
+  /** one raindrop running down the glass, at a point on it (null: none) */
+  drop: (p: THREE.Vector3 | null) => void;
   /** up on something this high (null: on the floor), and held in the air at a height (a jump) */
   perch: (h: number | null) => void;
   hold: (lift: number | null) => void;
@@ -593,6 +595,9 @@ export class Sill implements Act {
   private bed: Act | null = null;
   private watch = Math.random() * 10;
   private chirpIn = 0.6;
+  /** a raindrop running down the glass in front (where, how long it has run, paw pats at it) */
+  private drop: { p: THREE.Vector3; t: number; pats: number; patT: number; next: number; side: number } | null = null;
+  private dropIn = rand(2, 6);
   private readonly gaze = new THREE.Vector3();
   constructor(private readonly spot: SillSpot) {}
 
@@ -676,15 +681,44 @@ export class Sill implements Act {
           if ((this.chirpIn -= dt) <= 0) { c.chirp(); this.chirpIn = rand(1.5, 3.5); }
         } else m.lookAt(null);
         const chatter = birds ? 0.1 + 0.09 * Math.max(0, Math.sin(this.watch * Math.PI * 2 * 11)) : 0;
+        // rain on the glass: now and then a drop runs down it right in front, stopping and going,
+        // watched all the way down and patted at through the glass
+        let patPaw: Record<string, unknown> = {};
+        const D = this.drop;
+        if (!D && !birds && c.rain > 0.3 && !this.leaving && (this.dropIn -= dt) <= 0) {
+          // (off to one side, where a paw can go to it past the body, and you can see it do so)
+          const side = Math.random() < 0.5 ? 1 : -1, off = side * rand(0.08, 0.12);
+          this.drop = {
+            p: new THREE.Vector3(m.pos.x + Math.cos(m.yaw) * off, S.height + rand(0.32, 0.42), S.seat.z - 0.16),
+            t: 0, pats: 0, patT: -1, next: rand(0.4, 1), side,
+          };
+        } else if (D) {
+          D.t += dt;
+          D.p.y -= dt * (0.012 + 0.07 * Math.max(0, Math.sin(D.t * 2.1 + D.side)));
+          m.lookAt(D.p, 1);
+          const hy = D.p.y - S.height;
+          if (D.patT < 0 && D.pats < 3 && hy < 0.27 && hy > 0.07 && (D.next -= dt) <= 0) D.patT = 0;
+          if (D.patT >= 0) {
+            D.patT += dt;
+            const u = Math.min(1, D.patT / 0.38), reach = Math.sin(Math.PI * u);
+            const ax = Math.abs((D.p.x - m.pos.x) * Math.cos(m.yaw) - (D.p.z - m.pos.z) * Math.sin(m.yaw));
+            patPaw = { [D.side > 0 ? 'LF' : 'RF']: { planted: 0, frame: 0, x: 0.03 + (Math.max(0.01, ax) - 0.03) * reach, y: 0.03 + (hy - 0.03) * reach, z: 0.07 + 0.07 * reach, flex: 0.3 * reach } };
+            if (u >= 1) { D.patT = -1; D.pats++; D.next = rand(0.5, 1.2); }
+          }
+          if (hy < 0.035) { this.drop = null; this.dropIn = rand(4, 10); }
+        }
+        c.drop(this.drop?.p ?? null);
         m.layer = {
           pose: {
-            neckYaw: look, headYaw: 0.4 * look, neckPitch: 0.1, headPitch: -0.05 + 0.05 * Math.sin(this.watch * 0.5),
-            earFwd: birds ? 1 : 0.6, pupil: birds ? 0.95 : 0.6, whisker: birds ? 1 : 0, jaw: chatter,
-            tailLift: -1.35, tailSide: 0.1, tailCurve: 0.25, tailCurl: (birds ? 0.8 : 0.35) * Math.sin(this.watch * (birds ? 3 : 0.8)), tailSag: 1,
+            neckYaw: D ? 0 : look, headYaw: D ? 0 : 0.4 * look, neckPitch: 0.1, headPitch: -0.05 + 0.05 * Math.sin(this.watch * 0.5),
+            earFwd: birds || D ? 1 : 0.6, pupil: birds || D ? 0.95 : 0.6, whisker: birds || D ? 1 : 0, jaw: chatter,
+            tailLift: -1.35, tailSide: 0.1, tailCurve: 0.25, tailCurl: (birds || D ? 0.8 : 0.35) * Math.sin(this.watch * (birds ? 3 : 0.8)), tailSag: 1,
+            ...patPaw,
           },
           w: Math.min(1, this.t / 1.2) * Math.min(1, Math.max(0, (this.dur - this.t) / 0.8)),
         };
-        if (this.t > this.dur || (this.leaving && this.t > 1)) { m.layer = null; m.lookAt(null); this.next('about'); }
+        if (!D && !birds) m.lookAt(null);
+        if (this.t > this.dur || (this.leaving && this.t > 1)) { m.layer = null; m.lookAt(null); this.drop = null; c.drop(null); this.next('about'); }
         return true;
       }
       case 'about':
@@ -732,6 +766,8 @@ export class Sill implements Act {
   stop(c: Ctx) {
     this.bed?.stop(c);
     c.m.layer = null;
+    this.drop = null;
+    c.drop(null);
   }
 }
 

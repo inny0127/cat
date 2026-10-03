@@ -79,6 +79,8 @@ export class PixelAvatar implements Avatar {
     birds: () => THREE.Vector3 | null; chirp: () => void; sound: (name: string, gain: number) => void;
     /** a moth or a fly in the room, and a swipe that sends it off */
     bug?: () => { p: THREE.Vector3; resting: boolean } | null; scareBug?: (from: THREE.Vector3) => void;
+    /** one raindrop running down the glass (the one the cat is after), or none */
+    drop?: (p: THREE.Vector3 | null) => void;
   } | null = null;
   /** after a hunt, a while before the next */
   private huntRest = 0;
@@ -150,6 +152,7 @@ export class PixelAvatar implements Avatar {
       chirp: () => this.outside?.chirp(),
       bug: () => this.outside?.bug?.() ?? null,
       scareBug: (from) => this.outside?.scareBug?.(from),
+      drop: (p) => this.outside?.drop?.(p),
       perch: (h) => { this.cat.perch = h; },
       hold: (y) => { this.cat.liftHold = y; },
     };

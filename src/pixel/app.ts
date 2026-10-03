@@ -81,6 +81,7 @@ export class PixelApp {
       sound: (name, gain) => this.audio.play(name, { gain, pan: this.catPan() }),
       bug: () => this.room.bugAt(),
       scareBug: (from) => this.room.scareBug(from),
+      drop: (p) => this.room.setDrop(p),
     };
     // its paws on the boards: soft, and softer still for a shuffle of the feet
     this.cat.stepper.onLand = (_leg, settle) => {
