@@ -258,8 +258,9 @@ void main() {
     // the cat: the light catching an edge from behind lifts it a step; its outline below and to
     // the right, against whatever is behind it, a step darker in its own colours (a pixel
     // artist's selective outline: the shadow side drawn in, never in black)
+    // (neither outline ever goes down to a ramp's deepest step: that reads as a black line)
     if (kind == 1 && third > 0.4) level += 1;
-    else if (kind == 1 && (nm[1] < 0 || nm[4] < 0)) level -= 1;
+    else if (kind == 1 && (nm[1] < 0 || nm[4] < 0) && level >= 2) level -= 1;
     // (the room: a third value over a quarter glows that much; nearly one, at its brightest)
     bool glows = kind == 2 && third > 0.9;
     float partGlow = kind == 2 && third > 0.25 ? (third - 0.25) / 0.74 : 0.0;
@@ -268,7 +269,7 @@ void main() {
     // this colour's own shade, never black
     float w = invDepth(p);
     float front = max(max(invDepth(p + ivec2(-1, 0)), invDepth(p + ivec2(1, 0))), max(invDepth(p + ivec2(0, 1)), invDepth(p + ivec2(0, -1)))) - w;
-    if (front > 0.035 * w && w > 0.25) level -= 1;
+    if (front > 0.035 * w && w > 0.25) level -= level >= 2 ? 1 : 0;
     // the top edge of a thing against what lies behind it catches the window's light: a line a
     // step lighter, as a pixel artist picks out an edge (not on what glows, nor in the dark)
     else if (!glows && w > 0.25 && w - invDepth(p + ivec2(0, 1)) > 0.035 * w && L > 0.2) level += 1;
