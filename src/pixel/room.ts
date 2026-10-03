@@ -231,6 +231,21 @@ void main() {
     vec2 pl = vec2(-6.0 + tp * (Wd + 12.0) / 40.0, H * 0.9 - tp * 0.12);
     if (tp < 40.0 && sp == floor(pl) && fract(uTime * 0.8) < 0.3) { c = hex(255.0, 120.0, 100.0); a = 0.2; }
   } else {
+    // the sun itself when it is low: rising over the town on the left in the morning, going down
+    // behind the hill on the right in the evening, deeper and redder as it sinks, a haze of light
+    // round it (the town and the hill, drawn after, hide it as it goes behind them)
+    float up = h < 12.0 ? smoothstep(5.9, 8.4, h) : 1.0 - smoothstep(16.8, 19.3, h);
+    float low = (h < 12.0 ? 1.0 - smoothstep(7.6, 8.6, h) : smoothstep(16.6, 17.4, h) * (1.0 - smoothstep(19.25, 19.45, h))) * (1.0 - uRain);
+    if (low > 0.01) {
+      vec2 sc = vec2((h < 12.0 ? 0.26 : 0.6) * Wd, H * (0.3 + 0.4 * up));
+      float sd = length(sp - sc);
+      float r = 5.0;
+      vec3 disc = mix(hex(255.0, 170.0, 110.0), hex(255.0, 248.0, 224.0), smoothstep(0.0, 0.3, up));
+      vec3 halo = mix(hex(255.0, 176.0, 120.0), hex(255.0, 236.0, 196.0), smoothstep(0.1, 0.6, up));
+      int hb = band4(1.0 - smoothstep(r, r + 13.0, sd), px);
+      if (hb > 0) c = mix(c, halo, (float(hb) / 3.0) * 0.55 * low);
+      if (sd < r) { c = mix(c, disc, low); if (low > 0.5) a = 0.2; }
+    }
     // slow clouds, lit gold and pink at the ends of the day
     float n = noise(sp * vec2(0.09, 0.18) + vec2(uTime * 0.02, 0.0)) * 0.7 + noise(sp * vec2(0.2, 0.4) + vec2(uTime * 0.03, 3.0)) * 0.3;
     float bandC = smoothstep(0.45, 0.95, y) + uRain * 0.6;
