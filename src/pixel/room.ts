@@ -66,8 +66,13 @@ void main() {
     float ji = floor(bz), fz = fract(bz);
     float h = hash(bi * 7.13 + ji * 3.7);
     m = h < 0.3 ? ${PIX.floorDark} : ${PIX.floor};
-    tone += (h - 0.5) * 0.06;
-    tone += (vnoise(vec2(vWorld.x * 75.0 + h * 40.0, vWorld.z * 5.0)) - 0.5) * 0.1;
+    tone += (h - 0.5) * 0.06 + (vnoise(vec2(bi * 3.0, vWorld.z * 4.0)) - 0.5) * 0.04;
+    // grain: two or three long, slightly wavering lines down each board
+    for (int k = 0; k < 3; k++) {
+      float fk = float(k);
+      float gx = 0.2 + 0.65 * hash(bi * 13.1 + ji * 5.7 + fk * 3.3) + 0.03 * sin(vWorld.z * 9.0 + fk * 2.0 + h * 6.0);
+      if (abs(fx - gx) < 0.022 && hash(bi + fk * 7.0 + ji) > 0.25) tone -= 0.07;
+    }
     vec2 kc = vec2(bi + 0.3 + 0.4 * hash(h * 91.0), ji + 0.2 + 0.6 * hash(h * 53.0));
     vec2 kd = (vec2(bx, bz) - kc) * vec2(0.1 / 0.009, 0.75 / 0.016);
     if (hash(h * 17.0) > 0.55 && dot(kd, kd) < 1.0) tone -= 0.12;
