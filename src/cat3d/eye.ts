@@ -196,8 +196,12 @@ void main() {
     vec3 iris = mix(uIrisA * 1.45, uIrisB * 1.2, smoothstep(0.25, 0.9, rr));
     iris *= mix(0.62, 1.0, smoothstep(0.3, -0.15, ip.y));
     iris = mix(iris, uIrisC * 0.9, smoothstep(0.82, 0.98, rr));
-    vec2 q = ip / vec2(0.15 + 0.26 * uPupil, 0.46 + 0.1 * uPupil);
-    float pupil = step(length(q), 1.0);
+    // (by day a slit exactly one art pixel wide however small the eye, so that the iris's colour
+    // shows either side of it; opening into a round pupil in the dark, and with excitement or fear)
+    float pxI = max(length(vec2(dFdx(ip.x), dFdy(ip.x))), 1e-4);
+    float open = smoothstep(0.5, 0.9, uPupil);
+    vec2 q = ip / vec2(mix(0.5 * pxI, max(0.5 * pxI, 0.42), open), 0.46 + 0.1 * uPupil);
+    float pupil = open < 0.5 ? step(abs(q.x), 1.0) * step(abs(q.y), 1.0) : step(length(q), 1.0);
     // (never smaller than about an art pixel, so even a small eye keeps its spark)
     vec2 gq = abs(ip - vec2(-0.2, 0.22) - vec2(-0.5, 0.5) * max(0.0, uGlint - 0.12)) * 0.12 / uGlint;
     vec2 gq2 = abs(ip - vec2(0.2, -0.2));
