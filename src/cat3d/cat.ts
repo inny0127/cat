@@ -148,6 +148,13 @@ export class Cat3D {
     this.tail.reset();
   }
 
+  /** pixel art: flat coat colour, flat eyes, no whiskers (finer than an art pixel) */
+  setPixelArt(on: boolean) {
+    this.shared.uSolid.value = on ? 1 : 0;
+    for (const e of this.eyes) e.eyeMat.uniforms.uFlat.value = on ? 1 : 0;
+    this.whiskers.mesh.visible = !on;
+  }
+
   /** the camera's pixel size, for the whiskers */
   setPixel(px: number) {
     this.whiskers.setPixel(px);

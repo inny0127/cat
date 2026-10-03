@@ -42,6 +42,7 @@ void main() {
 const EYE_FRAG = /* glsl */ `
 ${LID_GLSL}
 uniform float uPupil;      // 0 slit .. 1 round
+uniform float uFlat;       // pixel art: a flat iris and a pupil wide enough to survive the low resolution
 uniform vec3 uIrisA;       // round the pupil
 uniform vec3 uIrisB;       // the body of the iris
 uniform vec3 uIrisC;       // toward the rim
@@ -125,6 +126,11 @@ void main() {
   float edge = 0.012 + 0.01 * uPupil;
   col = mix(col, col * 0.45, smoothstep(edge * 3.0, 0.0, pd));    // the iris darkens into the pupil rim
   col = mix(col, vec3(0.006, 0.006, 0.008), smoothstep(edge, -edge, pd));
+  if (uFlat > 0.5) {
+    float pupil = step(abs(ip.x), 0.1 + 0.4 * uPupil) * step(abs(ip.y), 0.62);
+    gl_FragColor = vec4(mix(uIrisA * 1.5, vec3(0.004), pupil), 1.0);
+    return;
+  }
 
   vec3 N = normalize(vN), V = normalize(vView);
   // in the lid's frame: the lids shade the ball beneath them; the third eyelid shows dark at the
@@ -168,6 +174,7 @@ export function makeEye(radius: number, side: 1 | -1, lights: EyeLights): CatEye
   const eyeMat = new THREE.ShaderMaterial({
     uniforms: {
       uPupil: { value: 0.15 },
+      uFlat: { value: 0 },
       // amber, sampled from a photograph of a ginger tabby's eye
       // golden amber, between the photographs' copper and hazel
       // olive gold, as in the photographs of ginger tabbies in daylight

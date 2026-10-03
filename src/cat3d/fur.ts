@@ -462,6 +462,7 @@ uniform float uClump;
 uniform float uRough;
 uniform float uSpec;
 uniform float uDebug;
+uniform float uSolid;   // 1: draw only the coat's surface colour (pixel art)
 varying vec3 vRest;
 varying vec3 vRestN;
 varying vec3 vN;
@@ -524,6 +525,7 @@ ${LIGHT_GLSL}
 
 void main() {
   float fwRest = length(fwidth(vRest));
+  float H = max(vH, uSolid);
   // the eye opening is cut out of the lids
   float lidE = vReg < 0.5 ? lidAt(vRest).x : 1.0;
   if (lidE < 0.0) discard;
@@ -569,14 +571,14 @@ void main() {
     vec3 cc = nearestSeed(cx);
     vec3 dc = (cx - cc) / (uClumpDensity * mix(0.6, 1.0, isFace(vRest)));
     dc -= rn * dot(dc, rn);
-    float kc = uClump * smoothstep(0.15, 1.0, vH) * (innerEar ? 0.2 : 1.0) * smoothstep(0.002, 0.005, vL);
+    float kc = uClump * smoothstep(0.15, 1.0, H) * (innerEar ? 0.2 : 1.0) * smoothstep(0.002, 0.005, vL);
     // two populations: coarse guard and awn hairs, thinner where the coat is short, and a fine
     // down three times denser that carries the texture close up
     vec3 restA = vRest + dc * (kc / (1.0 - kc));
     vec3 restB = vRest + dc * (0.5 * kc / (1.0 - 0.5 * kc));
     float shortCoat = smoothstep(0.0075, 0.0035, vL);
-    Hair A = hairPop(restA, comb, uDensity, 0.62, mix(0.56, 0.3, shortCoat), 0.2, 0.82, vH, fwRest);
-    Hair B = hairPop(restB, comb, uDensity * 3.0, 0.8, mix(0.36, 0.46, shortCoat), 0.0, 0.7, vH, fwRest);
+    Hair A = hairPop(restA, comb, uDensity, 0.62, mix(0.56, 0.3, shortCoat), 0.2, 0.82, H, fwRest);
+    Hair B = hairPop(restB, comb, uDensity * 3.0, 0.8, mix(0.36, 0.46, shortCoat), 0.0, 0.7, H, fwRest);
     if (innerEar) { A.cov *= step(hash33(A.cell).y, 0.4) * 0.9; B.cov *= 0.12; }
     alpha = 1.0 - (1.0 - A.cov) * (1.0 - B.cov);
     // hairs finer than a pixel are drawn as their average, but that average still gathers into
@@ -589,8 +591,8 @@ void main() {
     if (alpha < 0.02) discard;
     // each tuft has its own shade, and some tufts are bleached paler toward their tips
     vec3 tj = hash33(cc + 71.0);
-    tuftShade = mix(1.0, 0.78 + 0.44 * tj.x, smoothstep(0.1, 0.6, vH) * (innerEar ? 0.0 : 1.0));
-    tuftPale = step(0.55, tj.y) * smoothstep(0.45, 0.95, vH) * (innerEar ? 0.0 : 1.0);
+    tuftShade = mix(1.0, 0.78 + 0.44 * tj.x, smoothstep(0.1, 0.6, H) * (innerEar ? 0.0 : 1.0));
+    tuftPale = step(0.55, tj.y) * smoothstep(0.45, 0.95, H) * (innerEar ? 0.0 : 1.0);
     bool useA = A.cov >= B.cov;
     vec3 cell = useA ? A.cell : B.cell + 1000.0;
     vec3 jit = hash33(cell);
@@ -613,10 +615,10 @@ void main() {
   vec3 col = mix(under, tip, guard);
   // tips are paler than the hair below them: the coat looks frosted where the light catches it
   col = mix(col, min(col * vec3(1.32, 1.36, 1.3), vec3(1.0)), smoothstep(0.55, 1.0, hairT) * (0.4 + 0.4 * guard));
-  col = mix(mix(tip, under, 0.6), col, smoothstep(0.0, 0.3, vH));
+  col = mix(mix(tip, under, 0.6), col, smoothstep(0.0, 0.3, H));
   // ginger coats mix deep orange hairs with paler cream ones
-  col = mix(col, min(col * vec3(1.25, 1.32, 1.4), vec3(1.0)), paleHair * (0.3 + 0.5 * isFace(vRest)) * smoothstep(0.2, 0.7, vH));
-  col *= strandShade * tuftShade * (0.7 + 0.45 * seed.x + 0.15 * seed.y) * (1.0 - 0.45 * seed.z * (1.0 - 0.4 * vH));
+  col = mix(col, min(col * vec3(1.25, 1.32, 1.4), vec3(1.0)), paleHair * (0.3 + 0.5 * isFace(vRest)) * smoothstep(0.2, 0.7, H));
+  col *= strandShade * tuftShade * (0.7 + 0.45 * seed.x + 0.15 * seed.y) * (1.0 - 0.45 * seed.z * (1.0 - 0.4 * H));
   col = mix(col, min(col * vec3(1.3, 1.42, 1.5), lin(vec3(0.99, 0.9, 0.7))), tuftPale * 0.75);
   float earCup = 1.0;
   if (innerEar) {
@@ -629,11 +631,12 @@ void main() {
     earCup = mix(0.6, 0.2, deep);
     // furnishings: long cream hairs, mostly from the inner edge and the lower half; they stand out
     // of the cup into the light
-    if (uShell > 0.001) { col = mix(lin(vec3(0.95, 0.86, 0.72)), tip, rim) * strandShade; earCup = mix(earCup, 1.0, smoothstep(0.2, 0.8, vH)); }
+    if (uShell > 0.001) { col = mix(lin(vec3(0.95, 0.86, 0.72)), tip, rim) * strandShade; earCup = mix(earCup, 1.0, smoothstep(0.2, 0.8, H)); }
   }
+  if (uSolid > 0.5 && !innerEar) col = tip;
   col = mix(lin(vec3(0.08, 0.045, 0.03)), col, smoothstep(0.015, 0.05, lidE));   // dark lid margin
 
-  vec3 N = normalize(vN), V = normalize(vView), T = normalize(vT + hairJit * smoothstep(0.1, 0.6, vH));
+  vec3 N = normalize(vN), V = normalize(vView), T = normalize(vT + hairJit * smoothstep(0.1, 0.6, H));
   // locks are little ridges: tilt the normal across the flow so they catch the light in streaks
   vec3 Bn = normalize(cross(N, T) + 1e-5);
   float lockAmt = smoothstep(0.0015, 0.004, vL);
@@ -641,12 +644,12 @@ void main() {
   // each lock's hairs also point a little their own way, so the sheen breaks into streaks
   T = normalize(T + (Bn * (seed.y - 0.5) * 0.9 + N * (seed.x - 0.5) * 0.7) * lockAmt);
   // light reaching into the coat: deeper hairs see less of it
-  float depthL = mix(0.36, 1.0, pow(vH, 0.6));
+  float depthL = mix(0.36, 1.0, pow(H, 0.6));
   float furDepth = mix(1.0, depthL, smoothstep(0.0006, 0.0025, vL));
-  if (innerEar) furDepth = mix(0.85, 1.0, vH);
+  if (innerEar) furDepth = mix(0.85, 1.0, H);
   float sh = keyShadow(vWorld, N);
   // near the root the hair's own direction matters less than the skin under it
-  vec3 Ts = normalize(mix(N, T, smoothstep(0.0, 0.25, vH)));
+  vec3 Ts = normalize(mix(N, T, smoothstep(0.0, 0.25, H)));
   vec3 c = vec3(0.0);
   float bareSkin = 1.0 - smoothstep(0.0, 0.0005, vL);
   vec3 absorb = col * col;
@@ -659,7 +662,7 @@ void main() {
   vec3 amb = mix(uGroundCol, uSkyCol, clamp(N.y * 0.5 + 0.5, 0.0, 1.0));
   float lum = max(dot(col, vec3(0.3, 0.59, 0.11)), 1e-4);
   vec3 warm = col * pow(col / lum, vec3(0.35));
-  c += amb * warm * (0.8 + 0.2 * vH);
+  c += amb * warm * (0.8 + 0.2 * H);
   c *= furDepth * vAO * earCup;
   // ears are thin: light from behind glows through them
   if (vReg > 0.5) {
@@ -726,6 +729,7 @@ export function makeFurMaterials(opts: FurOptions, an: Anatomy, corr: Corrective
     uRough: { value: 0.46 },
     uSpec: { value: 0.85 },
     uDebug: { value: 0 },
+    uSolid: { value: 0 },
     uBreath: { value: 0 },
     uPuff: { value: 0 },
     uLids: { value: new THREE.Vector4(0.62, -0.5, 0.62, -0.5) },

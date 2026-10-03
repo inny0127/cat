@@ -6,7 +6,7 @@ import type { PoseName } from './pose';
 // Development stage for the 3D cat: renders it with fur and lets scripts drive it in fixed steps.
 async function main() {
   const q = new URLSearchParams(location.search);
-  const stage = new Stage({ paper: q.get('paper') ? '#' + q.get('paper') : undefined, exposure: q.get('exp') ? +q.get('exp')! : undefined });
+  const stage = new Stage({ paper: q.get('paper') ? '#' + q.get('paper') : undefined, exposure: q.get('exp') ? +q.get('exp')! : undefined, pixel: q.get('pixel') ? +q.get('pixel')! : undefined });
   const { renderer, scene, camera: cam } = stage;
   document.body.appendChild(renderer.domElement);
 
