@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GRADE_GLSL } from './grade';
 import { PIX, PIX_GLSL } from './pixclass';
+import { ROOM_LIGHT_GLSL } from './roomlight';
 
 /**
  * Cat eyes. The eyeball has a recessed iris seen through a bulging cornea (parallax), a slit
@@ -68,8 +69,12 @@ uniform sampler2D uLidMap; // ... or in the model's painted coat, where it maps 
 uniform vec3 uLidU;        //     u = dot(uLidU, (x, y, 1)) in the lid frame, v likewise
 uniform vec3 uLidV;
 uniform float uLidTex;
+uniform vec3 uLampPos;
+uniform float uLampInt;
+uniform float uRoomLit;
 ${GRADE_GLSL}
 ${PIX_GLSL}
+${ROOM_LIGHT_GLSL}
 varying vec3 vLocal;
 varying vec3 vViewLocal;
 varying vec3 vN;
@@ -203,9 +208,13 @@ void main() {
       vec3 Nl = normalize(vN);
       if (lidIn < 0.0 && !seam) {
         int cls = uLidTex > 0.5 ? pixClass(texture2D(uLidMap, vec2(dot(uLidU, vec3(dlo.xy, 1.0)), dot(uLidV, vec3(dlo.xy, 1.0)))).rgb) : ${PIX.white};
-        float light = smoothstep(-0.15, 0.55, dot(Nl, uKeyDir)) * 0.62 + (Nl.y * 0.5 + 0.5) * 0.25 + 0.06;
-        gl_FragColor = pixOut(cls, light, 0.0);
-      } else gl_FragColor = pixOut(${PIX.dark}, 0.42, 0.0);
+        vec3 lt = uRoomLit > 0.5 ? roomLight(cameraPosition - vView, Nl, 1.0, 0.85)
+          : vec3(smoothstep(-0.15, 0.55, dot(Nl, uKeyDir)) * 0.62 + (Nl.y * 0.5 + 0.5) * 0.25 + 0.06, 0.0, 0.0);
+        gl_FragColor = pixOutLit(cls, lt, 0.0);
+      } else {
+        vec3 lt = uRoomLit > 0.5 ? roomLight(cameraPosition - vView, normalize(vN), 1.0, 0.7) * vec3(0.8, 1.0, 1.0) : vec3(0.42, 0.0, 0.0);
+        gl_FragColor = pixOutLit(${PIX.dark}, lt, 0.0);
+      }
       return;
     }
     // alpha 0.75 tells the pixel pass to use the eyes' palette

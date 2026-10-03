@@ -61,6 +61,9 @@ export class PixelApp {
       (sx, sy, out) => this.senses.screenToWorld(sx, sy, out), () => this.stage.camera.position);
     this.room = new Room(cat.shared as unknown as Record<string, { value: unknown }>, { bed: new THREE.Vector3(0, 0, 0.05) });
     this.stage.scene.add(this.room.group);
+    // the cat is lit by the room's own light, and the sunbeam in the air is drawn from it
+    this.cat.shared.uRoomLit.value = 1;
+    this.stage.useRoomLight(cat.shared as unknown as Record<string, { value: unknown }>);
     // the room has a floor of its own
     this.stage.floor.visible = false;
     this.avatar.spots = this.room.spots;
@@ -128,10 +131,11 @@ export class PixelApp {
   private frame3d() {
     const cam = this.stage.camera;
     const tv = Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2);
-    const el = THREE.MathUtils.degToRad(17);
-    // far enough to see a metre across at the bed, and 1.7 m up and down
-    const d = Math.max(0.52 / (tv * cam.aspect), 0.85 / tv);
-    this.roomView.target.set(this.aim.x, 0.47, this.aim.z - 0.25);
+    const el = THREE.MathUtils.degToRad(16);
+    // the cat by its window: as wide as the window at the bed (the curtains, the lamp and the
+    // plant at the edges), from the bed up to the top of the window, a little from above
+    const d = Math.max(0.37 / (tv * cam.aspect), 0.66 / tv);
+    this.roomView.target.set(this.aim.x, 0.5, this.aim.z - 0.2);
     this.roomView.dir.set(0, Math.sin(el), Math.cos(el));
     this.roomView.dist = d;
     // close to the cat: a third of a metre across (and 0.6 m up and down) round its body
@@ -139,9 +143,8 @@ export class PixelApp {
     this.placeCamera();
     // the brain's touch speeds are in the painted cat's pixels: about 600 across the window
     this.senses.k = 600 / Math.max(1, innerWidth);
-    // the sun comes in through the window from up on the left and lies on the floor; a soft fill
-    // from the room behind you; the window lights the cat's edges
-    this.cat.shared.uKeyDir.value.set(-0.42, 0.62, -0.66).normalize();
+    // the window behind lights the cat's edges (the sun's way across the sky is the room's: it
+    // follows the hour)
     this.cat.shared.uFillDir.value.set(0.3, 0.35, 0.9).normalize();
     this.cat.shared.uRimDir.value.set(-0.2, 0.5, -0.85).normalize();
   }
@@ -154,11 +157,16 @@ export class PixelApp {
   private focusHold = 0;
   private readonly catAim = new THREE.Vector3();
 
+  /** the room view drifts sideways after the cat, so wherever it goes it stays in view */
+  private panX = 0;
+
   private placeCamera() {
     const cam = this.stage.camera;
     const f = this.focus * this.focus * (3 - 2 * this.focus);
     const rv = this.roomView;
-    const target = rv.target.clone().lerp(this.catAim, f);
+    const target = rv.target.clone();
+    target.x += this.panX;
+    target.lerp(this.catAim, f);
     const dist = rv.dist + (this.closeDist - rv.dist) * f;
     const dir = rv.dir.clone().lerp(new THREE.Vector3(0, Math.sin(0.27), Math.cos(0.27)), f).normalize();
     cam.position.copy(target).addScaledVector(dir, dist);
@@ -182,6 +190,10 @@ export class PixelApp {
     const want = new THREE.Vector3(m.pos.x + fp.x * c + fp.z * sn, 0.11, m.pos.z - fp.x * sn + fp.z * c);
     if (this.focus < 0.01) this.catAim.copy(want);
     else this.catAim.lerp(want, 1 - Math.exp(-dt * 2.5));
+    // the room view follows once the cat is near an edge, slowly, never past the room's ends
+    const off = want.x - this.panX, dead = 0.13;
+    const goal = Math.max(-0.3, Math.min(0.46, off > dead ? want.x - dead : off < -dead ? want.x + dead : this.panX));
+    this.panX += (goal - this.panX) * (1 - Math.exp(-dt * 1.2));
     const rate = this.focusT > this.focus ? 1.6 : 0.8;
     this.focus += Math.max(-rate * dt, Math.min(rate * dt, this.focusT - this.focus));
     this.placeCamera();
@@ -347,15 +359,14 @@ export class PixelApp {
     this.avatar.touched = now - this.touchedAt < 4;
     this.avatar.update(dt);
     this.cat.update(dt);
-    this.room.update(s, hour, dt);
+    this.stage.setDayLight(this.room.update(s, hour, dt));
     // the phone's bar the colour of the wall at the top of the room
     const tc = dark > 0.5 ? '#3b3150' : '#c99486';
     if (tc !== this.themeColor) {
       this.themeColor = tc;
       document.querySelector('meta[name="theme-color"]')?.setAttribute('content', tc);
     }
-    // at night the lamp has a halo; the tea on the books steams; by day dust turns in the sun
-    this.stage.setGlow(dark > 0.5 ? this.room.lampPos.clone().add(new THREE.Vector3(0, 0.05, 0)) : null, 0.42);
+    // the tea on the books steams; by day dust turns in the sun
     this.stage.setSteam(this.room.mugTop, 1);
     this.stage.setMotes(this.room.dust(dt, 1 - dark));
     this.stage.setTime(now);

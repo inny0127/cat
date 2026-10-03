@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { LIGHT_GLSL } from '../cat3d/fur';
+import { AO_GLSL, LIGHT_GLSL } from '../cat3d/fur';
+import { ROOM_LIGHT_GLSL, NOCC, dayLight, skyDay, type DayLight } from '../cat3d/roomlight';
 import { PIX, PIX_GLSL, type Material } from '../cat3d/pixclass';
 import type { CatState } from '../sim/state';
 
@@ -29,68 +30,94 @@ const FRAG = /* glsl */ `
 uniform float uMat;
 uniform int uPattern;
 uniform float uGlow;
-uniform float uDither;
 uniform float uTone;
 uniform vec3 uKeyDir;
 uniform float uSpec;
 uniform vec3 uLampPos;
 uniform float uLampInt;
-uniform float uDay;
 uniform vec3 uRug;       // centre x, z and radius
 uniform float uWallZ;
 varying vec3 vN;
 varying vec3 vWorld;
 varying vec2 vUv;
 ${LIGHT_GLSL}
+${AO_GLSL}
+${ROOM_LIGHT_GLSL}
 ${PIX_GLSL}
 float hash(float n) { return fract(sin(n * 127.1) * 43758.5453); }
+float hash2(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float vnoise(vec2 p) {
+  vec2 i = floor(p), f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hash2(i), hash2(i + vec2(1, 0)), f.x), mix(hash2(i + vec2(0, 1)), hash2(i + vec2(1, 1)), f.x), f.y);
+}
 void main() {
   vec3 N = normalize(vN) * (gl_FrontFacing ? 1.0 : -1.0);
   int m = int(uMat + 0.5);
   float tone = uTone;
   if (uPattern == 1) {
-    // floorboards running away from you, their ends staggered, now and then a darker one
+    // floorboards running away from you, their ends staggered: a dark seam between them with a
+    // catch of light on the edge beside it, long streaks of grain, a knot here and there, and now
+    // and then a darker board
     float bx = vWorld.x / 0.1;
     float bi = floor(bx), fx = fract(bx);
-    float off = hash(bi) * 0.7;
-    float bz = (vWorld.z + off) / 0.7;
+    float off = hash(bi) * 0.75;
+    float bz = (vWorld.z + off) / 0.75;
     float ji = floor(bz), fz = fract(bz);
     float h = hash(bi * 7.13 + ji * 3.7);
-    bool seam = fx < 0.07 || fz < 0.012;
-    m = seam || h < 0.28 ? ${PIX.floorDark} : ${PIX.floor};
-    tone += seam ? -0.08 : (h - 0.5) * 0.05;
+    m = h < 0.3 ? ${PIX.floorDark} : ${PIX.floor};
+    tone += (h - 0.5) * 0.06;
+    tone += (vnoise(vec2(vWorld.x * 75.0 + h * 40.0, vWorld.z * 5.0)) - 0.5) * 0.1;
+    vec2 kc = vec2(bi + 0.3 + 0.4 * hash(h * 91.0), ji + 0.2 + 0.6 * hash(h * 53.0));
+    vec2 kd = (vec2(bx, bz) - kc) * vec2(0.1 / 0.009, 0.75 / 0.016);
+    if (hash(h * 17.0) > 0.55 && dot(kd, kd) < 1.0) tone -= 0.12;
+    if (fx < 0.055 || fz < 0.012) { m = ${PIX.floorDark}; tone -= 0.16; }
+    else if (fx < 0.11) tone += 0.07;
   } else if (uPattern == 2) {
-    // a round rug: a cream border, a cream ring inside it, indigo between, a cream heart of it
-    float r = length(vWorld.xz - uRug.xy) / uRug.z;
-    bool cream = r > 0.92 || (r > 0.78 && r < 0.81);
-    m = cream ? ${PIX.rugCream} : ${PIX.rug};
-    // a tufted texture: every so often a stitch a shade lighter
-    if (!cream && fract(sin(dot(floor(vWorld.xz / 0.018), vec2(12.9898, 78.233))) * 43758.5453) > 0.86) tone += 0.06;
+    // a round rug: a fringe of tassels, a cream border, a band of cream diamonds on the indigo,
+    // a cream ring, indigo within
+    vec2 d = vWorld.xz - uRug.xy;
+    float r = length(d) / uRug.z;
+    float th = atan(d.y, d.x);
+    if (r > 1.0) {
+      if (fract(th * uRug.z / 0.011) > 0.5) discard;
+      m = ${PIX.rugCream};
+      tone -= 0.05;
+    } else {
+      bool cream = r > 0.92 || (r > 0.78 && r < 0.81);
+      float t = (r - 0.6) / 0.15;
+      float cell = fract(th / 6.2832 * 28.0);
+      if (t > 0.0 && t < 1.0 && abs(cell - 0.5) * 2.0 + abs(t - 0.5) * 2.0 < 0.55) cream = true;
+      m = cream ? ${PIX.rugCream} : ${PIX.rug};
+      // a tufted texture: every so often a stitch a shade lighter
+      if (!cream && hash2(floor(vWorld.xz / 0.016)) > 0.84) tone += 0.06;
+    }
   } else if (uPattern == 3) {
-    // the wall: panelling to the dado rail, plaster above
     if (vWorld.y < 0.3) {
+      // panelling: narrow boards, a groove between them with a lit edge beside it
       m = ${PIX.panel};
-      if (fract(vWorld.x / 0.24) < 0.06) tone -= 0.1;
+      float fx = fract(vWorld.x / 0.12);
+      if (fx < 0.045) tone -= 0.14;
+      else if (fx < 0.09) tone += 0.05;
     } else if (vWorld.y < 0.335) m = ${PIX.paint};
-    else m = ${PIX.wall};
+    else {
+      // old plaster, a little uneven
+      m = ${PIX.wall};
+      tone += (vnoise(vWorld.xy * 16.0) - 0.5) * 0.07 + (vnoise(vWorld.xy * 45.0 + 7.0) - 0.5) * 0.03;
+    }
     // the floor's shadow along the foot of the wall
     tone -= 0.12 * (1.0 - smoothstep(0.0, 0.06, vWorld.y));
+  } else if (uPattern == 4) {
+    // fleece: soft and a little uneven
+    tone += (vnoise(vWorld.xz * 70.0) - 0.5) * 0.08;
   }
   // the floor darkens toward the wall's foot
   if (uPattern == 1 || uPattern == 2) tone -= 0.1 * (1.0 - smoothstep(0.0, 0.12, vWorld.z - uWallZ));
   float sh = keyShadow(vWorld, N);
-  float direct = max(dot(N, uKeyDir), 0.0) * sh;
-  float sky = 0.3 + 0.12 * (N.y * 0.5 + 0.5);
-  // the lamp: a shade open below, so a pool of light under it and a softer glow all round
-  vec3 toL = uLampPos - vWorld;
-  float dl = length(toL);
-  vec3 Ld = toL / dl;
-  float lamp = uLampInt * (0.3 + 0.7 * max(dot(N, Ld), 0.0)) * (0.45 + 0.55 * smoothstep(0.1, 0.8, Ld.y)) / (1.0 + dl * dl * 2.6);
-  // by day the sunlit floor and the room behind you bounce light back onto everything, most of all
-  // onto the walls facing into the room
-  float bounce = 0.12 + 0.16 * max(N.z, 0.0);
-  float light = (0.6 * direct + sky + bounce) * mix(0.3, 1.0, uDay) + lamp + tone;
-  gl_FragColor = pixRoom(m, light, uGlow > 0.5 ? 1.0 : uDither > 0.5 ? 0.25 : 0.0);
+  float ao = capsuleAO(vWorld, N) * roomAO(vWorld, N);
+  vec3 lt = roomLight(vWorld, N, sh, ao);
+  lt.x = max(lt.x * (1.0 + 1.3 * tone) + 0.25 * tone, 0.0);
+  gl_FragColor = pixRoomLit(m, lt, uGlow > 0.5 ? 0.99 : 0.0);
 }`;
 
 /** the sky through the window: written as finished colours (alpha 0.15), in art pixels */
@@ -106,62 +133,66 @@ float noise(vec2 p) {
   return mix(mix(hash2(i), hash2(i + vec2(1, 0)), f.x), mix(hash2(i + vec2(0, 1)), hash2(i + vec2(1, 1)), f.x), f.y);
 }
 vec3 hex(float r, float g, float b) { return vec3(r, g, b) / 255.0; }
-// a dithered gradient through four colours
-vec3 grad(vec3 a, vec3 b, vec3 c, vec3 d, float t, vec2 px) {
-  float bay = fract(sin(dot(mod(px, 4.0), vec2(12.9898, 78.233))) * 43758.5453);
+// which of four bands of a gradient a pixel is in, dithered where they meet
+int band4(float t, vec2 px) {
   const float BAY[16] = float[](0.0, 8.0, 2.0, 10.0, 12.0, 4.0, 14.0, 6.0, 3.0, 11.0, 1.0, 9.0, 15.0, 7.0, 13.0, 5.0);
   ivec2 q = ivec2(mod(px, 4.0));
   float s = clamp(t, 0.0, 1.0) * 3.0 + (BAY[q.x * 4 + q.y] / 16.0 - 0.5) * 0.7;
-  int i = int(clamp(floor(s + 0.5), 0.0, 3.0));
-  return i == 0 ? a : i == 1 ? b : i == 2 ? c : d;
+  return int(clamp(floor(s + 0.5), 0.0, 3.0));
 }
+vec3 pick(int i, vec3 a, vec3 b, vec3 c, vec3 d) { return i == 0 ? a : i == 1 ? b : i == 2 ? c : d; }
 void main() {
   vec2 px = floor(vUv * uSkyPx);
   float y = vUv.y;
   float h = uHour;
-  float night = 1.0 - smoothstep(5.5, 7.0, h) * (1.0 - smoothstep(19.0, 20.5, h));
-  float dusk = max(1.0 - abs(h - 19.0) / 1.6, 1.0 - abs(h - 6.3) / 1.2);
-  vec3 c;
-  if (night > 0.5) c = grad(hex(59.0, 52.0, 98.0), hex(44.0, 42.0, 82.0), hex(33.0, 34.0, 66.0), hex(24.0, 26.0, 52.0), y, px);
-  else if (dusk > 0.35) c = grad(hex(255.0, 196.0, 140.0), hex(240.0, 140.0, 118.0), hex(176.0, 112.0, 148.0), hex(108.0, 92.0, 150.0), y, px);
-  else c = grad(hex(214.0, 234.0, 242.0), hex(178.0, 218.0, 238.0), hex(141.0, 196.0, 230.0), hex(112.0, 172.0, 220.0), y, px);
+  // the sky's hours: day, the gold of the first and last of the sun, dusk (and dawn), night
+  float night = 1.0 - smoothstep(5.4, 6.6, h) * (1.0 - smoothstep(19.6, 20.6, h));
+  float dusk = min(1.0, max(0.0, 1.0 - abs(h - 19.2) / 0.9) + max(0.0, 1.0 - abs(h - 6.2) / 0.7)) * (1.0 - night);
+  float gold = clamp(smoothstep(16.0, 17.6, h) * (1.0 - smoothstep(18.7, 19.5, h)) + (1.0 - smoothstep(6.6, 8.2, h)) * smoothstep(5.5, 6.2, h), 0.0, 1.0) * (1.0 - night - dusk);
+  float day = max(0.0, 1.0 - night - dusk - gold);
+  int i = band4(y, px);
+  // alpha: 0.15 shown as it is; 0.17 a small light that glows a little (a star, a lit window);
+  // 0.2 one that glows (the moon)
+  float a = 0.15;
+  vec3 c = day * pick(i, hex(214.0, 234.0, 242.0), hex(178.0, 218.0, 238.0), hex(141.0, 196.0, 230.0), hex(112.0, 172.0, 220.0))
+         + gold * pick(i, hex(255.0, 220.0, 156.0), hex(250.0, 196.0, 150.0), hex(206.0, 182.0, 190.0), hex(138.0, 156.0, 206.0))
+         + dusk * pick(i, hex(255.0, 196.0, 140.0), hex(240.0, 140.0, 118.0), hex(176.0, 112.0, 148.0), hex(108.0, 92.0, 150.0))
+         + night * pick(i, hex(59.0, 52.0, 98.0), hex(44.0, 42.0, 82.0), hex(33.0, 34.0, 66.0), hex(24.0, 26.0, 52.0));
+  // toward the sun, low over the town at the ends of the day, the sky is brighter
+  float side = h < 12.0 ? 1.0 - vUv.x : vUv.x;
+  c = mix(c, hex(255.0, 236.0, 190.0), (gold + 0.6 * dusk) * 0.35 * smoothstep(0.35, 1.0, side) * smoothstep(0.75, 0.2, y));
   if (night > 0.5) {
     // stars that twinkle, and the moon
     float st = hash2(px);
-    if (y > 0.35 && st > 0.985 && sin(uTime * (1.0 + st * 3.0) + st * 40.0) > -0.3) c = hex(255.0, 246.0, 214.0);
+    if (y > 0.35 && st > 0.985 && sin(uTime * (1.0 + st * 3.0) + st * 40.0) > -0.3) { c = hex(255.0, 246.0, 214.0); a = 0.17; }
     vec2 mc = vec2(0.72, 0.8) * uSkyPx;
     float md = length(px - mc), md2 = length(px - mc - vec2(2.0, 1.0));
-    if (md < 3.6 && md2 > 3.0) c = hex(246.0, 231.0, 168.0);
+    if (md < 3.6 && md2 > 3.0) { c = hex(246.0, 231.0, 168.0); a = 0.2; }
   } else {
-    // slow clouds
+    // slow clouds, lit gold and pink at the ends of the day
     float n = noise(px * vec2(0.09, 0.18) + vec2(uTime * 0.02, 0.0)) * 0.7 + noise(px * vec2(0.2, 0.4) + vec2(uTime * 0.03, 3.0)) * 0.3;
-    float band = smoothstep(0.35, 0.95, y);
-    if (n * band > 0.42) c = dusk > 0.35 ? hex(255.0, 214.0, 190.0) : hex(246.0, 249.0, 252.0);
-    else if (n * band > 0.37) c = dusk > 0.35 ? hex(232.0, 160.0, 150.0) : hex(214.0, 228.0, 240.0);
+    float bandC = smoothstep(0.35, 0.95, y);
+    vec3 lit = day * hex(246.0, 249.0, 252.0) + gold * hex(255.0, 238.0, 205.0) + dusk * hex(255.0, 214.0, 190.0) + night * hex(60.0, 56.0, 96.0);
+    vec3 shade = day * hex(214.0, 228.0, 240.0) + gold * hex(236.0, 186.0, 170.0) + dusk * hex(232.0, 160.0, 150.0) + night * hex(44.0, 42.0, 80.0);
+    if (n * bandC > 0.42) c = lit;
+    else if (n * bandC > 0.37) c = shade;
   }
-  // the town across the way: roofs, and at night lit windows
+  // the town across the way: roofs, and lit windows once it is getting dark
   float col = floor(px.x / 5.0);
   float roof = (0.16 + 0.22 * hash2(vec2(col, 1.0))) * uSkyPx.y;
   if (px.y < roof) {
-    c = night > 0.5 ? hex(22.0, 22.0, 40.0) : dusk > 0.35 ? hex(96.0, 70.0, 104.0) : hex(126.0, 150.0, 176.0);
-    if (night > 0.5 && mod(px.x, 5.0) > 0.5 && mod(px.x, 5.0) < 3.5 && mod(px.y, 3.0) > 1.0 && px.y < roof - 1.0) {
+    c = day * hex(126.0, 150.0, 176.0) + gold * hex(150.0, 128.0, 150.0) + dusk * hex(96.0, 70.0, 104.0) + night * hex(22.0, 22.0, 40.0);
+    if (night + dusk > 0.5 && mod(px.x, 5.0) > 0.5 && mod(px.x, 5.0) < 3.5 && mod(px.y, 3.0) > 1.0 && px.y < roof - 1.0) {
       float w = hash2(floor(px / vec2(1.0, 3.0)) + floor(uTime / 23.0) * 0.01);
-      if (w > 0.6) c = w > 0.85 ? hex(255.0, 160.0, 92.0) : hex(255.0, 210.0, 120.0);
+      if (w > 1.0 - 0.4 * night - 0.15 * dusk) { c = w > 0.85 ? hex(255.0, 160.0, 92.0) : hex(255.0, 210.0, 120.0); a = 0.17; }
     }
   }
-  gl_FragColor = vec4(c, 0.15);
+  gl_FragColor = vec4(c, a);
 }`;
 
 const SKY_VERT = /* glsl */ `
 varying vec2 vUv;
 void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
-
-/** the sunbeam: drawn over what is behind it, it only adds a little to their light (the g channel,
- *  by additive blending), so whatever lies in the beam, the air included, shows a step lighter
- *  in dithered streaks */
-const BEAM_FRAG = /* glsl */ `
-uniform float uAmount;
-void main() { gl_FragColor = vec4(0.0, uAmount, 0.0, 0.0); }`;
 
 /** the fairy lights' bulbs: finished colours that twinkle */
 const BULB_FRAG = /* glsl */ `
@@ -172,7 +203,8 @@ uniform float uSeed;
 void main() {
   float tw = 0.75 + 0.25 * sin(uTime * (0.8 + uSeed) + uSeed * 9.0);
   vec3 off = vec3(0.32, 0.28, 0.3);
-  gl_FragColor = vec4(mix(off, uCol * tw + (1.0 - tw) * 0.25, uOn), 0.15);
+  // alpha 0.2: shown as it is, and glowing (when lit)
+  gl_FragColor = vec4(mix(off, uCol * tw + (1.0 - tw) * 0.25, uOn), uOn > 0.5 ? 0.2 : 0.15);
 }`;
 
 export interface Spots {
@@ -220,7 +252,8 @@ export class Room {
     floor.receiveShadow = true;
     add(floor, bx, 0, wallZ + 1.5);
     const rugR = 0.42;
-    const rug = new THREE.Mesh(new THREE.CircleGeometry(rugR, 48), this.mat('rug', { pattern: 2, rug: new THREE.Vector3(bx, bz - 0.02, rugR), wallZ }));
+    // (a little wider than the rug: its fringe)
+    const rug = new THREE.Mesh(new THREE.CircleGeometry(rugR + 0.022, 64), this.mat('rug', { pattern: 2, rug: new THREE.Vector3(bx, bz - 0.02, rugR), wallZ }));
     rug.rotation.x = -Math.PI / 2;
     rug.receiveShadow = true;
     add(rug, bx, 0.002, bz - 0.02);
@@ -230,7 +263,7 @@ export class Room {
     // one sheet with the window cut out of it (pieces would leave hairline cracks at their seams)
     const wallShape = new THREE.Shape([new THREE.Vector2(bx - 2, 0), new THREE.Vector2(bx + 2, 0), new THREE.Vector2(bx + 2, 2.4), new THREE.Vector2(bx - 2, 2.4)]);
     wallShape.holes.push(new THREE.Path([new THREE.Vector2(winL, winB), new THREE.Vector2(winL, winT), new THREE.Vector2(winR, winT), new THREE.Vector2(winR, winB)]));
-    const wall = new THREE.Mesh(new THREE.ShapeGeometry(wallShape), this.mat('wall', { pattern: 3, dither: true }));
+    const wall = new THREE.Mesh(new THREE.ShapeGeometry(wallShape), this.mat('wall', { pattern: 3 }));
     wall.receiveShadow = true;
     wall.castShadow = true;   // the sun comes in only through the window
     add(wall, 0, 0, wallZ);
@@ -239,20 +272,6 @@ export class Room {
     add(shadowy(new THREE.Mesh(new THREE.BoxGeometry(4, 0.05, 0.015), this.mat('paint', { tone: -0.05 }))), bx, 0.025, wallZ + 0.008);
 
     this.win = { l: winL, r: winR, b: winB, t: winT, z: wallZ };
-    // the sunbeam: the window's opening swept along the light down to the floor (rebuilt as the
-    // light moves)
-    this.beam = new THREE.ShaderMaterial({
-      uniforms: { uAmount: { value: 0.07 } },
-      vertexShader: SKY_VERT, fragmentShader: BEAM_FRAG,
-      transparent: true, depthWrite: false,
-      blending: THREE.CustomBlending, blendEquation: THREE.AddEquation,
-      blendSrc: THREE.OneFactor, blendDst: THREE.OneFactor, blendSrcAlpha: THREE.ZeroFactor, blendDstAlpha: THREE.OneFactor,
-    });
-    this.beamMesh = new THREE.Mesh(new THREE.BufferGeometry(), this.beam);
-    this.beamMesh.renderOrder = 10;
-    this.beamMesh.frustumCulled = false;
-    this.group.add(this.beamMesh);
-
     // the window: the sky behind, a white frame and glazing bars, a deep sill
     const ww = winR - winL, wh = winT - winB;
     // (drawn after the sunbeam, so its light does not tint the sky)
@@ -282,6 +301,24 @@ export class Room {
       add(l, winL + 0.11 + Math.cos(a) * 0.014, winB + 0.06, wallZ + 0.02 + Math.sin(a) * 0.014);
     }
     add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.06, 14), this.mat('bookMustard', { tone: 0.1 }))), winR - 0.12, winB + 0.03, wallZ + 0.02);
+
+    // under the window, an old column radiator painted white: its fins, the pipes along its top
+    // and foot, its legs, and the pipe and valve at its end
+    const radW = 0.46, radB = 0.07, radH = 0.19, radZ = wallZ + 0.055;
+    const radMat = this.mat('paint', { tone: -0.03 });
+    const nFin = 13;
+    for (let i = 0; i < nFin; i++) {
+      const x = bx - radW / 2 + (i + 0.5) * (radW / nFin);
+      add(shadowy(new THREE.Mesh(new THREE.BoxGeometry(radW / nFin - 0.008, radH, 0.05), radMat)), x, radB + radH / 2, radZ);
+    }
+    for (const y of [radB + 0.018, radB + radH - 0.018]) {
+      add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.013, radW + 0.01, 10).rotateZ(Math.PI / 2), radMat)), bx, y, radZ);
+    }
+    for (const x of [bx - radW / 2 + 0.03, bx + radW / 2 - 0.03]) add(shadowy(new THREE.Mesh(new THREE.BoxGeometry(0.02, radB, 0.03), radMat)), x, radB / 2, radZ);
+    add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, radB + 0.02, 8), this.mat('metal', { tone: 0.15 }))), bx + radW / 2 + 0.03, (radB + 0.02) / 2, radZ + 0.01);
+    add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.05, 8).rotateZ(Math.PI / 2), this.mat('metal', { tone: 0.15 }))), bx + radW / 2 + 0.008, radB + 0.02, radZ + 0.01);
+    add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.012, 12), this.mat('bookRed', { tone: 0.05 }))), bx + radW / 2 + 0.03, radB + 0.055, radZ + 0.01);
+    add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.03, 6), this.mat('metal', { tone: 0.15 }))), bx + radW / 2 + 0.03, radB + 0.035, radZ + 0.01);
 
     // the curtains on their rod, gathered in soft folds
     add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, ww + 0.5, 8).rotateZ(Math.PI / 2), this.mat('metal'))), bx, winT + 0.09, wallZ + 0.06);
@@ -367,8 +404,10 @@ export class Room {
     const sun = new THREE.Mesh(new THREE.CircleGeometry(0.011, 10), this.mat('bookMustard', { tone: 0.15 }));
     sun.position.set(0.03, 0.02, 0.0072);
     print.add(sun);
-    print.rotation.x = -0.12;
-    print.position.set(bx + 0.13, ty + 0.072, wallZ + 0.04);
+    // (standing on the sill by the succulent, a little back against the glass)
+    print.scale.setScalar(0.62);
+    print.rotation.set(-0.14, 0.18, 0);
+    print.position.set(winL + 0.22, winB + 0.04, wallZ - 0.005);
     this.group.add(print);
     this.print = print;
     pot(bx + 0.27, 0.03, 0.055, 'pot');
@@ -452,7 +491,7 @@ export class Room {
     add(new THREE.Mesh(new THREE.TubeGeometry(strand, 20, 0.003, 4), this.mat('bookRed', { tone: 0.12 })), 0, 0, 0);
 
     // the bed: a soft teal rim round an oatmeal fleece cushion
-    const cushion = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.03, 32), this.mat('fleece'));
+    const cushion = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.03, 32), this.mat('fleece', { pattern: 4 }));
     cushion.receiveShadow = true;
     add(cushion, S.bed.x, 0.015, S.bed.z);
     const rim = new THREE.Mesh(new THREE.TorusGeometry(0.172, 0.04, 12, 40), this.mat('bed'));
@@ -496,30 +535,61 @@ export class Room {
     box.add(this.clumps);
     box.position.copy(S.litter);
     this.group.add(box);
+
+    // what the room's light needs to know: the window, its bars, the fairy lights' wire, and the
+    // things that shade the floor and walls near them
+    const L = this.lights;
+    (L.uWin.value as THREE.Vector4).set(winL, winR, winB, winT);
+    (L.uWinBar.value as THREE.Vector3).set(bx, winB + wh * 0.62, 0.01);
+    L.uWinZ.value = wallZ - 0.03;
+    (L.uFairy.value as THREE.Vector4).set(winL - 0.06, winR + 0.06, winT - 0.05, wallZ + 0.1);
+    const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+    const occ: [THREE.Vector3, THREE.Vector3, number, number][] = [];
+    const cap = (a: THREE.Vector3, b2: THREE.Vector3, r: number, k: number) => occ.push([a, b2, r, k]);
+    for (let i = 0; i < 8; i++) {
+      // the bed's soft rim
+      const a0 = (i / 8) * Math.PI * 2, a1 = ((i + 1) / 8) * Math.PI * 2;
+      cap(V(S.bed.x + 0.172 * Math.cos(a0), 0.03, S.bed.z + 0.172 * Math.sin(a0)), V(S.bed.x + 0.172 * Math.cos(a1), 0.03, S.bed.z + 0.172 * Math.sin(a1)), 0.04, 0.55);
+    }
+    cap(V(px, 0.05, pz), V(px, 0.17, pz), 0.1, 0.6);                       // the monstera's pot
+    cap(V(lx, 0.01, lz), V(lx, 0.012, lz), 0.07, 0.4);                     // the lamp's foot
+    cap(V(S.food.x, 0.02, S.food.z), V(S.food.x, 0.021, S.food.z), 0.06, 0.5);
+    cap(V(S.water.x, 0.02, S.water.z), V(S.water.x, 0.021, S.water.z), 0.06, 0.5);
+    for (const [ax, az, bx2, bz2] of [[-1, -1, 1, -1], [1, -1, 1, 1], [1, 1, -1, 1], [-1, 1, -1, -1]]) {
+      cap(V(S.litter.x + ax * W / 2, 0.04, S.litter.z + az * D / 2), V(S.litter.x + bx2 * W / 2, 0.04, S.litter.z + bz2 * D / 2), 0.035, 0.5);
+    }
+    cap(V(fx, 0.03, fz), V(fx, 0.06, fz), 0.1, 0.5);                       // the stack of books
+    cap(V(bx - 0.3, 0.045, bz + 0.26), V(bx - 0.3, 0.046, bz + 0.26), 0.045, 0.6);   // the yarn
+    cap(V(bx - 0.45, ty - 0.005, wallZ + 0.055), V(bx + 0.45, ty - 0.005, wallZ + 0.055), 0.045, 0.5);
+    cap(V(sx - 0.21, sy, wallZ + 0.06), V(sx + 0.21, sy, wallZ + 0.06), 0.045, 0.5);
+    cap(V(winL - 0.07, winB - 0.02, wallZ + 0.04), V(winR + 0.07, winB - 0.02, wallZ + 0.04), 0.04, 0.5);
+    cap(V(bx - 2, 0.318, wallZ + 0.01), V(bx + 2, 0.318, wallZ + 0.01), 0.015, 0.4);
+    cap(V(bx - 0.2, 0.16, wallZ + 0.055), V(bx + 0.2, 0.16, wallZ + 0.055), 0.07, 0.5);   // the radiator
+    const O = L.uOcc.value as THREE.Vector4[];
+    occ.slice(0, NOCC).forEach(([a, b2, r, k], i) => { O[2 * i].set(a.x, a.y, a.z, r); O[2 * i + 1].set(b2.x, b2.y, b2.z, k); });
   }
 
-  private readonly beam: THREE.ShaderMaterial;
-  private readonly beamMesh: THREE.Mesh;
   /** the window opening, for the sunbeam and the dust in it */
   private readonly win: { l: number; r: number; b: number; t: number; z: number };
   private readonly motes: { p: THREE.Vector3; v: THREE.Vector3; b: number; life: number }[] = [];
   private readonly timeU = { value: 0 };
-  /** the little print on the shelf (tapping it shows the credits) */
+  /** the little print on the sill (tapping it shows the credits) */
   print: THREE.Object3D = new THREE.Group();
   /** where the mug's steam rises from */
   mugTop = new THREE.Vector3();
   private readonly nightU = { value: 0 };
 
-  private mat(name: Material, o: { pattern?: number; tone?: number; rug?: THREE.Vector3; wallZ?: number; dither?: boolean } = {}) {
+  private mat(name: Material, o: { pattern?: number; tone?: number; rug?: THREE.Vector3; wallZ?: number } = {}) {
     const L = this.lights;
+    const shared: Record<string, { value: unknown }> = {};
+    for (const k of ['uKeyDir', 'uLampPos', 'uLampInt', 'uShadowMap', 'uShadowMatrix', 'uShadowOn', 'uShadowSoft', 'uCaps',
+      'uSun', 'uWin', 'uWinBar', 'uWinZ', 'uSkyI', 'uPatch', 'uAmb', 'uFloorB', 'uFill', 'uFairy', 'uFairyInt', 'uOcc']) shared[k] = L[k];
     const m = new THREE.ShaderMaterial({
       uniforms: {
+        ...shared,
         uMat: { value: PIX[name] }, uPattern: { value: o.pattern ?? 0 }, uGlow: { value: 0 }, uTone: { value: o.tone ?? 0 },
-        uDither: { value: o.dither ? 1 : 0 },
-        uKeyDir: L.uKeyDir, uSpec: { value: 0 },
-        uLampPos: L.uLampPos, uLampInt: L.uLampInt, uDay: L.uDay,
+        uSpec: { value: 0 },
         uRug: { value: o.rug ?? new THREE.Vector3() }, uWallZ: { value: o.wallZ ?? -10 },
-        uShadowMap: L.uShadowMap, uShadowMatrix: L.uShadowMatrix, uShadowOn: L.uShadowOn, uShadowSoft: L.uShadowSoft,
       },
       vertexShader: VERT,
       fragmentShader: FRAG,
@@ -527,24 +597,6 @@ export class Room {
     });
     this.mats.push(m);
     return m;
-  }
-
-  /** the beam's volume for the light now: the opening, and where it falls on the floor */
-  private shapeBeam() {
-    const K = this.lights.uKeyDir.value as THREE.Vector3;
-    if (K.y <= 0.05) return;
-    const { l, r, b, t, z } = this.win;
-    const top = [new THREE.Vector3(l, b, z), new THREE.Vector3(r, b, z), new THREE.Vector3(r, t, z), new THREE.Vector3(l, t, z)];
-    const floor = top.map((p) => p.clone().addScaledVector(K, -p.y / K.y));
-    const pos: number[] = [];
-    const quad = (a: THREE.Vector3, b2: THREE.Vector3, c: THREE.Vector3, d: THREE.Vector3) => pos.push(...a.toArray(), ...b2.toArray(), ...c.toArray(), ...a.toArray(), ...c.toArray(), ...d.toArray());
-    for (let i = 0; i < 4; i++) quad(top[i], top[(i + 1) % 4], floor[(i + 1) % 4], floor[i]);
-    quad(floor[0], floor[1], floor[2], floor[3]);
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-    g.computeVertexNormals();
-    this.beamMesh.geometry.dispose();
-    this.beamMesh.geometry = g;
   }
 
   /** dust motes drifting in the sunbeam (world points and how bright each is) */
@@ -576,31 +628,44 @@ export class Room {
     this.sky.uniforms.uSkyPx.value.set(0.68 / px, 0.8 / px);
   }
 
-  /** how dark it is outside at an hour (0 day .. 1 night): the sun is up from about half past six
-   *  and down by about eight in the evening (the sky in the window follows the same hours) */
+  /** how dark it is outside at an hour (0 day .. 1 night): light in the sky from before the sun
+   *  is up until a while after it has set (the sky in the window follows the same hours) */
   static dark(hour: number) {
-    const ss = (a: number, b: number, x: number) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
-    return 1 - ss(5.5, 7.2, hour) * (1 - ss(18.6, 20.2, hour));
+    return 1 - skyDay(hour);
   }
 
-  /** the bowls and box as the cat's state has them; the light and the sky by the hour */
-  update(s: CatState, hour = 12, dt = 0) {
-    const night = Room.dark(hour);
+  private readonly light = dayLight(12);
+
+  /** the bowls and box as the cat's state has them; the light and the sky by the hour (and that
+   *  light, for the pixel pass's colours) */
+  update(s: CatState, hour = 12, dt = 0): DayLight {
+    const d = dayLight(hour, this.light);
     this.time += dt;
     this.timeU.value = this.time;
     this.sky.uniforms.uTime.value = this.time;
     this.sky.uniforms.uHour.value = hour;
-    // night: the lamp on (its shade glowing), the fairy lights on, daylight down
     const L = this.lights;
+    (L.uKeyDir.value as THREE.Vector3).copy(d.keyDir);
     (L.uLampPos.value as THREE.Vector3).copy(this.lampPos);
-    L.uLampInt.value = 1.5 * night;
-    L.uDay.value = 1 - night;
-    this.shade.uniforms.uGlow.value = night > 0.5 ? 1 : 0;
-    // the sunbeam by day only
-    if (this.beamMesh.geometry.getAttribute('position') === undefined) this.shapeBeam();
-    this.beamMesh.visible = night < 0.5;
-    this.beam.uniforms.uAmount.value = 0.085 * (1 - night);
-    this.nightU.value = night > 0.5 ? 1 : 0;
+    L.uLampInt.value = d.lamp;
+    L.uDay.value = 1 - Room.dark(hour);
+    L.uSun.value = d.sun;
+    L.uSkyI.value = d.sky;
+    L.uAmb.value = d.amb;
+    L.uFloorB.value = d.floorB;
+    (L.uFill.value as THREE.Vector4).w = d.fill;
+    L.uFairyInt.value = d.fairy;
+    // where the sun through the window lies on the floor: its middle, its size, how bright
+    const K = d.keyDir;
+    const { l, r, b, t, z } = this.win;
+    const P = L.uPatch.value as THREE.Vector4;
+    if (d.sun > 0 && K.y > 0.03 && K.z < -0.03) {
+      const cy = (b + t) / 2;
+      P.set((l + r) / 2 - (K.x * cy) / K.y, z - (K.z * cy) / K.y, Math.min(1.5, ((r - l) * (t - b) * -K.z) / K.y), d.sun * 0.45 * K.y);
+    } else P.set(0, 0, 0, 0);
+    // the lamp's shade glows when it is lit; the fairy lights come on with it
+    this.shade.uniforms.uGlow.value = d.lamp > 0.5 ? 1 : 0;
+    this.nightU.value = d.fairy > 0.2 ? 1 : 0;
     const f = Math.max(0, Math.min(1, s.food));
     this.kibble.visible = f > 0.02;
     this.kibble.scale.set(0.55 + 0.45 * Math.sqrt(f), 0.15 + 0.85 * f, 0.55 + 0.45 * Math.sqrt(f));
@@ -609,6 +674,7 @@ export class Room {
     this.water.position.y = 0.012 + 0.024 * w;
     this.water.scale.setScalar(0.85 + 0.15 * w);
     this.clumps.count = Math.round(Math.max(0, Math.min(1, s.litter)) * 8);
+    return d;
   }
 }
 

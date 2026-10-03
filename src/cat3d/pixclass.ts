@@ -9,9 +9,10 @@ import * as THREE from 'three';
  * from one palette so the room and the cat belong together. The shaders write which material and
  * how much light into the small render target; the pixel pass (stage.ts) tidies that and paints it.
  *
- * In the render target: r = material, g = light (0..1), b = rim light (the cat) or glow (the room),
- * a = what it is: 1 the cat, 0.5 the room, 0.75 the irises (their own colours, snapped to the
- * eyes' palette), 0.15 a colour to show as it is (the sky outside).
+ * In the render target: r = material, g = light (0..1), b = which light it is in (whole part: 1 the
+ * lamp's, 2 the sun's) plus rim light (the cat) or glow (the room), a = what it is: 1 the cat, 0.5
+ * the room, 0.75 the irises (their own colours, snapped to the eyes' palette), 0.15 a colour to show
+ * as it is (the sky outside), 0.2 the same but glowing (a light bulb).
  */
 
 /** the material keys in the pixel coat texture (tools/cat3d/fripouille.py: PIX_KEYS), display sRGB */
@@ -102,5 +103,14 @@ vec4 pixOut(int cls, float light, float rim) {
 }
 vec4 pixRoom(int cls, float light, float glow) {
   return vec4((float(cls) + 0.5) / ${NMAT}.0, clamp(light, 0.0, 1.0), clamp(glow, 0.0, 1.0), 0.5);
+}
+// ... and with the light's kind (roomlight.ts: all of it, the lamp's share, the sun's share): the
+// third value's whole part says which light the pixel is in, 1 the lamp's, 2 the sun's
+float pixLights(vec3 lt) { return (lt.y > 0.5 ? 1.0 : 0.0) + (lt.z > 0.4 ? 2.0 : 0.0); }
+vec4 pixOutLit(int cls, vec3 lt, float rim) {
+  return vec4((float(cls) + 0.5) / ${NMAT}.0, clamp(lt.x, 0.0, 1.0), pixLights(lt) + clamp(rim, 0.0, 0.99), 1.0);
+}
+vec4 pixRoomLit(int cls, vec3 lt, float glow) {
+  return vec4((float(cls) + 0.5) / ${NMAT}.0, clamp(lt.x, 0.0, 1.0), pixLights(lt) + clamp(glow, 0.0, 0.99), 0.5);
 }
 `;

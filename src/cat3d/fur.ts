@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { roomLightUniforms } from './roomlight';
 import type { Correctives } from './load';
 import { LID_GLSL } from './eye';
 
@@ -756,6 +757,9 @@ export function makeFurMaterials(opts: FurOptions, an: Anatomy, corr: Corrective
     uLampPos: { value: new THREE.Vector3(0, 1, 0) },
     uLampInt: { value: 0 },
     uDay: { value: 1 },
+    // pixel art in the cat's room: lit by the room's light (roomlight.ts)
+    uRoomLit: { value: 0 },
+    ...roomLightUniforms(),
     uCorr: { value: corr ? corr.texture : null },
     uCorrW: { value: new Array(Math.max(1, corr ? corr.poses.length : 1)).fill(0) as number[] },
   };

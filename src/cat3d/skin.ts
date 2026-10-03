@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { AO_GLSL, LIGHT_GLSL } from './fur';
 import { GRADE_GLSL } from './grade';
 import { PIX, PIX_GLSL } from './pixclass';
+import { ROOM_LIGHT_GLSL } from './roomlight';
 
 /**
  * A painted (textured) coat for a model that brings its own colours instead of the procedural fur:
@@ -72,8 +73,10 @@ uniform vec3 uSkyCol;
 uniform vec3 uGroundCol;
 uniform float uSpec;   // the hair shading below wants it declared
 uniform float uJawOpen;
+uniform float uRoomLit;
 ${GRADE_GLSL}
 ${PIX_GLSL}
+${ROOM_LIGHT_GLSL}
 varying float vReg;
 varying vec3 vAux;
 varying vec2 vUv;
@@ -88,21 +91,29 @@ void main() {
     int cls = vReg > 1.5 ? ${PIX.teeth} : vReg > 0.5 ? (vAux.y > 0.5 ? ${PIX.tongue} : ${PIX.mouth})
       : !gl_FrontFacing ? ${PIX.mouth} : pixClass(texture2D(uPixMap, vUv).rgb);
     float shp = keyShadow(vWorld, Np);
-    float direct = smoothstep(-0.15, 0.55, dot(Np, uKeyDir)) * mix(0.25, 1.0, shp);
-    // key, sky, fill, and the warm floor bouncing light up under the chin and belly
-    float light = (direct * 0.56 + (Np.y * 0.5 + 0.5) * 0.28 + max(dot(Np, uFillDir), 0.0) * 0.2 + max(-Np.y, 0.0) * 0.14) * mix(0.3, 1.0, uDay);
-    // the lamp at night
-    vec3 toL = uLampPos - vWorld;
-    float dl = length(toL);
-    vec3 Ld = toL / dl;
-    light += uLampInt * (0.3 + 0.7 * max(dot(Np, Ld), 0.0)) * (0.45 + 0.55 * smoothstep(0.1, 0.8, Ld.y)) / (1.0 + dl * dl * 2.6);
-    light *= mix(0.55, 1.0, vAO);
-    // the mouth darkens toward the throat
-    if (vReg > 0.5 && vReg < 1.5) light *= mix(1.0, 0.15, smoothstep(0.3, 0.95, vAux.x));
-    if (!gl_FrontFacing && vReg < 0.5) light *= 0.5;
     vec3 Vp = normalize(cameraPosition - vWorld);
     float rim = pow(1.0 - max(dot(Np, Vp), 0.0), 2.5) * max(dot(Np, uRimDir), 0.0) * shp;
-    gl_FragColor = pixOut(cls, light, rim);
+    vec3 lt;
+    if (uRoomLit > 0.5) {
+      // in the room: the window, the sun through it, the lamp (roomlight.ts); the window behind
+      // lights its edges only while there is daylight in it
+      lt = roomLight(vWorld, Np, shp, mix(0.55, 1.0, vAO) * roomAO(vWorld, Np));
+      rim *= clamp(uSkyI + uSun, 0.0, 1.0);
+    } else {
+      float direct = smoothstep(-0.15, 0.55, dot(Np, uKeyDir)) * mix(0.25, 1.0, shp);
+      // key, sky, fill, and the warm floor bouncing light up under the chin and belly
+      float light = (direct * 0.56 + (Np.y * 0.5 + 0.5) * 0.28 + max(dot(Np, uFillDir), 0.0) * 0.2 + max(-Np.y, 0.0) * 0.14) * mix(0.3, 1.0, uDay);
+      // the lamp at night
+      vec3 toL = uLampPos - vWorld;
+      float dl = length(toL);
+      vec3 Ld = toL / dl;
+      light += uLampInt * (0.3 + 0.7 * max(dot(Np, Ld), 0.0)) * (0.45 + 0.55 * smoothstep(0.1, 0.8, Ld.y)) / (1.0 + dl * dl * 2.6);
+      lt = vec3(light * mix(0.55, 1.0, vAO), 0.0, 0.0);
+    }
+    // the mouth darkens toward the throat
+    if (vReg > 0.5 && vReg < 1.5) lt.x *= mix(1.0, 0.15, smoothstep(0.3, 0.95, vAux.x));
+    if (!gl_FrontFacing && vReg < 0.5) lt.x *= 0.5;
+    gl_FragColor = pixOutLit(cls, lt, rim);
     return;
   }
   vec3 col = texture2D(uMap, vUv).rgb;
