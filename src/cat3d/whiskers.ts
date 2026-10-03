@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { PIX, PIX_GLSL } from './pixclass';
 
 /**
  * Whiskers: tapered white tubes in rows on the whisker pads, a few above each eye. Real whiskers
@@ -12,6 +13,8 @@ export interface Whiskers {
   setSpread(v: number): void;
   /** world size of one screen pixel at 1 m from the camera */
   setPixel(px: number): void;
+  /** drawn as pixel art: an art pixel wide, as white fur in the light (how bright: 0 .. 1) */
+  setPixelArt(on: boolean, light?: number, lamp?: number): void;
 }
 
 export function makeWhiskers(padL: THREE.Vector3, padR: THREE.Vector3, eyeL: THREE.Vector3, eyeR: THREE.Vector3): Whiskers {
@@ -21,10 +24,11 @@ export function makeWhiskers(padL: THREE.Vector3, padR: THREE.Vector3, eyeL: THR
   const root: number[] = [];
   const tt: number[] = [];
   const side: number[] = [];
+  const keep: number[] = [];
   const idx: number[] = [];
   let seed = 7;
   const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-  const add = (start: THREE.Vector3, dir: THREE.Vector3, len: number, droop: number, r0: number, sx: number, sway: number) => {
+  const add = (start: THREE.Vector3, dir: THREE.Vector3, len: number, droop: number, r0: number, sx: number, sway: number, kept = 0) => {
     const seg = 14, sides = 3;
     const base = pos.length / 3;
     const up = new THREE.Vector3(0, 1, 0);
@@ -46,6 +50,7 @@ export function makeWhiskers(padL: THREE.Vector3, padR: THREE.Vector3, eyeL: THR
         root.push(start.x, start.y, start.z);
         tt.push(t);
         side.push(sx);
+        keep.push(kept);
       }
     }
     for (let i = 0; i < seg; i++)
@@ -65,7 +70,8 @@ export function makeWhiskers(padL: THREE.Vector3, padR: THREE.Vector3, eyeL: THR
         const dir = new THREE.Vector3(sx * Math.sin(fan + 0.55), Math.sin(elev), Math.cos(fan + 0.55) * 0.9).normalize();
         const start = pad.clone().add(new THREE.Vector3(sx * (0.0006 * j), 0.0024 - row * 0.0017, -j * 0.0019 - row * 0.0006));
         const len = (0.064 - row * 0.007 - (count - 1 - j) * 0.004) * (0.92 + rnd() * 0.16);
-        add(start, dir, len, 0.006 + rnd() * 0.006 + row * 0.002, 0.00011, sx, 0.004 + rnd() * 0.006);
+        // (as pixel art only the longest of each of the top three rows: a pixel artist's two or three)
+        add(start, dir, len, 0.006 + rnd() * 0.006 + row * 0.002, 0.00011, sx, 0.004 + rnd() * 0.006, row < 3 && j === count - 1 ? 1 : 0);
       }
     }
   }
@@ -82,6 +88,7 @@ export function makeWhiskers(padL: THREE.Vector3, padR: THREE.Vector3, eyeL: THR
   g.setAttribute('root', new THREE.Float32BufferAttribute(root, 3));
   g.setAttribute('t', new THREE.Float32BufferAttribute(tt, 1));
   g.setAttribute('side', new THREE.Float32BufferAttribute(side, 1));
+  g.setAttribute('keep', new THREE.Float32BufferAttribute(keep, 1));
   g.setIndex(idx);
   const uSpread = { value: 0 };
   const uPx = { value: 0.001 };
@@ -90,14 +97,16 @@ export function makeWhiskers(padL: THREE.Vector3, padR: THREE.Vector3, eyeL: THR
     transparent: true,
     depthWrite: false,
     vertexShader: /* glsl */ `
-      attribute vec3 ofs; attribute float rad; attribute vec3 root; attribute float t; attribute float side;
+      attribute vec3 ofs; attribute float rad; attribute vec3 root; attribute float t; attribute float side; attribute float keep;
       uniform float uSpread;
       uniform float uPx;
       varying float vt;
       varying float vA;
+      varying float vKeep;
       vec3 swing(vec3 o, float a) { return vec3(o.x * cos(a) + o.z * sin(a), o.y, -o.x * sin(a) + o.z * cos(a)); }
       void main() {
         vt = t;
+        vKeep = keep;
         // swing about a vertical axis through the root: forward (+) or back (-)
         float a = -uSpread * 0.55 * side;
         vec3 c = root + swing(position - root, a) + vec3(0.0, uSpread * 0.006 * t, 0.0);
@@ -117,6 +126,25 @@ export function makeWhiskers(padL: THREE.Vector3, padR: THREE.Vector3, eyeL: THR
         #include <colorspace_fragment>
       }`,
   });
+  // as pixel art: an art pixel wide (uPx is then an art pixel), drawn into the cat's own pixels as
+  // its white fur at a given light, the tips let go (a pixel artist's whisker: a pale line or two)
+  const uL = { value: 0.6 }, uLamp = { value: 0 };
+  const pixMat = new THREE.ShaderMaterial({
+    uniforms: { uSpread, uPx, uL, uLamp },
+    vertexShader: mat.vertexShader,
+    fragmentShader: /* glsl */ `
+      ${PIX_GLSL}
+      varying float vt;
+      varying float vA;
+      varying float vKeep;
+      uniform float uL;
+      uniform float uLamp;
+      void main() {
+        if (vKeep < 0.5 || vt > 0.8) discard;
+        // (in the light the face is in: so much of it the lamp's)
+        gl_FragColor = pixOutLit(${PIX.white}, vec3(uL, uLamp, 0.0), 0.0);
+      }`,
+  });
   const mesh = new THREE.Mesh(g, mat);
   mesh.frustumCulled = false;
   mesh.renderOrder = 1000;
@@ -124,5 +152,11 @@ export function makeWhiskers(padL: THREE.Vector3, padR: THREE.Vector3, eyeL: THR
     mesh,
     setSpread: (v: number) => { uSpread.value = v; },
     setPixel: (px: number) => { uPx.value = px; },
+    setPixelArt: (on: boolean, light = 0.6, lamp = 0) => {
+      mesh.material = on ? pixMat : mat;
+      mesh.renderOrder = on ? 0 : 1000;
+      uL.value = light;
+      uLamp.value = lamp;
+    },
   };
 }

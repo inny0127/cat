@@ -244,7 +244,13 @@ export class Cat3D {
       e.eyeMat.uniforms.uFlat.value = on ? 1 : 0;
       if (this.pixTexture && e.eyeMat.uniforms.uLidTex.value > 0.5) e.eyeMat.uniforms.uLidMap.value = on ? this.pixTexture : this.painted;
     }
-    this.whiskers.mesh.visible = !on;
+    this.whiskers.setPixelArt(on);
+  }
+
+  /** how bright the whiskers are drawn in pixel art (0 .. 1): as the room's light goes down, they
+   *  go down with it, rather than glow */
+  setWhiskerLight(light: number, lamp = 0) {
+    this.whiskers.setPixelArt(this.shared.uSolid.value > 0.5, light, lamp);
   }
 
   /** the camera's pixel size, for the whiskers */
