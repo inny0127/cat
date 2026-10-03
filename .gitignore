@@ -10,3 +10,4 @@ artifact-dist/
 __pycache__/
 tests/*.local.test.ts
 tools/*.local.mjs
+/poses.json
