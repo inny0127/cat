@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { loadCatAsset, buildSkeleton, type CatAsset } from './load';
 import { makeFurMaterials, NCAPS } from './fur';
+import { makeSkinMaterial } from './skin';
 import { makeStrands } from './strands';
 import { makeEye, setLids, type CatEye } from './eye';
 import { makeWhiskers, type Whiskers } from './whiskers';
@@ -84,12 +85,26 @@ export class Cat3D {
     this.tail = new Tail(this.kin, this.kin.i('hips'));
     this.group.add(root);
 
-    const shells = opts.shells ?? 24;
+    // a model with its own painted coat is drawn as one textured surface instead of fur
+    const painted = asset.texture;
+    const shells = painted ? 1 : opts.shells ?? 24;
     const LMa = asset.landmarks;
     const { mats, shared, defines } = makeFurMaterials({ shells, density: opts.density ?? 2400 }, { ...LMa, head: LMa.head }, asset.correctives);
     this.corrPoses = asset.correctives?.poses ?? [];
     this.shared = shared;
-    for (const [name, geo] of Object.entries(asset.meshes)) {
+    let skin: THREE.ShaderMaterial | null = null;
+    if (painted) {
+      skin = makeSkinMaterial(painted, shared as unknown as Record<string, { value: unknown }>);
+      for (const geo of Object.values(asset.meshes)) {
+        const m = new THREE.SkinnedMesh(geo, skin);
+        m.bind(skeleton, new THREE.Matrix4());
+        m.frustumCulled = false;
+        m.castShadow = true;
+        this.group.add(m);
+        this.meshes.push(m);
+      }
+    }
+    for (const [name, geo] of painted ? [] : Object.entries(asset.meshes)) {
       const n = name === 'body' ? shells : Math.max(4, Math.round(shells / 2));
       for (let i = 0; i < n; i++) {
         const m = new THREE.SkinnedMesh(geo, name === 'body' ? mats[i] : mats[Math.round((i / Math.max(1, n - 1)) * (shells - 1))]);
@@ -102,7 +117,7 @@ export class Cat3D {
       }
     }
     // guard hairs, one by one, over the shell coat
-    if (asset.strands && opts.strands !== 0) {
+    if (!painted && asset.strands && opts.strands !== 0) {
       const st = makeStrands(asset.strands, shared as unknown as Record<string, { value: unknown }>, defines);
       if (opts.strands) st.geometry.instanceCount = Math.min(opts.strands, asset.strands.count);
       const m = new THREE.SkinnedMesh(st.geometry, st.material);
@@ -119,6 +134,23 @@ export class Cat3D {
     const v3 = (a: number[]) => new THREE.Vector3(a[0], a[1], a[2]);
     for (const [p, x, eu] of [[LM.eyeL, 1, LM.eyeEulerL], [LM.eyeR, -1, LM.eyeEulerR]] as const) {
       const e = makeEye(LM.eyeRadius, x, shared);
+      if (LM.lidScale) {
+        // plain sockets: the eye draws its lids itself, in the skin round it
+        e.eyeMat.uniforms.uOwnLids.value = 1;
+        e.eyeMat.uniforms.uLidScale.value.set(LM.lidScale[0], LM.lidScale[1]);
+        if (LM.lidCol) e.eyeMat.uniforms.uLidCol.value.setRGB(LM.lidCol[0], LM.lidCol[1], LM.lidCol[2], THREE.SRGBColorSpace);
+        const uv = x > 0 ? LM.lidUVL : LM.lidUVR;
+        if (painted && skin && uv) {
+          const u = e.eyeMat.uniforms;
+          u.uLidMap.value = painted;
+          u.uLidU.value.set(uv[0], uv[1], uv[2]);
+          u.uLidV.value.set(uv[3], uv[4], uv[5]);
+          u.uLidTex.value = 1;
+          // the same grade as the coat, so a shut lid is the fur round it
+          u.uSolidGain = skin.uniforms.uSolidGain;
+          u.uSolidSat = skin.uniforms.uSolidSat;
+        }
+      }
       e.group.position.copy(v3(p).sub(headRest));
       e.group.rotation.set(eu[0], eu[1], eu[2]);
       head.add(e.group);
@@ -128,6 +160,8 @@ export class Cat3D {
       setLids(e, shared.uLids.value, 1, 0);
       this.eyes.push(e);
     }
+    // the point between the eyes, which the head aims when it looks at something
+    this.body.eyeOffset.copy(v3(LM.eyeL)).add(v3(LM.eyeR)).multiplyScalar(0.5).sub(headRest);
     this.whiskers = makeWhiskers(v3(LM.padL), v3(LM.padR), v3(LM.eyeL), v3(LM.eyeR));
     this.whiskers.mesh.position.copy(headRest).negate();
     head.add(this.whiskers.mesh);

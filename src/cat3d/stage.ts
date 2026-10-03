@@ -76,8 +76,9 @@ const PIXEL_VERT = /* glsl */ `
 varying vec2 vUv;
 void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`;
 
-/** palettes, display sRGB: the cat's own colours, and the room's (so shaded cream on the cat turns
- *  peach rather than borrowing the floor's greys) */
+/** palettes, display sRGB: the cat's own colours, its eyes', and the room's (so shaded cream on the
+ *  cat turns peach rather than borrowing the floor's greys, and a grey shadow on white fur never
+ *  turns the olive of the eyes). The eyes mark themselves with alpha 0.75, the floor with 0.25. */
 const PAL_CAT = [
   // ginger, light to dark
   '#fde6bd', '#f8cb8c', '#efa75c', '#de8337', '#c06222', '#954418', '#662c12',
@@ -85,14 +86,13 @@ const PAL_CAT = [
   '#fffaf1', '#f6e8d2', '#ecd2b0', '#e2bd92', '#d1a271',
   // pink: inside the ears, the nose
   '#f6b3a8',
-  // eyes
-  '#e2e48a', '#b9c45a', '#7f8e36', '#4a5520', '#121010', '#ffffff',
   // outlines
   '#3c2416', '#21140d',
 ];
+const PAL_EYE = ['#e2e48a', '#b9c45a', '#7f8e36', '#4a5520', '#121010', '#ffffff'];
 const PAL_BG = ['#f4eee4', '#e6dccd', '#d0c2ae', '#b3a28b', '#8f7d67', '#6d5b48', '#3c2416'];
-const OUTLINE = 19;   // index of the outline colour in PAL_CAT
-const NPAL = Math.max(PAL_CAT.length, PAL_BG.length);
+const OUTLINE = 13;   // index of the outline colour in PAL_CAT
+const NPAL = Math.max(PAL_CAT.length, PAL_BG.length, PAL_EYE.length);
 
 const PIXEL_FRAG = /* glsl */ `
 precision highp float;
@@ -104,6 +104,7 @@ uniform float uNear;
 uniform float uFar;
 uniform float uDither;
 uniform vec3 uPalCat[${NPAL}];
+uniform vec3 uPalEye[${NPAL}];
 uniform vec3 uPalBg[${NPAL}];
 varying vec2 vUv;
 
@@ -130,13 +131,15 @@ vec3 oklab(vec3 c) {
   return mat3(0.2104542553, 1.9779984951, 0.0259040371, 0.7936177850, -2.4285922050, 0.7827717662, -0.0040720468, 0.4505937099, -0.8086757660) * lms;
 }
 float lin(float d) { float z = d * 2.0 - 1.0; return 2.0 * uNear * uFar / (uFar + uNear - z * (uFar - uNear)); }
-// the nearest colour of a palette, and the second nearest with how close the colour sits between them
-vec3 snap(vec3 c, bool cat, out vec3 second, out float t) {
+// the nearest colour of a palette (0 room, 1 cat, 2 eyes), and the second nearest with how close
+// the colour sits between them
+vec3 snap(vec3 c, int pal, out vec3 second, out float t) {
   vec3 q = oklab(c);
   float d1 = 1e9, d2 = 1e9; vec3 c1 = c, c2 = c;
+  int n = pal == 2 ? ${PAL_EYE.length} : pal == 1 ? ${PAL_CAT.length} : ${PAL_BG.length};
   for (int i = 0; i < ${NPAL}; i++) {
-    if (i >= (cat ? ${PAL_CAT.length} : ${PAL_BG.length})) break;
-    vec3 p = cat ? uPalCat[i] : uPalBg[i];
+    if (i >= n) break;
+    vec3 p = pal == 2 ? uPalEye[i] : pal == 1 ? uPalCat[i] : uPalBg[i];
     vec3 e = oklab(p) - q;
     float d = dot(e * vec3(1.0, 1.4, 1.4), e);
     if (d < d1) { d2 = d1; c2 = c1; d1 = d; c1 = p; }
@@ -153,8 +156,9 @@ void main() {
   // the floor marks itself with alpha 0.25; the backdrop is at the far plane
   float depth = texelFetch(uDepth, p, 0).r;
   bool cat = src.a > 0.5 && depth < 0.99999;
+  int pal = !cat ? 0 : src.a < 0.9 ? 2 : 1;
   vec3 c2; float t;
-  vec3 s = snap(c, cat, c2, t);
+  vec3 s = snap(c, pal, c2, t);
   // a little ordered dithering where a colour falls between two palette entries
   if (uDither > 0.5) {
     int bx = p.x & 3, by = p.y & 3;
@@ -171,7 +175,7 @@ void main() {
   float behind = max(2.0 * w - wl - wr, 2.0 * w - wu - wd);
   if (w < 0.25) behind = 0.0;                                           // nothing to outline out at the horizon
   if (behind > 0.1 * w) s = uPalCat[${OUTLINE}];                        // against the backdrop
-  else if (behind > 0.035 * w) { vec3 c3; float t3; s = snap(s * 0.62, cat, c3, t3); }  // a limb in front of the body
+  else if (behind > 0.035 * w) { vec3 c3; float t3; s = snap(s * 0.62, pal, c3, t3); }  // a limb in front of the body
   gl_FragColor = vec4(s, 1.0);
 }`;
 
@@ -248,6 +252,7 @@ export class Stage {
         uExposure: { value: exposure }, uNear: { value: this.camera.near }, uFar: { value: this.camera.far },
         uDither: { value: new URLSearchParams(location.search).has('dither') ? 1 : 0 },
         uPalCat: { value: palette(PAL_CAT) },
+        uPalEye: { value: palette(PAL_EYE) },
         uPalBg: { value: palette(PAL_BG) },
       },
       vertexShader: PIXEL_VERT, fragmentShader: PIXEL_FRAG, depthTest: false, depthWrite: false, toneMapped: false,

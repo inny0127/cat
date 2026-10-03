@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { GRADE_GLSL } from './grade';
 
 /**
  * Cat eyes. The eyeball has a recessed iris seen through a bulging cornea (parallax), a slit
@@ -58,6 +59,14 @@ uniform float uUpper;
 uniform float uLower;
 uniform float uSide;
 uniform mat3 uGaze;        // ball frame -> lid frame
+uniform float uOwnLids;    // a model with plain sockets: the eye draws its own lids over the ball
+uniform vec3 uLidCol;      // ... in the skin round the eye
+uniform vec2 uLidScale;    // ... and leaves an opening this much wider and taller than the coat's lids
+uniform sampler2D uLidMap; // ... or in the model's painted coat, where it maps onto the lids:
+uniform vec3 uLidU;        //     u = dot(uLidU, (x, y, 1)) in the lid frame, v likewise
+uniform vec3 uLidV;
+uniform float uLidTex;
+${GRADE_GLSL}
 varying vec3 vLocal;
 varying vec3 vViewLocal;
 varying vec3 vN;
@@ -111,8 +120,31 @@ vec3 irisAt(vec2 ip) {
   return mix(c, vec3(0.045, 0.03, 0.02), smoothstep(1.0, 1.05, rr));
 }
 
+// the lid skin over the ball (dl: lid frame), lit as the painted coat is (skin.ts)
+vec3 lidSkin(vec3 N, vec3 dl) {
+  vec3 col = uLidCol;
+  if (uLidTex > 0.5) col = texture2D(uLidMap, vec2(dot(uLidU, vec3(dl.xy, 1.0)), dot(uLidV, vec3(dl.xy, 1.0)))).rgb;
+  if (uFlat > 0.5) return gradePaint(col) * mix(0.64, 1.0, smoothstep(0.3, 0.6, dot(N, uKeyDir) * 0.5 + 0.5)) * 0.87;
+  float wrap = clamp((dot(N, uKeyDir) + 0.3) / 1.3, 0.0, 1.0);
+  return col * (uKeyCol * 0.3183 * wrap + uFillCol * 0.3183 * max(dot(N, uFillDir), 0.0) + uSkyCol * 1.4);
+}
+
 void main() {
   vec3 d = vLocal / uRadius;
+  // own lids: how far inside the opening (units of the ball radius; < 0 under a lid), and the line
+  // where the lids meet once they are (nearly) shut
+  // the lid's dark margin: about an art pixel in pixel art
+  float rim = uFlat > 0.5 ? 0.16 : 0.07;
+  float lidIn = 1.0;
+  bool seam = false;
+  vec3 dlo = uGaze * d;
+  if (uOwnLids > 0.5) {
+    float xs = dlo.x / uLidScale.x;
+    vec2 lco = lidCurves(xs, xs * uSide, vec2(uUpper, uLower)) * uLidScale.y;
+    lidIn = min(lco.x - dlo.y, dlo.y - lco.y);
+    float u = xs * uSide / LID_XC;
+    seam = lco.x - lco.y < rim && abs(dlo.y - 0.5 * (lco.x + lco.y)) < rim * 0.7 && abs(u) < 0.92;
+  }
   // the iris sits ~35% of the radius behind the cornea: refract the view onto it
   vec3 v = -normalize(vViewLocal);
   vec3 r = refract(v, normalize(d), 1.0 / 1.336);
@@ -139,7 +171,10 @@ void main() {
     vec2 gq = abs(ip - vec2(-0.2, 0.2));
     float glint = step(max(gq.x, gq.y), 0.1);
     vec3 c = mix(iris, vec3(0.004), pupil);
-    gl_FragColor = vec4(mix(c, vec3(1.0), glint), 1.0);
+    c = mix(c, vec3(1.0), glint);
+    if (lidIn < rim) c = lidIn < 0.0 && !seam ? lidSkin(normalize(vN), dlo) : vec3(0.02, 0.012, 0.008);
+    // alpha 0.75 tells the pixel pass to use the eyes' palette; lids are coat
+    gl_FragColor = vec4(c, lidIn < rim ? 1.0 : 0.75);
     return;
   }
 
@@ -158,6 +193,7 @@ void main() {
   vec3 R = reflect(-V, N);
   float fres = 0.025 + 0.975 * pow(1.0 - max(dot(N, V), 0.0), 5.0);
   col += env(R) * fres * mix(0.3, 1.0, shade);
+  if (uOwnLids > 0.5) col = seam ? vec3(0.02, 0.012, 0.008) : lidIn < 0.0 ? lidSkin(N, dlo) : mix(vec3(0.02, 0.012, 0.008), col, smoothstep(0.0, rim, lidIn));
   gl_FragColor = vec4(col, 1.0);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
@@ -196,6 +232,15 @@ export function makeEye(radius: number, side: 1 | -1, lights: EyeLights): CatEye
       ...lights,
       uRadius: { value: radius },
       uGaze: { value: new THREE.Matrix3() },
+      uOwnLids: { value: 0 },
+      uLidCol: { value: new THREE.Color(0.6, 0.3, 0.12) },
+      uLidScale: { value: new THREE.Vector2(1, 1) },
+      uLidMap: { value: null as THREE.Texture | null },
+      uLidU: { value: new THREE.Vector3() },
+      uLidV: { value: new THREE.Vector3() },
+      uLidTex: { value: 0 },
+      uSolidGain: { value: 1 },
+      uSolidSat: { value: 1 },
       uUpper, uLower, uSide,
     },
     vertexShader: EYE_VERT,

@@ -6,14 +6,15 @@ import { Body } from '../src/cat3d/body';
 import { POSES, LEGS, type PoseName } from '../src/cat3d/pose';
 import type { BoneDef } from '../src/cat3d/load';
 
-function bones(): BoneDef[] {
-  const buf = readFileSync(new URL('../public/cat3d/cat.bin', import.meta.url));
+function bones(file: string): BoneDef[] {
+  const buf = readFileSync(new URL('../public/cat3d/' + file, import.meta.url));
   const len = buf.readUInt32LE(0);
   return JSON.parse(buf.subarray(4, 4 + len).toString()).bones;
 }
 
-describe('body solver', () => {
-  const kin = new Kin(bones());
+// the furred cat, and the painted model rigged with the same skeleton fitted into its body
+describe.each(['cat.bin', 'fri.bin'])('body solver (%s)', (file) => {
+  const kin = new Kin(bones(file));
   const body = new Body(kin);
   const flex = { LF: 0, RF: 0, LH: 0, RH: 0 };
   for (const name of Object.keys(POSES) as PoseName[]) {

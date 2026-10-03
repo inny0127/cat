@@ -112,10 +112,13 @@ export class Body {
     return Math.max(0, 0.006 - lowest);
   }
 
+  /** the point between the eyes from the head joint, at rest (the cat sets it from its model) */
+  readonly eyeOffset = new THREE.Vector3(0, 0.015, 0.052);
+
   /** where the eyes are, model space */
   eyes(out: THREE.Vector3) {
     const { kin, I } = this;
-    return out.set(0, 0.015, 0.052).applyQuaternion(kin.wq[I.head]).add(kin.wp[I.head]);
+    return out.copy(this.eyeOffset).applyQuaternion(kin.wq[I.head]).add(kin.wp[I.head]);
   }
 
   /**

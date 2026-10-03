@@ -11,3 +11,4 @@ __pycache__/
 tests/*.local.test.ts
 tools/*.local.mjs
 /poses.json
+tools/cat3d/.cache/
