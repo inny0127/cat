@@ -89,6 +89,9 @@ uniform float uNear;
 uniform float uFar;
 uniform vec3 uPalEye[${PAL_EYE.length}];
 uniform vec3 uGlow;      // a lamp's halo: centre (art pixels) and radius; radius 0 for none
+uniform vec3 uSteam;     // steam off a hot drink: where it rises from (art pixels), and how much
+uniform vec3 uMotes[16]; // dust in the sunlight: where (art pixels), and how bright (0 for none)
+uniform float uTime;
 varying vec2 vUv;
 
 // Khronos PBR Neutral, as the full-resolution stage uses
@@ -199,6 +202,23 @@ void main() {
     if (g > 0.0) L += 0.32 * g * g;
   }
   int level = stepOf(L, (kind == 2 && B0 > 0.1 && B0 < 0.5) || (uGlow.z > 0.0 && length(vec2(p) - uGlow.xy) < uGlow.z), p);
+  // steam curling up off a hot drink, and dust turning in the sunlight: a soft warm white over
+  // whatever is behind
+  float haze = 0.0;
+  if (uSteam.z > 0.0) {
+    vec2 q = vec2(p) - uSteam.xy;
+    if (q.y > 0.0 && q.y < 13.0) {
+      for (int i = 0; i < 2; i++) {
+        float fi = float(i);
+        float x = sin(q.y * 0.55 - uTime * 2.2 + fi * 2.4) * (0.6 + q.y * 0.12) + (fi - 0.5) * 2.0;
+        float gap = fract(q.y * 0.11 - uTime * 0.35 + fi * 0.5);
+        if (abs(q.x - x) < 0.6 && gap > 0.25 && q.y < 13.0 - fi * 3.0) haze = max(haze, 0.42 * (1.0 - q.y / 14.0) * uSteam.z);
+      }
+    }
+  }
+  for (int i = 0; i < 16; i++) {
+    if (uMotes[i].z > 0.0 && floor(uMotes[i].x) == float(p.x) && floor(uMotes[i].y) == float(p.y)) haze = max(haze, 0.75 * uMotes[i].z);
+  }
   // the cat: the light catching an edge from behind lifts it a step
   if (kind == 1 && B0 > 0.4) level += 1;
   if (kind == 2 && B0 > 0.5) level = 4;
@@ -207,7 +227,7 @@ void main() {
   float w = invDepth(p);
   float front = max(max(invDepth(p + ivec2(-1, 0)), invDepth(p + ivec2(1, 0))), max(invDepth(p + ivec2(0, 1)), invDepth(p + ivec2(0, -1)))) - w;
   if (front > 0.035 * w && w > 0.25) level -= 1;
-  gl_FragColor = vec4(ramp(mat, level), 1.0);
+  gl_FragColor = vec4(mix(ramp(mat, level), vec3(1.0, 0.97, 0.9), haze), 1.0);
 }`;
 
 /**
@@ -285,6 +305,9 @@ export class Stage {
         uPalEye: { value: eyePalette() },
         uRampTex: { value: rampTexture() },
         uGlow: { value: new THREE.Vector3() },
+        uSteam: { value: new THREE.Vector3() },
+        uMotes: { value: Array.from({ length: 16 }, () => new THREE.Vector3()) },
+        uTime: { value: 0 },
       },
       vertexShader: PIXEL_VERT, fragmentShader: PIXEL_FRAG, depthTest: false, depthWrite: false, toneMapped: false,
     });
@@ -325,6 +348,40 @@ export class Stage {
     const d = this.camera.position.distanceTo(at);
     const px = 2 * Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2) * d / size.y;
     u.set((v.x * 0.5 + 0.5) * size.x, (v.y * 0.5 + 0.5) * size.y, radius / px);
+  }
+
+  /** a world point in art pixels (x, y from the bottom left) */
+  toArt(at: THREE.Vector3, out = new THREE.Vector2()) {
+    const v = at.clone().project(this.camera);
+    const size = this.pixel ? (this.pixel.mat.uniforms.uSize.value as THREE.Vector2) : new THREE.Vector2(1, 1);
+    return out.set((v.x * 0.5 + 0.5) * size.x, (v.y * 0.5 + 0.5) * size.y);
+  }
+
+  /** steam rising off a hot drink at a world point (amount 0 for none) */
+  setSteam(at: THREE.Vector3 | null, amount = 1) {
+    if (!this.pixel) return;
+    const u = this.pixel.mat.uniforms.uSteam.value as THREE.Vector3;
+    if (!at || amount <= 0) { u.set(0, 0, 0); return; }
+    const a = this.toArt(at);
+    u.set(Math.floor(a.x), Math.floor(a.y), amount);
+  }
+
+  /** dust motes: world points with a brightness each (up to 16) */
+  setMotes(motes: { p: THREE.Vector3; b: number }[]) {
+    if (!this.pixel) return;
+    const u = this.pixel.mat.uniforms.uMotes.value as THREE.Vector3[];
+    const a = new THREE.Vector2();
+    for (let i = 0; i < u.length; i++) {
+      const m = motes[i];
+      if (!m || m.b <= 0) { u[i].set(0, 0, 0); continue; }
+      this.toArt(m.p, a);
+      u[i].set(a.x, a.y, m.b);
+    }
+  }
+
+  /** the pixel pass's clock (steam) */
+  setTime(t: number) {
+    if (this.pixel) this.pixel.mat.uniforms.uTime.value = t;
   }
 
   /** rows of art pixels (or of screen pixels when not pixel art) */

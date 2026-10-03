@@ -156,6 +156,13 @@ const SKY_VERT = /* glsl */ `
 varying vec2 vUv;
 void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
 
+/** the sunbeam: drawn over what is behind it, it only adds a little to their light (the g channel,
+ *  by additive blending), so whatever lies in the beam, the air included, shows a step lighter
+ *  in dithered streaks */
+const BEAM_FRAG = /* glsl */ `
+uniform float uAmount;
+void main() { gl_FragColor = vec4(0.0, uAmount, 0.0, 0.0); }`;
+
 /** the fairy lights' bulbs: finished colours that twinkle */
 const BULB_FRAG = /* glsl */ `
 uniform float uTime;
@@ -231,13 +238,31 @@ export class Room {
     add(shadowy(new THREE.Mesh(new THREE.BoxGeometry(4, 0.03, 0.02), this.mat('paint'))), bx, 0.318, wallZ + 0.01);
     add(shadowy(new THREE.Mesh(new THREE.BoxGeometry(4, 0.05, 0.015), this.mat('paint', { tone: -0.05 }))), bx, 0.025, wallZ + 0.008);
 
+    this.win = { l: winL, r: winR, b: winB, t: winT, z: wallZ };
+    // the sunbeam: the window's opening swept along the light down to the floor (rebuilt as the
+    // light moves)
+    this.beam = new THREE.ShaderMaterial({
+      uniforms: { uAmount: { value: 0.07 } },
+      vertexShader: SKY_VERT, fragmentShader: BEAM_FRAG,
+      transparent: true, depthWrite: false,
+      blending: THREE.CustomBlending, blendEquation: THREE.AddEquation,
+      blendSrc: THREE.OneFactor, blendDst: THREE.OneFactor, blendSrcAlpha: THREE.ZeroFactor, blendDstAlpha: THREE.OneFactor,
+    });
+    this.beamMesh = new THREE.Mesh(new THREE.BufferGeometry(), this.beam);
+    this.beamMesh.renderOrder = 10;
+    this.beamMesh.frustumCulled = false;
+    this.group.add(this.beamMesh);
+
     // the window: the sky behind, a white frame and glazing bars, a deep sill
     const ww = winR - winL, wh = winT - winB;
+    // (drawn after the sunbeam, so its light does not tint the sky)
     this.sky = new THREE.ShaderMaterial({
       uniforms: { uTime: { value: 0 }, uHour: { value: 12 }, uSkyPx: { value: new THREE.Vector2(48, 56) } },
       vertexShader: SKY_VERT, fragmentShader: SKY_FRAG,
+      transparent: true, blending: THREE.NoBlending,
     });
-    add(new THREE.Mesh(new THREE.PlaneGeometry(ww, wh), this.sky), bx, winB + wh / 2, wallZ - 0.06);
+    const skyMesh = add(new THREE.Mesh(new THREE.PlaneGeometry(ww, wh), this.sky), bx, winB + wh / 2, wallZ - 0.06);
+    skyMesh.renderOrder = 20;
     const paint = this.mat('paint');
     const bar = (w: number, h: number, d: number, x: number, y: number, z = wallZ - 0.02) => add(shadowy(new THREE.Mesh(new THREE.BoxGeometry(w, h, d), paint)), x, y, z);
     bar(ww + 0.08, 0.045, 0.08, bx, winT + 0.02);                       // head
@@ -282,9 +307,11 @@ export class Room {
       const m = new THREE.ShaderMaterial({
         uniforms: { uTime: this.timeU, uOn: this.nightU, uCol: { value: new THREE.Color(...(bulbCols[i % 4] as [number, number, number])) }, uSeed: { value: Math.random() } },
         vertexShader: SKY_VERT, fragmentShader: BULB_FRAG,
+        transparent: true, blending: THREE.NoBlending,
       });
       this.bulbs.push(m);
-      add(new THREE.Mesh(new THREE.SphereGeometry(0.009, 6, 4), m), p.x, p.y - 0.008, p.z);
+      const bulb = add(new THREE.Mesh(new THREE.SphereGeometry(0.009, 6, 4), m), p.x, p.y - 0.008, p.z);
+      bulb.renderOrder = 20;
     }
 
     // a long shelf over the window: little pots of green (one trailing down past the curtain),
@@ -470,6 +497,11 @@ export class Room {
     this.group.add(box);
   }
 
+  private readonly beam: THREE.ShaderMaterial;
+  private readonly beamMesh: THREE.Mesh;
+  /** the window opening, for the sunbeam and the dust in it */
+  private readonly win: { l: number; r: number; b: number; t: number; z: number };
+  private readonly motes: { p: THREE.Vector3; v: THREE.Vector3; b: number; life: number }[] = [];
   private readonly timeU = { value: 0 };
   /** where the mug's steam rises from */
   mugTop = new THREE.Vector3();
@@ -494,6 +526,48 @@ export class Room {
     return m;
   }
 
+  /** the beam's volume for the light now: the opening, and where it falls on the floor */
+  private shapeBeam() {
+    const K = this.lights.uKeyDir.value as THREE.Vector3;
+    if (K.y <= 0.05) return;
+    const { l, r, b, t, z } = this.win;
+    const top = [new THREE.Vector3(l, b, z), new THREE.Vector3(r, b, z), new THREE.Vector3(r, t, z), new THREE.Vector3(l, t, z)];
+    const floor = top.map((p) => p.clone().addScaledVector(K, -p.y / K.y));
+    const pos: number[] = [];
+    const quad = (a: THREE.Vector3, b2: THREE.Vector3, c: THREE.Vector3, d: THREE.Vector3) => pos.push(...a.toArray(), ...b2.toArray(), ...c.toArray(), ...a.toArray(), ...c.toArray(), ...d.toArray());
+    for (let i = 0; i < 4; i++) quad(top[i], top[(i + 1) % 4], floor[(i + 1) % 4], floor[i]);
+    quad(floor[0], floor[1], floor[2], floor[3]);
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.computeVertexNormals();
+    this.beamMesh.geometry.dispose();
+    this.beamMesh.geometry = g;
+  }
+
+  /** dust motes drifting in the sunbeam (world points and how bright each is) */
+  dust(dt: number, day: number) {
+    const K = this.lights.uKeyDir.value as THREE.Vector3;
+    const { l, r, b, t, z } = this.win;
+    while (this.motes.length < 14) this.motes.push({ p: new THREE.Vector3(), v: new THREE.Vector3(), b: 0, life: 0 });
+    for (const m of this.motes) {
+      m.life -= dt;
+      if (m.life <= 0) {
+        // somewhere in the beam: a point of the opening, carried a way along the light
+        const w = new THREE.Vector3(l + Math.random() * (r - l), b + Math.random() * (t - b), z);
+        m.p.copy(w).addScaledVector(K, -Math.random() * (w.y / K.y) * 0.85);
+        m.v.set((Math.random() - 0.5) * 0.01, (Math.random() - 0.3) * 0.008, (Math.random() - 0.5) * 0.01);
+        m.life = 4 + Math.random() * 6;
+      }
+      m.v.x += (Math.random() - 0.5) * 0.004 * dt;
+      m.v.y += (Math.random() - 0.5) * 0.004 * dt;
+      m.p.addScaledVector(m.v, dt);
+      // bright while it turns in the light, fading in and out
+      const fade = Math.min(1, m.life / 1.5, (10 - m.life) / 1.5);
+      m.b = day * Math.max(0, fade) * (0.4 + 0.6 * Math.abs(Math.sin(this.time * 0.9 + m.p.x * 40)));
+    }
+    return this.motes;
+  }
+
   /** the size of an art pixel at the window (metres), so the sky is drawn in whole art pixels */
   setPixel(px: number) {
     this.sky.uniforms.uSkyPx.value.set(0.68 / px, 0.8 / px);
@@ -511,6 +585,10 @@ export class Room {
     L.uLampInt.value = 1.5 * night;
     L.uDay.value = 1 - night;
     this.shade.uniforms.uGlow.value = night > 0.5 ? 1 : 0;
+    // the sunbeam by day only
+    if (this.beamMesh.geometry.getAttribute('position') === undefined) this.shapeBeam();
+    this.beamMesh.visible = night < 0.5;
+    this.beam.uniforms.uAmount.value = 0.085 * (1 - night);
     this.nightU.value = night > 0.5 ? 1 : 0;
     const f = Math.max(0, Math.min(1, s.food));
     this.kibble.visible = f > 0.02;

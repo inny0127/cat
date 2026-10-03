@@ -268,8 +268,11 @@ export class PixelApp {
     this.avatar.update(dt);
     this.cat.update(dt);
     this.room.update(s, night, clock.getHours() + clock.getMinutes() / 60, dt);
-    // at night the lamp has a halo
+    // at night the lamp has a halo; the tea on the books steams; by day dust turns in the sun
     this.stage.setGlow(night > 0.5 ? this.room.lampPos.clone().add(new THREE.Vector3(0, 0.05, 0)) : null, 0.42);
+    this.stage.setSteam(this.room.mugTop, 1);
+    this.stage.setMotes(this.room.dust(dt, 1 - night));
+    this.stage.setTime(now);
     this.hints(dt, contacts.length > 0);
     if ((this.saveIn -= dt) < 0) {
       this.saveIn = 10;

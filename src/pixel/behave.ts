@@ -150,8 +150,9 @@ export const toWindow = (c: Ctx) => {
 /** potter about: a spot or two on the floor, a sniff there, home again */
 export const wander = (c: Ctx) => {
   const spot = () => new THREE.Vector3(rand(c.room.minX, c.room.maxX), 0, rand(c.room.minZ, c.room.maxZ));
-  const sniff = (t: number): PoseLayer => ({ neckPitch: -0.6, headPitch: -0.35 + 0.05 * Math.sin(t * 14), whisker: 0.6, earFwd: 0.4 });
-  const legs: Leg[] = [{ to: spot(), face: null, stay: rand(1.5, 3), posture: 'crouch', layer: sniff }];
+  // sniffing: standing, the head right down to the floor, the nose working
+  const sniff = (t: number): PoseLayer => ({ neckPitch: -1.05, headPitch: -0.45 + 0.05 * Math.sin(t * 14), whisker: 0.6, earFwd: 0.4, hipY: 0.19 });
+  const legs: Leg[] = [{ to: spot(), face: null, stay: rand(1.5, 3), posture: 'stand', layer: sniff }];
   if (Math.random() < 0.5) legs.push({ to: spot(), face: null, stay: rand(2, 5), posture: pick<PoseName>(['sit', 'stand']) });
   const bed = c.bed('loaf');
   legs.push({ to: bed.to, face: bed.yaw, stay: 0.1, posture: 'loaf' });
