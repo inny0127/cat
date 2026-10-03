@@ -125,9 +125,12 @@ export class PixelApp {
     const el = THREE.MathUtils.degToRad(17);
     // far enough to see a metre across at the bed, and 1.7 m up and down
     const d = Math.max(0.52 / (tv * cam.aspect), 0.85 / tv);
-    const t = new THREE.Vector3(this.aim.x, 0.47, this.aim.z - 0.25);
-    cam.position.set(t.x, t.y + d * Math.sin(el), t.z + d * Math.cos(el));
-    cam.lookAt(t);
+    this.roomView.target.set(this.aim.x, 0.47, this.aim.z - 0.25);
+    this.roomView.dir.set(0, Math.sin(el), Math.cos(el));
+    this.roomView.dist = d;
+    // close to the cat: a third of a metre across (and 0.6 m up and down) round its body
+    this.closeDist = Math.max(0.18 / (tv * cam.aspect), 0.3 / tv);
+    this.placeCamera();
     // the brain's touch speeds are in the painted cat's pixels: about 600 across the window
     this.senses.k = 600 / Math.max(1, innerWidth);
     // the sun comes in through the window from up on the left and lies on the floor; a soft fill
@@ -135,11 +138,47 @@ export class PixelApp {
     this.cat.shared.uKeyDir.value.set(-0.42, 0.62, -0.66).normalize();
     this.cat.shared.uFillDir.value.set(0.3, 0.35, 0.9).normalize();
     this.cat.shared.uRimDir.value.set(-0.2, 0.5, -0.85).normalize();
+  }
+
+  /** where the view is: the whole room, or (touching the cat) close on it, easing between */
+  private readonly roomView = { target: new THREE.Vector3(), dir: new THREE.Vector3(0, 0.3, 1), dist: 3 };
+  private closeDist = 1.5;
+  private focus = 0;
+  private focusT = 0;
+  private focusHold = 0;
+  private readonly catAim = new THREE.Vector3();
+
+  private placeCamera() {
+    const cam = this.stage.camera;
+    const f = this.focus * this.focus * (3 - 2 * this.focus);
+    const rv = this.roomView;
+    const target = rv.target.clone().lerp(this.catAim, f);
+    const dist = rv.dist + (this.closeDist - rv.dist) * f;
+    const dir = rv.dir.clone().lerp(new THREE.Vector3(0, Math.sin(0.27), Math.cos(0.27)), f).normalize();
+    cam.position.copy(target).addScaledVector(dir, dist);
+    cam.lookAt(target);
+    cam.updateMatrixWorld();
     // the sky through the window, in art pixels
     if (this.room) {
-      const px = 2 * tv * cam.position.distanceTo(this.room.spots.bed) / this.stage.pixelRows();
-      this.room.setPixel(px);
+      const tv = Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2);
+      this.room.setPixel(2 * tv * cam.position.distanceTo(this.room.spots.bed.clone().setZ(this.room.spots.bed.z - 0.62)) / this.stage.pixelRows());
     }
+  }
+
+  /** a hand on the cat brings the view in close; some seconds after the last, back out */
+  private moveCamera(dt: number, touching: boolean) {
+    if (touching) { this.focusT = 1; this.focusHold = 9; }
+    else if ((this.focusHold -= dt) <= 0) this.focusT = 0;
+    const m = this.cat.motor;
+    // the middle of the body, wherever it lies
+    const fp = this.cat.footprint(m.targetPosture);
+    const c = Math.cos(m.yaw), sn = Math.sin(m.yaw);
+    const want = new THREE.Vector3(m.pos.x + fp.x * c + fp.z * sn, 0.11, m.pos.z - fp.x * sn + fp.z * c);
+    if (this.focus < 0.01) this.catAim.copy(want);
+    else this.catAim.lerp(want, 1 - Math.exp(-dt * 2.5));
+    const rate = this.focusT > this.focus ? 1.6 : 0.8;
+    this.focus += Math.max(-rate * dt, Math.min(rate * dt, this.focusT - this.focus));
+    this.placeCamera();
   }
 
   private makeBrain() {
@@ -274,6 +313,7 @@ export class PixelApp {
     this.stage.setMotes(this.room.dust(dt, 1 - night));
     this.stage.setTime(now);
     this.hints(dt, contacts.length > 0);
+    this.moveCamera(dt, contacts.length > 0);
     if ((this.saveIn -= dt) < 0) {
       this.saveIn = 10;
       this.persist(false);

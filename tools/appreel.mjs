@@ -18,7 +18,7 @@ mkdirSync(dir, { recursive: true });
 const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 const page = await b.newPage({ viewport: { width: w, height: h } });
 page.on('pageerror', (e) => console.log('ERR', e.message));
-page.on('console', (m) => { if (m.type() === 'error') console.log('CONSOLE', m.text().slice(0, 300)); });
+page.on('console', (m) => { if (m.type() === 'error' || m.text().startsWith('state')) console.log('CONSOLE', m.text().slice(0, 300)); });
 const seed = new URLSearchParams(query).get('seed');
 if (seed) {
   await page.addInitScript((s) => {
@@ -60,7 +60,7 @@ import sys, glob
 from PIL import Image
 files = sorted(glob.glob(sys.argv[2] + '/f*.png'))
 ims = [Image.open(f).convert('RGB') for f in files]
-pal = [im.convert('P', palette=Image.Palette.ADAPTIVE, colors=96) for im in ims]
+pal = [im.convert('P', palette=Image.Palette.ADAPTIVE, colors=255, dither=Image.Dither.NONE) for im in ims]
 pal[0].save(sys.argv[1], save_all=True, append_images=pal[1:], duration=int(1000 / float(sys.argv[3])), loop=0, optimize=False)
 cols = 6; step = max(1, len(ims) // 12); pick = ims[::step][:12]
 sw, sh = pick[0].size[0] // 2, pick[0].size[1] // 2
