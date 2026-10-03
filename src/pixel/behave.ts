@@ -40,6 +40,8 @@ export interface Ctx {
   toyPinned: () => boolean;
   /** the windowsill, if there is one to sit on */
   sill: () => SillSpot | null;
+  /** a cardboard box on the floor, if one is out */
+  box: () => SillSpot | null;
   /** a sound of the cat's own (a soft thump landing from a jump) */
   sound: (name: string, gain: number) => void;
   /** how hard it is raining (0 .. 1): a grey day is for watching it from the sill */
@@ -582,6 +584,120 @@ export class Hunt implements Act {
 const smooth = (x: number) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * x * (10 + x * (6 * x - 15)));
 
 /**
+ * If it fits, it sits: to the box, down on its haunches for a look in over the side, a hop in, round
+ * to face out and down in it, a loaf with just its head over the side, looking about; a long while
+ * (dozing off in there if sleep comes), then up, round to the way out, and a hop out. Asked to come
+ * out, it hops out first: it is never just dropped from inside.
+ */
+export class Box implements Act {
+  readonly name = 'box';
+  phase: 'go' | 'gather' | 'in' | 'settle' | 'sit' | 'turn' | 'out' | 'done' = 'go';
+  /** how deep asleep the cat is (set by the avatar): asleep in here, it stays and dozes */
+  nap = 0;
+  private t = 0;
+  private dur = 0;
+  private leaving = false;
+  private look = Math.random() * 10;
+  private readonly from = new THREE.Vector3();
+  constructor(private readonly spot: SillSpot) {}
+
+  /** asked out: out as soon as it can be */
+  leave() {
+    this.leaving = true;
+  }
+
+  /** in the box or hopping in or out of it: it cannot simply be stopped */
+  get up() {
+    return this.phase === 'in' || this.phase === 'settle' || this.phase === 'sit' || this.phase === 'turn' || this.phase === 'out';
+  }
+
+  private next(phase: Box['phase'], dur = 0) {
+    this.phase = phase;
+    this.t = 0;
+    this.dur = dur;
+  }
+
+  /** over the side: the body up in an arc, the paws tucked */
+  private hop(c: Ctx, to: THREE.Vector3, u: number, base: number) {
+    const m = c.m, S = this.spot;
+    m.pos.lerpVectors(this.from, to, smooth(u));
+    c.hold(base + (S.height + 0.05) * Math.sin(Math.PI * u));
+    const tuck = Math.sin(Math.PI * u);
+    const fore = { planted: 0, frame: 0, x: 0.035, y: 0.012 + 0.08 * tuck, z: 0.11 + 0.05 * tuck, flex: 0.45 * tuck };
+    const hind = { planted: 0, frame: 0, x: 0.04, y: 0.013 + 0.06 * tuck, z: -0.15 + 0.03 * tuck, flex: 0.3 * tuck };
+    m.layer = { pose: { hipY: 0.17, chestPitch: 0.2 * tuck, neckPitch: 0.15, earFwd: 0.6, LF: fore, RF: fore, LH: hind, RH: hind, tailLift: 0.3 }, w: 1 };
+  }
+
+  update(dt: number, c: Ctx) {
+    const m = c.m, S = this.spot;
+    this.t += dt;
+    const faceIn = Math.atan2(S.seat.x - S.launch.x, S.seat.z - S.launch.z);
+    switch (this.phase) {
+      case 'go':
+        if (this.leaving) return false;
+        m.layer = null;
+        if (!m.goal) m.walkTo(S.launch, 0.25, faceIn, () => this.next('gather', rand(0.6, 1.2)));
+        return true;
+      case 'gather':
+        // a look in over the side, down on its haunches
+        if (this.leaving) { m.layer = null; return false; }
+        m.setPosture('crouch');
+        m.layer = { pose: { neckPitch: 0.15, headPitch: -0.3, earFwd: 0.9, pupil: 0.75, eyeOpen: 1, hipY: 0.135 }, w: Math.min(1, this.t / 0.3) };
+        if (this.t > this.dur) { this.from.copy(m.pos); m.yaw = faceIn; this.next('in', 0.42); }
+        return true;
+      case 'in': {
+        const u = Math.min(1, this.t / this.dur);
+        m.yaw = faceIn;
+        this.hop(c, S.seat, u, 0);
+        if (u >= 1) { c.hold(null); m.layer = null; c.sound('thump', 0.1); c.sound('scrabble', 0.06); this.next('settle'); }
+        return true;
+      }
+      case 'settle':
+        // round in it to face out, toward you
+        m.setPosture('stand');
+        if (!m.goal) {
+          if (Math.abs(wrapA(0 - m.yaw)) < 0.15) this.next('sit', this.leaving ? 0.5 : c.night > 0.5 ? rand(60, 140) : rand(30, 80));
+          else m.walkTo(m.pos.clone(), 0.1, 0);
+        }
+        return true;
+      case 'sit': {
+        // down in it, just the head over the side, looking about; dozing off in here if sleep
+        // comes, the head sinking
+        m.setPosture('loaf');
+        this.look += dt;
+        const deep = Math.min(1, Math.max(0, (this.nap - 0.3) / 0.5));
+        const glance = (1 - deep) * (0.4 * Math.sin(this.look * 0.4) + 0.2 * Math.sin(this.look * 1.1));
+        m.layer = { pose: { neckYaw: glance, headYaw: 0.5 * glance, neckPitch: -0.45 * deep, headPitch: -0.2 * deep, earFwd: 0.5 * (1 - deep) }, w: Math.min(1, this.t / 1.2) };
+        if ((this.t > this.dur && this.nap <= 0.3) || this.leaving) { m.layer = null; this.next('turn', 0.6); }
+        return true;
+      }
+      case 'turn': {
+        // up, round to the way out, a look over the side
+        m.setPosture('stand');
+        const faceOut = Math.atan2(S.land.x - m.pos.x, S.land.z - m.pos.z);
+        if (Math.abs(wrapA(faceOut - m.yaw)) > 0.15) { if (!m.goal) m.walkTo(m.pos.clone(), 0.1, faceOut); this.t = 0; return true; }
+        if (this.t > this.dur) { this.from.copy(m.pos); this.next('out', 0.42); }
+        return true;
+      }
+      case 'out': {
+        const u = Math.min(1, this.t / this.dur);
+        this.hop(c, S.land, u, 0.006 * (1 - u));
+        if (u >= 1) { c.hold(null); m.layer = null; c.sound('thump', 0.1); this.next('done'); }
+        return true;
+      }
+      case 'done':
+        return false;
+    }
+    return true;
+  }
+
+  stop(c: Ctx) {
+    c.m.layer = null;
+    c.hold(null);
+  }
+}
+
+/**
  * Up on the windowsill: walk to below it, gather and look up, spring up onto it, sit looking out a
  * long while (the tail hanging down over the edge, the head following what goes by out there),
  * then turn round on it, look down, jump down, and back to bed. Asked to come down early (to sleep,
@@ -845,6 +961,8 @@ export function chooseAct(c: Ctx, atHome: boolean, posture: PoseName): Act | nul
     if (atHome) opts.push([0.5 * (1 + m.arousal) * (1 - m.sleepy), () => wander(c)]);
     if (atHome && c.mode === 'rest') opts.push([0.7 + 0.8 * m.sleepy, () => sunbathe(c)]);
     if (atHome && c.yarn()) opts.push([0.6 * (0.4 + m.arousal) * (1 - m.sleepy) * (c.mode === 'rest' ? 1 : 0.4), () => new Play()]);
+    const box = c.box();
+    if (atHome && box) opts.push([0.7 * (1 - 0.4 * m.sleepy), () => new Box(box)]);
     const sill = c.sill();
     if (atHome && sill) opts.push([0.55 * (1 + 1.5 * c.rain + 1.2 * c.night) * (1 - 0.6 * m.sleepy), () => new Sill(sill)]);
     else opts.push([1.5, () => toBed(c, 'loaf')]);

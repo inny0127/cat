@@ -25,7 +25,7 @@ export const PIX = {
   // the room
   wall: 9, panel: 10, floor: 11, floorDark: 12, rug: 13, rugCream: 14, bed: 15, fleece: 16, leaf: 17,
   pot: 18, shade: 19, metal: 20, paint: 21, curtain: 22, bookRed: 23, bookBlue: 24, bookMustard: 25,
-  brown: 26, water: 27, redBowl: 28, sand: 29, paper: 30, ink: 31,
+  brown: 26, water: 27, redBowl: 28, sand: 29, paper: 30, ink: 31, cardboard: 32,
 } as const;
 export type Material = keyof typeof PIX;
 
@@ -63,8 +63,9 @@ export const RAMPS: string[][] = [
   ['#4b4152', '#7a6c72', '#ab9b92', '#d3c3ad', '#ece0c8'],   // litter
   ['#8a8090', '#b8adb4', '#ddd3cf', '#efe8e0', '#f7f2ea'],   // paper (the lab's backdrop)
   ['#120e16', '#1c1621', '#2a2130', '#3a2e3e', '#4c3d4f'],   // ink: wire, the darkest things
+  ['#4a3530', '#7a5440', '#a87c58', '#cfa476', '#e9c897'],   // kraft cardboard
 ];
-export const NMAT = 32;
+export const NMAT = 33;
 
 /** other coats than ginger (a cat adopted later may be any of them): the ramps for the coat's own
  *  colour, its stripes and its lighter parts (the white stays white) */

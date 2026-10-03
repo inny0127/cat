@@ -76,6 +76,7 @@ export class PixelApp {
       held: () => this.room.yarnHeld, pin: (sec, at) => this.room.pinYarn(sec, at), pinned: () => this.room.yarnPinned,
     };
     this.avatar.sillSpot = () => this.room.sillSpot();
+    this.avatar.boxSpot = () => this.room.boxSpot();
     this.avatar.outside = {
       birds: () => this.room.birds(),
       chirp: () => this.audio.play('chirp', { gain: 0.45, pan: this.catPan() }),

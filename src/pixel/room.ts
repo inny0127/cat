@@ -940,11 +940,11 @@ export class Room {
     const wool = this.mat('bookRed', { tone: 0.12, pattern: 5 });
     const yarn = shadowy(new THREE.Mesh(new THREE.SphereGeometry(0.045, 16, 12), wool));
     // (in front of the bed, well in view on a phone, where a finger can find it)
-    const yx = bx - 0.22, yz = bz + 0.3;
+    const yx = bx + 0.24, yz = bz + 0.31;
     add(yarn, yx, 0.045, yz);
     const strand = new THREE.Mesh(new THREE.BufferGeometry(), this.mat('bookRed', { tone: 0.12 }));
     this.group.add(strand);
-    this.yarn = { mesh: yarn, v: new THREE.Vector3(), tail: new THREE.Vector3(yx - 0.16, 0.003, yz + 0.2), strand, rebuild: 0, hold: null, pinned: 0, pinAt: null, occ: -1 };
+    this.yarn = { mesh: yarn, v: new THREE.Vector3(), tail: new THREE.Vector3(yx + 0.12, 0.003, yz + 0.22), strand, rebuild: 0, hold: null, pinned: 0, pinAt: null, occ: -1 };
     this.windStrand();
 
     // the bed: a soft teal rim round an oatmeal fleece cushion
@@ -970,6 +970,47 @@ export class Room {
     rim.scale.z = 0.75;
     shadowy(rim);
     add(rim, S.bed.x, 0.03, S.bed.z);
+
+    // a cardboard box on the floor in front, open, its flaps folded out (left out for a few days
+    // now and then, as boxes are): the cat's, of course
+    {
+      const W = 0.3, D = 0.23, H = 0.11, t = 0.006;
+      const card = this.mat('cardboard'), inner = this.mat('cardboard', { tone: -0.12 });
+      const box = new THREE.Group();
+      const wall = (w: number, x: number, z: number, ry: number, m: THREE.Material) => {
+        const g = shadowy(new THREE.Mesh(new THREE.BoxGeometry(w, H, t), m));
+        g.position.set(x, H / 2, z);
+        g.rotation.y = ry;
+        box.add(g);
+      };
+      wall(W, 0, D / 2, 0, card);
+      wall(W, 0, -D / 2, 0, card);
+      wall(D, W / 2, 0, Math.PI / 2, card);
+      wall(D, -W / 2, 0, Math.PI / 2, card);
+      const floor = new THREE.Mesh(new THREE.BoxGeometry(W, t, D), inner);
+      floor.position.y = t / 2;
+      floor.receiveShadow = true;
+      box.add(floor);
+      // the flaps, hinged at the top of each side and folded out and down a little
+      const flap = (w: number, d: number, x: number, z: number, ry: number) => {
+        const piv = new THREE.Group();
+        piv.position.set(x, H, z);
+        piv.rotation.y = ry;
+        const f = shadowy(new THREE.Mesh(new THREE.BoxGeometry(w, t, d), card));
+        f.position.z = d / 2;
+        piv.add(f);
+        piv.rotateX(0.32);
+        box.add(piv);
+      };
+      flap(W, D * 0.3, 0, D / 2, 0);
+      flap(W, D * 0.3, 0, -D / 2, Math.PI);
+      flap(D, W * 0.26, W / 2, 0, Math.PI / 2);
+      flap(D, W * 0.26, -W / 2, 0, -Math.PI / 2);
+      box.position.set(bx - 0.31, 0, bz + 0.35);
+      box.rotation.y = 0.35;
+      this.group.add(box);
+      this.box = { group: box, center: box.position.clone(), yaw: 0.35, w: W, d: D, h: H, here: false, thing: [box.position, 0] };
+    }
 
     // bowls: a red one for food, a white one for water
     const bowl = (m: Material) => {
@@ -1038,12 +1079,12 @@ export class Room {
     cap(V(bx - 2, 0.318, wallZ + 0.01), V(bx + 2, 0.318, wallZ + 0.01), 0.015, 0.4);
     cap(V(bx - 0.2, 0.16, wallZ + 0.055), V(bx + 0.2, 0.16, wallZ + 0.055), 0.07, 0.5);   // the radiator
     this.yarnHome.set(yx, 0, yz);
-    this.things.push([V(px, 0, pz), 0.11], [V(lx, 0, lz), 0.08], [V(fx, 0, fz), 0.14], [this.yarnHome, 0.05]);
+    this.things.push([V(px, 0, pz), 0.11], [V(lx, 0, lz), 0.08], [V(fx, 0, fz), 0.14], [this.yarnHome, 0.05], this.box.thing);
     this.hides.push([V(fx, 0, fz), 0.14]);
     // worth a sniff: the monstera's pot, the radiator, the yarn, the books with the mug on them
     const face = (from: THREE.Vector3, at: THREE.Vector3) => Math.atan2(at.x - from.x, at.z - from.z);
     for (const [sx2, sz2, ax, az] of [
-      [px - 0.22, pz + 0.14, px, pz], [bx - 0.06, wallZ + 0.26, bx - 0.06, wallZ], [yx + 0.18, yz + 0.07, yx, yz], [fx - 0.17, fz + 0.03, fx, fz],
+      [px - 0.22, pz + 0.14, px, pz], [bx - 0.06, wallZ + 0.26, bx - 0.06, wallZ], [yx - 0.18, yz + 0.07, yx, yz], [fx - 0.17, fz + 0.03, fx, fz],
     ]) {
       const to = V(sx2, 0, sz2);
       S.sniff.push({ to, face: face(to, V(ax, 0, az)) });
@@ -1062,6 +1103,25 @@ export class Room {
     mesh: THREE.Mesh; v: THREE.Vector3; tail: THREE.Vector3; strand: THREE.Mesh; rebuild: number;
     hold: THREE.Vector3 | null; pinned: number; pinAt: THREE.Vector3 | null; occ: number;
   };
+
+  /** the cardboard box on the floor: its middle, which way it is turned, its size, whether it is
+   *  out just now, and its place among the things on the floor (no size while it is not) */
+  private box!: {
+    group: THREE.Group; center: THREE.Vector3; yaw: number; w: number; d: number; h: number; here: boolean;
+    thing: [THREE.Vector3, number];
+  };
+
+  /** the box for a cat: where to hop in from (on the side toward the room), where to sit in it,
+   *  where to land hopping out, and how high its sides are */
+  boxSpot() {
+    const B = this.box;
+    if (!B.here) return null;
+    const toRoom = new THREE.Vector3(this.spots.bed.x - B.center.x, 0, this.spots.bed.z - B.center.z).normalize();
+    return {
+      launch: B.center.clone().addScaledVector(toRoom, 0.33), seat: B.center.clone(),
+      land: B.center.clone().addScaledVector(toRoom, 0.36).add(new THREE.Vector3(0.04, 0, -0.02)), height: B.h,
+    };
+  }
 
   /** the windowsill for a cat: where to jump up from, where to sit on it (facing the glass), where
    *  to land jumping down, and how high it is */
@@ -1175,7 +1235,7 @@ export class Room {
     p.z += v.z * dt;
     if (ns > 1e-5) Y.mesh.rotateOnWorldAxis(new THREE.Vector3(v.z, 0, -v.x).normalize(), (ns * dt) / R);
     const S = this.spots;
-    const round: [THREE.Vector3, number][] = [[S.bed, 0.21], [S.food, 0.07], [S.water, 0.07], [S.litter, 0.19], ...this.things.filter(([c]) => c.distanceTo(this.yarnHome) > 0.01)];
+    const round: [THREE.Vector3, number][] = [[S.bed, 0.21], [S.food, 0.07], [S.water, 0.07], [S.litter, 0.19], ...this.things.filter(([c, r]) => r > 0 && c.distanceTo(this.yarnHome) > 0.01)];
     for (const [c, r] of round) {
       const dx = p.x - c.x, dz = p.z - c.z, d = Math.hypot(dx, dz), min = r + R;
       if (d < min && d > 1e-5) {
@@ -1304,7 +1364,7 @@ export class Room {
     const { l, r, b, t, z } = this.win;
     const S = this.spots;
     // (a cat lying down takes a circle about a quarter of a metre round the middle of its body)
-    const things: [THREE.Vector3, number][] = [[S.bed, 0.21], [S.food, 0.07], [S.water, 0.07], [S.litter, 0.19], ...this.things];
+    const things: [THREE.Vector3, number][] = [[S.bed, 0.21], [S.food, 0.07], [S.water, 0.07], [S.litter, 0.19], ...this.things.filter(([, r]) => r > 0)];
     const clear = things.map(([c, rr]): [THREE.Vector3, number] => [c, rr + 0.19]);
     const ok: THREE.Vector3[] = [];
     for (let i = 0; i < 12; i++) for (let j = 0; j < 12; j++) {
@@ -1330,6 +1390,12 @@ export class Room {
 
   /** how high the floor is at a point: the bed's cushion and its soft rim (paws stand on them) */
   groundAt(x: number, z: number) {
+    // inside the box: its cardboard floor
+    const B = this.box;
+    if (B && B.here) {
+      const dx = x - B.center.x, dz = z - B.center.z, c = Math.cos(B.yaw), s = Math.sin(B.yaw);
+      if (Math.abs(dx * c - dz * s) < B.w / 2 && Math.abs(dx * s + dz * c) < B.d / 2) return 0.006;
+    }
     const b = this.spots.bed;
     const r = Math.hypot(x - b.x, z - b.z);
     let y = r < 0.15 ? 0.03 : 0;
@@ -1354,6 +1420,9 @@ export class Room {
     const { l, r, b, t } = this.win, px = this.sky.uniforms.uSkyPx.value as THREE.Vector2;
     u.set(((p.x - l) / (r - l)) * px.x, ((p.y - b) / (t - b)) * px.y, 1);
   }
+
+  /** the box out (true) or put away (false) whatever the day (the lab, tests) */
+  boxOverride: boolean | null = null;
 
   /** a rainbow now (the lab, tests), whatever the weather was */
   rainbowOverride: number | null = null;
@@ -1514,6 +1583,13 @@ export class Room {
     this.sky.uniforms.uRain.value = rain;
     // the year outside: the tree's leaves, snow; and what is put out for the time of year
     const md = date.getMonth() * 100 + date.getDate();
+    {
+      const dayN = Math.floor(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) / 864e5);
+      const B = this.box;
+      B.here = this.boxOverride ?? Math.floor(dayN / 3) % 2 === 0;
+      B.group.visible = B.here;
+      B.thing[1] = B.here ? 0.22 : 0;
+    }
     for (const d of this.decor) d.obj.visible = md >= d.from[0] * 100 + d.from[1] && md <= d.to[0] * 100 + d.to[1];
     if (this.xmasStar) this.xmasStar.uniforms.uGlow.value = 1;
     const se = seasonAt(date, rain);

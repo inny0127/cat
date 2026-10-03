@@ -12,7 +12,7 @@ await page.goto((process.env.REEL_BASE ?? 'http://localhost:5173/') + 'index.htm
 await page.waitForFunction(() => window.__pcat, null, { timeout: 180000 });
 const report = await page.evaluate(async (minutes) => {
   const app = window.__pcat;
-  const acts = ['wander', 'sun', 'play', 'sill', 'window', 'groom', 'yawn', 'stretch', 'bed'];
+  const acts = ['wander', 'sun', 'play', 'sill', 'box', 'wash', 'window', 'groom', 'yawn', 'stretch', 'bed'];
   const issues = [];
   let t = 1, seen = {}, drag = null, drags = 0, errands = 0;
   // a cat that wants to go somewhere and does not move
@@ -21,6 +21,7 @@ const report = await page.evaluate(async (minutes) => {
   const ev = (x, y, t) => ({ preventDefault() {}, pointerId: 9, clientX: x, clientY: y, timeStamp: t * 1000, pointerType: 'touch', pressure: 0.5, width: 20, height: 20, buttons: 1 });
   app.brain.toAwake('rest');
   app.state.trust = 0.6;
+  app.room.boxOverride = true;
   const steps = Math.round(minutes * 60 / 0.05);
   for (let i = 0; i < steps; i++) {
     t += 0.05;
@@ -56,7 +57,7 @@ const report = await page.evaluate(async (minutes) => {
     if (d) seen[d] = (seen[d] || 0) + 1;
     if (![m.pos.x, m.pos.z, m.yaw].every(Number.isFinite)) { issues.push(`NaN at ${i}`); break; }
     if (c.perch !== null && !(app.avatar.act && app.avatar.act.name === 'sill')) issues.push(`perched without the sill act at ${i}`);
-    if (c.liftHold !== null && !(app.avatar.act && app.avatar.act.name === 'sill')) issues.push(`held in the air without the sill act at ${i}`);
+    if (c.liftHold !== null && !(app.avatar.act && (app.avatar.act.name === 'sill' || app.avatar.act.name === 'box'))) issues.push(`held in the air without the sill or box act at ${i}`);
     if (Math.abs(m.pos.x) > 3 || Math.abs(m.pos.z) > 3) issues.push(`far away ${m.pos.x.toFixed(2)},${m.pos.z.toFixed(2)} at ${i}`);
     const moved = Math.hypot(m.pos.x - lastPos.x, m.pos.z - lastPos.z) > 0.002;
     lastPos.x = m.pos.x; lastPos.z = m.pos.z;
