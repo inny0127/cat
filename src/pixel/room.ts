@@ -124,6 +124,11 @@ void main() {
     else for (int k = 0; k < 5; k++) {
       if (abs(vLocal.y - (0.04 + 0.0415 * float(k)) - 0.35 * ax) < 0.0022 && ax > 0.006) tone += 0.06;
     }
+  } else if (uPattern == 9) {
+    // a thing in the round, painted as a pixel artist paints a column or a dome: a lit band toward
+    // the upper left, then the middle tone, the far edge in shade (the light alone is too even
+    // across something this small to give it form)
+    tone += 0.16 * (dot(N, normalize(vec3(-0.42, 0.55, 0.72))) - 0.55);
   } else if (uPattern == 4) {
     // fleece: soft and a little uneven
     tone += (vnoise(vWorld.xz * 70.0) - 0.5) * 0.08;
@@ -898,14 +903,18 @@ export class Room {
     // under the window, an old column radiator painted cream: its fins, the pipes along its top
     // and foot, its legs, and the pipe and valve at its end
     const radW = 0.46, radB = 0.07, radH = 0.19, radZ = wallZ + 0.055;
-    const radMat = this.mat('rugCream', { tone: 0.06 });
+    const radMat = this.mat('enamel', { tone: 0.06, pattern: 9 });
     const nFin = 13;
+    // (each section a round-topped column, so the light runs across it: lit on the lamp's side,
+    // in shade on the other, a glint on its shoulder; flat boxes would be a single dull tone each)
+    const finR = radW / nFin / 2 - 0.003;
+    const fin = new THREE.CapsuleGeometry(finR, radH - 2 * finR, 4, 10).scale(1, 1, 1.5);
     for (let i = 0; i < nFin; i++) {
       const x = bx - radW / 2 + (i + 0.5) * (radW / nFin);
-      add(shadowy(new THREE.Mesh(new THREE.BoxGeometry(radW / nFin - 0.008, radH, 0.05), radMat)), x, radB + radH / 2, radZ);
+      add(shadowy(new THREE.Mesh(fin, radMat)), x, radB + radH / 2, radZ);
     }
-    for (const y of [radB + 0.018, radB + radH - 0.018]) {
-      add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.013, radW + 0.01, 10).rotateZ(Math.PI / 2), radMat)), bx, y, radZ);
+    for (const y of [radB + 0.022, radB + radH - 0.026]) {
+      add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, radW + 0.01, 10).rotateZ(Math.PI / 2), radMat)), bx, y, radZ - 0.012);
     }
     for (const x of [bx - radW / 2 + 0.03, bx + radW / 2 - 0.03]) add(shadowy(new THREE.Mesh(new THREE.BoxGeometry(0.02, radB, 0.03), radMat)), x, radB / 2, radZ);
     add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, radB + 0.02, 8), this.mat('metal', { tone: 0.15 }))), bx + radW / 2 + 0.03, (radB + 0.02) / 2, radZ + 0.01);
@@ -1111,7 +1120,9 @@ export class Room {
 
     // the lamp: a bronze stand, a linen shade
     const lx = bx - 0.3, lz = bz - 0.2;
-    add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.08, 0.02, 20), this.mat('metal'))), lx, 0.01, lz);
+    // (its foot a low dome, which catches the light along its top; a flat disc is a black blot)
+    add(shadowy(new THREE.Mesh(new THREE.SphereGeometry(0.08, 24, 8, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 0.32, 1), this.mat('metal', { tone: 0.08, pattern: 9 }))), lx, 0.004, lz);
+    add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.082, 0.083, 0.006, 24), this.mat('metal', { tone: 0.08 }))), lx, 0.003, lz);
     add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 1.0, 8), this.mat('metal'))), lx, 0.5, lz);
     this.shade = this.mat('shade', { pattern: 7 });
     add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.12, 0.16, 24, 1, true), this.shade)), lx, 1.02, lz);
@@ -1576,8 +1587,6 @@ export class Room {
     return m;
   }
 
-  /** a warm place on the floor in the sun, clear of the bed and the room's things, if the sun is
-   *  in: points of the window's opening carried along the light down to the floor */
   /** a thunderstorm: lightning now and then, and after each flash (the further off it struck, the
    *  later and the softer) its thunder */
   private readonly storm = { next: 6, t: 9, peak: 0, bolt: false, x: 0.5, seed: 0 };
@@ -1638,6 +1647,8 @@ export class Room {
     return x > l + 0.03 && x < r - 0.03 && y > b + 0.03 && y < t - 0.03;
   }
 
+  /** a warm place on the floor in the sun, clear of the bed and the room's things, if the sun is
+   *  in: points of the window's opening carried along the light down to the floor */
   sunSpot(): THREE.Vector3 | null {
     const L = this.lights;
     const P = L.uPatch.value as THREE.Vector4;

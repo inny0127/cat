@@ -305,8 +305,12 @@ void main() {
     float hz = acc / 24.0 * length(D) * uBeam * smoothstep(0.12, 0.3, uBeam);
     // lighter air in three layers, the thicker the brighter, dithered where one gives way to the
     // next (lit, not greyed: the light adds to what is behind it); and a soft glow all through it
+    // (in the light's own colour, and a little more of it, warming what is seen through it too:
+    // lightened alone, the violet shade under a low gold sun goes a misty grey, a fog, not a ray)
     float lv = clamp(floor(hz * 22.0 + (bayer(p) - 0.5) * 0.9), 0.0, 3.0);
-    col = 1.0 - (1.0 - col) * (1.0 - uBeamCol * lv * 0.085);
+    vec3 bc = clamp(mix(vec3(dot(uBeamCol, vec3(0.3, 0.59, 0.11))), uBeamCol, 1.5), 0.0, 1.0);
+    col *= mix(vec3(1.0), bc, lv * 0.09);
+    col = 1.0 - (1.0 - col) * (1.0 - bc * lv * 0.085);
     glow = max(glow, clamp(hz * 2.5, 0.0, 1.0) * 0.75);
   }
   // steam curling up off a hot drink, and dust turning in the sunlight: a soft warm white over
