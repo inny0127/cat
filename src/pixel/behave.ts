@@ -505,8 +505,17 @@ export const toBed = (c: Ctx, settle: PoseName) => {
   const r = 0.07, a = Math.random() * Math.PI * 2, dir = Math.random() < 0.5 ? 1 : -1;
   const ring = [0, 1, 2].map((k) => new THREE.Vector3(c.home.x + r * Math.cos(a + dir * k * 2.1), 0, c.home.z + r * Math.sin(a + dir * k * 2.1)));
   const bed = c.bed(settle);
+  // sometimes it treads the cushion a little before it lies down, as cats do
+  const tread: Leg[] = Math.random() < 0.4 ? [{
+    to: bed.to, face: bed.yaw, stay: 2 + Math.random() * 2, posture: 'stand',
+    layer: (t) => {
+      const ph = t * Math.PI * 2 * 1.6, l = Math.max(0, Math.sin(ph)), rr = Math.max(0, Math.sin(ph + Math.PI));
+      return { LF: { planted: 0, y: 0.012 + 0.018 * l, flex: 0.35 * l }, RF: { planted: 0, y: 0.012 + 0.018 * rr, flex: 0.35 * rr }, neckPitch: -0.35, headPitch: -0.1, eyeOpen: 0.5 };
+    },
+  }] : [];
   return new Walk('to bed', [
     ...ring.map((to): Leg => ({ to, face: null, stay: 0, posture: 'stand' })),
+    ...tread,
     { to: bed.to, face: bed.yaw, stay: 0.1, posture: settle },
   ], 0.22);
 };

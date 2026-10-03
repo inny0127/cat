@@ -133,6 +133,9 @@ export class Motor {
   private earAimS = 0;
   private tailFlickW = new Wobble(140, 6);
   private joltW = new Wobble(260, 12);
+  /** a twitch in its sleep (a dream): a forepaw, the whiskers */
+  private dreamW = new Wobble(320, 9);
+  private dreamPaw: 'LF' | 'RF' = 'LF';
   private earT = 3;
   time = 0;
   tailWave = 0.15;
@@ -246,6 +249,13 @@ export class Motor {
    *  the head drawn back, then easing to a snarl */
   hiss() {
     this.hissT = 0;
+  }
+
+  /** asleep and dreaming: a forepaw twitches, the whiskers quiver */
+  dreamTwitch() {
+    this.dreamPaw = Math.random() < 0.5 ? 'LF' : 'RF';
+    this.dreamW.kick(0.8 + Math.random() * 0.6);
+    if (Math.random() < 0.5) this.flickEar(Math.random() < 0.5 ? 'L' : 'R', 0.6);
   }
 
   /** startle: the head jerks up */
@@ -443,6 +453,13 @@ export class Motor {
     // startle and tail flicks: springs that settle by themselves
     p.headPitch += 0.35 * this.joltW.step(dt);
     p.neckPitch += 0.2 * this.joltW.x;
+    const dw = this.dreamW.step(dt);
+    if (Math.abs(dw) > 1e-4) {
+      const paw = p[this.dreamPaw];
+      paw.flex = Math.max(0, Math.min(1, paw.flex + 0.5 * dw));
+      paw.z += 0.012 * dw;
+      p.whisker = Math.max(-1, Math.min(1, p.whisker + 0.6 * dw));
+    }
     this.tailFlickW.step(dt);
     // gaze
     if (this.lookTarget) this.look.copy(this.lookTarget);
