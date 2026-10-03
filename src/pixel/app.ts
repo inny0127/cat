@@ -68,6 +68,7 @@ export class PixelApp {
     // the room has a floor of its own
     this.stage.floor.visible = false;
     this.avatar.spots = this.room.spots;
+    this.avatar.feel = (sx, sy) => this.senses.hitNear(sx, sy);
     this.cat.groundAt = (x, z) => this.room.groundAt(x, z);
     this.avatar.sunSpot = () => this.room.sunSpot();
     this.avatar.toys = {
@@ -499,6 +500,7 @@ export class PixelApp {
     this.avatar.mode = this.brain.mode;
     this.avatar.mood = mood;
     if (contacts.length) this.touchedAt = now;
+    this.avatar.hands = contacts;
     this.avatar.touched = now - this.touchedAt < 4;
     // the ball of wool under a finger: the cat's eyes go to it, and moving it keeps it up and is
     // company; caught under its paws, the finger feels it

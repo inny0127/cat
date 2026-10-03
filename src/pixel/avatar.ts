@@ -88,6 +88,42 @@ export class PixelAvatar implements Avatar {
   } | null = null;
   /** after a hunt, a while before the next */
   private huntRest = 0;
+  /** fingers on the cat now (screen points, set by the app), and what is under one: a bone of
+   *  the body and the point on it */
+  hands: { sx: number; sy: number }[] = [];
+  feel: ((sx: number, sy: number) => { bone: string; point: THREE.Vector3 } | null) | null = null;
+  private rub = 0;
+  private rubSide = 1;
+  private readonly eyesAt = new THREE.Vector3();
+
+  /** where a hand is on it, its body answers: the cheek or the head rubbed into it, the chin
+   *  lifted to a scratch, the rump and tail raised to a stroke at the base of the tail; the
+   *  happier it is under the hand, the more */
+  private leanIntoHand(dt: number) {
+    const m = this.cat.motor, T = m.petTarget;
+    T.roll = T.yaw = T.pitch = T.rump = 0;
+    const h = this.hands[0];
+    const keen = !this.alive || this.sleep > 0.5 ? 0 : this.mode === 'enjoy' ? 1 : this.mode === 'rest' || this.mode === 'alert' ? 0.45 : 0;
+    if (!h || keen <= 0 || !this.feel) return;
+    const hit = this.feel(h.sx, h.sy);
+    if (!hit) return;
+    this.rub += dt;
+    const b = hit.bone;
+    // where on the head the hand is, from between the eyes: which side (+ the cat's left; near the
+    // middle, the side it was), and whether it is under the chin
+    this.cat.group.updateMatrixWorld(true);
+    const E = this.cat.body.eyes(this.eyesAt).applyMatrix4(this.cat.group.matrixWorld);
+    const lx = (hit.point.x - E.x) * Math.cos(m.yaw) - (hit.point.z - E.z) * Math.sin(m.yaw);
+    if (Math.abs(lx) > 0.008) this.rubSide = Math.sign(lx);
+    const side = this.rubSide;
+    const chin = b === 'jaw' || (b === 'head' && hit.point.y < E.y - 0.02);
+    const rubbing = 0.08 * Math.sin(this.rub * 5);
+    if (chin) { T.pitch = 0.35 * keen; T.roll = side * 0.08 * keen; }
+    else if (b === 'head' || b.startsWith('ear')) { T.roll = side * (0.3 + rubbing) * keen; T.yaw = side * 0.22 * keen; }
+    else if (b === 'neck1' || b === 'neck2') { T.pitch = 0.2 * keen; T.roll = side * 0.15 * keen; }
+    else if (b === 'hips' || b === 'tail0' || b === 'tail1') T.rump = keen;
+  }
+
   /** a sound it turned to: where, and for how much longer it looks */
   private heard: { at: THREE.Vector3; t: number } | null = null;
 
@@ -373,6 +409,7 @@ export class PixelAvatar implements Avatar {
       f();
     }
     if (this.errand) this.doErrand(dt);
+    this.leanIntoHand(dt);
     this.playRest = Math.max(0, this.playRest - dt);
     this.huntRest = Math.max(0, this.huntRest - dt);
     // a ball someone is moving about: watched a moment, then it has to have it

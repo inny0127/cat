@@ -251,6 +251,12 @@ export class Motor {
     this.hissT = 0;
   }
 
+  /** leaning into a hand: the head rolled and turned toward the side being rubbed, the chin up
+   *  under a scratch, the rump and tail raised under a stroke at the base of the tail (set by
+   *  whoever knows where the hand is; eased toward) */
+  readonly petTarget = { roll: 0, yaw: 0, pitch: 0, rump: 0 };
+  private readonly pet = { roll: 0, yaw: 0, pitch: 0, rump: 0 };
+
   /** something said (a meow, a trill, a chirp), how long it lasts and when it starts */
   private voice: { kind: string; t: number; dur: number } | null = null;
   vocalize(kind: string, dur: number, delay = 0) {
@@ -470,6 +476,22 @@ export class Motor {
         p.earFwd += 0.4 * lift;
         if (x > 1.25) this.voice = null;
       }
+    }
+    // leaning into a hand
+    {
+      const P = this.pet, T = this.petTarget, kp = 1 - Math.exp(-dt * 3.5);
+      P.roll += (T.roll - P.roll) * kp;
+      P.yaw += (T.yaw - P.yaw) * kp;
+      P.pitch += (T.pitch - P.pitch) * kp;
+      P.rump += (T.rump - P.rump) * kp;
+      p.headRoll += P.roll;
+      p.headYaw += P.yaw;
+      p.neckYaw += 0.5 * P.yaw;
+      p.headPitch += P.pitch;
+      p.neckPitch += 0.4 * P.pitch;
+      if (this.posture === 'stand' || this.posture === 'sit' || this.posture === 'crouch') p.hipY += 0.018 * P.rump;
+      p.hipPitch -= 0.12 * P.rump;
+      p.tailLift += 0.6 * P.rump;
     }
     // tail: a lazy swish, more when the motor asks for it or the cat is cross or keen
     this.wavePhase += dt * (1.1 + 1.6 * this.waveAmp) * this.tailWaveSpeed * Math.max(0.2, f.tailWaveSpeed);
