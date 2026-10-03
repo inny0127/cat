@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { Motor } from '../cat3d/motor';
 import type { Mood } from '../cat3d/mood';
-import type { PoseLayer, PoseName } from '../cat3d/pose';
+import { POSES, type PoseLayer, type PoseName } from '../cat3d/pose';
 
 /**
  * What a cat does by itself between the brain's big decisions (sleep, errands, being stroked): a
@@ -190,10 +190,12 @@ export const scratchEar = () => {
     const st = tb > 0 && k < bouts && u < bout ? Math.sin(u * Math.PI * 2 * 7) : 0;
     // the shake: the head whipped side to side a few times, the ears flapping
     const sh = t > down + 0.3 && t < down + 0.75 ? Math.sin((t - down - 0.3) / 0.45 * Math.PI * 4) * Math.sin((t - down - 0.3) / 0.45 * Math.PI) : 0;
+    // (from where the paw sits, up behind the ear and back)
+    const f = POSES.sit.LH, to = { x: 0.065, y: 0.2 + 0.012 * st, z: 0.04 - 0.012 * st };
     return {
       [paw]: {
-        planted: up > 0.05 ? 0 : 1, frame: 0, x: 0.04 + 0.025 * up, y: 0.012 + (0.188 + 0.012 * st) * up,
-        z: -0.064 + (0.104 - 0.012 * st) * up, flex: (0.2 + 0.1 * st) * up,
+        planted: up > 0.05 ? 0 : 1, frame: 0, x: f.x + (to.x - f.x) * up, y: f.y + (to.y - f.y) * up,
+        z: f.z + (to.z - f.z) * up, flex: (0.2 + 0.1 * st) * up,
       },
       neckYaw: s * 0.6 * up, headRoll: (-s * 0.55 + 0.05 * st) * up + 0.45 * sh, neckPitch: -0.15 * up, headPitch: -0.1 * up,
       hipRoll: s * 0.12 * up, eyeOpen: 1 - 0.7 * up - 0.3 * Math.abs(sh), squint: 0.6 * up, earOut: 0.3 * up + 0.4 * Math.abs(sh), earFwd: -0.2 * up,

@@ -81,11 +81,13 @@ export const POSES = {
 
   /** sitting upright on the haunches, front legs straight, tail round the paws */
   sit: make({
-    hipY: 0.064, hipZ: -0.12, hipPitch: 0.72,
-    lumbarPitch: 0.5, chestPitch: -0.97,
+    // (sat down low on the haunches, which spread wide at the bottom, the hind paws out beside the
+    // forepaws: seen from behind, a pear, not a pillar)
+    hipY: 0.056, hipZ: -0.12, hipPitch: 0.8,
+    lumbarPitch: 0.5, chestPitch: -1.02,
     neckPitch: 0.0, headPitch: -0.32,
     LF: foot(0.036, 0.012, 0.068), RF: foot(0.036, 0.012, 0.068),
-    LH: foot(0.04, 0.012, -0.064, 0, 1, 0), RH: foot(0.04, 0.012, -0.064, 0, 1, 0),
+    LH: foot(0.062, 0.012, -0.052, 0, 1, 0), RH: foot(0.062, 0.012, -0.052, 0, 1, 0),
     pastern: 0.38, hindFlat: 1,
     tailLift: -0.9, tailSide: 0.7, tailCurve: 1.1, tailCurl: 0.4, tailSag: 0.5,
     breath: 0.5,
