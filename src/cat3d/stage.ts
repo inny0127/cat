@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { Cat3D } from './cat';
-import { NRAMP, rampUniform } from './pixclass';
+import { NMAT, PIX, PIX_GLSL, rampTexture } from './pixclass';
 
 const FLOOR_VERT = /* glsl */ `
 varying vec3 vWorld;
@@ -19,8 +19,10 @@ uniform float uShadowOn;
 uniform float uShadowSoft;
 uniform float uShadowDark;
 uniform vec4 uCaps[40];
+uniform float uPixel;
 varying vec3 vWorld;
 float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+${PIX_GLSL}
 void main() {
   float sh = 1.0;
   if (uShadowOn > 0.5) {
@@ -51,17 +53,11 @@ void main() {
     float cosT = d.y * inversesqrt(l2);
     vis *= 1.0 - 0.8 * clamp(cosT, 0.0, 1.0) * clamp(A.w * A.w / l2, 0.0, 1.0);
   }
+  if (uPixel > 0.5) { gl_FragColor = pixRoom(${PIX.paper}, mix(0.4, 0.9, sh) * mix(0.55, 1.0, vis), 0.25); return; }
   vec3 c = uPaper * mix(1.0, uShadowDark, 1.0 - sh) * mix(0.55, 1.0, vis);
-  gl_FragColor = vec4(c, 0.25);   // alpha marks the floor for the pixel-art pass
+  gl_FragColor = vec4(c, 1.0);
   #include <colorspace_fragment>
 }`;
-
-/** a palette as display-sRGB vectors, padded to the shader's array length */
-const palette = (hex: string[]) => {
-  const v = hex.map((h) => new THREE.Vector3(...new THREE.Color().setStyle(h, THREE.SRGBColorSpace).convertLinearToSRGB().toArray()));
-  while (v.length < NPAL) v.push(v[v.length - 1].clone());
-  return v;
-};
 
 export interface StageOptions {
   paper?: string;            // backdrop colour (display sRGB)
@@ -71,55 +67,28 @@ export interface StageOptions {
   pixel?: number;
 }
 
-// Pixel art: the scene is rendered small (linear HDR), then each art pixel is tone mapped, snapped to
-// a fixed palette and outlined where the depth jumps, and drawn as a block of screen pixels.
+// Pixel art: the scene is rendered small, every surface writing its material and its light
+// (pixclass.ts); this pass paints each art pixel from its material's ramp and draws it as a block of
+// screen pixels.
 const PIXEL_VERT = /* glsl */ `
 varying vec2 vUv;
 void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`;
 
-/** palettes, display sRGB: the cat's own colours, its eyes', and the room's (so shaded cream on the
- *  cat turns peach rather than borrowing the floor's greys, and a grey shadow on white fur never
- *  turns the olive of the eyes). The eyes mark themselves with alpha 0.75, the floor with 0.25. */
-const PAL_CAT = [
-  // ginger, light to dark
-  '#fde6bd', '#f8cb8c', '#efa75c', '#de8337', '#c06222', '#954418', '#662c12',
-  // white fur, shading toward rose
-  '#fffaf7', '#f9e9e4', '#f0d5cc', '#e3bcae', '#cfa08f',
-  // pink skin: inside the ears, the nose, the pads; the inside of the mouth
-  '#f8c6c0', '#ee9f9a', '#d47f7f', '#9c3f45',
-  // outlines
-  '#3c2416', '#21140d',
-];
+/** the irises keep a palette of their own (they write colour, alpha 0.75) */
 const PAL_EYE = ['#ecd98a', '#c4c25a', '#8a8a36', '#4f5222', '#121010', '#ffffff'];
-const PAL_BG = ['#f4eee4', '#e6dccd', '#d0c2ae', '#b3a28b', '#8f7d67', '#6d5b48', '#3c2416'];
-/** the room's things (alpha 0.35): wood, the bed's dusty blue, the red bowl, kibble, water, litter */
-const PAL_PROP = [
-  '#f7f3ec', '#d9d1c4', '#c8a27a', '#a57f58', '#7a5a3c', '#4f3a27',
-  '#b9cbe0', '#8fa7c4', '#6a84a6', '#4b6283',
-  '#eba3a3', '#cf6f74', '#a24c55', '#6e2f38',
-  '#c58b52', '#93602f', '#5f3c1e',
-  '#c4e6f4', '#86c4e3', '#5a9cc6',
-  '#e3dccd', '#c2b8a6', '#968c7a',
-  // the sky through the window: day, dawn and dusk, night
-  '#a9d4ee', '#fde3c0', '#f3b17e', '#e88f7a', '#34416a', '#222c4d', '#f6e7a8',
-  '#3c2416',
-];
-const NPAL = Math.max(PAL_CAT.length, PAL_BG.length, PAL_EYE.length, PAL_PROP.length);
+const eyePalette = () => PAL_EYE.map((h) => new THREE.Vector3(...new THREE.Color().setStyle(h, THREE.SRGBColorSpace).convertLinearToSRGB().toArray()));
 
 const PIXEL_FRAG = /* glsl */ `
 precision highp float;
 uniform sampler2D uColor;
 uniform sampler2D uDepth;
+uniform sampler2D uRampTex;
 uniform vec2 uSize;
 uniform float uExposure;
 uniform float uNear;
 uniform float uFar;
-uniform float uDither;
-uniform vec3 uPalCat[${NPAL}];
-uniform vec3 uPalEye[${NPAL}];
-uniform vec3 uPalBg[${NPAL}];
-uniform vec3 uPalProp[${NPAL}];
-uniform vec3 uRamp[${NRAMP}];
+uniform vec3 uPalEye[${PAL_EYE.length}];
+uniform vec3 uGlow;      // a lamp's halo: centre (art pixels) and radius; radius 0 for none
 varying vec2 vUv;
 
 // Khronos PBR Neutral, as the full-resolution stage uses
@@ -145,93 +114,100 @@ vec3 oklab(vec3 c) {
   return mat3(0.2104542553, 1.9779984951, 0.0259040371, 0.7936177850, -2.4285922050, 0.7827717662, -0.0040720468, 0.4505937099, -0.8086757660) * lms;
 }
 float lin(float d) { float z = d * 2.0 - 1.0; return 2.0 * uNear * uFar / (uFar + uNear - z * (uFar - uNear)); }
-// the nearest colour of a palette (0 room, 1 cat, 2 eyes, 3 the room's things), and the second
-// nearest with how close the colour sits between them
-vec3 snap(vec3 c, int pal, out vec3 second, out float t) {
-  vec3 q = oklab(c);
-  float d1 = 1e9, d2 = 1e9; vec3 c1 = c, c2 = c;
-  int n = pal == 3 ? ${PAL_PROP.length} : pal == 2 ? ${PAL_EYE.length} : pal == 1 ? ${PAL_CAT.length} : ${PAL_BG.length};
-  for (int i = 0; i < ${NPAL}; i++) {
-    if (i >= n) break;
-    vec3 p = pal == 3 ? uPalProp[i] : pal == 2 ? uPalEye[i] : pal == 1 ? uPalCat[i] : uPalBg[i];
-    vec3 e = oklab(p) - q;
-    float d = dot(e * vec3(1.0, 1.4, 1.4), e);
-    if (d < d1) { d2 = d1; c2 = c1; d1 = d; c1 = p; }
-    else if (d < d2) { d2 = d; c2 = p; }
-  }
-  second = c2;
-  t = sqrt(d1) / max(sqrt(d1) + sqrt(d2), 1e-5);
-  return c1;
-}
-// the cat writes its material, light and rim light (pixclass.ts); -1 where it is not the cat
-int catAt(ivec2 q, out float light, out float rim) {
-  vec4 t = texelFetch(uColor, q, 0);
-  light = t.g;
-  rim = t.b;
-  if (t.a < 0.9 || texelFetch(uDepth, q, 0).r >= 0.99999) return -1;
-  return int(t.r * 16.0);
-}
 float invDepth(ivec2 q) { return 1.0 / lin(texelFetch(uDepth, q, 0).r); }
+vec3 snapEye(vec3 c) {
+  vec3 q = oklab(c);
+  float best = 1e9; vec3 r = c;
+  for (int i = 0; i < ${PAL_EYE.length}; i++) {
+    vec3 e = oklab(uPalEye[i]) - q;
+    float d = dot(e * vec3(1.0, 1.4, 1.4), e);
+    if (d < best) { best = d; r = uPalEye[i]; }
+  }
+  return r;
+}
+vec3 ramp(int m, int step) { return texelFetch(uRampTex, ivec2(clamp(step, 0, 4), m), 0).rgb; }
+
+// what lies under an art pixel: 1 the cat, 2 the room, 0 anything else; its material and light
+int kindAt(ivec2 q, out int mat, out float light, out float third) {
+  vec4 t = texelFetch(uColor, q, 0);
+  mat = int(t.r * ${NMAT}.0);
+  light = t.g;
+  third = t.b;
+  if (texelFetch(uDepth, q, 0).r >= 0.99999) return 0;
+  return t.a > 0.9 ? 1 : (t.a > 0.4 && t.a < 0.6) ? 2 : 0;
+}
+
+const float TH[4] = float[](0.16, 0.32, 0.52, 0.76);
+// the step of the ramp a light falls on; the room dithers across the edges of its bands (the soft
+// gradients of a pixel-art wall), the cat keeps clean bands
+int stepOf(float L, bool dither, ivec2 p) {
+  float s = 0.0;
+  if (L < TH[0]) s = L / TH[0] - 0.5;
+  else if (L >= TH[3]) s = 4.0 + (L - TH[3]) / (1.0 - TH[3]) * 0.5;
+  else for (int i = 0; i < 3; i++) if (L >= TH[i] && L < TH[i + 1]) s = float(i + 1) + (L - TH[i]) / (TH[i + 1] - TH[i]) - 0.5;
+  float b = 0.0;
+  if (dither) {
+    int bx = p.x & 3, by = p.y & 3;
+    const float BAYER[16] = float[](0.0, 8.0, 2.0, 10.0, 12.0, 4.0, 14.0, 6.0, 3.0, 11.0, 1.0, 9.0, 15.0, 7.0, 13.0, 5.0);
+    b = (BAYER[(bx ^ by) * 4 + by] / 16.0 - 0.47) * 0.42;
+  }
+  return int(floor(s + 0.5 + b));
+}
 
 void main() {
   ivec2 p = ivec2(vUv * uSize);
   vec4 src = texelFetch(uColor, p, 0);
-  float L0, R0;
-  int cls = catAt(p, L0, R0);
-  if (cls >= 0) {
-    // a single pixel of a material none of its neighbours share takes the commonest of theirs,
-    // and the light is evened a little over the same material, so the coat comes out in clean
-    // shapes and bands rather than specks
-    int nc[8];
-    float nl[8];
-    int k = 0, same = 0;
-    for (int dy = -1; dy <= 1; dy++) for (int dx = -1; dx <= 1; dx++) {
-      if (dx == 0 && dy == 0) continue;
-      float l2, r2;
-      int c2 = catAt(p + ivec2(dx, dy), l2, r2);
-      nc[k] = c2; nl[k] = l2; k++;
-      if (c2 == cls) same++;
-    }
-    if (same == 0) {
-      int best = cls, bestN = 0;
-      for (int i = 0; i < 8; i++) {
-        if (nc[i] < 0) continue;
-        int n = 0;
-        for (int j = 0; j < 8; j++) if (nc[j] == nc[i]) n++;
-        if (n > bestN) { bestN = n; best = nc[i]; }
-      }
-      cls = best;
-    }
-    float sumL = L0 * 4.0, sumW = 4.0;
-    for (int i = 0; i < 8; i++) if (nc[i] == cls) { sumL += nl[i]; sumW += 1.0; }
-    float L = sumL / sumW;
-    int level = L < 0.16 ? 0 : L < 0.32 ? 1 : L < 0.52 ? 2 : L < 0.76 ? 3 : 4;
-    // the light catching the edge from behind
-    if (R0 > 0.4) level = min(4, level + 1);
-    // just behind a nearer part of the body (a leg across the chest, the tail over a flank): a
-    // line in this colour's own shade, never black
-    float w = invDepth(p);
-    float front = max(max(invDepth(p + ivec2(-1, 0)), invDepth(p + ivec2(1, 0))), max(invDepth(p + ivec2(0, 1)), invDepth(p + ivec2(0, -1)))) - w;
-    if (front > 0.035 * w && w > 0.25) level = max(0, level - 1);
-    gl_FragColor = vec4(uRamp[cls * 5 + level], 1.0);
+  int mat; float L0, B0;
+  int kind = kindAt(p, mat, L0, B0);
+  if (kind == 0) {
+    if (texelFetch(uDepth, p, 0).r >= 0.99999) { gl_FragColor = vec4(toSRGB(src.rgb), 1.0); return; }
+    // the irises in their own palette; a colour written to be shown as it is (the sky)
+    if (src.a > 0.7 && src.a < 0.8) gl_FragColor = vec4(snapEye(toSRGB(neutral(src.rgb))), 1.0);
+    else gl_FragColor = vec4(src.rgb, 1.0);
     return;
   }
-  vec3 c = toSRGB(neutral(src.rgb));
-  // the floor marks itself with alpha 0.25, the room's things 0.35, the eyes 0.75; the backdrop is
-  // at the far plane
-  float depth = texelFetch(uDepth, p, 0).r;
-  bool cat = src.a > 0.5 && depth < 0.99999;
-  int pal = depth >= 0.99999 ? 0 : src.a < 0.3 ? 0 : src.a < 0.5 ? 3 : src.a < 0.9 ? 2 : 1;
-  vec3 c2; float t;
-  vec3 s = snap(c, pal, c2, t);
-  // a little ordered dithering where a colour falls between two palette entries
-  if (uDither > 0.5) {
-    int bx = p.x & 3, by = p.y & 3;
-    float b = float(((bx ^ by) * 4 + bx) * 4 + by) ; // scrambled 4x4 order
-    float th = fract(b * 0.0625 * 7.0) * 0.5;
-    if (t > 0.5 - th * 0.35 && t > 0.38) s = c2;
+  // a single pixel of a material none of its neighbours share takes the commonest of theirs, and
+  // the light is evened a little over the same material: clean shapes and bands, not specks
+  int nm[8];
+  float nl[8];
+  int k = 0, same = 0;
+  for (int dy = -1; dy <= 1; dy++) for (int dx = -1; dx <= 1; dx++) {
+    if (dx == 0 && dy == 0) continue;
+    int m2; float l2, b2;
+    int k2 = kindAt(p + ivec2(dx, dy), m2, l2, b2);
+    nm[k] = k2 == kind ? m2 : -1; nl[k] = l2; k++;
+    if (k2 == kind && m2 == mat) same++;
   }
-  gl_FragColor = vec4(s, 1.0);
+  if (same == 0) {
+    int best = mat, bestN = 0;
+    for (int i = 0; i < 8; i++) {
+      if (nm[i] < 0) continue;
+      int n = 0;
+      for (int j = 0; j < 8; j++) if (nm[j] == nm[i]) n++;
+      if (n > bestN) { bestN = n; best = nm[i]; }
+    }
+    mat = best;
+  }
+  float sumL = L0 * 4.0, sumW = 4.0;
+  for (int i = 0; i < 8; i++) if (nm[i] == mat) { sumL += nl[i]; sumW += 1.0; }
+  float L = sumL / sumW;
+  // the room's third channel: what glows (the lamp's shade at night: lit from within), or what
+  // may dither across its light's bands (big smooth walls), or neither
+  // the halo round a glowing lamp: the air near it is lighter, in dithered rings
+  if (uGlow.z > 0.0) {
+    float g = 1.0 - length(vec2(p) - uGlow.xy) / uGlow.z;
+    if (g > 0.0) L += 0.32 * g * g;
+  }
+  int level = stepOf(L, (kind == 2 && B0 > 0.1 && B0 < 0.5) || (uGlow.z > 0.0 && length(vec2(p) - uGlow.xy) < uGlow.z), p);
+  // the cat: the light catching an edge from behind lifts it a step
+  if (kind == 1 && B0 > 0.4) level += 1;
+  if (kind == 2 && B0 > 0.5) level = 4;
+  // just behind something nearer (a leg across the chest, the bed's rim on the floor): a line in
+  // this colour's own shade, never black
+  float w = invDepth(p);
+  float front = max(max(invDepth(p + ivec2(-1, 0)), invDepth(p + ivec2(1, 0))), max(invDepth(p + ivec2(0, 1)), invDepth(p + ivec2(0, -1)))) - w;
+  if (front > 0.035 * w && w > 0.25) level -= 1;
+  gl_FragColor = vec4(ramp(mat, level), 1.0);
 }`;
 
 /**
@@ -284,6 +260,7 @@ export class Stage {
         uShadowSoft: { value: 0.012 },
         uShadowDark: { value: 0.8 },
         uCaps: { value: [] as THREE.Vector4[] },
+        uPixel: { value: opts.pixel ? 1 : 0 },
       },
       vertexShader: FLOOR_VERT,
       fragmentShader: FLOOR_FRAG,
@@ -305,12 +282,9 @@ export class Stage {
       uniforms: {
         uColor: { value: rt.texture }, uDepth: { value: rt.depthTexture }, uSize: { value: new THREE.Vector2() },
         uExposure: { value: exposure }, uNear: { value: this.camera.near }, uFar: { value: this.camera.far },
-        uDither: { value: new URLSearchParams(location.search).has('dither') ? 1 : 0 },
-        uPalCat: { value: palette(PAL_CAT) },
-        uPalEye: { value: palette(PAL_EYE) },
-        uPalProp: { value: palette(PAL_PROP) },
-        uPalBg: { value: palette(PAL_BG) },
-        uRamp: { value: rampUniform() },
+        uPalEye: { value: eyePalette() },
+        uRampTex: { value: rampTexture() },
+        uGlow: { value: new THREE.Vector3() },
       },
       vertexShader: PIXEL_VERT, fragmentShader: PIXEL_FRAG, depthTest: false, depthWrite: false, toneMapped: false,
     });
@@ -339,6 +313,23 @@ export class Stage {
     this.renderer.render(this.scene, this.camera);
     this.renderer.setRenderTarget(null);
     this.renderer.render(this.pixel.scene, this.pixel.cam);
+  }
+
+  /** a halo round a light at a world point (radius in metres; 0 for none), in art pixels */
+  setGlow(at: THREE.Vector3 | null, radius = 0) {
+    if (!this.pixel) return;
+    const u = this.pixel.mat.uniforms.uGlow.value as THREE.Vector3;
+    if (!at || radius <= 0) { u.set(0, 0, 0); return; }
+    const v = at.clone().project(this.camera);
+    const size = this.pixel.mat.uniforms.uSize.value as THREE.Vector2;
+    const d = this.camera.position.distanceTo(at);
+    const px = 2 * Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2) * d / size.y;
+    u.set((v.x * 0.5 + 0.5) * size.x, (v.y * 0.5 + 0.5) * size.y, radius / px);
+  }
+
+  /** rows of art pixels (or of screen pixels when not pixel art) */
+  pixelRows() {
+    return this.pixel ? this.pixel.rt.height : this.renderer.domElement.height;
   }
 
   add(cat: Cat3D) {

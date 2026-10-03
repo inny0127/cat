@@ -61,6 +61,9 @@ uniform sampler2D uMap;
 uniform sampler2D uPixMap;
 uniform float uSolid;
 uniform vec3 uRimDir;
+uniform vec3 uLampPos;
+uniform float uLampInt;
+uniform float uDay;
 uniform vec3 uKeyDir;
 uniform vec3 uKeyCol;
 uniform vec3 uFillDir;
@@ -87,7 +90,12 @@ void main() {
     float shp = keyShadow(vWorld, Np);
     float direct = smoothstep(-0.15, 0.55, dot(Np, uKeyDir)) * mix(0.25, 1.0, shp);
     // key, sky, fill, and the warm floor bouncing light up under the chin and belly
-    float light = direct * 0.56 + (Np.y * 0.5 + 0.5) * 0.28 + max(dot(Np, uFillDir), 0.0) * 0.2 + max(-Np.y, 0.0) * 0.14;
+    float light = (direct * 0.56 + (Np.y * 0.5 + 0.5) * 0.28 + max(dot(Np, uFillDir), 0.0) * 0.2 + max(-Np.y, 0.0) * 0.14) * mix(0.3, 1.0, uDay);
+    // the lamp at night
+    vec3 toL = uLampPos - vWorld;
+    float dl = length(toL);
+    vec3 Ld = toL / dl;
+    light += uLampInt * (0.3 + 0.7 * max(dot(Np, Ld), 0.0)) * (0.45 + 0.55 * smoothstep(0.1, 0.8, Ld.y)) / (1.0 + dl * dl * 2.6);
     light *= mix(0.55, 1.0, vAO);
     // the mouth darkens toward the throat
     if (vReg > 0.5 && vReg < 1.5) light *= mix(1.0, 0.15, smoothstep(0.3, 0.95, vAux.x));

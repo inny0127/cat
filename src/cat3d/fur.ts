@@ -752,6 +752,10 @@ export function makeFurMaterials(opts: FurOptions, an: Anatomy, corr: Corrective
     uShadowMatrix: { value: new THREE.Matrix4() },
     uShadowOn: { value: 0 },
     uShadowSoft: { value: 0.006 },
+    // the room's lamp (a warm point light, off by day) and how much daylight there is
+    uLampPos: { value: new THREE.Vector3(0, 1, 0) },
+    uLampInt: { value: 0 },
+    uDay: { value: 1 },
     uCorr: { value: corr ? corr.texture : null },
     uCorrW: { value: new Array(Math.max(1, corr ? corr.poses.length : 1)).fill(0) as number[] },
   };

@@ -51,7 +51,7 @@ export class PixelApp {
   }
 
   constructor(readonly canvas: HTMLCanvasElement, hintEl: HTMLDivElement, readonly cat: Cat3D) {
-    this.stage = new Stage({ pixel: PixelApp.artWidth(), paper: '#f4eee4' }, canvas);
+    this.stage = new Stage({ pixel: PixelApp.artWidth(), paper: '#f4eee4', shadowSize: 2.6 }, canvas);
     this.stage.add(cat);
     this.hintUi = new Hint(hintEl);
     this.senses = new Senses3D(cat, this.stage.camera, canvas);
@@ -60,7 +60,10 @@ export class PixelApp {
       (sx, sy, out) => this.senses.screenToWorld(sx, sy, out), () => this.stage.camera.position);
     this.room = new Room(cat.shared as unknown as Record<string, { value: unknown }>, { bed: new THREE.Vector3(0, 0, 0.05) });
     this.stage.scene.add(this.room.group);
+    // the room has a floor of its own
+    this.stage.floor.visible = false;
     this.avatar.spots = this.room.spots;
+    this.frame3d();
 
     const now = Date.now();
     const firstEver = !localStorageHas();
@@ -113,22 +116,30 @@ export class PixelApp {
     return Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2) * d * cam.aspect;
   }
 
-  /** the view through the window: the bed in the lower middle, a little from above; a tall phone
-   *  screen stands farther back so the room is as wide as on a wide one */
+  /** the view into the room: the bed low in the middle, the window above it, a little from above
+   *  and from far off (nearly flat, as pixel art is drawn). A phone held upright sees the room as
+   *  wide as the bed and its neighbours and as tall as the window; a wide screen, as tall */
   private frame3d() {
     const cam = this.stage.camera;
-    const H = clamp(0.36 / cam.aspect, 0.5, 0.9);
-    const d = H / (2 * Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2));
-    const el = THREE.MathUtils.degToRad(13);
-    cam.position.set(this.aim.x, this.aim.y + d * Math.sin(el), this.aim.z + d * Math.cos(el));
-    cam.lookAt(this.aim.x, this.aim.y + H * 0.2, this.aim.z - 0.1);
+    const tv = Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2);
+    const el = THREE.MathUtils.degToRad(17);
+    // far enough to see a metre across at the bed, and 1.8 m up and down
+    const d = Math.max(0.5 / (tv * cam.aspect), 0.9 / tv);
+    const t = new THREE.Vector3(this.aim.x, 0.5, this.aim.z - 0.28);
+    cam.position.set(t.x, t.y + d * Math.sin(el), t.z + d * Math.cos(el));
+    cam.lookAt(t);
     // the brain's touch speeds are in the painted cat's pixels: about 600 across the window
     this.senses.k = 600 / Math.max(1, innerWidth);
-    // lights like a photographer's: the key up and to the left of the camera, a fill opposite
-    const dir = (a: number, e: number) => new THREE.Vector3(Math.sin(a) * Math.cos(e), Math.sin(e), Math.cos(a) * Math.cos(e));
-    this.cat.shared.uKeyDir.value.copy(dir(-0.85, 0.65));
-    this.cat.shared.uFillDir.value.copy(dir(0.75, 0.2));
-    this.cat.shared.uRimDir.value.copy(dir(Math.PI + 0.5, 0.5));
+    // the sun comes in through the window from up on the left and lies on the floor; a soft fill
+    // from the room behind you; the window lights the cat's edges
+    this.cat.shared.uKeyDir.value.set(-0.42, 0.62, -0.66).normalize();
+    this.cat.shared.uFillDir.value.set(0.3, 0.35, 0.9).normalize();
+    this.cat.shared.uRimDir.value.set(-0.2, 0.5, -0.85).normalize();
+    // the sky through the window, in art pixels
+    if (this.room) {
+      const px = 2 * tv * cam.position.distanceTo(this.room.spots.bed) / this.stage.pixelRows();
+      this.room.setPixel(px);
+    }
   }
 
   private makeBrain() {
@@ -256,7 +267,9 @@ export class PixelApp {
     this.avatar.touched = now - this.touchedAt < 4;
     this.avatar.update(dt);
     this.cat.update(dt);
-    this.room.update(s, night, clock.getHours() + clock.getMinutes() / 60);
+    this.room.update(s, night, clock.getHours() + clock.getMinutes() / 60, dt);
+    // at night the lamp has a halo
+    this.stage.setGlow(night > 0.5 ? this.room.lampPos.clone().add(new THREE.Vector3(0, 0.05, 0)) : null, 0.42);
     this.hints(dt, contacts.length > 0);
     if ((this.saveIn -= dt) < 0) {
       this.saveIn = 10;
