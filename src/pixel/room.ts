@@ -104,9 +104,11 @@ void main() {
     if (vWorld.y < 0.3) {
       // panelling: narrow boards, a groove between them with a lit edge beside it
       m = ${PIX.panel};
-      float fx = fract(vWorld.x / 0.12);
-      if (fx < 0.045) tone -= 0.14;
-      else if (fx < 0.09) tone += 0.05;
+      // (the groove two art pixels wide at the least, however far off: thinner, the pixel pass's
+      // evening of the light breaks it into dashes)
+      float fx = fract(vWorld.x / 0.12), pw = max(0.045, 2.0 * fwidth(vWorld.x / 0.12));
+      if (fx < pw) tone -= 0.14;
+      else if (fx < pw + max(0.045, fwidth(vWorld.x / 0.12))) tone += 0.05;
     } else if (vWorld.y < 0.335) m = ${PIX.paint};
     else {
       // old plaster, a little uneven
