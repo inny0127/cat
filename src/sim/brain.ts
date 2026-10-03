@@ -54,6 +54,8 @@ export class Brain {
   sleepDepth = 1;
   purr = 0;
   private wantSleepIn = rand(25, 70);
+  /** how long yet this sleep lasts before it wakes of itself (s) */
+  private napLeft = rand(600, 1500);
   private peekIn = rand(40, 160);
   private lastTouch = -1e9;
   private lastToy = -1e9;
@@ -598,12 +600,22 @@ export class Brain {
         this.sleepDepth = Math.min(1, this.sleepDepth + dt * 0.012);
         if (this.sleepDepth > 0.65) this.setMode('sleep');
         this.peek(dt);
+        this.napEnds(dt);
         break;
       case 'sleep':
         this.sleepDepth = Math.min(1, this.sleepDepth + dt * 0.01);
         this.peek(dt);
+        this.napEnds(dt);
         break;
     }
+  }
+
+  /** a cat sleeps in naps, not all day at a stretch: in time it wakes of itself, yawns, gets up
+   *  for a good stretch and sees what there is to do, and later sleeps again */
+  private napEnds(dt: number) {
+    if ((this.napLeft -= dt) > 0) return;
+    this.toAwake('rest', true);
+    this.anim.wakeStretch?.();
   }
 
   /** now and then a sleeping cat opens its eyes, checks on you, and goes back to sleep */
@@ -628,6 +640,8 @@ export class Brain {
   private toSleep(depth: number) {
     this.sleepDepth = depth;
     this.setMode(depth > 0.65 ? 'sleep' : 'doze');
+    // (a quarter of an hour to three quarters by day; longer in the night)
+    this.napLeft = rand(14, 45) * 60 * (1 + 0.8 * nightness(Date.now()));
     this.wantSleepIn = rand(30, 90);
     this.peekIn = rand(30, 140);
   }

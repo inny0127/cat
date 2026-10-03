@@ -86,13 +86,19 @@ const hump = (t: number, d: number, r: number) => ease(t / r) * ease((d - t) / r
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
 const pick = <T>(xs: T[]) => xs[Math.floor(Math.random() * xs.length)];
 
-/** a motion laid over the pose for a while, shaped by a function of time */
+/** a motion laid over the pose for a while, shaped by a function of time (and a sound with it, at
+ *  a time into it) */
 class Layered implements Act {
   private t = 0;
   constructor(readonly name: string, private readonly dur: number, private readonly ramp: number,
-    private readonly shape: (t: number) => PoseLayer, private readonly posture: PoseName | null = null) {}
+    private readonly shape: (t: number) => PoseLayer, private readonly posture: PoseName | null = null,
+    private cue: { at: number; sound: string; gain: number } | null = null) {}
   update(dt: number, c: Ctx) {
     this.t += dt;
+    if (this.cue && this.t >= this.cue.at) {
+      c.sound(this.cue.sound, this.cue.gain);
+      this.cue = null;
+    }
     if (this.posture) c.m.setPosture(this.posture);
     c.m.layer = { pose: this.shape(this.t), w: hump(this.t, this.dur, this.ramp) };
     return this.t < this.dur;
@@ -127,10 +133,43 @@ class Settled implements Act {
   }
 }
 
-/** a big yawn: the mouth wide, eyes squeezed, head back, ears out */
-export const yawn = () => new Layered('yawn', 2.4, 0.7, () => ({
+/** a big yawn: the mouth wide, eyes squeezed, head back, ears out; now and then you hear it */
+export const yawn = (heard = Math.random() < 0.5) => new Layered('yawn', 2.4, 0.7, () => ({
   jaw: 1, eyeOpen: 0.08, squint: 0.8, headPitch: 0.35, neckPitch: 0.1, earOut: 0.35, earFwd: -0.3,
-}));
+}), null, heard ? { at: 0.45, sound: 'yawn', gain: 0.22 } : null);
+
+/** one act after another */
+class Seq implements Act {
+  private i = 0;
+  private cur: Act | null = null;
+  constructor(readonly name: string, private readonly parts: (() => Act)[]) {}
+  update(dt: number, c: Ctx) {
+    while (this.i < this.parts.length) {
+      this.cur ??= this.parts[this.i]();
+      if (this.cur.update(dt, c)) return true;
+      this.cur.stop(c);
+      this.cur = null;
+      this.i++;
+      dt = 0;
+    }
+    return false;
+  }
+  stop(c: Ctx) {
+    this.cur?.stop(c);
+    this.cur = null;
+  }
+}
+
+/** waking of itself from a long sleep: a big yawn where it lies, the head hardly lifted from the
+ *  bed; then up, round to face the room, a long stretch toward you, and down onto its chest to
+ *  get on with the day */
+export const wakeUp = (c: Ctx) => new Seq('wake', [
+  () => new Layered('yawn', 2.6, 0.8, () => ({
+    jaw: 1, eyeOpen: 0.08, squint: 0.8, neckPitch: -0.2, headPitch: 0, earOut: 0.35, earFwd: -0.3,
+  }), null, { at: 0.5, sound: 'yawn', gain: 0.22 }),
+  () => new Walk('wake', [{ to: c.m.pos.clone(), face: c.bed('loaf').yaw, stay: 0.3, posture: 'stand' }], 0.22),
+  () => new Stretch('loaf'),
+]);
 
 /** washing a flank: head round to the side and down, licking in strokes */
 export const groomFlank = () => {

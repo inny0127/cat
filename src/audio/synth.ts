@@ -437,6 +437,30 @@ export function rain(sr: number, seconds = 6): Float32Array {
   return normalize(d, 0.5);
 }
 
+/** a cat's yawn: a long breath out through a mouth opened wide, swelling and dying away, and at
+ *  the top of it, now and then, a tiny high squeak */
+export function yawn(sr: number) {
+  const dur = rnd(1.0, 1.3), n = Math.floor(dur * sr);
+  const out = new Float32Array(n);
+  const f1 = new Biquad(sr, 'bp', rnd(800, 1000), 2.5), f2 = new Biquad(sr, 'bp', rnd(1600, 1900), 3.5);
+  for (let i = 0; i < n; i++) {
+    const x = i / n;
+    const e = Math.min(1, x / 0.3) ** 1.5 * Math.max(0, 1 - Math.max(0, x - 0.5) / 0.5) ** 1.2;
+    const src = noise();
+    out[i] = (f1.run(src) + f2.run(src) * 0.55) * e;
+  }
+  filter(out, sr, 'lp', 3000, 0.7);
+  normalize(out, 0.5);
+  if (Math.random() < 0.6) {
+    const top = rnd(900, 1150);
+    const sq = voice(sr, rnd(0.14, 0.22), (x) => top * (0.75 + 0.25 * Math.sin(Math.PI * Math.min(1, x * 1.3))),
+      () => [1100, 2300, 3500], (x) => Math.sin(Math.PI * x) ** 1.5, { breath: 0.3, lp: 4200 });
+    const at = Math.floor(n * rnd(0.38, 0.5));
+    for (let i = 0; i < sq.length && at + i < n; i++) out[at + i] += sq[i] * 0.6;
+  }
+  return normalize(fade(out, sr, 0.02, 0.08), 0.6);
+}
+
 /** a cat's sneeze: a faint quick breath in, then a tiny sharp "tch", a burst of breath snapped off */
 export function sneeze(sr: number) {
   const n = Math.floor(0.32 * sr);

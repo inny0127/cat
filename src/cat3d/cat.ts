@@ -184,6 +184,11 @@ export class Cat3D {
     head.add(this.whiskers.mesh);
   }
 
+  /** how upright the head is: 1 level, 0 lying on its side, below 0 upside down */
+  headUp() {
+    return this.tmp.b.set(0, 1, 0).applyQuaternion(this.body.kin.wq[this.body.I.head]).y;
+  }
+
   private readonly prints = new Map<string, { x: number; z: number; face: number }>();
 
   /**

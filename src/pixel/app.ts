@@ -571,9 +571,10 @@ export class PixelApp {
     const dl = this.room.update(s, hour, dt, rain, clock);
     this.stage.setDayLight(dl);
     // the whiskers in the light the face is in: dimmer after dark, warm while the lamp is lit;
-    // asleep, they lie back along the cheeks (and drawn there, they would only be scratches)
+    // asleep, they lie back along the cheeks; and on a head lying on its side they would be drawn
+    // as scratches across the face
     this.cat.setWhiskerLight(0.62 - 0.2 * dark, dl.lamp > 0.5 ? 0.8 * dark : 0);
-    this.cat.whiskers.mesh.visible = this.brain.mode !== 'sleep';
+    this.cat.whiskers.mesh.visible = this.brain.mode !== 'sleep' && this.cat.headUp() > 0.55;
     this.audio.setRain(rain);
     // a bird outside: the cat's ear goes to it, and if it is awake, a glance at the window
     if (this.audio.setOutside(dt, { day: 1 - dark, hour, month: clock.getMonth(), rain })) this.avatar.hear(this.room.windowMiddle);

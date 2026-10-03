@@ -193,6 +193,7 @@ export class CatAudio {
       ['crickets', () => S.crickets(sr), 1],
       ['thunder', () => S.thunder(sr), 2],
       ['sneeze', () => S.sneeze(sr), 3],
+      ['yawn', () => S.yawn(sr), 3],
       ['thunderNear', () => S.thunder(sr, true), 2],
     ];
     for (const [name, fn, count] of jobs) {

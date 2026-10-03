@@ -4,7 +4,7 @@ import { POSES, type PoseLayer, type PoseName } from '../cat3d/pose';
 import { NEUTRAL, type Mood } from '../cat3d/mood';
 import type { Avatar } from '../sim/avatar';
 import type { EarMood, TailMood } from '../rig/animator';
-import { Stretch, chooseAct, groomChest, groomFlank, knead, restingPose, sneeze, toBed, toWindow, wander, warmUp, washFace, yawn, type Act, type Ctx, sunbathe, Play, Sill, Hunt, Box, Zoomies, Walk, Stare, Rub, scratchEar, type SillSpot } from './behave';
+import { Stretch, chooseAct, groomChest, groomFlank, knead, restingPose, sneeze, toBed, toWindow, wander, warmUp, washFace, yawn, type Act, type Ctx, sunbathe, Play, Sill, Hunt, Box, Zoomies, Walk, Stare, Rub, scratchEar, wakeUp, type SillSpot } from './behave';
 
 const LYING: PoseName[] = ['loaf', 'sphinx', 'side', 'curl'];
 const wrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
@@ -360,6 +360,7 @@ export class PixelAvatar implements Avatar {
     const atHome = Math.hypot(m.pos.x - c.home.x, m.pos.z - c.home.z) < 0.2;
     // (woken in the middle of a stretch in its sleep: that is over)
     if (this.stretchT > 0 && (this.sleep <= 0.3 || !this.alive)) this.sleepStretch(0, false);
+    this.waking = Math.max(0, this.waking - dt);
     this.shadeEyes(dt, this.alive && this.sleep > 0.75 && atHome && !this.touched && !this.act && this.stretchT <= 0 && this.glare > 0.4);
     if (!this.alive) {
       this.stopAct();
@@ -410,6 +411,16 @@ export class PixelAvatar implements Avatar {
         this.act = null;
       }
       return;
+    }
+    // just awake of itself, at home in bed: a yawn and a stretch first (the paw down off its eyes
+    // before anything)
+    if (this.waking > 0) {
+      if (this.shade.u > 0) return;
+      this.waking = 0;
+      if (atHome && this.mode === 'rest' && !this.touched) {
+        this.act = wakeUp(c);
+        return;
+      }
     }
     // a moth or a fly about: nothing else matters for a while
     const bug = c.bug();
@@ -575,6 +586,13 @@ export class PixelAvatar implements Avatar {
       flex: A.flex + (1 - A.flex) * e,
     });
     m.layer = L;
+  }
+
+  /** woken of itself from a long sleep in its bed: a yawn and a stretch before anything else (if
+   *  it gets to it in the next few seconds, that is: not once it has been picked up and petted) */
+  private waking = 0;
+  wakeStretch() {
+    this.waking = 4;
   }
 
   doBlink(slow = false) {
