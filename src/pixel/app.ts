@@ -43,6 +43,7 @@ export class PixelApp {
   private idleHintAt = 14;
   private saveIn = 10;
   private touchedAt = -1e9;
+  private themeColor = '';
   private readonly aim = new THREE.Vector3(0, 0.12, 0.05);
 
   static async create(canvas: HTMLCanvasElement, hint: HTMLDivElement) {
@@ -307,6 +308,12 @@ export class PixelApp {
     this.avatar.update(dt);
     this.cat.update(dt);
     this.room.update(s, night, clock.getHours() + clock.getMinutes() / 60, dt);
+    // the phone's bar the colour of the wall at the top of the room
+    const tc = night > 0.5 ? '#3b3150' : '#c99486';
+    if (tc !== this.themeColor) {
+      this.themeColor = tc;
+      document.querySelector('meta[name="theme-color"]')?.setAttribute('content', tc);
+    }
     // at night the lamp has a halo; the tea on the books steams; by day dust turns in the sun
     this.stage.setGlow(night > 0.5 ? this.room.lampPos.clone().add(new THREE.Vector3(0, 0.05, 0)) : null, 0.42);
     this.stage.setSteam(this.room.mugTop, 1);

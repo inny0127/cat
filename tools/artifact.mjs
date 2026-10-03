@@ -1,5 +1,5 @@
-// Builds a single-page version of the app for publishing as a claude.ai Artifact preview:
-// one HTML fragment with the bundle inlined, plus the painting assets beside it.
+// Builds a single-page version of the painted cat (painted.html) for publishing as a claude.ai
+// Artifact preview: one HTML fragment with the bundle inlined, plus the painting assets beside it.
 import { build } from 'vite';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -17,11 +17,11 @@ await build({
     emptyOutDir: true,
     target: 'es2022',
     modulePreload: false,
-    rollupOptions: { output: { inlineDynamicImports: true, entryFileNames: 'app.js' } },
+    rollupOptions: { input: 'painted.html', output: { inlineDynamicImports: true, entryFileNames: 'app.js' } },
   },
 });
 const js = fs.readFileSync(path.join(tmp, 'app.js'), 'utf8');
-const html = fs.readFileSync('index.html', 'utf8');
+const html = fs.readFileSync('painted.html', 'utf8');
 const style = html.match(/<style>([\s\S]*?)<\/style>/)[1];
 const body = html.match(/<body>([\s\S]*?)<script/)[1];
 const page = `<title>창가의 고양이</title>
