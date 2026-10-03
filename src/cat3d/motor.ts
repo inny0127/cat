@@ -179,6 +179,11 @@ export class Motor {
     this.tt = 0;
   }
 
+  /** the posture it is in or on its way to */
+  get targetPosture() {
+    return this.target;
+  }
+
   get settled() {
     return this.tt >= 1 && this.path.length === 0;
   }

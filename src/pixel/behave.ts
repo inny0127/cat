@@ -21,6 +21,8 @@ export interface Ctx {
   mood: Mood;
   /** the brain wants kneading (purring under a hand) */
   kneading: boolean;
+  /** where to stand and which way to face to lie down in a posture in the middle of the bed */
+  bed: (p: PoseName) => { to: THREE.Vector3; yaw: number };
 }
 
 /** one thing the cat does: update returns false when it is over; stop cuts it short cleanly */
@@ -111,8 +113,9 @@ class Walk implements Act {
     const leg = this.legs[this.i];
     if (!leg) return false;
     if (!this.arrived) {
+      // up on its feet (again, if something sat it down on the way)
+      c.m.setPosture('stand');
       if (!c.m.goal) {
-        c.m.setPosture('stand');
         // a waypoint with nothing to do there is walked through
         const pass = leg.stay <= 0 && this.i < this.legs.length - 1;
         c.m.walkTo(leg.to, this.speed, leg.face, () => { this.arrived = true; this.t = 0; }, pass);
@@ -136,10 +139,13 @@ class Walk implements Act {
 }
 
 /** come to the glass and sit looking at you a while, then back to bed */
-export const toWindow = (c: Ctx) => new Walk('window', [
-  { to: c.window, face: 0, stay: rand(8, 22), posture: 'sit' },
-  { to: c.home, face: 0, stay: 0.1, posture: 'loaf' },
-]);
+export const toWindow = (c: Ctx) => {
+  const bed = c.bed('loaf');
+  return new Walk('window', [
+    { to: c.window, face: 0, stay: rand(8, 22), posture: 'sit' },
+    { to: bed.to, face: bed.yaw, stay: 0.1, posture: 'loaf' },
+  ]);
+};
 
 /** potter about: a spot or two on the floor, a sniff there, home again */
 export const wander = (c: Ctx) => {
@@ -147,17 +153,20 @@ export const wander = (c: Ctx) => {
   const sniff = (t: number): PoseLayer => ({ neckPitch: -0.6, headPitch: -0.35 + 0.05 * Math.sin(t * 14), whisker: 0.6, earFwd: 0.4 });
   const legs: Leg[] = [{ to: spot(), face: null, stay: rand(1.5, 3), posture: 'crouch', layer: sniff }];
   if (Math.random() < 0.5) legs.push({ to: spot(), face: null, stay: rand(2, 5), posture: pick<PoseName>(['sit', 'stand']) });
-  legs.push({ to: c.home, face: 0, stay: 0.1, posture: 'loaf' });
+  const bed = c.bed('loaf');
+  legs.push({ to: bed.to, face: bed.yaw, stay: 0.1, posture: 'loaf' });
   return new Walk('wander', legs);
 };
 
-/** back to bed: walk there, turn round on it once, and settle */
+/** back to bed (or up, round and down again on it): turn round on it once and settle, lying so
+ *  that the body is in the middle and the face toward the window */
 export const toBed = (c: Ctx, settle: PoseName) => {
   const r = 0.07, a = Math.random() * Math.PI * 2, dir = Math.random() < 0.5 ? 1 : -1;
   const ring = [0, 1, 2].map((k) => new THREE.Vector3(c.home.x + r * Math.cos(a + dir * k * 2.1), 0, c.home.z + r * Math.sin(a + dir * k * 2.1)));
+  const bed = c.bed(settle);
   return new Walk('to bed', [
     ...ring.map((to): Leg => ({ to, face: null, stay: 0, posture: 'stand' })),
-    { to: c.home, face: null, stay: 0.1, posture: settle },
+    { to: bed.to, face: bed.yaw, stay: 0.1, posture: settle },
   ], 0.22);
 };
 

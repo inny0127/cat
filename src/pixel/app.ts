@@ -42,6 +42,7 @@ export class PixelApp {
   private askMotion = false;
   private idleHintAt = 14;
   private saveIn = 10;
+  private touchedAt = -1e9;
   private readonly aim = new THREE.Vector3(0, 0.12, 0.05);
 
   static async create(canvas: HTMLCanvasElement, hint: HTMLDivElement) {
@@ -251,6 +252,8 @@ export class PixelApp {
     this.cat.motor.setMood(mood, true);
     this.avatar.mode = this.brain.mode;
     this.avatar.mood = mood;
+    if (contacts.length) this.touchedAt = now;
+    this.avatar.touched = now - this.touchedAt < 4;
     this.avatar.update(dt);
     this.cat.update(dt);
     this.room.update(s, night, clock.getHours() + clock.getMinutes() / 60);

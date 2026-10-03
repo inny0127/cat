@@ -6,6 +6,9 @@ import type { Avatar } from '../sim/avatar';
 import type { EarMood, TailMood } from '../rig/animator';
 import { Stretch, chooseAct, groomChest, groomFlank, knead, restingPose, toBed, toWindow, wander, yawn, type Act, type Ctx } from './behave';
 
+const LYING: PoseName[] = ['loaf', 'sphinx', 'side', 'curl'];
+const wrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
+
 export interface Spot {
   x: number;
   z: number;
@@ -32,6 +35,8 @@ export class PixelAvatar implements Avatar {
   headLean = { x: 0, y: 0 };
   headRecoil = 0;
   kneading = false;
+  /** a hand on it now or a moment ago (set by the app): it stays put rather than getting up */
+  touched = false;
   rippleTarget = 0;
   puffTarget = 0;
   breathRate = 0.33;
@@ -76,12 +81,55 @@ export class PixelAvatar implements Avatar {
       m: cat.motor, home: h, window: new THREE.Vector3(home.x, 0, home.z + 0.2),
       room: { minX: home.x - 0.22, maxX: home.x + 0.22, minZ: home.z - 0.3, maxZ: home.z + 0.2 },
       mode: this.mode, mood: this.mood, kneading: false,
+      bed: (p) => this.bedSpot(p),
     };
   }
 
   /** straight into the posture the brain wants, no getting there (opening the app) */
   settle() {
-    this.cat.snap(this.wanted());
+    this.stopAct();
+    const p = this.wanted();
+    const b = this.bedSpot(p);
+    this.cat.place(b.to.x, b.to.z, b.yaw);
+    this.cat.snap(p);
+  }
+
+  /**
+   * Where to stand, and which way to face, so that lying down in posture p puts the body (not the
+   * spot it stood on) in the middle of the bed with the face toward the window: curling up, a cat
+   * ends nose to tail, so it lies down facing the wall.
+   */
+  bedSpot(p: PoseName) {
+    const f = this.cat.footprint(p);
+    const yaw = wrap(this.home.yaw - f.face);
+    const s = Math.sin(yaw), c = Math.cos(yaw);
+    return { to: new THREE.Vector3(this.home.x - (f.x * c + f.z * s), 0, this.home.z + f.x * s - f.z * c), yaw };
+  }
+
+  /**
+   * Lie (or sit) in posture p on the bed. Lying the wrong way round for it (asleep curled toward
+   * the wall, then woken; or settling deeper from a loaf into a curl) it first gets up, turns round
+   * once and lies down again, unless a hand is on it; otherwise it shuffles and turns a little into
+   * the middle of the bed.
+   */
+  private lieIn(p: PoseName, atHome: boolean, dt: number) {
+    const m = this.cat.motor;
+    const b = this.bedSpot(p);
+    const e = wrap(b.yaw - m.yaw);
+    if (atHome && !this.touched && Math.abs(e) > 0.8) {
+      this.act = toBed(this.ctx, p);
+      this.act.update(dt, this.ctx);
+      return;
+    }
+    m.setPosture(p);
+    if (!atHome || m.goal || !LYING.includes(m.targetPosture)) return;
+    const dx = b.to.x - m.pos.x, dz = b.to.z - m.pos.z, d = Math.hypot(dx, dz);
+    if (d > 0.004 && d < 0.3) {
+      const step = Math.min(d, 0.08 * dt);
+      m.pos.x += (dx / d) * step;
+      m.pos.z += (dz / d) * step;
+    }
+    if (Math.abs(e) <= 0.8) m.yaw = wrap(m.yaw + Math.max(-0.3 * dt, Math.min(0.3 * dt, e)));
   }
 
   /** what it is doing of its own accord, if anything */
@@ -111,7 +159,8 @@ export class PixelAvatar implements Avatar {
     c.mode = this.mode;
     c.mood = this.mood;
     c.kneading = this.kneading;
-    const atHome = Math.hypot(m.pos.x - c.home.x, m.pos.z - c.home.z) < 0.08;
+    // at home: on the bed, wherever on it the body has settled
+    const atHome = Math.hypot(m.pos.x - c.home.x, m.pos.z - c.home.z) < 0.2;
     if (!this.alive) {
       this.stopAct();
       m.setPosture('side');
@@ -120,12 +169,12 @@ export class PixelAvatar implements Avatar {
     if (this.sleep > 0.3) {
       // sleep is taken in bed: go back to it, turn round once and settle
       if (this.act && this.act.name !== 'to bed') this.stopAct();
-      if (!this.act && !atHome) this.act = toBed(c, 'loaf');
+      if (!this.act && !atHome) this.act = toBed(c, this.wanted());
       if (this.act) {
         if (!this.act.update(dt, c)) this.act = null;
         return;
       }
-      m.setPosture(this.wanted());
+      this.lieIn(this.wanted(), atHome, dt);
       return;
     }
     if (this.mode === 'enjoy' || this.mode === 'annoyed' || this.mode === 'angry') {
@@ -144,7 +193,8 @@ export class PixelAvatar implements Avatar {
       }
       return;
     }
-    m.setPosture(this.mode === 'alert' ? 'sit' : this.rest);
+    this.lieIn(this.mode === 'alert' ? 'sit' : this.rest, atHome, dt);
+    if (this.act) return;
     this.nextActIn -= dt;
     if (this.nextActIn < 0) {
       this.nextActIn = 4 + Math.random() * 8;

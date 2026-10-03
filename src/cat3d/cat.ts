@@ -10,7 +10,7 @@ import { Body } from './body';
 import { Tail } from './tail';
 import { Stepper } from './stepper';
 import { Motor } from './motor';
-import { LEGS, type Leg } from './pose';
+import { LEGS, POSES, type Leg, type PoseName } from './pose';
 
 export interface CatOptions {
   shells?: number;
@@ -168,6 +168,37 @@ export class Cat3D {
     this.whiskers = makeWhiskers(v3(LM.padL), v3(LM.padR), v3(LM.eyeL), v3(LM.eyeR));
     this.whiskers.mesh.position.copy(headRest).negate();
     head.add(this.whiskers.mesh);
+  }
+
+  private readonly prints = new Map<string, { x: number; z: number; face: number }>();
+
+  /**
+   * Where the body's middle lies in a posture, and which way the face points, in the cat's own
+   * frame (x to its left, z ahead of where it stood; the face as a heading, 0 straight ahead):
+   * curled up, a cat lies well off to one side of where it stood, with its nose back by its tail.
+   * Measured once, by holding each posture a moment.
+   */
+  footprint(posture: PoseName) {
+    if (!this.prints.size) {
+      const { pos, yaw } = this.motor, keep = this.motor.posture;
+      const x = pos.x, z = pos.z;
+      const mesh = this.meshes[0], k = this.body.kin, head = this.body.I.head;
+      const c = new THREE.Vector3(), f = new THREE.Vector3();
+      for (const name of Object.keys(POSES) as PoseName[]) {
+        this.place(0, 0, 0);
+        this.snap(name);
+        this.update(1 / 60);
+        this.update(1 / 60);
+        mesh.computeBoundingBox();
+        mesh.boundingBox!.clone().applyMatrix4(mesh.matrixWorld).getCenter(c);
+        f.set(0, 0, 1).applyQuaternion(k.wq[head]);
+        this.prints.set(name, { x: c.x, z: c.z, face: Math.atan2(f.x, f.z) });
+      }
+      this.place(x, z, yaw);
+      this.snap(keep);
+      this.update(1 / 60);
+    }
+    return this.prints.get(posture)!;
   }
 
   /** place the cat (and its paws) without walking there */
