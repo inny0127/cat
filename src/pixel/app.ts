@@ -98,9 +98,14 @@ export class PixelApp {
       this.brain?.thunder(loud);
       this.avatar.thunder(loud, this.room.windowMiddle);
     };
-    // its paws on the boards: soft, and softer still for a shuffle of the feet
-    this.cat.stepper.onLand = (_leg, settle) => {
-      if (!this.avatar.hidden) this.audio.play('step', { gain: settle ? 0.04 : 0.09, pan: this.catPan(), rate: 1.15 });
+    // its paws on the boards: soft, and softer still for a shuffle of the feet; on the rug a
+    // muffled pat, on the bed all but nothing
+    this.cat.stepper.onLand = (leg, settle) => {
+      if (this.avatar.hidden) return;
+      const p = this.pawW.copy(this.cat.body.reached[leg]).applyMatrix4(this.cat.group.matrixWorld);
+      const on = this.room.surfaceAt(p.x, p.z);
+      const k = on === 'boards' ? 1 : on === 'rug' ? 0.45 : 0.15;
+      this.audio.play('step', { gain: (settle ? 0.04 : 0.09) * k, pan: this.catPan(), rate: on === 'boards' ? 1.15 : 0.85 });
     };
     this.frame3d();
 

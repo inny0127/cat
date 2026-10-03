@@ -1870,6 +1870,13 @@ export class Room {
   /** where the ball of wool was left (it is among the things on the floor) */
   private readonly yarnHome = new THREE.Vector3();
 
+  /** what the floor is at a point, for the sound of a paw on it: the bed, the rug, or the boards */
+  surfaceAt(x: number, z: number): 'bed' | 'rug' | 'boards' {
+    const b = this.spots.bed;
+    if (Math.hypot(x - b.x, z - b.z) < 0.21) return 'bed';
+    return Math.hypot(x - b.x, z - (b.z - 0.02)) < 0.44 ? 'rug' : 'boards';
+  }
+
   /** how high the floor is at a point: the bed's cushion and its soft rim, the lamp's domed foot
    *  (paws stand on them) */
   groundAt(x: number, z: number) {

@@ -76,6 +76,8 @@ export interface Act {
   readonly name: string;
   update(dt: number, c: Ctx): boolean;
   stop(c: Ctx): void;
+  /** it is looking at something of its own just now (the eyes are not to be taken off it) */
+  readonly ownGaze?: boolean;
 }
 
 const ease = (x: number) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x));
@@ -397,7 +399,13 @@ export class Walk implements Act {
   nap = 0;
   private napT = 0;
   private followIn = 8;
+  /** a stop on the way, a look round (where at, how long yet), and whether this leg has had one */
+  private pause: { t: number; at: THREE.Vector3 } | null = null;
+  private paused = false;
   constructor(readonly name: string, private readonly legs: Leg[], private readonly speed = 0.25) {}
+  get ownGaze() {
+    return !!this.pause;
+  }
   /** lying somewhere it may doze off */
   get canNap() {
     const leg = this.legs[this.i];
@@ -423,6 +431,25 @@ export class Walk implements Act {
     if (!this.arrived) {
       // up on its feet (again, if something sat it down on the way)
       c.m.setPosture('stand');
+      // on a longer way, now and then a stop part way along: stood still a moment, the head up
+      // and turned to something (a sound, the window, you), then on
+      if (this.pause) {
+        c.m.lookAt(this.pause.at, 0.9);
+        if ((this.pause.t -= dt) > 0) return true;
+        this.pause = null;
+        c.m.lookAt(null);
+      } else if (!this.paused && c.m.goal && this.name !== 'to bed' && this.speed <= 0.3) {
+        const left = Math.hypot(leg.to.x - c.m.pos.x, leg.to.z - c.m.pos.z);
+        if (left > 0.35 && left < 0.6 && c.m.speed > 0.12) {
+          this.paused = true;
+          if (Math.random() < 0.35) {
+            const side = Math.random() < 0.5 ? -1 : 1, a = c.m.yaw + side * rand(0.6, 1.3);
+            this.pause = { t: rand(0.6, 1.6), at: new THREE.Vector3(c.m.pos.x + Math.sin(a), rand(0.2, 0.9), c.m.pos.z + Math.cos(a)) };
+            c.m.stop();
+            return true;
+          }
+        }
+      }
       if (!c.m.goal) {
         // a waypoint with nothing to do there is walked through
         const pass = leg.stay <= 0 && this.i < this.legs.length - 1;
@@ -450,11 +477,13 @@ export class Walk implements Act {
       c.m.layer = null;
       this.i++;
       this.arrived = false;
+      this.paused = false;
     }
     return true;
   }
   stop(c: Ctx) {
     c.m.layer = null;
+    if (this.pause) c.m.lookAt(null);
     c.m.stop();
   }
 }
