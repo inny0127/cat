@@ -427,20 +427,30 @@ void main() {
   float top = floor(H * (0.15 + 0.15 * h1(mc * 9.1)));
   float lx = mx - x0;
   bool inB = lx >= 0.0 && lx < bw && px.y < top;
-  vec3 facade = tod(hex(118.0, 138.0, 164.0), hex(176.0, 128.0, 118.0), hex(98.0, 70.0, 102.0), hex(26.0, 26.0, 46.0));
+  // each block in its own paint: cream, a faded brick, sage, a grey-blue; by day a little hazed
+  // with the distance, gold and rose in the low sun, dark by night
+  float pk = fract(mc * 0.618 + 0.3);
+  vec3 paint = pk < 0.3 ? hex(214.0, 206.0, 196.0) : pk < 0.55 ? hex(198.0, 152.0, 140.0) : pk < 0.78 ? hex(162.0, 180.0, 172.0) : hex(142.0, 162.0, 192.0);
+  vec3 facade = tod(mix(paint, hex(176.0, 204.0, 228.0), 0.25), paint * vec3(1.0, 0.78, 0.68), paint * vec3(0.6, 0.46, 0.6), paint * vec3(0.15, 0.15, 0.25));
   facade = mix(facade, grey * 0.85, uRain * 0.35);
-  facade *= 0.92 + 0.12 * h1(mc * 4.4);
   if (inB) {
     c = facade;
-    // the lit side and the shaded side
-    if (lx >= bw - 2.0) c *= 0.86;
-    if (lx < 1.0) c = mix(c, vec3(1.0), 0.08 * (1.0 - night));
-    // windows: two wide, two tall, in rows
+    // the side toward the sun lit, the other in shade (by night, neither)
+    bool sunR = h > 12.75;
+    float lit = (1.0 - night) * (1.0 - uRain);
+    if (lx >= bw - 2.0) c = sunR ? mix(c, hex(255.0, 236.0, 200.0), 0.22 * lit) : c * mix(1.0, 0.84, lit);
+    if (lx < 1.0) c = sunR ? c * mix(1.0, 0.88, lit) : mix(c, hex(255.0, 236.0, 200.0), 0.22 * lit);
+    // windows: two wide, two tall, in rows; by day dark glass with the sky caught in a corner;
+    // the blocks of flats have a balcony rail under each row
     float wx = mod(lx - 2.0, 4.0), wy = mod(px.y - 2.0, 5.0);
+    bool flats = h1(mc * 6.6) > 0.45;
+    if (flats && wy == 4.0 && lx >= 1.0 && lx < bw - 1.0 && px.y < top - 3.0) c = mix(c, hex(250.0, 246.0, 236.0), 0.22 * lit);
     if (lx >= 2.0 && lx < bw - 2.0 && px.y < top - 3.0 && px.y > 1.0 && wx < 2.0 && wy < 2.0) {
       vec2 wid = vec2(mc * 31.0 + floor((lx - 2.0) / 4.0), floor((px.y - 2.0) / 5.0));
       float on = hash2(wid + floor(uTime / 37.0) * 0.013 * step(0.5, h1(wid.x + wid.y)));
-      c = tod(mix(facade, hex(190.0, 214.0, 232.0), 0.45), mix(facade, hex(255.0, 220.0, 170.0), 0.4), facade * 0.75, facade * 0.7);
+      vec3 glass = mix(facade * 0.62, hex(112.0, 140.0, 182.0), 0.45);
+      if (wx == 0.0 && wy == 1.0) glass = mix(glass, hex(226.0, 238.0, 246.0), 0.45);
+      c = tod(glass, mix(facade * 0.7, hex(255.0, 206.0, 150.0), 0.35), facade * 0.72, facade * 0.7);
       if (on > 1.0 - 0.45 * night - 0.2 * dusk - 0.18 * uRain) { c = on > 0.93 ? hex(255.0, 168.0, 96.0) : hex(255.0, 214.0, 132.0); a = 0.17; }
     }
   }
