@@ -386,7 +386,9 @@ export class Stage {
 
     const s = (opts.shadowSize ?? 0.9) / 2;
     this.key.castShadow = true;
-    this.key.shadow.mapSize.set(2048, 2048);
+    // (pixel art is drawn small: a quarter of the shadow map holds all it can show)
+    const sm = opts.pixel ? 1024 : 2048;
+    this.key.shadow.mapSize.set(sm, sm);
     Object.assign(this.key.shadow.camera, { left: -s, right: s, top: s, bottom: -s, near: 0.1, far: 6 });
     this.key.shadow.bias = 0;
     this.scene.add(this.key, this.key.target);
