@@ -15,6 +15,7 @@ import { clamp } from '../util/math';
 import { PixelAvatar } from './avatar';
 import { Senses3D } from './senses';
 import { Room } from './room';
+import { rainAt } from '../cat3d/roomlight';
 
 const MODEL = './cat3d/fri.bin';
 
@@ -341,6 +342,8 @@ export class PixelApp {
   private readonly manual = new URLSearchParams(location.search).has('still');
   /** ?hour=21: the room's clock, for looking at the evening by day */
   private readonly hourOverride = new URLSearchParams(location.search).get('hour');
+  /** ?rain=1: rain now (0: none) */
+  private readonly rainOverride = new URLSearchParams(location.search).get('rain');
 
   private clock() {
     const d = new Date();
@@ -378,7 +381,10 @@ export class PixelApp {
     this.avatar.touched = now - this.touchedAt < 4;
     this.avatar.update(dt);
     this.cat.update(dt);
-    this.stage.setDayLight(this.room.update(s, hour, dt));
+    // the weather: now and then a few hours of rain (or as asked, ?rain=1)
+    const rain = this.rainOverride !== null ? +this.rainOverride : rainAt(clock);
+    this.stage.setDayLight(this.room.update(s, hour, dt, rain));
+    this.audio.setRain(rain);
     // the phone's bar the colour of the wall at the top of the room
     const tc = dark > 0.5 ? '#3b3150' : '#c99486';
     if (tc !== this.themeColor) {
@@ -387,7 +393,7 @@ export class PixelApp {
     }
     // the tea on the books steams; by day dust turns in the sun
     this.stage.setSteam(this.room.mugTop, 1);
-    this.stage.setMotes(this.room.dust(dt, 1 - dark));
+    this.stage.setMotes(this.room.dust(dt, (1 - dark) * (1 - rain)));
     // the radio: its dial lit and notes rising while it plays; slower and softer at night
     this.stage.setNotes(this.room.setRadio(this.audio.musicPlaying, dt));
     this.audio.setNight(dark);

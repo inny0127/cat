@@ -152,7 +152,7 @@ export function skyDay(hour: number) {
 /** the light of the hour. The window looks south: the sun rises on the left, stands highest at
  *  midday and sets on the right, low and gold, its patch on the floor long and reaching into the
  *  room; after it, a pink dusk, then night with the lamp lit */
-export function dayLight(hour: number, out?: DayLight): DayLight {
+export function dayLight(hour: number, out?: DayLight, rain = 0): DayLight {
   const rise = 6.4, set = 19.1;
   const u = Math.max(0, Math.min(1, (hour - rise) / (set - rise)));
   const up = hour > rise && hour < set ? 1 : 0;
@@ -166,27 +166,50 @@ export function dayLight(hour: number, out?: DayLight): DayLight {
   // daylight in the sky: up before the sun and lingering after it
   const day = skyDay(hour);
   const night = 1 - day;
-  // how gold the light is: the first and last hours of the sun
-  const gold = Math.max(1 - ss(rise + 0.3, rise + 2.4, hour), ss(set - 2.6, set - 0.4, hour)) * up;
+  // how gold the light is: the first and last hours of the sun (none under rain clouds)
+  const gold = Math.max(1 - ss(rise + 0.3, rise + 2.4, hour), ss(set - 2.6, set - 0.4, hour)) * up * (1 - rain);
   const dusk = Math.max(0, 1 - Math.abs(hour - 19.4) / 1.1) * (1 - up * 0.5);
   const tintSun = lerp3([1.02, 1.0, 0.96], [1.1, 0.94, 0.74], gold);
   let tintShade = lerp3([0.97, 0.98, 1.03], [1.02, 0.94, 0.94], gold);
   tintShade = lerp3(tintShade, [0.94, 0.84, 1.0], dusk);
+  // rain: a grey, blue-ish day
+  tintShade = lerp3(tintShade, [0.9, 0.94, 1.04], rain * day);
   tintShade = lerp3(tintShade, [0.62, 0.66, 0.98], night * (1 - dusk * 0.5));
   const tintLamp = [1.08, 0.95, 0.8];
   const o = out ?? ({} as DayLight);
+  // under rain the sun is hidden, the sky gives less light, and the lamp is lit even by day
+  const dim = 1 - 0.3 * rain;
   o.keyDir = keyDir;
-  o.sun = 0.8 * sun;
-  o.sky = 0.9 * day + 0.12 * night;
-  o.amb = 0.14 * day + 0.05;
-  o.floorB = 0.45 * day;
-  o.fill = 0.3 * day + 0.03;
-  o.lamp = 1.5 * ss(0.35, 0.8, night);
-  o.fairy = 0.5 * ss(0.4, 0.8, night);
+  o.sun = 0.8 * sun * (1 - rain);
+  o.sky = (0.9 * day + 0.12 * night) * (1 - 0.45 * rain);
+  o.amb = (0.14 * day + 0.05) * dim;
+  o.floorB = 0.45 * day * dim;
+  o.fill = (0.3 * day + 0.03) * dim;
+  o.lamp = Math.max(1.5 * ss(0.35, 0.8, night), 1.2 * rain);
+  o.fairy = Math.max(0.5 * ss(0.4, 0.8, night), 0.45 * rain);
   o.tintSun = (o.tintSun ?? new THREE.Vector3()).set(tintSun[0], tintSun[1], tintSun[2]);
   o.tintShade = (o.tintShade ?? new THREE.Vector3()).set(tintShade[0], tintShade[1], tintShade[2]);
   o.tintLamp = (o.tintLamp ?? new THREE.Vector3()).set(tintLamp[0], tintLamp[1], tintLamp[2]);
   // the beam shows in the air most when the sun is low and its light comes in long
-  o.beam = sun * (0.15 + 0.85 * Math.max(gold, 1 - Math.min(1, keyDir.y / 0.6)));
+  o.beam = sun * (1 - rain) * (0.15 + 0.85 * Math.max(gold, 1 - Math.min(1, keyDir.y / 0.6)));
   return o;
+}
+
+/** is it raining (0 .. 1): now and then for a few hours, the same for everyone at the same time.
+ *  Each three hours of each day has its own chance; the rain comes on and goes off over about
+ *  twenty minutes either side */
+export function rainAt(d: Date) {
+  const day = Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 864e5);
+  const h = d.getHours() + d.getMinutes() / 60;
+  const wet = (block: number) => {
+    const x = Math.sin((day * 3.1 + block * 17.7) * 12.9898) * 43758.5453;
+    return x - Math.floor(x) < 0.17 ? 1 : 0;
+  };
+  const b = Math.floor(h / 3), f = h / 3 - b;
+  const now = wet(b), prev = wet(b - 1), next = wet(b + 1);
+  // eased across the edges of the blocks (half way at the edge itself)
+  const e = (t: number) => t * t * (3 - 2 * t);
+  if (f < 0.11) return prev + (now - prev) * e(0.5 + 0.5 * f / 0.11);
+  if (f > 0.89) return now + (next - now) * e(0.5 * (f - 0.89) / 0.11);
+  return now;
 }

@@ -387,3 +387,32 @@ export function step(sr: number) {
   clicks(out, sr, 0.002, 2, 0.01, 1500, 3500, 0.12, 0.002);
   return fade(normalize(out, 0.4), sr, 0.001, 0.02);
 }
+
+// ------------------------------------------------------------------ rain
+/**
+ * Rain heard from indoors: a soft wash of noise with its highs muffled by the glass, the patter of
+ * drops on the pane and the sill (bright little ticks, a few heavier taps). Loops without a seam.
+ */
+export function rain(sr: number, seconds = 6): Float32Array {
+  const n = Math.floor(seconds * sr);
+  const d = new Float32Array(n);
+  // the wash: two bands of noise, gently swelling
+  const lo = new Biquad(sr, 'lp', 900), mid = new Biquad(sr, 'bp', 2200, 0.6);
+  for (let i = 0; i < n; i++) {
+    const t = i / sr;
+    const swell = 0.8 + 0.2 * Math.sin((2 * Math.PI * t) / seconds) * Math.sin((6 * Math.PI * t) / seconds);
+    d[i] = (lo.run(noise()) * 0.5 + mid.run(noise()) * 0.18) * swell;
+  }
+  // drops: ticks on the glass, taps on the sill
+  const tick = (at: number, amp: number, f: number, dec: number) => {
+    const bp = new Biquad(sr, 'bp', f, 2.5);
+    const len = Math.floor(dec * 6 * sr);
+    for (let i = 0; i < len; i++) {
+      const j = (at + i) % n;
+      d[j] += bp.run(noise()) * amp * Math.exp(-i / (dec * sr));
+    }
+  };
+  for (let k = 0; k < seconds * 26; k++) tick(Math.floor(rnd(0, n)), rnd(0.05, 0.22), rnd(2500, 6000), rnd(0.002, 0.006));
+  for (let k = 0; k < seconds * 3; k++) tick(Math.floor(rnd(0, n)), rnd(0.15, 0.35), rnd(500, 900), rnd(0.008, 0.02));
+  return normalize(d, 0.5);
+}

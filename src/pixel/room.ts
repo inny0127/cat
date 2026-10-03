@@ -132,6 +132,7 @@ uniform float uHour;
 uniform vec2 uSkyPx;     // the window's size in art pixels
 uniform float uPxSize;   // an art pixel at the window, in metres
 uniform float uPar;      // where you look from, across the room from the window's middle (metres)
+uniform float uRain;     // 0 dry .. 1 raining
 varying vec2 vUv;
 float hash2(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float h1(float n) { return fract(sin(n * 127.1 + 31.7) * 43758.5453); }
@@ -179,7 +180,11 @@ void main() {
   // toward the sun, low over the town at the ends of the day, the sky is brighter
   float side = h < 12.0 ? 1.0 - vUv.x : vUv.x;
   c = mix(c, hex(255.0, 236.0, 190.0), (gold + 0.6 * dusk) * 0.35 * smoothstep(0.35, 1.0, side) * smoothstep(0.75, 0.2, y));
-  if (night > 0.5) {
+  // under rain: a low grey sky, the same brightness drained of colour
+  float lumS = dot(c, vec3(0.3, 0.59, 0.11));
+  vec3 grey = vec3(lumS) * vec3(0.93, 0.97, 1.08) * 0.8;
+  c = mix(c, grey, uRain * 0.85);
+  if (night > 0.5 && uRain < 0.5) {
     // stars that twinkle, and the moon
     float st = hash2(sp);
     if (y > 0.4 && st > 0.986 && sin(uTime * (1.0 + st * 3.0) + st * 40.0) > -0.3) { c = hex(255.0, 246.0, 214.0); a = 0.17; }
@@ -193,12 +198,16 @@ void main() {
   } else {
     // slow clouds, lit gold and pink at the ends of the day
     float n = noise(sp * vec2(0.09, 0.18) + vec2(uTime * 0.02, 0.0)) * 0.7 + noise(sp * vec2(0.2, 0.4) + vec2(uTime * 0.03, 3.0)) * 0.3;
-    float bandC = smoothstep(0.45, 0.95, y);
-    if (n * bandC > 0.42) c = tod(hex(246.0, 249.0, 252.0), hex(255.0, 238.0, 205.0), hex(255.0, 214.0, 190.0), hex(60.0, 56.0, 96.0));
-    else if (n * bandC > 0.37) c = tod(hex(214.0, 228.0, 240.0), hex(236.0, 186.0, 170.0), hex(232.0, 160.0, 150.0), hex(44.0, 42.0, 80.0));
+    float bandC = smoothstep(0.45, 0.95, y) + uRain * 0.6;
+    vec3 cl = tod(hex(246.0, 249.0, 252.0), hex(255.0, 238.0, 205.0), hex(255.0, 214.0, 190.0), hex(60.0, 56.0, 96.0));
+    vec3 cs = tod(hex(214.0, 228.0, 240.0), hex(236.0, 186.0, 170.0), hex(232.0, 160.0, 150.0), hex(44.0, 42.0, 80.0));
+    // (rain clouds: heavy and dark)
+    cl = mix(cl, grey * 0.92, uRain); cs = mix(cs, grey * 0.78, uRain);
+    if (n * bandC > 0.42) c = cl;
+    else if (n * bandC > 0.37) c = cs;
     // a few birds crossing now and then, wings up, wings down
     float tb = mod(uTime + 20.0, 47.0);
-    if (tb < 16.0) {
+    if (tb < 16.0 && uRain < 0.3) {
       for (int k = 0; k < 4; k++) {
         float fk = float(k);
         vec2 bc = floor(vec2(-8.0 + tb * (Wd + 16.0) / 16.0 - fk * 5.0 - h1(fk) * 3.0, H * 0.74 + fk * 2.0 + 2.0 * sin(tb * 0.7 + fk * 1.7)));
@@ -217,6 +226,8 @@ void main() {
   float hx = (fx - Wd * 0.7) / (Wd * 0.3);
   float hill = H * (0.31 + 0.09 * max(0.0, 1.0 - hx * hx));
   vec3 farCol = tod(hex(170.0, 196.0, 214.0), hex(210.0, 178.0, 168.0), hex(150.0, 108.0, 138.0), hex(38.0, 38.0, 70.0));
+  // (in the rain the far side of town is half lost in it)
+  farCol = mix(farCol, grey * 1.05, uRain * 0.6);
   if (px.y < max(farH, hill)) {
     c = farCol;
     if (night > 0.5 && px.y < farH && hash2(vec2(fx, px.y) * 0.37) > 0.985) { c = hex(255.0, 214.0, 150.0); a = 0.17; }
@@ -242,6 +253,7 @@ void main() {
   float lx = mx - x0;
   bool inB = lx >= 0.0 && lx < bw && px.y < top;
   vec3 facade = tod(hex(118.0, 138.0, 164.0), hex(176.0, 128.0, 118.0), hex(98.0, 70.0, 102.0), hex(26.0, 26.0, 46.0));
+  facade = mix(facade, grey * 0.85, uRain * 0.35);
   facade *= 0.92 + 0.12 * h1(mc * 4.4);
   if (inB) {
     c = facade;
@@ -254,7 +266,7 @@ void main() {
       vec2 wid = vec2(mc * 31.0 + floor((lx - 2.0) / 4.0), floor((px.y - 2.0) / 5.0));
       float on = hash2(wid + floor(uTime / 37.0) * 0.013 * step(0.5, h1(wid.x + wid.y)));
       c = tod(mix(facade, hex(190.0, 214.0, 232.0), 0.45), mix(facade, hex(255.0, 220.0, 170.0), 0.4), facade * 0.75, facade * 0.7);
-      if (on > 1.0 - 0.45 * night - 0.2 * dusk) { c = on > 0.93 ? hex(255.0, 168.0, 96.0) : hex(255.0, 214.0, 132.0); a = 0.17; }
+      if (on > 1.0 - 0.45 * night - 0.2 * dusk - 0.18 * uRain) { c = on > 0.93 ? hex(255.0, 168.0, 96.0) : hex(255.0, 214.0, 132.0); a = 0.17; }
     }
   }
   // on the roofs
@@ -290,6 +302,36 @@ void main() {
                    : tod(hex(76.0, 116.0, 76.0), hex(112.0, 110.0, 62.0), hex(62.0, 52.0, 70.0), hex(18.0, 28.0, 32.0));
   }
 
+  // rain falling past: thin slanted streaks, near ones longer and quicker than far ones
+  if (uRain > 0.01) {
+    vec3 drop = mix(vec3(1.0), c, 0.45) * mix(1.0, 0.75, night);
+    for (int k = 0; k < 2; k++) {
+      float fk = float(k);
+      float w = 3.0 + fk * 2.0, len = 3.0 + fk * 4.0, per = 26.0 + fk * 14.0;
+      vec2 q = vec2(px.x + px.y * (0.22 + fk * 0.08), px.y + uTime * (48.0 + fk * 40.0));
+      float colI = floor(q.x / w);
+      if (mod(q.x, w) < 1.0 && h1(colI * 7.3 + fk * 31.0) < uRain * (0.75 - fk * 0.2)) {
+        float ph = fract((q.y + h1(colI * 3.1 + fk) * per) / per);
+        if (ph < len / per) c = mix(c, drop, 0.35 + 0.2 * fk);
+      }
+    }
+    // drops on the glass: little beads, lit on top and dark under; now and then one runs down
+    vec2 cellI = floor(px / 6.0);
+    vec2 inC = px - cellI * 6.0;
+    float hb = hash2(cellI + 0.5);
+    vec2 bead = floor(vec2(1.0 + 4.0 * h1(hb * 9.1), 1.0 + 4.0 * h1(hb * 5.7)));
+    if (hb < 0.3 * uRain) {
+      if (inC == bead) c = mix(c, vec3(1.0), 0.55);
+      else if (inC == bead - vec2(0.0, 1.0)) c *= 0.8;
+    }
+    float runCol = floor(px.x / 9.0);
+    if (h1(runCol * 1.7) < 0.35 * uRain && mod(px.x, 9.0) == 4.0) {
+      float speed = 6.0 + 10.0 * h1(runCol * 4.3);
+      float yd = H - mod(uTime * speed + h1(runCol) * H * 3.0, H * 1.6);
+      if (px.y == floor(yd)) c = mix(c, vec3(1.0), 0.6);
+      else if (px.y > yd && px.y < yd + 9.0) c = mix(c, vec3(1.0), 0.16);
+    }
+  }
   // the glass catches the light: two thin streaks across the top corner of each pane
   float g = mod(px.x + px.y, 40.0);
   vec2 pane = mod(px, vec2(Wd * 0.5, H * 0.62));
@@ -386,7 +428,7 @@ export class Room {
     const ww = winR - winL, wh = winT - winB;
     // (drawn after the sunbeam, so its light does not tint the sky)
     this.sky = new THREE.ShaderMaterial({
-      uniforms: { uTime: { value: 0 }, uHour: { value: 12 }, uSkyPx: { value: new THREE.Vector2(48, 56) }, uPxSize: { value: 0.01 }, uPar: { value: 0 } },
+      uniforms: { uTime: { value: 0 }, uHour: { value: 12 }, uSkyPx: { value: new THREE.Vector2(48, 56) }, uPxSize: { value: 0.01 }, uPar: { value: 0 }, uRain: { value: 0 } },
       vertexShader: SKY_VERT, fragmentShader: SKY_FRAG,
       transparent: true, blending: THREE.NoBlending,
     });
@@ -864,8 +906,9 @@ export class Room {
 
   /** the bowls and box as the cat's state has them; the light and the sky by the hour (and that
    *  light, for the pixel pass's colours) */
-  update(s: CatState, hour = 12, dt = 0): DayLight {
-    const d = dayLight(hour, this.light);
+  update(s: CatState, hour = 12, dt = 0, rain = 0): DayLight {
+    const d = dayLight(hour, this.light, rain);
+    this.sky.uniforms.uRain.value = rain;
     this.time += dt;
     this.timeU.value = this.time;
     this.sky.uniforms.uTime.value = this.time;

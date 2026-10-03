@@ -89,6 +89,30 @@ export class CatAudio {
     this.lofi?.setNight(n);
   }
 
+  private rainSrc: AudioBufferSourceNode | null = null;
+  private rainGain: GainNode | null = null;
+  /** rain on the window (0 .. 1) */
+  setRain(level: number) {
+    const ctx = this.ctx;
+    if (!ctx || !this.ready) return;
+    if (level > 0.01 && !this.rainSrc) {
+      const src = ctx.createBufferSource();
+      src.buffer = this.bank.rain[0];
+      src.loop = true;
+      this.rainGain = ctx.createGain();
+      this.rainGain.gain.value = 0;
+      src.connect(this.rainGain).connect(this.master);
+      src.start();
+      this.rainSrc = src;
+    }
+    if (this.rainGain) this.rainGain.gain.setTargetAtTime(this.muted ? 0 : 0.32 * Math.max(0, Math.min(1, level)), ctx.currentTime, 1.5);
+    if (level <= 0.01 && this.rainSrc && this.rainGain && this.rainGain.gain.value < 0.003) {
+      this.rainSrc.stop();
+      this.rainSrc.disconnect();
+      this.rainSrc = null;
+    }
+  }
+
   private async build() {
     const sr = this.ctx!.sampleRate;
     const make = (fn: () => Float32Array) => {
@@ -116,6 +140,7 @@ export class CatAudio {
       ['scrabble', () => S.scrabble(sr), 2],
       ['thump', () => S.thump(sr), 2],
       ['step', () => S.step(sr), 4],
+      ['rain', () => S.rain(sr), 1],
     ];
     for (const [name, fn, count] of jobs) {
       this.bank[name] = [];
