@@ -322,7 +322,10 @@ export class Cat3D {
     this.breathT += dt * (0.55 + 0.25 * (1 - p.breath)) * Math.max(0.3, motor.feel.breathRate);
     this.shared.uBreath.value = 0.0022 * p.breath * Math.sin(this.breathT * Math.PI * 2);
     this.shared.uPuff.value = p.puff;
-    if (this.skin) this.skin.uniforms.uJawOpen.value = p.jaw;
+    if (this.skin) {
+      this.skin.uniforms.uJawOpen.value = p.jaw;
+      this.skin.uniforms.uSnarl.value = motor.feel.snarl;
+    }
   }
 
   /** world-space capsules round the body for the fur's and the floor's ambient occlusion */

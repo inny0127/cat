@@ -381,7 +381,7 @@ export class Motor {
     const fb = bodyFor(this.mood), f = this.feel;
     const kk = (rate: number) => 1 - Math.exp(-dt * rate);
     for (const key of Object.keys(fb) as (keyof BodyLook)[]) {
-      const rate = key.startsWith('ear') || key === 'whisker' || key === 'jaw' ? 6
+      const rate = key.startsWith('ear') || key === 'whisker' || key === 'jaw' || key === 'snarl' ? 6
         : key === 'puff' ? (fb.puff > f.puff ? 4 : 0.7)
         : key.startsWith('tail') ? 2.5 : 1.5;
       f[key] += (fb[key] - f[key]) * kk(rate);

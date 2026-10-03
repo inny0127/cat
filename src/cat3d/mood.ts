@@ -97,6 +97,8 @@ export interface BodyLook {
   puff: number;
   /** mouth open (the hiss) */
   jaw: number;
+  /** the upper lip drawn up off the fangs */
+  snarl: number;
   /** nose up (+) or down */
   headPitch: number;
   /** how deep the breathing is */
@@ -135,7 +137,8 @@ export function bodyFor(m: Mood): BodyLook {
     tailHook: 0.7 * friendly + 0.2 * m.arousal,
     tailSag: 0.5 * m.sick + 0.3 * m.sleepy,
     puff: 0.65 * m.fear + 0.6 * threat + 0.15 * cross,
-    jaw: 0.9 * threat,
+    jaw: Math.min(1, 1.5 * threat),
+    snarl: Math.min(1, 1.2 * threat + 0.25 * cross),
     headPitch: -0.25 * scared - 0.2 * m.sick + 0.1 * m.arousal,
     breath: 0.2 * m.pleasure - 0.15 * m.fear + 0.15 * m.sleepy,
     tailWave: 0.35 * cross + 0.45 * cross * cross + 0.25 * m.arousal - 0.08 * m.sleepy - 0.06 * m.pleasure,

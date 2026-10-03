@@ -384,6 +384,118 @@ def lid_uv(V, uv, isl, o, eye, R, r):
     return coef, float(np.median(err)), int(sel.sum())
 
 
+# ------------------------------------------------------------------ the mouth
+def ray_hits(O, D, tri, max_t):
+    """for each ray (origin O[i], direction D[i]): does it hit any triangle of tri (m, 3, 3)
+    between 0.4 mm and max_t (Moller-Trumbore)"""
+    a, b, c = tri[:, 0], tri[:, 1], tri[:, 2]
+    e1, e2 = b - a, c - a
+    hit = np.zeros(len(O), bool)
+    for i in range(len(O)):
+        p = np.cross(D[i], e2)
+        det = np.einsum('ij,ij->i', e1, p)
+        ok = np.abs(det) > 1e-12
+        inv = np.where(ok, 1 / np.where(ok, det, 1), 0)
+        tv = O[i] - a
+        u = np.einsum('ij,ij->i', tv, p) * inv
+        q = np.cross(tv, e1)
+        v = (q @ D[i]) * inv
+        t = np.einsum('ij,ij->i', e2, q) * inv
+        hit[i] = np.any(ok & (u >= 0) & (v >= 0) & (u + v <= 1) & (t > 0.0004) & (t < max_t))
+    return hit
+
+
+def jaw_split(V, faces, inv, head, nose, corner, hinge):
+    """Which of the head goes with the lower jaw. The sculpt's mouth is a closed slit: under the
+    upper lip a thin wall runs back into the head (the palate's side), over the lower lip another
+    (the tongue's), the lower lip tucked a little up inside the upper, the two walls meeting at the
+    back. So the jaw is what lies nearer the chin than the nose over the surface: the lower wall,
+    the lower lip and the chin; the fold at the back and the cheeks behind the corners of the mouth
+    share, and stretch as it opens."""
+    import scipy.sparse as sp
+    from scipy.sparse.csgraph import dijkstra
+    nU = inv.max() + 1
+    U = np.zeros((nU, 3))
+    U[inv] = V
+    hU = np.zeros(nU)
+    np.maximum.at(hU, inv, head)
+    f = inv[faces]
+    e = np.concatenate([f[:, [0, 1]], f[:, [1, 2]], f[:, [2, 0]]])
+    e = e[e[:, 0] != e[:, 1]]
+    G = sp.coo_matrix((np.linalg.norm(U[e[:, 0]] - U[e[:, 1]], axis=1), (e[:, 0], e[:, 1])), shape=(nU, nU)).tocsr()
+    G = G.maximum(G.T)
+    x, y, z = U[:, 0], U[:, 1], U[:, 2]
+    front = z > corner[2]
+    chin = np.where((hU > 0.5) & front & (np.abs(x) < 0.012) & (y < corner[1] - 0.004))[0]
+    muzzle = np.where((hU > 0.5) & front & (np.abs(x) < 0.015) & (y > nose[1] - 0.006))[0]
+    dj = dijkstra(G, indices=chin, min_only=True)
+    dh = dijkstra(G, indices=muzzle, min_only=True)
+    w = 0.007 + 0.025 * smoothstep(corner[2], corner[2] - 0.025, z)
+    jaw = np.clip((dh - dj) / w * 0.5 + 0.5, 0, 1)
+    jaw *= smoothstep(hinge[2] - 0.006, hinge[2] + 0.01, z) * smoothstep(hinge[1] + 0.014, hinge[1], y)
+    print('jaw: %d chin seeds, %d muzzle seeds, %d vertices on the jaw' % (len(chin), len(muzzle), int((jaw[inv] > 0.5).sum())))
+    return jaw[inv]
+
+
+def mouth_inside(V, faces, Nn, head, jaw, corner):
+    """The slit's walls, to be drawn as the inside of the mouth: surfaces near the lips that look
+    out into a narrow cavity (nearly every way they face, the head is close by), where the chin
+    and the lips look out into the open. Per vertex: how deep in from the lips (0..1), and whether
+    it is the tongue's side; the front of the lips at each width."""
+    hf = head[faces].mean(1) > 0.5
+    tri = V[faces[hf]]
+    cand = np.where((head > 0.5) & (np.abs(V[:, 0]) < corner[0] + 0.003) & (V[:, 1] > corner[1] - 0.006)
+                    & (V[:, 1] < corner[1] + 0.01) & (V[:, 2] > corner[2] - 0.012))[0]
+    # rays over the hemisphere each vertex faces
+    rng = np.random.default_rng(3)
+    k = 20
+    d = rng.normal(size=(k, 3))
+    d /= np.linalg.norm(d, axis=1, keepdims=True)
+    blocked = np.zeros(len(cand))
+    for j in range(k):
+        D = d[j] * np.sign(np.einsum('ij,j->i', Nn[cand], d[j]) + 1e-9)[:, None]
+        D = D + Nn[cand] * 0.35
+        D /= np.linalg.norm(D, axis=1, keepdims=True)
+        blocked += ray_hits(V[cand] + Nn[cand] * 2e-5, D, tri, 0.04)
+    # (the eye sockets are holes in the face the eyes fill: rays from the mouth leave through
+    # them, so a wall of the slit sees about two thirds of its sky blocked, the chin a quarter)
+    inner = np.zeros(len(V), bool)
+    inner[cand[blocked / k > 0.45]] = True
+    # depth: from the front of the lips at that width back to the fold
+    lips = (head > 0.5) & (V[:, 1] > corner[1] - 0.002) & (V[:, 1] < corner[1] + 0.009) & (V[:, 2] > corner[2] - 0.004)
+    ax = np.abs(V[:, 0])
+    front = np.array([V[lips & (np.abs(ax - a) < 0.0018), 2].max() if (lips & (np.abs(ax - a) < 0.0018)).any() else corner[2] for a in ax])
+    back = V[inner, 2].min() if inner.any() else corner[2] - 0.006
+    depth = np.clip((front - V[:, 2]) / np.maximum(front - back, 0.004), 0, 1)
+    inner &= depth > 0.03
+    print('inside of the mouth: %d vertices (%d tongue side), from z %.4f back to %.4f' % (inner.sum(), (inner & (jaw > 0.5)).sum(), front.max(), back))
+    return inner, depth, front
+
+
+def teeth(V, inner, jaw, depth, front):
+    """four canines, as cones in the slit just behind the lips: the upper ones hang from the
+    palate's wall, the lower ones stand on the tongue's. Each vertex keeps its tooth's root, so the
+    tooth can grow out of the gum as the mouth opens (shut, it would come through the lips)."""
+    P, F, R, up = [], [], [], []
+    def wall(x, lower):
+        sel = inner & ((jaw > 0.5) == lower) & (np.abs(np.abs(V[:, 0]) - abs(x)) < 0.003) & (depth > 0.08) & (depth < 0.45)
+        return V[sel].mean(0)
+    for x, lower, length, rad in ((0.0082, False, 0.0055, 0.0011), (-0.0082, False, 0.0055, 0.0011), (0.0068, True, 0.004, 0.0009), (-0.0068, True, 0.004, 0.0009)):
+        w = wall(x, lower)
+        base = np.array([x, w[1] + (-0.0012 if lower else 0.0012), w[2]])
+        tip = base + np.array([0, length if lower else -length, -0.0006])
+        n0 = len(P)
+        for k in range(8):
+            a = k / 8 * 2 * np.pi
+            P.append(base + rad * np.array([np.cos(a), 0, np.sin(a)]))
+        P.append(tip)
+        for k in range(8):
+            F.append([n0 + k, n0 + (k + 1) % 8, n0 + 8] if lower else [n0 + (k + 1) % 8, n0 + k, n0 + 8])
+        R += [base] * 9
+        up += [lower] * 9
+    return np.array(P), np.array(F), np.array(R), np.array(up)
+
+
 # ------------------------------------------------------------------ weights
 def chain_weights(V, pts, blend):
     """Weights over a chain of bones (bone i runs from pts[i] to pts[i+1]): each vertex goes to the
@@ -513,8 +625,10 @@ def main():
     tex8 = paint_out_eyes((tex * 255).round().astype(np.uint8), V, faces, F['uv'], sockets, isl)
     V = hug_eyes(V, faces, inv, isl, eyes, sockets)
     eyeMid = (eyes['L']['c'] + eyes['R']['c']) / 2
-    # jaw hinge: back under the eye, a little above the corner of the mouth (as in our own head)
-    B['jaw'] = np.array([0, nose[1] - 0.008, eyeMid[2] - 0.04])
+    # the corners of the mouth (the sculpt's lip line ends there) and the jaw's hinge: under the
+    # eye, a little behind and above the corner, as a cat's is
+    corner = np.array([0.0183, 0.2259, 0.1923])
+    B['jaw'] = np.array([0, corner[1] + 0.006, corner[2] - 0.017])
     print('bones moved from our own skeleton (cm):', {n: round(float(np.linalg.norm(B[n] - M.pos(n))) * 100, 1) for n in B if np.linalg.norm(B[n] - M.pos(n)) > 0.005})
 
     # --- weights: the artist's regions, shared out over our bones by where each vertex lies
@@ -536,9 +650,8 @@ def main():
     add('tail', tl, tail, 0.5)
     # the head: ears off the skull, the lower jaw below the mouth line
     ear = {s: smoothstep(0.283, 0.295, V[:, 1]) * smoothstep(0.016, 0.024, V[:, 0] * x) for s, x in (('L', 1), ('R', -1))}
-    mouth = nose[1] - 0.012
-    jaw = smoothstep(mouth + 0.002, mouth - 0.004, V[:, 1]) * smoothstep(B['jaw'][2] - 0.006, B['jaw'][2] + 0.01, V[:, 2])
     hw = G['head']
+    jaw = jaw_split(V, faces, inv, hw, nose, corner, B['jaw'])
     Wo[:, bi['earL']] += hw * ear['L']
     Wo[:, bi['earR']] += hw * ear['R']
     Wo[:, bi['jaw']] += hw * jaw * (1 - ear['L'] - ear['R'])
@@ -552,6 +665,19 @@ def main():
 
     Nn = normals(V, faces, inv)
     tex8 = pink_ears(tex8, V, faces, F['uv'], Nn, Wo[:, bi['earL']] + Wo[:, bi['earR']], B)
+    # the inside of the mouth (reg 1: depth in from the lips, the tongue's side) and the teeth
+    # (reg 2, each vertex with its tooth's root), drawn by the coat's shader
+    inner, depth, lipfront = mouth_inside(V, faces, Nn, hw, Wo[:, bi['jaw']], corner)
+    reg = inner.astype(np.float32)
+    aux = np.zeros((len(V), 3), np.float32)
+    aux[inner, 0] = depth[inner]
+    aux[inner, 1] = (Wo[inner, bi['jaw']] > 0.5)
+    # the snarl: the upper lip over the canines draws up off the teeth (aux.z: how much)
+    lipY = corner[1] + 0.0035 - 0.0035 * (np.abs(V[:, 0]) / corner[0]) ** 2
+    up = (~inner) & (Wo[:, bi['jaw']] < 0.5) & (V[:, 2] > corner[2] - 0.004)
+    aux[up, 2] = (np.exp(-((np.abs(V[:, 0]) - 0.0095) / 0.0055) ** 2) * smoothstep(lipY + 0.012, lipY + 0.002, V[:, 1])
+                  * smoothstep(lipY - 0.003, lipY, V[:, 1]))[up]
+    TP, TF, TR, TL = teeth(V, inner, Wo[:, bi['jaw']], depth, lipfront)
     buf = io.BytesIO()
     Image.fromarray(tex8).save(buf, 'PNG', optimize=True)
     png = buf.getvalue()
@@ -577,11 +703,31 @@ def main():
         lm['lidUV' + s] = E(coef.T.ravel())          # u = a.x + b.y + c, v = d.x + e.y + f
         print('lid -> texture map, eye %s: %d head vertices, median miss %.4f of the texture' % (s, n, err))
     print('eyes: radius %.1f mm, centres %s / %s, lid opening x%s' % (R_eye * 1000, lm['eyeL'], lm['eyeR'], lm['lidScale']))
-    export(out, V, faces, Nn, order, w4, F['uv'], names, B, lm, png)
+    # the teeth join the mesh last (nothing above works on them)
+    n0 = len(V)
+    tw = np.zeros((len(TP), 4))
+    tw[:, 0] = 1
+    tj = np.zeros((len(TP), 4), int)
+    tj[:, 0] = np.where(TL, bi['jaw'], bi['head'])
+    tn = TP - TR
+    tn[:, 1] = 0
+    tn /= np.linalg.norm(tn, axis=1, keepdims=True) + 1e-9
+    V = np.vstack([V, TP])
+    faces = np.vstack([faces, TF + n0])
+    order = np.vstack([order, tj])
+    w4 = np.vstack([w4, tw])
+    Nn = np.vstack([Nn, tn])
+    uvs = np.vstack([F['uv'], np.zeros((len(TP), 2))])
+    reg = np.concatenate([reg, np.full(len(TP), 2, np.float32)])
+    aux = np.vstack([aux, TR.astype(np.float32)])
+    if os.environ.get('DUMP'):
+        np.savez(os.environ['DUMP'], V=V, faces=faces, uv=uvs, Nn=Nn, reg=reg, aux=aux, nose=nose, Wo=Wo, names=np.array(names),
+                 B=np.array([B[n] for n in names]), tex=tex8, eyeL=eyes['L']['c'], eyeR=eyes['R']['c'])
+    export(out, V, faces, Nn, order, w4, uvs, names, B, lm, png, reg, aux)
     print('wrote', out)
 
 
-def export(out, V, faces, Nn, j, w, uv, names, B, lm, png):
+def export(out, V, faces, Nn, j, w, uv, names, B, lm, png, reg=None, aux=None):
     """same layout as model.py's export_bin (read by src/cat3d/load.ts), plus UVs and the texture"""
     blobs, off = [], 0
 
@@ -596,7 +742,8 @@ def export(out, V, faces, Nn, j, w, uv, names, B, lm, png):
     n = len(V)
     mesh = dict(name='body', count=n, index=len(faces) * 3, pos=add(V.astype(np.float32)), nrm=add(Nn.astype(np.float32)),
                 jnt=add(j.astype(np.uint16)), wgt=add(w.astype(np.float32)), idx=add(faces.astype(np.uint32)),
-                reg=add(np.zeros(n, np.float32)), aux=add(np.zeros((n, 3), np.float32)), uv=add(uv.astype(np.float32)))
+                reg=add((np.zeros(n) if reg is None else reg).astype(np.float32)),
+                aux=add((np.zeros((n, 3)) if aux is None else aux).astype(np.float32)), uv=add(uv.astype(np.float32)))
     texture = dict(data=add(png), bytes=len(png), mime='image/png')
     bones = [{'name': nm, 'parent': M.BONES[nm][0], 'pos': np.round(B[nm], 5).tolist()} for nm in names]
     head = json.dumps(dict(landmarks=lm, bones=bones, meshes=[mesh], correctives=None, strands=None, texture=texture, credit=CREDIT)).encode()

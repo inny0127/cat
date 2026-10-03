@@ -14,21 +14,28 @@ varying vec2 vUv;
 varying vec3 vN;
 varying vec3 vWorld;
 varying float vAO;
-varying float vMouth;
+// 0 the coat; 1 the inside of the mouth (aux: how deep in from the lips, the tongue's side);
+// 2 a tooth (aux: its root)
+attribute float reg;
+attribute vec3 aux;
+varying float vReg;
+varying vec3 vAux;
 uniform float uPuff;
 uniform float uBonePuff[NBONES];
-uniform float uJawZ;
+uniform float uJawOpen;
+uniform float uSnarl;
 ${AO_GLSL}
 void main() {
-  // where the lower jaw blends into the head in front of the hinge: the lips. When the jaw opens
-  // these faces stretch, and they are drawn as the inside of the mouth
-  float wj = 0.0;
-  for (int i = 0; i < 4; i++) wj += int(skinIndex[i]) == JAW ? skinWeight[i] : 0.0;
-  vMouth = 4.0 * wj * (1.0 - wj) * step(uJawZ + 0.008, position.z);
+  vReg = reg;
+  vAux = aux;
   #include <beginnormal_vertex>
   #include <skinbase_vertex>
   #include <skinnormal_vertex>
   #include <begin_vertex>
+  // the teeth grow out of the gums as the mouth opens: shut, they would come through the lips
+  if (reg > 1.5) transformed = aux + (transformed - aux) * clamp((uJawOpen - 0.03) * 6.0, 0.0, 1.0);
+  // snarling, the upper lip draws up and back off the canines
+  else if (reg < 0.5) transformed += vec3(0.0, 0.0028, -0.0012) * aux.z * uSnarl;
   // fur on end: a painted coat has no hairs to raise, so the body swells a little instead, most
   // along the back and the tail (the bottle-brush), least on the face and paws, and unevenly, as
   // raised fur is
@@ -60,7 +67,8 @@ uniform vec3 uGroundCol;
 uniform float uSpec;   // the hair shading below wants it declared
 uniform float uJawOpen;
 ${GRADE_GLSL}
-varying float vMouth;
+varying float vReg;
+varying vec3 vAux;
 varying vec2 vUv;
 varying vec3 vN;
 varying vec3 vWorld;
@@ -68,7 +76,17 @@ varying float vAO;
 ${LIGHT_GLSL}
 void main() {
   vec3 col = texture2D(uMap, vUv).rgb;
-  vec3 N = normalize(vN);
+  // inside the mouth: the lips' skin, then pink gums and palate, the tongue a softer pink, dark
+  // toward the throat; the teeth ivory
+  if (vReg > 0.5 && vReg < 1.5) {
+    float d = vAux.x;
+    vec3 wall = mix(vec3(0.72, 0.36, 0.40), vec3(0.88, 0.50, 0.54), vAux.y);
+    vec3 inside = mix(wall, vec3(0.20, 0.05, 0.07), smoothstep(0.35, 0.95, d));
+    col = mix(col, inside, smoothstep(0.12, 0.3, d));
+  } else if (vReg > 1.5) col = vec3(0.97, 0.94, 0.88);
+  // the coat seen from inside is only ever seen through the open mouth: the inside of the cheeks
+  else if (!gl_FrontFacing) col = vec3(0.45, 0.18, 0.21);
+  vec3 N = normalize(vN) * (gl_FrontFacing ? 1.0 : -1.0);
   float sh = keyShadow(vWorld, N);
   vec3 c;
   if (uSolid > 0.5) {
@@ -81,9 +99,6 @@ void main() {
     vec3 amb = mix(uGroundCol, uSkyCol, clamp(N.y * 0.5 + 0.5, 0.0, 1.0));
     c = col * (uKeyCol * 0.3183 * wrap * sh + uFillCol * 0.3183 * max(dot(N, uFillDir), 0.0) + amb * 1.4) * vAO;
   }
-  // the open mouth (the hiss): dark pink, deeper toward the back
-  float mouth = clamp(uJawOpen * 4.0, 0.0, 1.0) * smoothstep(0.25, 0.7, vMouth);
-  c = mix(c, vec3(0.26, 0.05, 0.06) * (uSolid > 0.5 ? 1.0 : 0.6), mouth);
   gl_FragColor = vec4(c, 1.0);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
@@ -103,15 +118,16 @@ function bristle(name: string) {
 }
 
 export function makeSkinMaterial(map: THREE.Texture, shared: Record<string, { value: unknown }>, bones: { name: string; pos: number[] }[]) {
-  const jaw = bones.findIndex((b) => b.name === 'jaw');
   return new THREE.ShaderMaterial({
     uniforms: {
       ...shared, uMap: { value: map }, uSolidGain: { value: 1.7 }, uSolidSat: { value: 1.3 },
       uBonePuff: { value: bones.map((b) => bristle(b.name)) },
-      uJawZ: { value: jaw >= 0 ? bones[jaw].pos[2] : 1e3 }, uJawOpen: { value: 0 },
+      uJawOpen: { value: 0 }, uSnarl: { value: 0 },
     },
     vertexShader: VERT,
     fragmentShader: FRAG,
-    defines: { NBONES: bones.length, JAW: jaw },
+    defines: { NBONES: bones.length },
+    // the inside of the mouth is seen from within
+    side: THREE.DoubleSide,
   });
 }
