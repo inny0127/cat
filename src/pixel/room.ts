@@ -661,6 +661,8 @@ export class Room {
   private readonly sky: THREE.ShaderMaterial;
   private readonly shade: THREE.ShaderMaterial;
   private readonly bulbs: THREE.ShaderMaterial[] = [];
+  /** the monstera's leaves, as they were set, to stir about that */
+  private readonly leaves: { leaf: THREE.Mesh; x: number; z: number; seed: number }[] = [];
   private readonly mats: THREE.ShaderMaterial[] = [];
   private time = 0;
 
@@ -1090,6 +1092,7 @@ export class Room {
       leaf.rotation.set(-0.5 - 0.3 * (1 - lean), Math.sin(a) * 0.35, -Math.sin(a) * 0.95);
       shadowy(leaf);
       this.group.add(leaf);
+      this.leaves.push({ leaf, x: leaf.rotation.x, z: leaf.rotation.z, seed: a * 3.1 + h * 7 });
     }
 
     // in front: a stack of books with a mug on top, and a ball of yarn the cat plays with
@@ -1782,6 +1785,13 @@ export class Room {
     su.uSnowLie.value = se.winter;
     this.time += dt;
     this.timeU.value = this.time;
+    // the air in the room just stirs the monstera's leaves, now one, now another, slowly
+    for (const L of this.leaves) {
+      const t = this.time * 0.45 + L.seed;
+      const w = Math.sin(t) * 0.6 + Math.sin(t * 2.3 + 1.7) * 0.4;
+      L.leaf.rotation.x = L.x + 0.025 * w;
+      L.leaf.rotation.z = L.z + 0.018 * Math.sin(t * 0.8 + 2.1);
+    }
     this.rollYarn(dt);
     this.flyBug(dt, d.lamp > 0.5, 1 - Room.dark(hour), date.getMonth(), rain);
     this.sky.uniforms.uTime.value = this.time;
