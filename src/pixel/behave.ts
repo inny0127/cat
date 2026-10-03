@@ -858,7 +858,8 @@ export class Zoomies implements Act {
     // front right (clear of the books), ... (when the box is out on the left, the right only)
     const box = c.box() !== null;
     const F = () => at(box ? rand(0.04, 0.12) : rand(-0.1, 0.1), rand(0.44, 0.5));
-    const L = () => at(-0.42, rand(0.12, 0.24));
+    // (not so far out to the left that it runs out of the picture before the view can follow)
+    const L = () => at(-0.36, rand(0.14, 0.24));
     const R = () => at(rand(0.14, 0.22), rand(0.5, 0.56));
     const n = 3 + Math.floor(Math.random() * 3);
     const cycle = box ? [F, R] : Math.random() < 0.5 ? [F, L, R, L] : [L, F, R, F];

@@ -298,7 +298,8 @@ export class PixelApp {
     const lead = want.x + m.vel.x * 0.7 * (1 - m.zoom);
     const off = lead - this.panX, dead = 0.07;
     const goal = Math.max(-0.3, Math.min(0.46, off > dead ? lead - dead : off < -dead ? lead + dead : this.panX));
-    this.panX += (goal - this.panX) * (1 - Math.exp(-dt * 1.8));
+    // (a little quicker after it when it is tearing about, so that it is not lost off the side)
+    this.panX += (goal - this.panX) * (1 - Math.exp(-dt * (1.8 + 1.2 * m.zoom)));
     const rate = this.focusT > this.focus ? 1.6 : 0.8;
     this.focus += Math.max(-rate * dt, Math.min(rate * dt, this.focusT - this.focus));
     this.placeCamera();
