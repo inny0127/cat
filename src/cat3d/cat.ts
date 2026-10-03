@@ -366,7 +366,7 @@ export class Cat3D {
     this.shared.uPuff.value = p.puff;
     if (this.skin) {
       this.skin.uniforms.uJawOpen.value = p.jaw;
-      this.skin.uniforms.uSnarl.value = motor.feel.snarl;
+      this.skin.uniforms.uSnarl.value = Math.max(motor.feel.snarl, motor.hissNow);
     }
   }
 

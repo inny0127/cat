@@ -386,6 +386,7 @@ export class Brain {
     this.purr = 0;
     if (chance(0.5)) this.audio.play('growl', { gain: 0.6 });
     this.audio.play('hiss', { gain: 0.85, delay: 0.1 });
+    this.anim.hiss?.();
     this.haptic.tap('medium');
     if (contacts.length && chance(0.55 + 0.3 * clamp(-this.s.trust))) {
       this.later(0.35, () => {

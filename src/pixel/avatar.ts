@@ -350,6 +350,10 @@ export class PixelAvatar implements Avatar {
     this.cat.motor.slowBlink();
   }
 
+  hiss() {
+    this.cat.motor.hiss();
+  }
+
   /** eating and drinking where you can see: crouched with the head in the bowl, chewing or lapping */
   private doErrand(dt: number) {
     const e = this.errand!, m = this.cat.motor;

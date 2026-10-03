@@ -239,6 +239,15 @@ export class Motor {
     this.tailFlickW.kick(-(1.6 + Math.random() * 0.8) * strength);
   }
 
+  private hissT = -1;
+  /** how far into the hiss itself (0 .. 1): the coat shader draws the lip up off the fangs with it */
+  hissNow = 0;
+  /** the hiss itself: the mouth flung wide on the fangs, the ears flat back, the whiskers back,
+   *  the head drawn back, then easing to a snarl */
+  hiss() {
+    this.hissT = 0;
+  }
+
   /** startle: the head jerks up */
   jolt(strength = 1) {
     this.joltW.kick((1.2 + Math.random() * 0.6) * strength);
@@ -402,6 +411,21 @@ export class Motor {
     p.jaw = clamp(p.jaw + f.jaw);
     p.headPitch += f.headPitch;
     p.breath = clamp(p.breath + f.breath);
+    if (this.hissT >= 0) {
+      this.hissT += dt;
+      const ht = this.hissT;
+      const env = ht < 0.09 ? ht / 0.09 : ht < 0.85 ? 1 : Math.max(0, 1 - (ht - 0.85) / 0.6);
+      if (env <= 0 && ht > 0.5) this.hissT = -1;
+      this.hissNow = env;
+      p.jaw = Math.max(p.jaw, 0.95 * env);
+      p.earFlat = clamp(p.earFlat + env);
+      p.earFwd -= 0.8 * env;
+      p.earOut += 0.5 * env;
+      p.whisker = clamp(p.whisker - env, -1, 1);
+      p.squint = clamp(p.squint + 0.3 * env);
+      p.headPitch += 0.16 * env;
+      p.neckPitch -= 0.12 * env;
+    } else this.hissNow = 0;
     // tail: a lazy swish, more when the motor asks for it or the cat is cross or keen
     this.wavePhase += dt * (1.1 + 1.6 * this.waveAmp) * this.tailWaveSpeed * Math.max(0.2, f.tailWaveSpeed);
     // ears: flick now and then, often when annoyed

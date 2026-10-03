@@ -40,6 +40,8 @@ export interface Avatar {
   /** startle */
   jolt(strength?: number): void;
   swat(dirX?: number, dirY?: number): void;
+  /** the hiss itself, if the body can show it (a mouth that opens) */
+  hiss?(): void;
   sigh(): void;
   /** leave: dir -1 left, 1 right; calm walks off rather than bolting; reason: the errand, if one
    *  (a body with a room to show it in goes to the bowl or the box) */
