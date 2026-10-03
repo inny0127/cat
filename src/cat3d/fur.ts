@@ -759,6 +759,8 @@ export function makeFurMaterials(opts: FurOptions, an: Anatomy, corr: Corrective
     uDay: { value: 1 },
     // pixel art in the cat's room: lit by the room's light (roomlight.ts)
     uRoomLit: { value: 0 },
+    // the height of what the cat lies, sits or stands on (the floor, the bed, the sill)
+    uGround: { value: 0 },
     ...roomLightUniforms(),
     uCorr: { value: corr ? corr.texture : null },
     uCorrW: { value: new Array(Math.max(1, corr ? corr.poses.length : 1)).fill(0) as number[] },

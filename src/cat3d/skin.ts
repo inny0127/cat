@@ -74,6 +74,7 @@ uniform vec3 uGroundCol;
 uniform float uSpec;   // the hair shading below wants it declared
 uniform float uJawOpen;
 uniform float uRoomLit;
+uniform float uGround;
 ${GRADE_GLSL}
 ${PIX_GLSL}
 ${ROOM_LIGHT_GLSL}
@@ -102,6 +103,10 @@ void main() {
       // modelled as a painter models a figure, whatever the room's light: lighter where the body
       // turns up and toward you from the left, darker where it turns down and away
       lt.x *= mix(0.78, 1.14, smoothstep(-0.45, 0.75, dot(Np, normalize(vec3(-0.45, 0.8, 0.4)))));
+      // and in its own shade low down, where it meets what it lies or stands on (the lower flanks
+      // of a loaf, paws tucked under, the belly), as a form darkens toward the ground
+      float under = 1.0 - smoothstep(-0.3, 0.6, Np.y);
+      lt.x *= 1.0 - 0.5 * under * (1.0 - smoothstep(0.004, 0.085, vWorld.y - uGround));
     } else {
       float direct = smoothstep(-0.15, 0.55, dot(Np, uKeyDir)) * mix(0.25, 1.0, shp);
       // key, sky, fill, and the warm floor bouncing light up under the chin and belly

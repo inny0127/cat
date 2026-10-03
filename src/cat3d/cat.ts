@@ -307,6 +307,7 @@ export class Cat3D {
     group.position.y += this.lift;
     group.rotation.set(0, motor.yaw, 0);
     group.updateMatrixWorld(true);
+    this.shared.uGround.value = group.position.y;
     this.inv.copy(group.matrixWorld).invert();
 
     body.trunk(p);
