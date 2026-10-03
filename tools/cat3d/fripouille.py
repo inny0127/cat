@@ -4,8 +4,10 @@ Source model: "3d modelling my cat: Fripouille" by guillaume bolis
   https://sketchfab.com/3d-models/3d-modelling-my-cat-fripouille-0ab14bf98e754f8d90fe1bf1c84ca66c
   licensed CC BY 4.0, https://creativecommons.org/licenses/by/4.0/
 Changes made here: rigged to our skeleton (bones and weights), the tail straightened onto the
-skeleton's rest line, rescaled and turned to our axes. Its own eyeballs, whiskers and material maps
-are not used: the procedural eyes sit in its sockets and the procedural whiskers on its muzzle.
+skeleton's rest line, rescaled and turned to our axes, its coat simplified into a few flat colours
+for the pixel art (the back's tabby stripes joined into bands). Its own eyeballs, whiskers and
+material maps are not used: the procedural eyes sit in its sockets and the procedural whiskers on
+its muzzle.
 
 The Sketchfab glTF does not hold together: the body's vertices are stored point-reflected and at a
 different scale from what its bind matrices expect. The body is put back by fitting the rings of
@@ -24,7 +26,8 @@ import model as M  # noqa: E402  (our skeleton)
 
 URL = 'https://huggingface.co/datasets/allenai/objaverse/resolve/main/glbs/000-125/0ab14bf98e754f8d90fe1bf1c84ca66c.glb'
 CREDIT = ('"3d modelling my cat: Fripouille" by guillaume bolis (https://sketchfab.com/guillaume.bolis.neko), '
-          'CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/). Rigged, re-posed and given procedural eyes for this app.')
+          'CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/). Rigged, re-posed, its coat simplified into flat '
+          'colours for pixel art and given procedural eyes for this app.')
 
 # the source rig's bones, by what they are
 SPINE = ['Bone_01', 'Bone.001_02', 'Bone.002_03', 'Bone.003_04', 'Bone.004_05']   # pelvis .. head
@@ -520,9 +523,24 @@ def pixel_coat(tex8):
     cls = np.zeros(Ls.shape, np.int32)
     orange = (Cs >= 0.035) & (hs > 35) & (hs < 95)
     pink = (Cs > 0.035) & ((hs < 35) | (hs > 330)) & (Ls > 0.55)
+    # the back's tabby stripes: in the painting they are broken into dabs, each a tuft or two darker
+    # than the coat round it, which at a few millimetres to the art pixel read as dots and dashes.
+    # Joined along their run (down the flanks from the spine: up and down the back's island, the
+    # piece of coat on the left of the texture) they read as stripes
+    H, W = Ls.shape
+    om = orange.astype(np.float32)
+    L2 = blur(lab[..., 0], 2.0)
+    darker = (blur(L2 * om, 12) / np.maximum(blur(om, 12), 1e-3) - L2) * om
+    _, piece = cv2.connectedComponents((orange | (Ls < 0.5)).astype(np.uint8))
+    back = (piece == piece[int(H * 0.234), int(W * 0.195)]) & orange
+    back[:, :6] = False
+    back[:, int(W * 0.354):] = False
+    bw = back.astype(np.float32)
+    along = lambda x: cv2.GaussianBlur(x, (0, 0), sigmaX=2.0, sigmaY=14.0)
+    joined = along(darker * bw) / np.maximum(along(bw), 1e-3)
     cls[orange] = 2
     cls[orange & (blur(Ls, 4.0) > 0.655)] = 1
-    cls[orange & (Ls < 0.50)] = 3
+    cls[orange & ((Ls < 0.50) | (back & (joined > 0.018)))] = 3
     cls[pink] = 4
     cls[Ls < 0.3] = 5
     soft = np.stack([blur(cls == k, 2.5) for k in range(len(PIX_KEYS))], -1)

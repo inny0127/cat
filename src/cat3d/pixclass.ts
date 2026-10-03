@@ -31,7 +31,7 @@ export type Material = keyof typeof PIX;
 
 /** five steps per material, deep shadow to highlight (display sRGB), in material order */
 export const RAMPS: string[][] = [
-  ['#8b7f96', '#bdb2c0', '#e3dbdb', '#f7f0e8', '#fffbf3'],   // white fur: lavender in shadow, warm in the light
+  ['#7e7290', '#ab9fb8', '#d4cad4', '#efe7e4', '#fffbf3'],   // white fur: lavender in shadow, warm in the light
   ['#7b5160', '#b9806f', '#e2ac82', '#f6cf9b', '#ffebc2'],   // cream
   ['#5e2f3a', '#9a4434', '#cf6a32', '#ec9447', '#f9bd6c'],   // ginger
   ['#42222f', '#6c2f30', '#9c4329', '#c15e2c', '#dc8240'],   // the stripes

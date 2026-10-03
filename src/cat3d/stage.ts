@@ -281,8 +281,11 @@ void main() {
     col = clamp(col * tint, 0.0, 1.0);
     // richer: a little more colour in the lights and middle tones (not the darks, which would go
     // garish), the darks a little deeper
+    // (the more colour a thing has already, the less it is given: a ginger coat stays a coat, not
+    // a neon sign)
     float lu = dot(col, vec3(0.299, 0.587, 0.114));
-    col = clamp(mix(vec3(lu), col, mix(1.0, 1.22, smoothstep(0.12, 0.45, lu))), 0.0, 1.0);
+    float chroma = max(col.r, max(col.g, col.b)) - min(col.r, min(col.g, col.b));
+    col = clamp(mix(vec3(lu), col, 1.0 + 0.22 * smoothstep(0.12, 0.45, lu) * (1.0 - smoothstep(0.3, 0.7, chroma))), 0.0, 1.0);
     col = col * col * (3.0 - 2.0 * col) * 0.35 + col * 0.65;
     if (glows) glow = 1.0;
     else if (partGlow > 0.0) glow = partGlow;
