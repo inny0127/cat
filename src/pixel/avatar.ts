@@ -93,6 +93,8 @@ export class PixelAvatar implements Avatar {
   hands: { sx: number; sy: number }[] = [];
   feel: ((sx: number, sy: number) => { bone: string; point: THREE.Vector3 } | null) | null = null;
   private rub = 0;
+  /** after eating: a wash of the face before it goes */
+  private washAfter: Act | null = null;
   private rubSide = 1;
   private readonly eyesAt = new THREE.Vector3();
 
@@ -488,7 +490,17 @@ export class PixelAvatar implements Avatar {
     e.t += dt;
     if (e.phase === 'do') {
       if (e.t > e.dur) {
-        // done: off out of the room, the far way round
+        // done eating: sat up from the bowl, a wash of the face first; then off
+        if (e.reason === 'eat' && !this.washAfter) {
+          this.washAfter = washFace();
+          m.layer = null;
+        }
+        if (this.washAfter) {
+          if (this.washAfter.update(dt, this.ctx)) return;
+          this.washAfter.stop(this.ctx);
+          this.washAfter = null;
+        }
+        // off out of the room, the far way round
         e.phase = 'off';
         m.layer = null;
         m.setPosture('stand');
@@ -514,6 +526,9 @@ export class PixelAvatar implements Avatar {
       return;
     }
     const m = this.cat.motor;
+    // whatever it was doing is dropped first (stopping it later would stop this walk too)
+    this.stopAct();
+    m.layer = null;
     const spot = !calm || !this.spots ? null : reason === 'eat' ? this.spots.food : reason === 'drink' ? this.spots.water : reason === 'litter' ? this.spots.litter : null;
     if (spot) {
       // walk to it and stop with the mouth over the bowl (the box: in it); the errand itself
@@ -522,6 +537,7 @@ export class PixelAvatar implements Avatar {
       const reach = reason === 'litter' ? 0 : 0.2;
       const at = new THREE.Vector3(spot.x - Math.sin(face) * reach, 0, spot.z - Math.cos(face) * reach);
       this.trip = { kind: 'errand' };
+      this.washAfter = null;
       this.errand = {
         reason: reason!, phase: 'go', t: 0, dur: reason === 'eat' ? 26 + Math.random() * 14 : reason === 'drink' ? 12 + Math.random() * 8 : 0,
         dir: spot.x >= 0 ? 1 : -1,
