@@ -84,14 +84,14 @@ const PAL_CAT = [
   '#fde6bd', '#f8cb8c', '#efa75c', '#de8337', '#c06222', '#954418', '#662c12',
   // white fur, shading toward rose
   '#fffaf7', '#f9e9e4', '#f0d5cc', '#e3bcae', '#cfa08f',
-  // pink skin: inside the ears, the nose, the pads
-  '#f8c6c0', '#ee9f9a', '#d47f7f',
+  // pink skin: inside the ears, the nose, the pads; the inside of the mouth
+  '#f8c6c0', '#ee9f9a', '#d47f7f', '#9c3f45',
   // outlines
   '#3c2416', '#21140d',
 ];
 const PAL_EYE = ['#ecd98a', '#c4c25a', '#8a8a36', '#4f5222', '#121010', '#ffffff'];
 const PAL_BG = ['#f4eee4', '#e6dccd', '#d0c2ae', '#b3a28b', '#8f7d67', '#6d5b48', '#3c2416'];
-const OUTLINE = 15;   // index of the outline colour in PAL_CAT
+const OUTLINE = 16;   // index of the outline colour in PAL_CAT
 const NPAL = Math.max(PAL_CAT.length, PAL_BG.length, PAL_EYE.length);
 
 const PIXEL_FRAG = /* glsl */ `

@@ -1,4 +1,4 @@
-import type { Animator } from '../rig/animator';
+import type { Avatar } from './avatar';
 import type { CatAudio } from '../audio/audio';
 import type { Haptic } from '../platform/haptics';
 import type { Hint } from '../ui/hint';
@@ -17,6 +17,8 @@ export interface Senses {
   headScreen(): { x: number; y: number };
   viewW(): number;
   motionShake: boolean; // can the phone itself be shaken?
+  /** which ear a touch at this point is on (default: the painting's left half is the left ear) */
+  earSide?(px: number, py: number): 'L' | 'R';
 }
 
 const HINT = {
@@ -73,7 +75,7 @@ export class Brain {
 
   constructor(
     private s: CatState,
-    private anim: Animator,
+    private anim: Avatar,
     private audio: CatAudio,
     private haptic: Haptic,
     private hint: Hint,
@@ -82,6 +84,10 @@ export class Brain {
 
   get state() {
     return this.s;
+  }
+
+  private earSide(c: Contact) {
+    return this.senses.earSide ? this.senses.earSide(c.px, c.py) : c.px < 120 ? 'L' : 'R';
   }
 
   /** decide how we find the cat when the window is opened */
@@ -157,7 +163,7 @@ export class Brain {
     this.pokes.push(this.time);
     const rough = 0.1 + 0.07 * (this.pokes.length - 1) + (zone === 'face' ? 0.12 : 0);
     this.irritation = clamp(this.irritation + rough * (this.s.trust < 0 ? 1.4 : 1));
-    this.anim.twitchEar(zone === 'ear' ? (c.px < 120 ? 'L' : 'R') : 'both', 1.2);
+    this.anim.twitchEar(zone === 'ear' ? this.earSide(c) : 'both', 1.2);
     if (zone === 'face') this.anim.doBlink();
     if (zone === 'tail') this.anim.flickTail(1.5);
     this.s.trust = clamp(this.s.trust - 0.004 * this.pokes.length, -1, 1);
@@ -364,7 +370,7 @@ export class Brain {
       s.trust = clamp(s.trust + p * dt * 0.005, -1, 1);
     }
     // physical replies to where it's touched
-    if (zone === 'ear' && chance(dt * 2.5)) this.anim.twitchEar(c.px < 120 ? 'L' : 'R', 0.8);
+    if (zone === 'ear' && chance(dt * 2.5)) this.anim.twitchEar(this.earSide(c), 0.8);
     if (zone === 'tail' && chance(dt * 3)) this.anim.flickTail(1);
     if (over > 0.3 && chance(dt * 1.5)) this.anim.flickTail(1.2);
     return p;

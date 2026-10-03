@@ -82,6 +82,67 @@ export function eyesFor(m: Mood): EyeLook {
   };
 }
 
+/** what a feeling does to the rest of the body, as changes to the posture's own (0: none) */
+export interface BodyLook {
+  earFwd: number;
+  earOut: number;
+  earFlat: number;
+  whisker: number;
+  tailLift: number;
+  tailCurve: number;
+  tailCurl: number;
+  tailSag: number;
+  /** fur on end */
+  puff: number;
+  /** mouth open (the hiss) */
+  jaw: number;
+  /** nose up (+) or down */
+  headPitch: number;
+  /** how deep the breathing is */
+  breath: number;
+  /** the tail's sway: added amplitude, and how many times faster */
+  tailWave: number;
+  tailWaveSpeed: number;
+  /** breathing, times faster */
+  breathRate: number;
+  /** ear flicks, times more often */
+  earFlicks: number;
+}
+
+/**
+ * The rest of the body, read as a cat reads another: ears forward for interest, a little out and
+ * easy when content, swivelled back and out when annoyed, flattened sideways in fear and pinned
+ * back for the hiss; whiskers forward when keen, pulled back when afraid or cross; the tail up with
+ * a hook for a friend, low and tucked in fear, bottle-brush for the hiss, twitching when annoyed
+ * and lashing in anger, low and limp when ill; fur standing on end, the mouth open to hiss; quick
+ * shallow breaths in fear, slow deep ones at ease.
+ */
+export function bodyFor(m: Mood): BodyLook {
+  const calm = 1 - m.fear;
+  const threat = m.fear * m.irritation;          // afraid and ready to fight: the defensive hiss
+  const cross = m.irritation * calm;             // annoyed and sure of itself
+  const scared = m.fear * (1 - m.irritation);    // plain fear: make itself small
+  const friendly = m.pleasure * clamp01((m.trust + 0.3) / 0.8);
+  return {
+    earFwd: 0.55 * m.arousal - 0.12 * m.pleasure - 0.55 * m.fear - 0.45 * cross - 0.25 * m.sick - 0.15 * m.sleepy,
+    earOut: 0.25 * m.pleasure + 0.5 * m.fear + 0.6 * cross + 0.35 * m.sick + 0.2 * m.sleepy,
+    earFlat: 0.8 * m.fear + 0.25 * cross,
+    whisker: 0.8 * m.arousal - 0.25 * m.pleasure - 0.9 * m.fear - 0.6 * cross - 0.3 * m.sick,
+    tailLift: 0.75 * friendly + 0.3 * m.arousal - 1.0 * scared + 0.6 * threat - 0.2 * cross - 0.5 * m.sick,
+    tailCurve: -0.35 * friendly + 0.35 * scared,
+    tailCurl: 0.45 * friendly + 0.2 * m.arousal,
+    tailSag: 0.5 * m.sick + 0.3 * m.sleepy,
+    puff: 0.65 * m.fear + 0.6 * threat + 0.15 * cross,
+    jaw: 0.9 * threat,
+    headPitch: -0.25 * scared - 0.2 * m.sick + 0.1 * m.arousal,
+    breath: 0.2 * m.pleasure - 0.15 * m.fear + 0.15 * m.sleepy,
+    tailWave: 0.35 * cross + 0.45 * cross * cross + 0.25 * m.arousal - 0.08 * m.sleepy - 0.06 * m.pleasure,
+    tailWaveSpeed: 1 + 1.6 * cross + 0.8 * m.arousal - 0.4 * m.sleepy - 0.3 * m.pleasure,
+    breathRate: 1 + 0.9 * m.fear + 0.6 * cross + 0.3 * m.arousal - 0.25 * m.pleasure - 0.3 * m.sleepy,
+    earFlicks: 1 + 3 * cross + 1.5 * m.fear,
+  };
+}
+
 /**
  * The brain's view of the cat (sim/brain.ts: its fast emotions, its mode, how ill it is and how
  * much it trusts you) as a Mood. `sick` is 0..1 as the brain works it out; `night` 0 day .. 1 night.

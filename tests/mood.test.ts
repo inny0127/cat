@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { NEUTRAL, MOODS, eyesFor, moodFromBrain, type Mood } from '../src/cat3d/mood';
+import { NEUTRAL, MOODS, bodyFor, eyesFor, moodFromBrain, type Mood } from '../src/cat3d/mood';
 import { POSES } from '../src/cat3d/pose';
 
 const eyes = (m: Partial<Mood>) => eyesFor({ ...NEUTRAL, ...m });
@@ -52,5 +52,43 @@ describe('feelings in the eyes', () => {
     const angry = moodFromBrain({ ...b, mode: 'angry', pleasure: 0, irritation: 0.7 }, 0, -0.3, 0);
     expect(eyesFor(angry).pupil).toBeLessThan(calm.pupil);
     expect(moodFromBrain({ ...b, mode: 'rest' }, 0, 0, 1).light).toBeLessThan(0.2);
+  });
+});
+
+const body = (m: Partial<Mood>) => bodyFor({ ...NEUTRAL, ...m });
+
+describe('feelings in the body', () => {
+  it('a calm cat holds its posture as it is', () => {
+    const b = bodyFor(NEUTRAL);
+    for (const [k, v] of Object.entries(b)) expect(v, k).toBeCloseTo(['tailWaveSpeed', 'breathRate', 'earFlicks'].includes(k) ? 1 : 0, 6);
+  });
+
+  it('fear: ears flattened, tail tucked, fur up, quick breaths', () => {
+    const b = body(MOODS.scared);
+    expect(b.earFlat).toBeGreaterThan(0.6);
+    expect(b.tailLift).toBeLessThan(-0.6);
+    expect(b.puff).toBeGreaterThan(0.5);
+    expect(b.breathRate).toBeGreaterThan(1.5);
+  });
+
+  it('the hiss: bottle-brush fur, the mouth open; anger: ears back and a lashing tail', () => {
+    const h = body(MOODS.hiss);
+    expect(h.puff).toBeGreaterThan(0.8);
+    expect(h.jaw).toBeGreaterThan(0.15);
+    const a = body(MOODS.angry);
+    expect(a.earFwd).toBeLessThan(-0.3);
+    expect(a.earOut).toBeGreaterThan(0.4);
+    expect(a.tailWave).toBeGreaterThan(0.5);
+    expect(a.tailWaveSpeed).toBeGreaterThan(2);
+    expect(body(MOODS.annoyed).earFlicks).toBeGreaterThan(2);
+  });
+
+  it('a happy cat that trusts you carries its tail up with a hook, and breathes slow', () => {
+    const b = body(MOODS.happy);
+    expect(b.tailLift).toBeGreaterThan(0.5);
+    expect(b.tailCurl).toBeGreaterThan(0.3);
+    expect(b.breathRate).toBeLessThan(1);
+    expect(body({ pleasure: 0.9, trust: -0.8 }).tailLift).toBeLessThan(0.1);
+    expect(body(MOODS.curious).earFwd).toBeGreaterThan(0.2);
   });
 });

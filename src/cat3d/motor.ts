@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { POSES, blendPose, clonePose, copyPose, GROUPS, type Group, type Pose, type PoseName } from './pose';
 import { Wobble, noise1, clamp } from '../util/math';
-import { NEUTRAL, eyesFor, type Mood } from './mood';
+import { NEUTRAL, bodyFor, eyesFor, type BodyLook, type Mood } from './mood';
 
 /** Which postures can go straight to which, and how long it takes (seconds). */
 const EDGES: [PoseName, PoseName, number][] = [
@@ -117,10 +117,17 @@ export class Motor {
   /** how far the feeling moves the eyes from the posture's own face (lids, lower lid, pupil),
    *  smoothed, and how bright they are */
   readonly eyes = { open: 0, squint: 0, pupil: 0, shine: 1 };
+  /** ... and the rest of the body (ears, whiskers, tail, fur, mouth, head, breath), smoothed */
+  readonly feel: BodyLook = bodyFor(NEUTRAL);
   private slowBlinkIn = 6;
   readonly twitch = { L: 0, R: 0, swivelL: 0, swivelR: 0 };
   private earL = new Wobble(380, 11);
   private earR = new Wobble(380, 11);
+  /** ears turned toward something: -1 the cat's right .. 1 its left */
+  earAim = 0;
+  private earAimS = 0;
+  private tailFlickW = new Wobble(140, 6);
+  private joltW = new Wobble(260, 12);
   private earT = 3;
   time = 0;
   tailWave = 0.15;
@@ -199,6 +206,32 @@ export class Motor {
   slowBlink() {
     this.blinkSlow = true;
     this.blinkPhase = 0;
+  }
+
+  /** an ordinary blink, now */
+  blinkNow() {
+    if (this.blinkPhase < 0) {
+      this.blinkPhase = 0;
+      this.blinkSlow = false;
+    }
+  }
+
+  /** flick an ear, or both */
+  flickEar(which: 'L' | 'R' | 'both', strength = 1) {
+    const kick = (w: Wobble) => w.kick((Math.random() < 0.5 ? -1 : 1) * (7 + Math.random() * 6) * strength);
+    if (which !== 'R') kick(this.earL);
+    if (which !== 'L') kick(this.earR);
+  }
+
+  /** a quick flick of the tail */
+  flickTail(strength = 1) {
+    this.tailFlickW.kick(-(1.6 + Math.random() * 0.8) * strength);
+  }
+
+  /** startle: the head jerks up */
+  jolt(strength = 1) {
+    this.joltW.kick((1.2 + Math.random() * 0.6) * strength);
+    this.flickEar('both', 1.2 * strength);
   }
 
   /** set what the cat feels: the named parts change, the rest stay (or return to neutral with replace) */
@@ -299,19 +332,48 @@ export class Motor {
     p.chestYaw += 0.02 * noise1(t * 0.19 + 7);
     p.headRoll += 0.05 * noise1(t * 0.13 + 11);
     p.neckPitch += 0.03 * noise1(t * 0.17 + 5);
-    // tail: a lazy swish, more when the motor asks for it
-    this.wavePhase += dt * (1.1 + 1.6 * this.tailWave) * this.tailWaveSpeed;
-    // ears: flick now and then
+    // what the cat feels, in its ears, whiskers, tail, fur, mouth, head and breath (mood.ts):
+    // ears and whiskers quick, the tail slower; fur bristles at once and lies down slowly
+    const fb = bodyFor(this.mood), f = this.feel;
+    const kk = (rate: number) => 1 - Math.exp(-dt * rate);
+    for (const key of Object.keys(fb) as (keyof BodyLook)[]) {
+      const rate = key.startsWith('ear') || key === 'whisker' || key === 'jaw' ? 6
+        : key === 'puff' ? (fb.puff > f.puff ? 4 : 0.7)
+        : key.startsWith('tail') ? 2.5 : 1.5;
+      f[key] += (fb[key] - f[key]) * kk(rate);
+    }
+    p.earFwd += f.earFwd;
+    p.earOut += f.earOut;
+    p.earFlat = clamp(p.earFlat + f.earFlat);
+    p.whisker = clamp(p.whisker + f.whisker, -1, 1);
+    // a tail lying on the floor (sleeping, lying on the side) stays there
+    const up = 1 - clamp(p.tailSag);
+    p.tailLift += f.tailLift * up;
+    p.tailCurve += f.tailCurve * up;
+    p.tailCurl += f.tailCurl;
+    p.tailSag = clamp(p.tailSag + f.tailSag);
+    p.puff = clamp(p.puff + f.puff);
+    p.jaw = clamp(p.jaw + f.jaw);
+    p.headPitch += f.headPitch;
+    p.breath = clamp(p.breath + f.breath);
+    // tail: a lazy swish, more when the motor asks for it or the cat is cross or keen
+    this.wavePhase += dt * (1.1 + 1.6 * this.waveAmp) * this.tailWaveSpeed * Math.max(0.2, f.tailWaveSpeed);
+    // ears: flick now and then, often when annoyed
     this.earT -= dt;
     if (this.earT < 0) {
-      this.earT = 1.5 + Math.random() * 5;
+      this.earT = (1.5 + Math.random() * 5) / Math.max(1, f.earFlicks);
       const side = Math.random() < 0.5 ? this.earL : this.earR;
       side.kick((Math.random() < 0.5 ? -1 : 1) * (8 + Math.random() * 10));
     }
     this.twitch.L = this.earL.step(dt);
     this.twitch.R = this.earR.step(dt);
-    this.twitch.swivelL = 0.25 * noise1(t * 0.3 + 1);
-    this.twitch.swivelR = 0.25 * noise1(t * 0.3 + 9);
+    this.earAimS += (this.earAim - this.earAimS) * (1 - Math.exp(-dt * 6));
+    this.twitch.swivelL = 0.25 * noise1(t * 0.3 + 1) + 0.6 * this.earAimS;
+    this.twitch.swivelR = 0.25 * noise1(t * 0.3 + 9) + 0.6 * this.earAimS;
+    // startle and tail flicks: springs that settle by themselves
+    p.headPitch += 0.35 * this.joltW.step(dt);
+    p.neckPitch += 0.2 * this.joltW.x;
+    this.tailFlickW.step(dt);
     // gaze
     if (this.lookTarget) this.look.copy(this.lookTarget);
     this.lookS.lerp(this.look, 1 - Math.exp(-dt * 7));
@@ -360,10 +422,15 @@ export class Motor {
   /** gait phase is kept by the stepper; the cat object copies it in */
   gaitPhase = 0;
 
+  /** the tail's sway: the motor's own, plus the feeling's */
+  private get waveAmp() {
+    return Math.max(0, this.tailWave + this.feel.tailWave);
+  }
+
   /** time-varying tail yaw for segment i of n */
   tailWaveAt(i: number, n: number) {
     const u = i / (n - 1);
-    return this.tailWave * 0.22 * Math.sin(this.wavePhase - u * 2.2) * (0.3 + u);
+    return this.waveAmp * 0.22 * Math.sin(this.wavePhase - u * 2.2) * (0.3 + u) + 0.18 * this.tailFlickW.x * u * u;
   }
 }
 

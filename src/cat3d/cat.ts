@@ -59,6 +59,8 @@ export class Cat3D {
   readonly eyes: CatEye[] = [];
   readonly whiskers: Whiskers;
   readonly meshes: THREE.SkinnedMesh[] = [];
+  /** the painted coat's material, for a painted model */
+  private skin: THREE.ShaderMaterial | null = null;
   private readonly homeM: Record<Leg, THREE.Vector3> = { LF: v(), RF: v(), LH: v(), RH: v() };
   private readonly homeW: Record<Leg, THREE.Vector3> = { LF: v(), RF: v(), LH: v(), RH: v() };
   private readonly targ: Record<Leg, THREE.Vector3> = { LF: v(), RF: v(), LH: v(), RH: v() };
@@ -94,7 +96,8 @@ export class Cat3D {
     this.shared = shared;
     let skin: THREE.ShaderMaterial | null = null;
     if (painted) {
-      skin = makeSkinMaterial(painted, shared as unknown as Record<string, { value: unknown }>);
+      skin = makeSkinMaterial(painted, shared as unknown as Record<string, { value: unknown }>, asset.bones);
+      this.skin = skin;
       for (const geo of Object.values(asset.meshes)) {
         const m = new THREE.SkinnedMesh(geo, skin);
         m.bind(skeleton, new THREE.Matrix4());
@@ -261,9 +264,10 @@ export class Cat3D {
       const k = this.corrPoses.indexOf(name);
       if (k >= 0) cw[k] += wgt;
     }
-    this.breathT += dt * (0.55 + 0.25 * (1 - p.breath));
+    this.breathT += dt * (0.55 + 0.25 * (1 - p.breath)) * Math.max(0.3, motor.feel.breathRate);
     this.shared.uBreath.value = 0.0022 * p.breath * Math.sin(this.breathT * Math.PI * 2);
     this.shared.uPuff.value = p.puff;
+    if (this.skin) this.skin.uniforms.uJawOpen.value = p.jaw;
   }
 
   /** world-space capsules round the body for the fur's and the floor's ambient occlusion */
