@@ -92,7 +92,7 @@ vec3 roomLight(vec3 P, vec3 N, float shadow, float ao) {
   vec3 toL = uLampPos - P;
   float dl = length(toL);
   vec3 Ld = toL / max(dl, 1e-4);
-  float lamp = uLampInt * (0.3 + 0.7 * max(dot(N, Ld), 0.0)) * (0.45 + 0.55 * smoothstep(0.1, 0.8, Ld.y)) / (1.0 + dl * dl * 2.6);
+  float lamp = uLampInt * (0.3 + 0.7 * max(dot(N, Ld), 0.0)) * (0.35 + 0.65 * smoothstep(0.7, 0.95, Ld.y)) / (1.0 + dl * dl * 4.2);
   vec3 Q = vec3(clamp(P.x, uFairy.x, uFairy.y), uFairy.z, uFairy.w);
   vec3 dq = Q - P;
   float lq = dot(dq, dq);
@@ -153,7 +153,29 @@ export function skyDay(hour: number) {
 /** the light of the hour. The window looks south: the sun rises on the left, stands highest at
  *  midday and sets on the right, low and gold, its patch on the floor long and reaching into the
  *  room; after it, a pink dusk, then night with the lamp lit */
-export function dayLight(hour: number, out?: DayLight, rain = 0): DayLight {
+/** the moon's phase on a date (0 new .. 0.5 full .. 1): an average month of the moon's, counted
+ *  from a new moon of January 2000 (right to within a day or so) */
+export function moonPhase(d: Date) {
+  const p = ((d.getTime() - Date.UTC(2000, 0, 6, 18, 14)) / 864e5 / 29.530588853) % 1;
+  return p < 0 ? p + 1 : p;
+}
+
+/** how much of the moon is lit on a date (0 new .. 1 full) */
+export function moonLit(d: Date) {
+  return 0.5 - 0.5 * Math.cos(2 * Math.PI * moonPhase(d));
+}
+
+/** how cloudy the sky is (0 clear .. 1 overcast): the same for everyone at the same time, drifting
+ *  from one quarter of a day to the next; under rain, overcast */
+export function cloudAt(d: Date, rain = 0) {
+  const t = d.getTime() / 36e5 / 6;
+  const b = Math.floor(t), f = t - b;
+  const v = (i: number) => { const x = Math.sin(i * 12.9898 + 78.233) * 43758.5453; return x - Math.floor(x); };
+  const e = f * f * (3 - 2 * f);
+  return Math.max(0.2 + 0.6 * (v(b) + (v(b + 1) - v(b)) * e), rain);
+}
+
+export function dayLight(hour: number, out?: DayLight, rain = 0, moon = 1): DayLight {
   const rise = 6.4, set = 19.1;
   const u = Math.max(0, Math.min(1, (hour - rise) / (set - rise)));
   const up = hour > rise && hour < set ? 1 : 0;
@@ -169,7 +191,8 @@ export function dayLight(hour: number, out?: DayLight, rain = 0): DayLight {
   const night = 1 - day;
   // by night the moon, high in the left of the window, lays its own cool patch over the bed and
   // the floor to the right of it, away from the lamp's warm pool, the window's cross in it
-  const moon = ss(0.55, 0.9, night) * (1 - rain);
+  // (a full moon gives its whole light, a thin one only a little)
+  const moonUp = ss(0.55, 0.9, night) * (1 - rain) * (0.35 + 0.65 * moon);
   const ma = sun > 0 ? 0 : 1;
   const mAz = THREE.MathUtils.degToRad(-15), mEl = THREE.MathUtils.degToRad(40);
   const keyDir = (out?.keyDir ?? new THREE.Vector3()).set(
@@ -184,8 +207,8 @@ export function dayLight(hour: number, out?: DayLight, rain = 0): DayLight {
   tintShade = lerp3(tintShade, [0.94, 0.84, 1.0], dusk);
   // rain: a grey, blue-ish day
   tintShade = lerp3(tintShade, [0.9, 0.94, 1.04], rain * day);
-  tintShade = lerp3(tintShade, [0.66, 0.68, 0.92], night * (1 - dusk * 0.5));
-  const tintLamp = [1.08, 0.95, 0.8];
+  tintShade = lerp3(tintShade, [0.6, 0.63, 0.9], night * (1 - dusk * 0.5));
+  const tintLamp = [1.14, 0.92, 0.7];
   const o = out ?? ({} as DayLight);
   // under rain the sun is hidden, the sky gives less light, and the lamp is lit even by day
   const dim = 1 - 0.3 * rain;
@@ -193,18 +216,18 @@ export function dayLight(hour: number, out?: DayLight, rain = 0): DayLight {
   // the light is the window's: bright near it and less and less toward you, the room behind you
   // giving back only a little; in the gold hours the sky dims and the room with it, and the low
   // sun is all the stronger for it
-  o.sun = ma ? 0.34 * moon : 0.8 * sun * (1 - rain) * (1 + 0.6 * gold);
+  o.sun = ma ? 0.34 * moonUp : 0.8 * sun * (1 - rain) * (1 + 0.6 * gold);
   o.sky = (0.9 * day + 0.12 * night) * (1 - 0.45 * rain) * (1 - 0.55 * gold);
-  o.amb = (0.1 * day + 0.045) * dim * (1 - 0.5 * gold);
+  o.amb = (0.11 * day + 0.03) * dim * (1 - 0.5 * gold);
   o.floorB = 0.45 * day * dim;
   o.fill = (0.22 * day + 0.03) * dim * (1 - 0.5 * gold);
-  o.lamp = Math.max(1.5 * ss(0.35, 0.8, night), 1.2 * rain);
+  o.lamp = Math.max(2.0 * ss(0.35, 0.8, night), 1.55 * rain);
   o.fairy = Math.max(0.5 * ss(0.4, 0.8, night), 0.45 * rain);
   o.tintSun = (o.tintSun ?? new THREE.Vector3()).set(tintSun[0], tintSun[1], tintSun[2]);
   o.tintShade = (o.tintShade ?? new THREE.Vector3()).set(tintShade[0], tintShade[1], tintShade[2]);
   o.tintLamp = (o.tintLamp ?? new THREE.Vector3()).set(tintLamp[0], tintLamp[1], tintLamp[2]);
   // the beam shows in the air most when the sun is low and its light comes in long
-  o.beam = ma ? 0.3 * moon : sun * (1 - rain) * (0.15 + 0.85 * Math.max(gold, 1 - Math.min(1, keyDir.y / 0.6)));
+  o.beam = ma ? 0.3 * moonUp : sun * (1 - rain) * (0.15 + 0.85 * Math.max(gold, 1 - Math.min(1, keyDir.y / 0.6)));
   return o;
 }
 
