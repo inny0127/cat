@@ -550,6 +550,56 @@ export class Room {
       this.decor.push({ obj: pk, from: [9, 1], to: [10, 6] });
     }
 
+    // December: a little fir in a pot at that end of the sill, a star on top and lights on it
+    {
+      const xt = new THREE.Group();
+      xt.add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.021, 0.035, 12), this.mat('pot', { tone: 0.04 }))));
+      for (let k = 0; k < 3; k++) {
+        const cone = shadowy(new THREE.Mesh(new THREE.ConeGeometry(0.05 - k * 0.012, 0.06, 10), this.mat('leaf', { tone: -0.06 + k * 0.03 })));
+        cone.position.y = 0.045 + k * 0.032;
+        xt.add(cone);
+      }
+      const star = new THREE.Mesh(new THREE.SphereGeometry(0.008, 6, 4), this.mat('bookMustard', { tone: 0.2 }));
+      star.position.y = 0.14;
+      xt.add(star);
+      this.xmasStar = star.material as THREE.ShaderMaterial;
+      const cols = [[1, 0.5, 0.45], [1, 0.85, 0.5], [0.6, 0.8, 1], [1, 0.95, 0.8]];
+      for (let k = 0; k < 9; k++) {
+        const a = k * 2.4, h = 0.035 + (k / 9) * 0.085, r = 0.042 - (k / 9) * 0.03;
+        const m = new THREE.ShaderMaterial({
+          uniforms: { uTime: this.timeU, uOn: { value: 1 }, uCol: { value: new THREE.Color(...(cols[k % 4] as [number, number, number])) }, uSeed: { value: Math.random() } },
+          vertexShader: SKY_VERT, fragmentShader: BULB_FRAG, transparent: true, blending: THREE.NoBlending,
+        });
+        const b = new THREE.Mesh(new THREE.SphereGeometry(0.0045, 5, 3), m);
+        b.position.set(Math.cos(a) * r, h, Math.sin(a) * r + 0.004);
+        b.renderOrder = 20;
+        xt.add(b);
+      }
+      xt.position.set(winL + 0.075, winB + 0.0175, wallZ + 0.115);
+      this.group.add(xt);
+      this.decor.push({ obj: xt, from: [11, 1], to: [11, 31] });
+    }
+    // spring: a jar of tulips there
+    {
+      const tl = new THREE.Group();
+      tl.add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.02, 0.06, 12), this.mat('water', { tone: 0.15 }))));
+      const bloom = ['bookRed', 'pink', 'bookMustard', 'bookRed', 'pink'] as Material[];
+      for (let k = 0; k < 5; k++) {
+        const a = (k / 5) * Math.PI * 2, lean = 0.25;
+        const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.0022, 0.0022, 0.09, 4), this.mat('leaf'));
+        stem.position.set(Math.cos(a) * 0.01, 0.075, Math.sin(a) * 0.01);
+        stem.rotation.set(Math.sin(a) * lean, 0, -Math.cos(a) * lean);
+        tl.add(stem);
+        const head = shadowy(new THREE.Mesh(new THREE.SphereGeometry(0.011, 8, 6), this.mat(bloom[k], { tone: 0.05 })));
+        head.scale.set(0.9, 1.3, 0.9);
+        head.position.set(Math.cos(a) * 0.022, 0.12, Math.sin(a) * 0.022);
+        tl.add(head);
+      }
+      tl.position.set(winL + 0.075, winB + 0.03, wallZ + 0.115);
+      this.group.add(tl);
+      this.decor.push({ obj: tl, from: [2, 15], to: [4, 20] });
+    }
+
     // under the window, an old column radiator painted white: its fins, the pipes along its top
     // and foot, its legs, and the pipe and valve at its end
     const radW = 0.46, radB = 0.07, radH = 0.19, radZ = wallZ + 0.055;
@@ -1024,6 +1074,9 @@ export class Room {
   /** things put out for a time of the year: shown from a (month, day) to another */
   private readonly decor: { obj: THREE.Object3D; from: [number, number]; to: [number, number] }[] = [];
 
+  /** the little fir's star (it glows when the lights are lit) */
+  private xmasStar: THREE.ShaderMaterial | null = null;
+
   /** the clock's hands */
   private hourHand: THREE.Mesh | null = null;
   private minHand: THREE.Mesh | null = null;
@@ -1173,6 +1226,7 @@ export class Room {
     // the year outside: the tree's leaves, snow; and what is put out for the time of year
     const md = date.getMonth() * 100 + date.getDate();
     for (const d of this.decor) d.obj.visible = md >= d.from[0] * 100 + d.from[1] && md <= d.to[0] * 100 + d.to[1];
+    if (this.xmasStar) this.xmasStar.uniforms.uGlow.value = 1;
     const se = seasonAt(date, rain);
     const su = this.sky.uniforms;
     (su.uLeafA.value as THREE.Vector3).set(...se.leafA);
