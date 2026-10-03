@@ -320,7 +320,7 @@ export class PixelApp {
         만든 이 <a href="https://sketchfab.com/guillaume.bolis.neko" target="_blank" rel="noopener">guillaume bolis</a> ·
         <a href="https://sketchfab.com/3d-models/3d-modelling-my-cat-fripouille-0ab14bf98e754f8d90fe1bf1c84ca66c" target="_blank" rel="noopener">원본</a><br>
         <a href="https://creativecommons.org/licenses/by/4.0/deed.ko" target="_blank" rel="noopener">CC BY 4.0</a> 라이선스로 공유된 모델이에요.</p>
-        <p>이 앱을 위해 뼈대를 새로 심고, 자세와 걸음, 입과 눈을 새로 만들고, 픽셀아트로 다시 칠했어요. (원작자가 이 앱을 보증하는 것은 아니에요.)</p>
+        <p>이 앱을 위해 뼈대를 새로 심고, 자세와 걸음, 입과 눈을 새로 만들고, 머리를 조금 크게 해서 픽셀아트로 다시 칠했어요. (원작자가 이 앱을 보증하는 것은 아니에요.)</p>
         <p class="small">방, 그림, 소리는 이 앱을 위해 만들었어요. 아무 곳이나 누르면 닫혀요.</p>`;
       el.addEventListener('pointerdown', (e) => { if ((e.target as HTMLElement).tagName !== 'A') this.showCredits(false); });
     }
@@ -348,6 +348,29 @@ export class PixelApp {
   private toyFinger: { x: number; y: number; off: THREE.Vector3 } | null = null;
   private toyWasPinned = false;
   private readonly bugLight = new THREE.Vector3();
+
+  /** a paw walking into the ball of wool sends it rolling on a little, the way the cat is going
+   *  and out from under its feet (it is a ball on the floor, not a ghost of one; play has its own
+   *  ways with it) */
+  private brushYarn(dt: number) {
+    this.yarnBrush = Math.max(0, this.yarnBrush - dt);
+    const m = this.cat.motor, R = this.room;
+    if (this.yarnBrush > 0 || m.speed < 0.06 || this.avatar.hidden || this.avatar.doing === 'play' || R.yarnHeld || R.yarnPinned || R.yarnSpeed > 0.15) return;
+    const y = R.yarnAt(), M = this.cat.group.matrixWorld;
+    for (const leg of ['LF', 'RF', 'LH', 'RH'] as const) {
+      const p = this.pawW.copy(this.cat.body.reached[leg]).applyMatrix4(M);
+      const dx = y.x - p.x, dz = y.z - p.z, d = Math.max(Math.hypot(dx, dz), 1e-3);
+      if (d > 0.058 || p.y > 0.07) continue;
+      // (on ahead, and off to the side of the cat's path it is on, so it is not walked over again)
+      const fx = Math.sin(m.yaw), fz = Math.cos(m.yaw);
+      const side = Math.sign((y.x - m.pos.x) * fz - (y.z - m.pos.z) * fx) || (Math.random() < 0.5 ? -1 : 1);
+      R.kickYarn(new THREE.Vector3(0.7 * fx + side * fz, 0, 0.7 * fz - side * fx), Math.min(0.65, 0.25 + 0.6 * m.speed));
+      this.yarnBrush = 0.5;
+      return;
+    }
+  }
+  private yarnBrush = 0;
+  private readonly pawW = new THREE.Vector3();
   private overToy = false;
   private readonly floorRay = new THREE.Raycaster();
 
@@ -524,6 +547,7 @@ export class PixelApp {
     this.toyWasPinned = pinned;
     this.avatar.update(dt);
     this.cat.update(dt);
+    this.brushYarn(dt);
     // the weather: now and then a few hours of rain (or as asked, ?rain=1)
     const rain = this.rainOverride !== null ? +this.rainOverride : rainAt(clock);
     this.stage.setDayLight(this.room.update(s, hour, dt, rain, clock));

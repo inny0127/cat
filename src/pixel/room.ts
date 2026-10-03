@@ -687,11 +687,13 @@ uniform vec3 uCol;
 uniform float uSeed;
 uniform float uDay;
 void main() {
-  float tw = 0.75 + 0.25 * sin(uTime * (0.8 + uSeed) + uSeed * 9.0);
+  float tw = 0.5 + 0.5 * sin(uTime * (0.8 + uSeed) + uSeed * 9.0);
   // (unlit: clear glass, catching the day)
   vec3 off = mix(vec3(0.3, 0.27, 0.3), vec3(0.86, 0.82, 0.76), uDay);
+  // lit, it breathes: dimming, a filament goes amber, never a dull grey
+  vec3 on = mix(uCol * vec3(0.95, 0.66, 0.4), uCol, tw);
   // alpha 0.2: shown as it is, and glowing (when lit)
-  gl_FragColor = vec4(mix(off, uCol * tw + (1.0 - tw) * 0.25, uOn), uOn > 0.5 ? 0.2 : 0.15);
+  gl_FragColor = vec4(mix(off, on, uOn), uOn > 0.5 ? 0.2 : 0.15);
 }`;
 
 const ss = (a: number, b: number, x: number) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };

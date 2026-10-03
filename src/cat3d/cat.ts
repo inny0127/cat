@@ -230,10 +230,16 @@ export class Cat3D {
     this.tail.reset();
   }
 
+  /** how big the head is drawn (the ears, the eyes and the jaw with it) */
+  headScale = 1;
+
   /** pixel art: flat coat colour, flat eyes, no whiskers (finer than an art pixel); the lids show
-   *  the coat's materials as the coat does */
+   *  the coat's materials as the coat does. And the head a little larger, as a pixel artist draws
+   *  a cat: at a few dozen pixels across, the face is what has to read, its eyes a pixel or two
+   *  more each way */
   setPixelArt(on: boolean) {
     this.shared.uSolid.value = on ? 1 : 0;
+    this.headScale = on ? 1.15 : 1;
     for (const e of this.eyes) {
       e.eyeMat.uniforms.uFlat.value = on ? 1 : 0;
       if (this.pixTexture && e.eyeMat.uniforms.uLidTex.value > 0.5) e.eyeMat.uniforms.uLidMap.value = on ? this.pixTexture : this.painted;
@@ -354,6 +360,7 @@ export class Cat3D {
     this.tail.update(dt, p, tmp.q.setFromEuler(group.rotation), group.position, 0, this.shared.uCaps.value, TRUNK_CAPS);
     this.updateCaps();
     kin.apply(this.bones);
+    this.byName.get('head')!.scale.setScalar(this.headScale);
 
     // face: the posture's own, moved by what the cat feels (mood.ts); a posture with the eyes
     // shut (asleep) keeps them shut

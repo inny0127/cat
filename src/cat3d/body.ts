@@ -238,7 +238,7 @@ export class Body {
    * forward for knees (dir = 1), back for elbows (dir = -1), and a touch outward. Measured from
    * the limb itself, so the knee stays in front however far the paw is tucked or reached.
    */
-  private bendPole(L: LegRig, root: THREE.Vector3, end: THREE.Vector3, girdleQ: THREE.Quaternion, dir: number, out: THREE.Vector3) {
+  private bendPole(L: LegRig, root: THREE.Vector3, end: THREE.Vector3, girdleQ: THREE.Quaternion, dir: number, out: THREE.Vector3, splay = 0.12) {
     const X = this.sc.axis.set(1, 0, 0).applyQuaternion(girdleQ);
     const chain = this.sc.chain.copy(end).sub(root).normalize();
     out.crossVectors(chain, X).multiplyScalar(dir);
@@ -248,7 +248,7 @@ export class Body {
       const fb = this.sc.bend.set(0, -0.2, dir).applyQuaternion(girdleQ);
       out.lerp(fb, 1 - n / 0.35);
     }
-    return out.normalize().addScaledVector(X, L.side * 0.12).normalize();
+    return out.normalize().addScaledVector(X, L.side * splay).normalize();
   }
 
   private readonly sc = { chain: v(), bend: v(), fem: v(), axis: v(), d: v(), side: v() };
@@ -302,6 +302,9 @@ export class Body {
     const girdleQ = kin.wq[L.girdle];
     const Hp = kin.wp[L.b[0]];
     const pole = this.t.e;
+    // (sitting or lying on the haunches, the knees turn out, the thighs filling out beside the
+    // body as a sitting cat's do; standing, they point ahead)
+    const splay = 0.12 + 0.35 * p.hindFlat;
     // cannon lying along the floor (sitting) or held by the girdle
     const flat = this.t.a.set(0, -0.06, 1);
     const flatG = this.t.c.copy(flat).applyQuaternion(girdleQ);
@@ -310,7 +313,7 @@ export class Body {
     const K = this.t.f, Hk2 = this.t.g, Hk = this.t.d;
     for (let it = 0; it < 4; it++) {
       Hk.copy(T).addScaledVector(M, -L.len[2]);
-      this.bendPole(L, Hp, Hk, girdleQ, 1, pole);
+      this.bendPole(L, Hp, Hk, girdleQ, 1, pole, splay);
       twoBone(Hp, L.len[0], L.len[1], Hk, pole, K, Hk2);
       // pantograph: cannon parallel to the thigh
       const fem = this.sc.fem.copy(K).sub(Hp).normalize();
@@ -322,7 +325,7 @@ export class Body {
       }
     }
     Hk.copy(T).addScaledVector(M, -L.len[2]);
-    this.bendPole(L, Hp, Hk, girdleQ, 1, pole);
+    this.bendPole(L, Hp, Hk, girdleQ, 1, pole, splay);
     twoBone(Hp, L.len[0], L.len[1], Hk, pole, K, Hk2);
     L.lastCannon.copy(M);
     const side = this.sideOf(Hp, K, Hk2, pole, this.sc.side);
