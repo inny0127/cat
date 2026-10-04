@@ -2191,6 +2191,10 @@ export class Sill implements Act {
   /** the tea by it steaming: a sniff at the steam now and then (how far into it; how long till the
    *  next; whether it has started back from the heat yet) */
   private sniff = -1;
+  /** ... or, as often as not, a pat at the wisps going up instead: nothing there, a look at the
+   *  paw, puzzled, and a lick of it (set beforehand to have it so) */
+  steamBat: boolean | null = null;
+  private batting = false;
   private sniffIn = rand(6, 20);
   private flinched = false;
   private knock = {
@@ -2428,6 +2432,35 @@ export class Sill implements Act {
           this.sniff = 0;
           this.sniffIn = rand(45, 120);
           this.flinched = false;
+          this.batting = this.steamBat ?? Math.random() < 0.35;
+          this.steamBat = null;
+        }
+        if (this.sniff >= 0 && this.batting) {
+          this.sniff += dt;
+          const s = this.sniff;
+          m.setPosture('sit');
+          // (which side the tea is, in its own frame: its left +)
+          const dx = M ? M.at.x - m.pos.x : 0, dz = M ? M.at.z - m.pos.z : 0;
+          const side = dx * Math.cos(m.yaw) - dz * Math.sin(m.yaw) >= 0 ? 1 : -1, paw = side > 0 ? 'LF' : 'RF';
+          // eyes on the wisps going up, after them; a paw up through them, quick; nothing there: a
+          // look down at the paw, the head on one side; and a lick of it
+          if (s < 1.3 && M) m.lookAt(M.at.clone().setY(M.at.y + 0.1 + 0.05 * Math.sin(s * 2.6)), 1);
+          else m.lookAt(null);
+          const swipe = s > 0.75 && s < 1.25 ? Math.sin(Math.PI * (s - 0.75) / 0.5) : 0;
+          const atPaw = s > 1.25 && s < 2.5 ? ease((s - 1.25) / 0.25) * (1 - ease((s - 2.3) / 0.2)) : 0;
+          const lick = s > 2.4 && s < 3.2 ? Math.max(0, Math.sin((s - 2.4) * 22)) : 0;
+          const up = Math.max(swipe, 0.55 * atPaw, s > 2.35 && s < 3.25 ? 0.65 : 0);
+          m.layer = {
+            pose: {
+              [paw]: { planted: 0, frame: 0, x: 0.04 + 0.03 * swipe, y: 0.012 + 0.13 * up, z: 0.07 + 0.08 * swipe, flex: 0.5 * up },
+              neckYaw: side * 0.5 * atPaw, headPitch: -0.3 * atPaw, headRoll: side * 0.35 * atPaw,
+              earFwd: 0.7 * (1 - atPaw) - 0.1, pupil: 0.9, whisker: 0.6 * (1 - atPaw), jaw: 0.12 * lick, tongue: lick, tongueUp: 1,
+              tailLift: -1.35, tailSag: 1, tailCurve: 0.25, tailCurl: 0.6 * Math.sin(s * 8) * (1 - atPaw),
+            },
+            w: Math.min(1, s / 0.3) * Math.min(1, (3.5 - s) / 0.3),
+          };
+          if (s > 3.5) { this.sniff = -1; this.batting = false; m.layer = null; m.lookAt(null); }
+          return true;
         }
         if (this.sniff >= 0) {
           this.sniff += dt;

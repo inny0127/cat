@@ -67,6 +67,7 @@ describe('up on the sill', () => {
     const { c, m, spot } = sill();
     const act = new Sill(spot);
     act.phase = 'sit';
+    act.steamBat = false;
     (act as unknown as { dur: number }).dur = 60;
     (act as unknown as { sniffIn: number }).sniffIn = 0.5;
     let tongue = 0, whisker = 0, squint = 0, sniffed = false;
@@ -85,6 +86,30 @@ describe('up on the sill', () => {
     // (and done with, back to the window)
     expect((act as unknown as { sniff: number }).sniff).toBe(-1);
     expect(act.phase).toBe('sit');
+  });
+
+  it('or a pat at the wisps going up: a paw up through them, nothing there, a look at the paw with the head on one side, a lick of it', () => {
+    const { c, m, spot } = sill();
+    const act = new Sill(spot);
+    act.phase = 'sit';
+    act.steamBat = true;
+    (act as unknown as { dur: number }).dur = 60;
+    (act as unknown as { sniffIn: number }).sniffIn = 0.5;
+    let paw = 0, roll = 0, tongue = 0, squint = 0;
+    for (let t = 0; t < 8; t += 0.02) {
+      act.update(0.02, c);
+      m.update(0.02);
+      paw = Math.max(paw, m.pose.LF.y, m.pose.RF.y);
+      roll = Math.max(roll, Math.abs(m.pose.headRoll));
+      tongue = Math.max(tongue, m.pose.tongue);
+      squint = Math.max(squint, m.pose.squint);
+    }
+    expect(paw).toBeGreaterThan(0.1);
+    expect(roll).toBeGreaterThan(0.25);
+    expect(tongue).toBeGreaterThan(0.5);
+    // (no start back from the heat: it never put its nose in)
+    expect(squint).toBeLessThan(0.3);
+    expect((act as unknown as { sniff: number }).sniff).toBe(-1);
   });
 
   it('caught at it by a tap on the glass: frozen, looking at you; then, holding your eye, over it goes anyway', () => {
