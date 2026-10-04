@@ -157,6 +157,8 @@ export class PointerInput {
       this.h.dragToy?.(c.sx, c.sy, e.pointerId);
       return;
     }
+    // (a finger moving over the glass is watched, as a mouse's pointer is)
+    this.h.hover(c.sx, c.sy);
     // side-to-side scrubbing: count direction reversals
     if (Math.abs(dsx) > 0.5) {
       if (Math.sign(dsx) !== Math.sign(g.lastDx) && g.accum > 16) {
