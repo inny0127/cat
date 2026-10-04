@@ -221,9 +221,11 @@ export class PixelApp {
           this.haptic.tap?.();
           return;
         }
+        // (up on the sill seeing to the mug or the pencil: caught at it)
+        if (this.avatar.caught()) return;
         this.brain.glassTap(x, y);
       },
-      glassKnock: (x, y) => { this.gestureEnd(); this.brain.knock(x, y); },
+      glassKnock: (x, y) => { this.gestureEnd(); if (!this.avatar.caught()) this.brain.knock(x, y); },
       pourStart: () => this.brain.pourStart(),
       pourEnd: () => { this.gestureEnd(); this.brain.pourEnd(); },
       // (a finger scrubbing the glass to shake the kibble is not one to play with)

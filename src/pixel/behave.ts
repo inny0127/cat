@@ -2172,12 +2172,31 @@ export class Sill implements Act {
   private sniff = -1;
   private sniffIn = rand(6, 20);
   private flinched = false;
-  private knock = { what: 'pencil' as 'pencil' | 'mug', step: 'eye' as 'to' | 'eye' | 'you' | 'paw' | 'watch' | 'after', t: 0, len: 0, taps: 0, pushed: false };
+  private knock = {
+    what: 'pencil' as 'pencil' | 'mug', step: 'eye' as 'to' | 'eye' | 'you' | 'paw' | 'caught' | 'watch' | 'after', t: 0, len: 0, taps: 0, pushed: false,
+    /** caught at it (a tap on the glass): whether it goes ahead anyway, holding your eye; the paw
+     *  where it was when it froze */
+    defiant: false, held: {} as Record<string, unknown>, last: {} as Record<string, unknown>,
+  };
   constructor(private readonly spot: SillSpot) {}
 
   /** asked down: it comes down as soon as it can, and stops there */
   leave() {
     this.leaving = true;
+  }
+
+  /** a tap on the glass while it is seeing to the pencil or the mug: caught at it (true if it
+   *  was) */
+  caught() {
+    const K = this.knock;
+    if (this.phase !== 'knock' || (K.step !== 'eye' && K.step !== 'you' && K.step !== 'paw' && K.step !== 'to')) return false;
+    K.held = K.step === 'paw' ? K.last : {};
+    K.defiant = Math.random() < 0.5;
+    K.step = 'caught';
+    K.t = 0;
+    K.len = rand(1.1, 1.6);
+    K.pushed = false;
+    return true;
   }
 
   /** up on the sill or in the air: it cannot simply be stopped */
@@ -2368,7 +2387,7 @@ export class Sill implements Act {
           const P = c.pencil(), M = c.mug();
           const what = near(M) && (!near(P) || Math.random() < 0.5) ? 'mug' : near(P) ? 'pencil' : null;
           if (what && !this.leaving && this.nap < 0.3 && Math.random() < (what === 'mug' ? 0.3 : 0.4)) {
-            Object.assign(this.knock, { what, step: what === 'mug' ? 'to' : 'eye', t: 0, len: rand(1.2, 2), taps: 0, pushed: false });
+            Object.assign(this.knock, { what, step: what === 'mug' ? 'to' : 'eye', t: 0, len: rand(1.2, 2), taps: 0, pushed: false, defiant: false, held: {}, last: {} });
             this.next('knock');
           } else this.next('look', 0.6);
         });
@@ -2404,8 +2423,31 @@ export class Sill implements Act {
         } else if (K.step === 'you') {
           m.lookAt(c.viewer(), 1);
           if (K.t > K.len) go(P.onSill ? 'paw' : 'after', P.onSill ? 0.62 : rand(1.2, 1.8));
+        } else if (K.step === 'caught') {
+          // stock still, the paw where it was, round to you with its eyes wide and its ears a
+          // little back; then either the paw drawn slowly back and a look anywhere but at the
+          // thing, as if it had never been near it, or, holding your eye, over it goes anyway
+          m.lookAt(c.viewer(), 1);
+          const back = K.defiant ? 0 : ease((K.t - K.len) / 0.8);
+          paw = {};
+          for (const [leg, v] of Object.entries(K.held)) {
+            const f = v as Record<string, number>;
+            paw[leg] = { ...f, x: 0.036 + (f.x - 0.036) * (1 - back), y: 0.012 + (f.y - 0.012) * (1 - back), z: 0.068 + (f.z - 0.068) * (1 - back), flex: (f.flex ?? 0) * (1 - back) };
+          }
+          if (!K.defiant && K.t > K.len) {
+            // (looking away, out of the window, at nothing)
+            if (K.t > K.len + 0.5) m.lookAt(new THREE.Vector3(m.pos.x - 0.6, 0.9, m.pos.z - 1.5), 1);
+          }
+          m.layer = {
+            pose: { earFwd: 0.1 - 0.4 * (1 - back), earOut: 0.25 * (1 - back), pupil: 1, eyeOpen: 1, whisker: 0.2, tailCurl: 0.3, ...paw },
+            w: 1,
+          };
+          if (K.defiant && K.t > K.len) { go('paw', 0.75); K.taps = 9; }
+          else if (!K.defiant && K.t > K.len + 2.2) { m.layer = null; m.lookAt(null); this.next('look', 0.6); }
+          return true;
         } else if (K.step === 'paw') {
-          m.lookAt(P.at, 1);
+          // (holding your eye, if it was caught at it and is doing it anyway)
+          m.lookAt(K.defiant ? c.viewer() : P.at, 1);
           const dx = P.at.x - m.pos.x, dz = P.at.z - m.pos.z;
           const lx = dx * Math.cos(m.yaw) - dz * Math.sin(m.yaw), lz = dx * Math.sin(m.yaw) + dz * Math.cos(m.yaw);
           const u = Math.min(1, K.t / K.len), ax = Math.max(0.03, Math.abs(lx));
@@ -2426,9 +2468,12 @@ export class Sill implements Act {
             // (a pat or two first; then over it goes, a little off to the side, past the end of the
             // bed, where it lies in sight)
             const last = K.taps >= 3 || (K.taps >= 2 && Math.random() < 0.6);
-            if (K.what === 'mug') c.pushMug(last ? 0.075 : 0.024, (last ? 0.012 : 0.004) * Math.sign(lx || 1));
-            else c.pushPencil(last ? 0.07 : 0.022, (last ? 0.03 : 0.006) * Math.sign(lx || 1));
+            // (caught at it and doing it anyway: one shove, and over it goes)
+            const sure = K.defiant ? 0.13 : 0;
+            if (K.what === 'mug') c.pushMug(Math.max(sure, last ? 0.075 : 0.024), (last ? 0.012 : 0.004) * Math.sign(lx || 1));
+            else c.pushPencil(Math.max(sure, last ? 0.07 : 0.022), (last ? 0.03 : 0.006) * Math.sign(lx || 1));
           }
+          K.last = structuredClone(paw);
           if (u >= 1) {
             K.pushed = false;
             const p2 = K.what === 'mug' ? c.mug() : c.pencil();

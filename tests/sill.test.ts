@@ -87,6 +87,48 @@ describe('up on the sill', () => {
     expect(act.phase).toBe('sit');
   });
 
+  it('caught at it by a tap on the glass: frozen, looking at you; then, holding your eye, over it goes anyway', () => {
+    let r = 0.1;
+    vi.spyOn(Math, 'random').mockImplementation(() => r);
+    const { c, m, spot, mug, pushes } = sill();
+    const act = new Sill(spot);
+    act.phase = 'about';
+    const K = () => (act as unknown as { knock: { step: string } }).knock;
+    let caught = false, steps: string[] = [];
+    for (let t = 0; t < 20 && act.phase !== 'look'; t += 0.02) {
+      act.update(0.02, c);
+      m.update(0.02);
+      if (!caught && act.phase === 'knock' && K().step === 'you') { caught = act.caught(); }
+      if (act.phase === 'knock' && steps[steps.length - 1] !== K().step) steps.push(K().step);
+    }
+    expect(caught).toBe(true);
+    expect(steps).toContain('caught');
+    // (one shove, and over: no pats before it)
+    expect(pushes.length).toBe(1);
+    expect(pushes[0].dz).toBeGreaterThanOrEqual(0.13);
+    expect(mug.onSill).toBe(false);
+    r = 0.1;
+  });
+
+  it('caught at it: or the paw drawn back, a look out of the window, and the mug left be', () => {
+    let r = 0.1;
+    vi.spyOn(Math, 'random').mockImplementation(() => r);
+    const { c, m, spot, mug, pushes } = sill();
+    const act = new Sill(spot);
+    act.phase = 'about';
+    const K = () => (act as unknown as { knock: { step: string } }).knock;
+    let caught = false;
+    for (let t = 0; t < 20 && act.phase !== 'look'; t += 0.02) {
+      act.update(0.02, c);
+      m.update(0.02);
+      if (!caught && act.phase === 'knock' && K().step === 'you') { r = 0.9; caught = act.caught(); }
+    }
+    expect(caught).toBe(true);
+    expect(pushes.length).toBe(0);
+    expect(mug.onSill).toBe(true);
+    expect(act.phase).toBe('look');
+  });
+
   it('the pencil by its paws as well: one or the other, never both at once', () => {
     vi.spyOn(Math, 'random').mockReturnValue(0.1);
     const { c, m, spot, pushes } = sill(true);

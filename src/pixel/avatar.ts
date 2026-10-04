@@ -385,6 +385,11 @@ export class PixelAvatar implements Avatar {
   get asking() {
     return this.act instanceof PawGlass && this.act.asking;
   }
+  /** a tap on the glass: caught at whatever it was up to on the sill (true if it was up to
+   *  something there) */
+  caught() {
+    return this.act instanceof Sill && this.act.caught();
+  }
   /** a paw patted at the glass this frame: which (null: none) */
   get pawLanded() {
     return this.act instanceof PawGlass ? this.act.landed : null;
