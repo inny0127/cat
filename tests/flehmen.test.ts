@@ -48,3 +48,39 @@ describe('the flehmen', () => {
     expect(found).toBe(3);
   });
 });
+
+describe('the silent meow', () => {
+  it('sat at the glass looking at you, now and then the mouth opens on a meow with no sound, and a slow blink after', async () => {
+    const { toWindow } = await import('../src/pixel/behave');
+    let found = 0;
+    for (let seed0 = 1; seed0 < 300 && found < 2; seed0++) {
+      let seed = seed0;
+      vi.spyOn(Math, 'random').mockImplementation(() => (seed = (seed * 16807) % 2147483647) / 2147483647);
+      const m = new Motor();
+      m.snap('sit');
+      m.pos.set(0, 0, 0.25);
+      const sounds: string[] = [];
+      const c = {
+        m, mood: { ...NEUTRAL, trust: 0.9 }, window: new THREE.Vector3(0, 0, 0.25),
+        bed: () => ({ to: new THREE.Vector3(0, 0, 0.05), yaw: 0 }),
+        sound: (n: string) => sounds.push(n), say: (n: string) => sounds.push(n),
+      } as unknown as Ctx;
+      const w = toWindow(c) as unknown as { legs: { layer?: unknown }[]; update: (dt: number, c: Ctx) => boolean };
+      if (!w.legs[0].layer) { vi.restoreAllMocks(); continue; }
+      found++;
+      let jaw = 0, blink = false;
+      for (let t = 0; t < 40; t += 1 / 60) {
+        const going = w.update(1 / 60, c);
+        m.update(1 / 60);
+        jaw = Math.max(jaw, m.pose.jaw);
+        if (m.slowBlinking) blink = true;
+        if (!going) break;
+      }
+      expect(jaw).toBeGreaterThan(0.25);
+      expect(blink).toBe(true);
+      expect(sounds).toEqual([]);
+      vi.restoreAllMocks();
+    }
+    expect(found).toBe(2);
+  });
+});

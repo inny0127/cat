@@ -680,8 +680,19 @@ export class Walk implements Act {
  *  square on, a sitting cat is a pillar), then back to bed */
 export const toWindow = (c: Ctx) => {
   const bed = c.bed('loaf');
+  const stay = rand(8, 22);
+  // now and then, sat there looking up at you, the silent meow: the mouth opened on a meow with
+  // no sound to it (a cat's way with someone it is fond of), and, fond enough, a slow blink after
+  const trust = c.mood?.trust ?? 0;
+  const silent = Math.random() < 0.15 + 0.35 * Math.max(0, trust - 0.3) ? rand(2.5, Math.max(3, stay - 3)) : -1;
+  let said = false, blinked = false;
+  const meow = silent < 0 ? undefined : (t: number, m: Motor): PoseLayer => {
+    if (!said && t > silent) { said = true; m.vocalize('meow', 0.5); }
+    if (said && !blinked && t > silent + 1.3) { blinked = true; if (trust > 0.6) m.slowBlink(); }
+    return {};
+  };
   return new Walk('window', [
-    { to: c.window, face: (Math.random() < 0.5 ? -1 : 1) * 0.42, stay: rand(8, 22), posture: 'sit' },
+    { to: c.window, face: (Math.random() < 0.5 ? -1 : 1) * 0.42, stay, posture: 'sit', layer: meow },
     { to: bed.to, face: bed.yaw, stay: 0.1, posture: 'loaf' },
   ]);
 };
