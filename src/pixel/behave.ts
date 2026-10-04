@@ -954,7 +954,7 @@ interface Bout {
  */
 export class PawGlass implements Act {
   readonly name = 'paw';
-  phase: 'come' | 'ask' | 'watch' | 'pat' | 'look' = 'come';
+  phase: 'come' | 'ask' | 'watch' | 'pat' | 'look' | 'lick' = 'come';
   private t = 0;
   private goes = 0;
   private wait = 0.5 + Math.random() * 0.5;
@@ -1022,8 +1022,22 @@ export class PawGlass implements Act {
       m.lookAt(f.at, 1);
       return this.t < 8;
     }
-    if (!f && this.phase !== 'look' && this.phase !== 'pat') { this.phase = 'look'; this.t = 0; m.layer = null; }
+    if (!f && this.phase !== 'look' && this.phase !== 'pat' && this.phase !== 'lick') { this.phase = 'look'; this.t = 0; m.layer = null; }
     m.setPosture('sit');
+    if (this.phase === 'lick') {
+      // the paw up to the mouth and licked a few times, the eyes half shut, and down
+      const reach = hump(this.t, 1.9, 0.3);
+      m.lookAt(null);
+      m.layer = {
+        pose: {
+          [this.bout?.paw ?? 'LF']: { planted: 0, frame: 0, x: 0.012, y: 0.06 + 0.15 * reach, z: 0.08 + 0.055 * reach, flex: 0.85 },
+          headPitch: -0.32 - 0.25 * reach, neckPitch: -0.1 * reach, jaw: this.t > 0.35 && this.t < 1.5 ? 0.16 * Math.max(0, Math.sin(this.t * 15)) : 0.04,
+          eyeOpen: 0.35, squint: 0.5,
+        },
+        w: 1,
+      };
+      return this.t < 1.9;
+    }
     if (this.phase === 'look') {
       // (where did it go: a look at where it was, and away)
       m.layer = { pose: { earFwd: 0.5, eyeOpen: 1 }, w: 1 - ease((this.t - 0.8) / 0.6) };
@@ -1070,6 +1084,8 @@ export class PawGlass implements Act {
       this.goes++;
       if (this.goes >= this.most || !f) {
         if (!f) { this.phase = 'look'; this.t = 0; m.layer = null; return true; }
+        // (game over: as often as not, the paw that did it licked, as if nothing had happened)
+        if (Math.random() < 0.5) { this.phase = 'lick'; this.t = 0; return true; }
         return false;
       }
       this.phase = 'watch';

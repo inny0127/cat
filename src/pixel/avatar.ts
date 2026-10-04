@@ -661,6 +661,11 @@ export class PixelAvatar implements Avatar {
         this.dreamIn = 12 + Math.random() * 40;
         this.cat.motor.dreamTwitch();
         if (Math.random() < 0.4) setTimeout(() => this.cat.motor.dreamTwitch(), 180 + Math.random() * 200);
+        // (and now and then a little mew in its sleep, hardly heard, the mouth hardly moving)
+        if (Math.random() < 0.18) {
+          this.outside?.sound('meowSoft', 0.07);
+          this.vocalize('chirp', 0.2, 0.05);
+        }
       }
       this.sleepStretch(dt, this.sleep > 0.75 && atHome && !this.touched);
       this.nodOff(dt, this.sleep <= 0.75 && atHome && !this.touched && !this.act && m.posture === 'loaf' && m.targetPosture === 'loaf' && m.settled);
