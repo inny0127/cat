@@ -1155,6 +1155,11 @@ export class PixelApp {
     this.avatar.music = this.audio.musicPlaying;
     this.avatar.update(dt);
     const landed = this.avatar.pawLanded;
+    // (its cheek rubbed on the glass at your finger: felt, a soft bump each time)
+    if (this.avatar.nuzzled) {
+      this.haptic.tapSoon('light');
+      this.audio.play('thump', { gain: 0.07, rate: 0.8, pan: this.catPan() });
+    }
     // (keeping time with the radio, when it is in the mood)
     this.cat.motor.beat = this.avatar.groove > 0.01 ? this.avatar.groove * this.audio.beat() : 0;
     this.cat.update(dt);

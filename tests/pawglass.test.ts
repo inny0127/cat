@@ -93,6 +93,8 @@ describe('a finger on the glass', () => {
     let seed = 31337;
     vi.spyOn(Math, 'random').mockImplementation(() => (seed = (seed * 16807) % 2147483647) / 2147483647);
     const { c, m } = room();
+    // (a cat that does not know you so well yet: no rub of its head on the glass)
+    c.mood.trust = 0.4;
     const at = new THREE.Vector3(0.02, 0.12, 0.5);
     const act = new PawGlass(() => ({ at, still: 0 }));
     // (moving for a second, then held still)
@@ -100,6 +102,34 @@ describe('a finger on the glass', () => {
     expect(r.landed.length).toBeGreaterThan(0);
     expect(r.going).toBe(false);
     expect(r.t).toBeLessThan(8);
+  });
+
+  it('a cat that loves you, the finger held still at its head: its cheek rubbed on the glass there, then a slow blink', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.2);
+    const { c, m, said, breaths } = room();
+    const at = new THREE.Vector3(0.03, 0.24, 0.5);
+    const act = new PawGlass(() => ({ at, still: 0 }));
+    let nuzzles = 0, turn = 0, eyes = 1;
+    const phases = new Set<string>();
+    for (let t = 0, going = true; t < 14 && going; t += 0.02) {
+      const f = { at, still: Math.max(0, t - 1) };
+      (act as unknown as { finger: () => GlassFinger | null }).finger = () => f;
+      going = act.update(0.02, c);
+      m.update(0.02);
+      phases.add(act.phase);
+      if (act.nuzzled) nuzzles++;
+      if (act.phase === 'nuzzle') { turn = Math.max(turn, Math.abs(m.pose.headYaw)); eyes = Math.min(eyes, m.pose.eyeOpen); }
+    }
+    expect(phases.has('nuzzle')).toBe(true);
+    expect(phases.has('blink')).toBe(true);
+    expect(nuzzles).toBeGreaterThanOrEqual(2);
+    expect(breaths.length).toBeGreaterThanOrEqual(2);
+    // (the face turned to put the cheek to the glass)
+    expect(turn).toBeGreaterThan(0.35);
+    expect(eyes).toBeLessThan(0.4);
+    // (no pats: it was not a game)
+    expect(phases.has('pat')).toBe(false);
+    expect(said.length).toBeLessThanOrEqual(1);
   });
 
   it('asking for a game: to the glass, a word, a pat or two at it, and a while waiting', () => {

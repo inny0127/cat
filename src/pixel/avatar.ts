@@ -389,6 +389,10 @@ export class PixelAvatar implements Avatar {
   get pawLanded() {
     return this.act instanceof PawGlass ? this.act.landed : null;
   }
+  /** its cheek rubbed on the glass this frame, where your finger is */
+  get nuzzled() {
+    return this.act instanceof PawGlass && this.act.nuzzled;
+  }
   /** its breath on the glass since last asked: where its nose was (null: none) */
   private breath: THREE.Vector3 | null = null;
   takeBreath() {

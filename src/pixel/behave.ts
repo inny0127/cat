@@ -971,7 +971,7 @@ interface Bout {
  */
 export class PawGlass implements Act {
   readonly name = 'paw';
-  phase: 'come' | 'ask' | 'watch' | 'pat' | 'look' | 'lick' = 'come';
+  phase: 'come' | 'ask' | 'watch' | 'pat' | 'look' | 'lick' | 'nuzzle' | 'blink' = 'come';
   private t = 0;
   private goes = 0;
   private wait = 0.5 + Math.random() * 0.5;
@@ -985,6 +985,14 @@ export class PawGlass implements Act {
   private readonly cameFor = new THREE.Vector3(1e3, 0, 0);
   /** a paw met the glass this frame: which (null: none) */
   landed: PawSide | null = null;
+  /** its cheek met the glass this frame (rubbing its head on it where the finger is) */
+  nuzzled = false;
+  /** a cat that loves you, the finger held still at its head's height: a rub of the head on the
+   *  glass there instead of a game (decided once, the first time it can be; which cheek; whether
+   *  it has stepped in close for it) */
+  private rubs: boolean | null = null;
+  private cheek = 1;
+  private closeIn = false;
   /** before the first pat, as often as not, a sniff at it */
   private sniff = Math.random() < 0.6;
   /** asking you for a game: how many times yet, and whether it has said so this time */
@@ -1015,6 +1023,7 @@ export class PawGlass implements Act {
     const m = c.m;
     this.t += dt;
     this.landed = null;
+    this.nuzzled = false;
     const f = this.finger();
     const keen: PoseLayer = { earFwd: 0.85, pupil: 0.9, eyeOpen: 1, whisker: 0.8, tailCurl: 0.5 * Math.sin(this.t * 7) };
     // asked, and here is a finger on the glass: the game is on
@@ -1043,7 +1052,16 @@ export class PawGlass implements Act {
       m.lookAt(f.at, 1);
       return this.t < 8;
     }
-    if (!f && this.phase !== 'look' && this.phase !== 'pat' && this.phase !== 'lick') { this.phase = 'look'; this.t = 0; m.layer = null; }
+    if (!f && this.phase !== 'look' && this.phase !== 'pat' && this.phase !== 'lick' && this.phase !== 'blink') { this.phase = 'look'; this.t = 0; m.layer = null; }
+    if (this.phase === 'nuzzle') return this.nuzzle(dt, c, f!);
+    if (this.phase === 'blink') {
+      // sat back from the glass, looking at you: a slow blink, and done
+      m.setPosture('sit');
+      m.lookAt(c.viewer(), 1);
+      m.layer = { pose: { earFwd: 0.3, whisker: -0.2 }, w: 1 - ease((this.t - 1.4) / 0.5) };
+      if (this.t > 0.35 && this.t - dt <= 0.35) m.slowBlink();
+      return this.t < 1.9;
+    }
     m.setPosture('sit');
     if (this.phase === 'lick') {
       // the paw up to the mouth and licked a few times, the eyes half shut, and down
@@ -1071,6 +1089,14 @@ export class PawGlass implements Act {
     if (this.phase === 'watch') {
       m.layer = { pose: keen, w: ease(this.t / 0.3) };
       if (!L) return true;
+      // a cat that loves you, the finger held still about its head's height, near: no game, its
+      // head rubbed on the glass there (now and then; the first time it could be)
+      this.rubs ??= c.mood.trust > 0.6 && c.mood.arousal < 0.6 && Math.random() < 0.55;
+      if (this.rubs && this.goes === 0 && f!.still > 0.7 && L.y > 0.1 && L.y < 0.34 && Math.abs(L.x) < 0.12) {
+        this.phase = 'nuzzle'; this.t = 0; this.closeIn = false;
+        this.cheek = L.x > 0 ? 1 : -1;
+        return true;
+      }
       // still a good while (after a pat or two at it, to see if it would go): no game in it
       if (f!.still > 3.5) { this.phase = 'look'; this.t = 0.6; return true; }
       // gone along the glass out of a paw's reach (and not where it was the last time it came
@@ -1116,6 +1142,52 @@ export class PawGlass implements Act {
     }
     return true;
   }
+  /** its head rubbed on the glass where the finger is: in close to the glass under it, then leant
+   *  in, the cheek put to the glass and drawn along it and back, two or three times, the eyes
+   *  shut and the ears laid back a little, the tail up (a trill first, now and then); each time
+   *  the cheek meets the glass it is felt, and its breath mists it there; then sat back */
+  private nuzzle(dt: number, c: Ctx, f: GlassFinger | null) {
+    const m = c.m;
+    if (!this.closeIn) {
+      this.closeIn = true;
+      if (Math.random() < 0.5) c.say('trill');
+    }
+    // (a scoot across and in as it leans, so that its head comes under the finger)
+    if (f && this.t < 0.6) {
+      const tx = f.at.x - this.cheek * 0.015, tz = f.at.z - 0.17;
+      const k = Math.min(1, dt * 6);
+      m.pos.x += (tx - m.pos.x) * k;
+      m.pos.z += Math.max(0, tz - m.pos.z) * k;
+    }
+    m.setPosture('sit');
+    // (the eyes on the finger as it comes in; then the face to the glass, whatever the finger's
+    // height, the cheek and not the top of the head to it, so you see it from your side)
+    if (f) m.lookAt(f.at, this.t < 0.5 ? 0.6 : 0.15);
+    const s = this.cheek, t = this.t;
+    // in (0 .. 0.6), the strokes (each 0.8 s), out after the last
+    const n = 3, lean = ease(t / 0.6) * (1 - ease((t - 0.6 - n * 0.8) / 0.5));
+    const ph = Math.max(0, t - 0.6) / 0.8, k = Math.floor(ph), u = ph - k;
+    const stroke = t > 0.6 && k < n ? Math.sin(Math.PI * 2 * u) : 0;
+    // (the cheek meets the glass at the start of each stroke)
+    if (t > 0.6 && k < n && Math.floor((t - dt - 0.6) / 0.8) < k) {
+      this.nuzzled = true;
+      c.breathe(c.mouthAt());
+    }
+    m.layer = {
+      pose: {
+        // (the face up to the glass and turned to put the cheek to it, drawn along it and back;
+        // seen from your side of the glass, the face pressed to it)
+        neckPitch: 0, headPitch: -0.32 + 0.4 * lean,
+        headYaw: s * lean * (0.45 + 0.22 * stroke), headRoll: s * lean * (0.15 + 0.12 * stroke), neckYaw: s * 0.16 * stroke * lean,
+        eyeOpen: 1 - 0.85 * lean, squint: 0.5 * lean, earFwd: -0.35 * lean, earOut: 0.25 * lean, whisker: -0.4 * lean,
+        tailLift: 1.1 * lean, tailHook: 0.6 * lean,
+      },
+      w: 1,
+    };
+    if (t > 0.6 + n * 0.8 + 0.5) { this.phase = 'blink'; this.t = 0; m.layer = null; }
+    return true;
+  }
+
   /** asking for a game: up to the glass, sat looking at you, a word, and a pat or two at the
    *  glass in front of it (or up on its hind legs with its paws to it); a while waiting */
   private ask(dt: number, c: Ctx, keen: PoseLayer) {
