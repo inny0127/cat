@@ -67,7 +67,17 @@
       transition: opacity 1.4s ease;
       pointer-events: none;
     }
+    #loading { flex-direction: column; gap: calc(16 * var(--fpx)); }
+    /* the cat by its window, as on the icon: 64 art pixels, each a whole number of the screen's */
+    #loading img {
+      width: calc(192 * var(--fpx));
+      height: calc(192 * var(--fpx));
+      image-rendering: crisp-edges;
+      image-rendering: pixelated;
+      animation: arrive 0.9s ease-out both;
+    }
     #loading span { animation: breathe 2.6s ease-in-out infinite; }
+    @keyframes arrive { from { opacity: 0; transform: translateY(calc(4 * var(--fpx))); } to { opacity: 1; transform: none; } }
     #loading.off { opacity: 0; }
     @keyframes breathe { 0%, 100% { opacity: 0.35; } 50% { opacity: 0.95; } }
     #hint {
@@ -123,7 +133,7 @@
   </style>
 </head>
 <body>
-  <div id="loading"><span>창문을 여는 중…</span></div>
+  <div id="loading"><img src="./icons/art-64.png" alt="" width="64" height="64" /><span>창문을 여는 중…</span></div>
   <canvas id="stage" aria-label="방 안의 고양이. 손가락으로 쓰다듬을 수 있어요." role="img"></canvas>
   <div id="hint" aria-live="polite"></div>
   <div id="credits" role="dialog" aria-label="만든 것들"></div>

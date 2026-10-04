@@ -117,6 +117,17 @@ def main():
     with open(os.path.join(d, 'maskable.rgb'), 'rb') as fh:
         mask_rgb = fh.read()
     icon, cat = cat_over(backdrop(n, 6), icon_rgb, n, back)
+    # (the art itself, an art pixel to a pixel, for the loading screen to show blown up on the
+    # wall's colour: the cat's chest, cut by the bottom edge, dissolving into it in checks)
+    art = icon.copy()
+    ap = art.load()
+    bayer = ((0, 2), (3, 1))
+    for y in range(n - 8, n):
+        f = (y - (n - 8) + 1) / 8
+        for x in range(n):
+            if bayer[y % 2][x % 2] < f * 4:
+                ap[x, y] = WALL
+    art.save(os.path.join(OUT, 'art-64.png'))
     save(icon, 512, 'icon-512.png')
     save(icon, 192, 'icon-192.png')
     # (iOS rounds the corners itself: 180 is 64 x 3 less two art pixels each side)
