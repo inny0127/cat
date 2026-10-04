@@ -103,6 +103,8 @@ export class PixelApp {
       mouse: () => this.room.mouse,
       carry: (at, yaw) => this.room.carryMouse(at, yaw),
       hookMouse: (toward) => this.room.hookMouse(toward),
+      pompom: () => this.room.pompom(),
+      batPompom: (v) => this.room.batPompom(v),
       pinLure: (sec, at) => {
         this.room.pinLure(sec, at);
         // (a hand on the wand feels the paws have them)
@@ -111,6 +113,8 @@ export class PixelApp {
     };
     // the monstera knocked: its leaves rustle
     this.room.onRustle = (k) => this.audio.play('rustle', { gain: 0.08 + 0.18 * Math.min(1, k), pan: 0.5 });
+    // the pompom batted: a soft tap of a paw on it
+    this.room.onPompom = (k) => this.audio.play('thump', { gain: 0.03 + 0.05 * k, rate: 1.6, pan: Math.max(-0.8, Math.min(0.8, this.room.pompom().project(this.stage.camera).x * 0.8)) });
     // the toy mouse skids in under the radiator: a little knock against its foot, and the cat hears
     this.room.onMouseUnder = () => {
       this.audio.play('pencil', { gain: 0.05, rate: 0.6, pan: Math.max(-0.8, Math.min(0.8, this.room.mouse.p.clone().project(this.stage.camera).x * 0.8)) });

@@ -32,6 +32,10 @@ export interface Ctx {
   /** the scratching post, if there is one: where it stands on the floor, how thick its post is,
    *  and how high its top is */
   scratcher: () => ScratchPost | null;
+  /** the pompom hanging from the post's top, if there is one (where it is now as it swings), and a
+   *  paw sending it swinging (a push across the floor, m/s) */
+  pompom: () => THREE.Vector3 | null;
+  batPompom: (v: THREE.Vector3) => void;
   /** a bird come down on the ledge outside the window, if there is one (where, on the glass) */
   visitor: () => THREE.Vector3 | null;
   /** a place on the floor in the sun, if the sun is in; and whether a point is in it */
@@ -1490,6 +1494,105 @@ export class Claw implements Act {
       tailLift: 0.95, tailSide: 0.15, tailCurve: 0.5, tailSag: 0.4,
       LF: paw(l, 0.03), RF: paw(r, 0.03),
     };
+  }
+  stop(c: Ctx) {
+    c.m.layer = null;
+    c.m.lookAt(null);
+  }
+}
+
+/**
+ * The pompom hanging from the scratching post: sat by it, the eyes on it and the tail tip going;
+ * then a paw at it, up off the haunches, out and onto it, and off it swings; the head after it, to
+ * and fro, as it goes and comes back; at it again as it comes (and missed, now and then: it moves);
+ * a few goes, and then sat watching it come to rest, and a look round at you.
+ */
+export class Bat implements Act {
+  readonly name = 'pompom';
+  phase: 'go' | 'watch' | 'swat' | 'after' = 'go';
+  private t = 0;
+  private set = false;
+  private swats = 0;
+  private readonly most = 3 + Math.floor(Math.random() * 4);
+  private wait = rand(1.2, 2);
+  private paw: PawSide = 'RF';
+  /** where the paw goes for it (its own frame, the paw's x outward), set as the swat starts */
+  private readonly aim = new THREE.Vector3();
+  private hit = false;
+  /** hits so far */
+  hits = 0;
+  private readonly tmp = new THREE.Vector3();
+  get ownGaze() {
+    return true;
+  }
+  /** the pompom in the cat's own frame: across (to its left), up, ahead */
+  private local(c: Ctx, p: THREE.Vector3, out: THREE.Vector3) {
+    const m = c.m, dx = p.x - m.pos.x, dz = p.z - m.pos.z, cy = Math.cos(m.yaw), sy = Math.sin(m.yaw);
+    return out.set(dx * cy - dz * sy, p.y, dx * sy + dz * cy);
+  }
+  update(dt: number, c: Ctx) {
+    const m = c.m, B = c.pompom();
+    if (!B) return false;
+    this.t += dt;
+    if (this.phase === 'go') {
+      if (!this.set) {
+        this.set = true;
+        // (a paw's reach off it, out to the front and the room side of it, facing it: side on
+        // to you as it bats)
+        const spot = new THREE.Vector3(B.x + 0.16, 0, B.z + 0.075);
+        m.setPosture('stand');
+        m.walkTo(spot, 0.3, Math.atan2(B.x - spot.x, B.z - spot.z), () => { this.phase = 'watch'; this.t = 0; });
+      }
+      m.lookAt(B, 0.8);
+      return this.t < 12;
+    }
+    m.setPosture('sit');
+    m.lookAt(B, 1);
+    const keen: PoseLayer = { earFwd: 0.9, pupil: 0.95, eyeOpen: 1, whisker: 0.7, tailCurl: 0.8 * Math.sin(this.t * 6), tailLift: -0.4 };
+    if (this.phase === 'watch') {
+      m.layer = { pose: keen, w: ease(this.t / 0.3) };
+      if (this.t > this.wait) {
+        const L = this.local(c, B, this.tmp);
+        this.paw = L.x > 0 ? 'LF' : 'RF';
+        this.aim.set(Math.min(0.09, Math.max(0.02, Math.abs(L.x))), Math.min(0.3, Math.max(0.08, L.y)), Math.min(0.24, Math.max(0.1, L.z)));
+        this.hit = false;
+        this.phase = 'swat';
+        this.t = 0;
+      }
+      return true;
+    }
+    if (this.phase === 'swat') {
+      // up off its haunches, the paw up and out to it and down through it, and back
+      const u = this.t, out = u < 0.22 ? ease(u / 0.22) : 1 - ease((u - 0.3) / 0.3);
+      const lift = Math.sin(Math.PI * Math.min(1, u / 0.6));
+      const a = this.aim;
+      const foot = { planted: 0, frame: 0, x: 0.03 + (a.x - 0.03) * out, y: 0.02 + (a.y + 0.03 - 0.02) * out - 0.05 * ease((u - 0.18) / 0.12) * out, z: 0.1 + (a.z - 0.1) * out, flex: 0.3 - 0.9 * out };
+      m.layer = { pose: { ...keen, chestPitch: -1.02 - 0.2 * lift, hipY: 0.058 + 0.03 * lift, neckPitch: 0.1 * lift, [this.paw]: foot }, w: 1 };
+      if (!this.hit && u >= 0.2) {
+        this.hit = true;
+        // (where the paw is now, against where the pompom is: near enough, and it goes)
+        const L = this.local(c, B, this.tmp);
+        const px = (this.paw === 'LF' ? 1 : -1) * a.x;
+        if (Math.hypot(L.x - px, L.y - a.y, L.z - a.z) < 0.08) {
+          this.hits++;
+          // (pushed away from it and across, the way the paw goes)
+          const f = new THREE.Vector3(Math.sin(m.yaw), 0, Math.cos(m.yaw)), side = new THREE.Vector3(Math.cos(m.yaw), 0, -Math.sin(m.yaw));
+          const k = rand(0.5, 0.9);
+          c.batPompom(f.multiplyScalar(k * 0.8).addScaledVector(side, (this.paw === 'LF' ? -1 : 1) * k * 0.6));
+        }
+      }
+      if (u > 0.65) {
+        this.swats++;
+        this.t = 0;
+        this.phase = this.swats >= this.most ? 'after' : 'watch';
+        this.wait = rand(0.6, 1.5);
+      }
+      return true;
+    }
+    // sat watching it come to rest, then a look round at you
+    m.layer = { pose: { ...keen, tailCurl: 0.3 * Math.sin(this.t * 3) }, w: 1 - ease((this.t - 1.6) / 0.4) };
+    if (this.t > 1.8) m.lookAt(c.viewer(), 1);
+    return this.t < 3;
   }
   stop(c: Ctx) {
     c.m.layer = null;
@@ -3330,6 +3433,8 @@ export function chooseAct(c: Ctx, atHome: boolean, posture: PoseName): Act | nul
     // ... and its claws, on the scratching post
     const post = c.scratcher();
     if (atHome && post) opts.push([0.4 * (0.4 + m.arousal) * (1 - 0.7 * m.sleepy), () => new Claw(post)]);
+    // ... and the pompom hanging from it to bat at
+    if (atHome && post && c.pompom?.()) opts.push([0.3 * (0.4 + m.arousal) * (1 - m.sleepy), () => new Bat()]);
     // ... and up on top of it for a while, to look down on the room (or doze up there)
     if (atHome && post && c.mode === 'rest') opts.push([0.35 * (0.6 + 0.6 * m.trust) * (1 + 0.6 * c.night) * (1 - 0.5 * m.sleepy), () => new Top(post)]);
     if (atHome && c.mode === 'rest') opts.push([0.7 + 0.8 * m.sleepy, () => sunbathe(c)]);

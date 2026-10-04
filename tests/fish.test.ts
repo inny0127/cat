@@ -73,3 +73,45 @@ describe('the toy mouse under the radiator', () => {
     expect(r.t).toBeLessThan(40);
   });
 });
+
+describe('the pompom on the post', () => {
+  it('sat by it, a paw at it a few times (it swings off), the eyes on it, and a look at you after', async () => {
+    const { Bat } = await import('../src/pixel/behave');
+    for (const seed0 of [3, 333]) {
+      let seed = seed0;
+      vi.spyOn(Math, 'random').mockImplementation(() => (seed = (seed * 16807) % 2147483647) / 2147483647);
+      const m = new Motor();
+      m.snap('stand');
+      m.pos.set(-0.4, 0, -0.1);
+      const rest = new THREE.Vector3(-0.82, 0.264, -0.265), ball = rest.clone(), vel = new THREE.Vector3();
+      const viewer = new THREE.Vector3(0, 1.2, 3);
+      const bats: THREE.Vector3[] = [];
+      let watchedBall = 0, frames = 0;
+      const c = {
+        m, mood: { ...NEUTRAL }, viewer: () => viewer, pompom: () => ball,
+        batPompom: (v: THREE.Vector3) => { bats.push(v.clone()); vel.add(v); },
+      } as unknown as Ctx;
+      const act = new Bat(), phases: string[] = [];
+      let going = true;
+      for (let t = 0; t < 40 && going; t += 1 / 30) {
+        going = act.update(1 / 30, c);
+        m.update(1 / 30);
+        // (the ball on its string: pulled back toward where it hangs, slowly coming to rest)
+        vel.addScaledVector(ball.clone().sub(rest).setY(0), -30 / 30).multiplyScalar(1 - 0.7 / 30);
+        ball.addScaledVector(vel.clone().setY(0), 1 / 30);
+        if (phases[phases.length - 1] !== act.phase) phases.push(act.phase);
+        if (act.phase === 'watch') { frames++; if (m.lookTarget && m.lookTarget.distanceTo(ball) < 0.05) watchedBall++; }
+      }
+      expect(going).toBe(false);
+      expect(phases[0]).toBe('go');
+      expect(phases).toContain('swat');
+      expect(phases[phases.length - 1]).toBe('after');
+      expect(bats.length).toBeGreaterThanOrEqual(1);
+      // (pushed away from the cat: toward the post's side of the room)
+      for (const v of bats) expect(v.x).toBeLessThan(0);
+      expect(watchedBall / frames).toBeGreaterThan(0.95);
+      expect(m.lookTarget?.distanceTo(viewer) ?? 1).toBeLessThan(1e-6);
+      vi.restoreAllMocks();
+    }
+  });
+});

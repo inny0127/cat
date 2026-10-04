@@ -936,7 +936,31 @@ export class Room {
   private readonly postSway = {
     group: new THREE.Group() as THREE.Object3D, at: new THREE.Vector3(), ax: 0, az: 0, vx: 0, vz: 0,
     pom: new THREE.Group() as THREE.Object3D, px: 0, pz: 0, pvx: 0, pvz: 0,
+    /** the ball on the string, and how far below where the string hangs from it is */
+    ball: new THREE.Object3D(), len: 0.3,
   };
+
+  /** where the pompom on the scratching post is now (as it swings), and how fast it is going */
+  pompom(out = new THREE.Vector3()) {
+    const P = this.postSway;
+    P.ball.updateWorldMatrix(true, false);
+    return P.ball.getWorldPosition(out);
+  }
+  get pompomSpeed() {
+    const P = this.postSway;
+    return Math.hypot(P.pvx, P.pvz) * P.len;
+  }
+
+  /** a paw at the pompom: it swings off the way the paw sends it (a push across the floor, m/s) */
+  batPompom(v: THREE.Vector3) {
+    const P = this.postSway;
+    // (a swing out toward +z is the string turned about x the other way; toward +x, about z)
+    P.pvx += -v.z / P.len;
+    P.pvz += v.x / P.len;
+    this.onPompom?.(Math.min(1, Math.hypot(v.x, v.z) / 1.2));
+  }
+  /** the pompom batted (how hard, 0 .. 1) */
+  onPompom: ((k: number) => void) | null = null;
 
   /** a cat knocks against something, at a point, so hard (0 .. 1): the monstera's pot, and its
    *  leaves shake and rustle; a curtain, and it swings */
@@ -1478,17 +1502,19 @@ export class Room {
       const top = shadowy(new THREE.Mesh(new THREE.CylinderGeometry(topR, topR + 0.005, 0.032, 28), plush));
       top.position.y = 0.03 + h + 0.016;
       post.add(foot, rope, top);
-      // (the pompom hangs from under the top on the side toward you, away from the room's middle,
-      // where a cat at the post has it by its ear and not in its face)
+      // (the pompom hangs low on a long string from under the top's front edge, toward you: clear
+      // of a cat at the post's side, and down where a paw can get at it)
       const pom = new THREE.Group();
-      pom.position.set(-0.06, 0.03 + h, 0.08);
-      const sl = 0.15;
+      pom.position.set(0, 0.03 + h, 0.105);
+      const sl = 0.31;
       const string = new THREE.Mesh(new THREE.CylinderGeometry(0.003, 0.003, sl, 4), this.mat('rugCream', { tone: -0.1 }));
       string.position.y = -sl / 2;
       const ball = shadowy(new THREE.Mesh(new THREE.SphereGeometry(0.02, 10, 8), this.mat('pink', { tone: 0.06, pattern: 4 })));
       ball.position.y = -sl - 0.016;
       pom.add(string, ball);
       post.add(pom);
+      P.ball = ball;
+      P.len = sl + 0.016;
       this.group.add(post);
       P.group = post;
       P.pom = pom;
@@ -3518,9 +3544,11 @@ export class Room {
       P.ax += P.vx * h;
       P.az += P.vz * h;
       P.group.rotation.set(P.ax, 0, P.az);
-      // (the top's lurch, carried down the string: a hand's length below a point 0.6 m up)
-      P.pvx += (P.vx - ox) * 4 + (-62 * P.px - 0.9 * P.pvx) * h;
-      P.pvz += (P.vz - oz) * 4 + (-62 * P.pz - 0.9 * P.pvz) * h;
+      // (the top's lurch, carried down the string from a point 0.6 m up; and the swing of a
+      // pendulum this long, slowly dying)
+      const k = 0.6 / P.len, g = 9.8 / P.len;
+      P.pvx += (P.vx - ox) * k + (-g * P.px - 0.7 * P.pvx) * h;
+      P.pvz += (P.vz - oz) * k + (-g * P.pz - 0.7 * P.pvz) * h;
       P.px += P.pvx * h;
       P.pz += P.pvz * h;
       if (Math.abs(P.px) + Math.abs(P.pz) < 1e-4 && Math.abs(P.pvx) + Math.abs(P.pvz) < 1e-3) P.px = P.pz = P.pvx = P.pvz = 0;
