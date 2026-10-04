@@ -114,9 +114,21 @@ ${LIGHT_GLSL}
 // own stripes, at a few millimetres to the art pixel, come out as dabs). The head keeps its own.
 float hashT(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 int tabby(int cls, vec3 P) {
-  // (the top and back of the head are ginger all over: the painting's light tufts there come out
-  // as white specks)
-  if (cls == ${PIX.white} && P.z > 0.085 && P.z < 0.165 && P.y > 0.255) return ${PIX.ginger};
+  // the top and back of the head and the nape, short of the forehead and the ears: ginger, with the
+  // tabby's lines running back over it from between the ears and down the nape to the spine's (one
+  // down the middle and one either side, wavering a little: at the distance it is mostly seen from,
+  // a few lines a pixel or two wide, as a pixel artist would draw them, where more would only be
+  // a stipple). The painting's own dabs there came out as blotches, its light tufts as specks
+  // that the evening light turned pink, and the pink of the ears' insides as flecks at their roots
+  bool crown = P.z > 0.085 && P.z < 0.176 && abs(P.x) < 0.047 && P.y > mix(0.238, 0.262, smoothstep(0.11, 0.15, P.z))
+    && !(P.y > 0.29 && abs(P.x) > 0.017);
+  if (crown && cls <= ${PIX.pink}) {
+    float ph = abs(P.x) / 0.019 + 0.22 + 0.12 * sin(P.z * 140.0 + sign(P.x));
+    bool line = fract(ph) < 0.44 && ph < 2.0 && P.z < 0.17;
+    return line ? ${PIX.stripe} : ${PIX.ginger};
+  }
+  // (and the sides of the head behind the eyes: ginger, short of the white of the chin and throat)
+  if ((cls == ${PIX.white} || cls == ${PIX.pink}) && P.z > 0.11 && P.z < 0.165 && P.y > 0.215) return ${PIX.ginger};
   if (cls != ${PIX.ginger} && cls != ${PIX.stripe} && cls != ${PIX.cream}) return cls;
   if (P.z > 0.085) return cls;
   bool band;
