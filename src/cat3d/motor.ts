@@ -36,6 +36,8 @@ const RISE: Record<Group, [number, number]> = {
   hips: [0.12, 0.85], hind: [0.12, 0.85], chest: [0, 0.8], front: [0, 0.75],
   head: [0, 0.65], tail: [0.2, 0.8], ears: [0, 0.5], face: [0, 0.8],
 };
+/** postures whose tail is laid round to one side, which might as well be the other */
+const TAIL_FLIPS = new Set<PoseName>(['loaf', 'sit', 'sphinx']);
 const LOW: Partial<Record<PoseName, number>> = { stand: 3, alert: 3, arch: 3, stretch: 3, crouch: 2, sit: 2, loaf: 1, sphinx: 1, side: 0, curl: 0, curlL: 0 };
 
 const ease = (t: number) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * t * (t * (t * 6 - 15) + 10));
@@ -158,8 +160,9 @@ export class Motor {
     this.posture = this.target = this.fromName = name;
     this.path = [];
     copyPose(this.base, POSES[name]);
-    copyPose(this.from, POSES[name]);
-    copyPose(this.to, POSES[name]);
+    this.flipTail(this.base, name);
+    copyPose(this.from, this.base);
+    copyPose(this.to, this.base);
     this.tt = 1;
   }
 
@@ -174,6 +177,15 @@ export class Motor {
     return [[this.fromName, 1 - k], [this.posture, k]];
   }
   private fromName: PoseName = 'stand';
+  /** which side the tail is laid round to when it sits or lies on its chest (-1: the other side
+   *  from the posture's own), picked afresh each time it sits or lies down from standing */
+  private tailFlip = 1;
+  private flipTail(p: Pose, name: PoseName) {
+    if (this.tailFlip < 0 && TAIL_FLIPS.has(name)) {
+      p.tailSide = -p.tailSide;
+      p.tailCurl = -p.tailCurl;
+    }
+  }
 
   private advance() {
     const next = this.path.shift();
@@ -182,6 +194,8 @@ export class Motor {
     this.fromName = this.tt < 1 && this.prog.hips < 0.5 ? this.fromName : this.posture;
     copyPose(this.from, this.base);
     copyPose(this.to, POSES[next]);
+    if (TAIL_FLIPS.has(next) && !TAIL_FLIPS.has(this.posture) && (LOW[this.posture] ?? 2) >= 2) this.tailFlip = Math.random() < 0.5 ? 1 : -1;
+    this.flipTail(this.to, next);
     this.tdur = edgeTime(this.posture, next) * (0.9 + Math.random() * 0.2);
     this.sched = (LOW[next] ?? 2) > (LOW[this.posture] ?? 2) ? RISE : SCHEDULE;
     this.posture = next;
