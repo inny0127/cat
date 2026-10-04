@@ -1269,6 +1269,7 @@ export class PixelApp {
   }
 
   private radioHintIn = 25;
+  private mistHintIn = 8;
 
   private hints(dt: number, touching: boolean) {
     const s = this.state;
@@ -1291,6 +1292,12 @@ export class PixelApp {
     if (this.avatar.doing === 'play' && !s.hints.yarnDrag && !touching && !this.toyFinger) {
       s.hints.yarnDrag = 1;
       this.hintUi.show('털실 공을 손가락으로 끌어 보세요. 고양이가 쫓아올 거예요', 5000);
+      return;
+    }
+    // the first time the glass mists over well enough to draw on: that you can
+    if (this.glassFog.level > 0.35 && !s.hints.mist && !touching && !this.input.touching && (this.mistHintIn -= dt) < 0) {
+      s.hints.mist = 1;
+      this.hintUi.show('유리에 김이 서렸어요. 손가락으로 그림을 그려 보세요', 5500);
       return;
     }
     // once the radio has played a while: how to switch it off
