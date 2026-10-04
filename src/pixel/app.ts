@@ -502,10 +502,15 @@ export class PixelApp {
     if (touching) { this.focusT = 1; this.focusHold = 9; }
     else if ((this.focusHold -= dt) <= 0) this.focusT = 0;
     const m = this.cat.motor;
-    // the middle of the body, wherever it lies
+    // the middle of the body, wherever it lies; close in, as high as halfway up to its head (sat
+    // up, the head is well above the middle of the body, and the view would have it at the top
+    // and empty floor below)
     const want = this.bodyMiddle();
-    if (this.focus < 0.01) this.catAim.copy(want);
-    else this.catAim.lerp(want, 1 - Math.exp(-dt * 2.5));
+    const head = this.cat.byName.get('head');
+    const aimAt = want.clone();
+    if (head) aimAt.y = 0.5 * (want.y + Math.max(0.08, Math.min(0.36, head.getWorldPosition(this.tmpA).y)));
+    if (this.focus < 0.01) this.catAim.copy(aimAt);
+    else this.catAim.lerp(aimAt, 1 - Math.exp(-dt * 2.5));
     if (this.anchor) {
       const a = this.anchor;
       a.bone.updateWorldMatrix(true, false);
