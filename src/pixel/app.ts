@@ -288,6 +288,18 @@ export class PixelApp {
           if (id === L.id) {
             L.id = -1;
             if (canvas.style.cursor === 'none') canvas.style.cursor = 'crosshair';
+            // (a quick tap is a tap on the glass all the same, pointer in hand or not: the cat
+            // hears it, and two are a knock, which wakes it)
+            if (tap) {
+              const now = performance.now();
+              if (now - this.laserTap.t < 420 && Math.hypot(L.sx - this.laserTap.x, L.sy - this.laserTap.y) < 60) {
+                this.brain.knock(L.sx, L.sy);
+                this.laserTap.t = 0;
+              } else {
+                this.brain.glassTap(L.sx, L.sy);
+                this.laserTap = { t: now, x: L.sx, y: L.sy };
+              }
+            }
             // (the first time the dot goes off: how to put the pointer down)
             if (!this.state.hints.laserDown && L.used > 4) {
               this.state.hints.laserDown = 1;
@@ -518,6 +530,9 @@ export class PixelApp {
     hit: null as { p: THREE.Vector3; n: THREE.Vector3; on: 'floor' | 'bed' | 'sill' | 'books' | 'up' | 'out' | 'cat'; mug?: boolean } | null,
   };
 
+  /** the last quick tap with the laser pointer in hand (a second one soon after is a knock) */
+  private laserTap = { t: 0, x: 0, y: 0 };
+
   /** a finger holding the feather wand (where, which) */
   private wandFinger: { x: number; y: number; id: number } | null = null;
 
@@ -636,7 +651,15 @@ export class PixelApp {
     const h = L.hit;
     this.avatar.laser = dot && h && h.on !== 'cat' && h.on !== 'out' ? { p: h.p, n: h.n, on: h.on, mug: h.mug } : null;
     if (dot && this.brain.mode !== 'sleep' && this.brain.mode !== 'doze') this.brain.toy(L.sx, L.sy - L.lift, dt);
+    // (shone for a while at a cat fast asleep: that it can be woken)
+    const asleep = this.brain.mode === 'sleep' || this.brain.mode === 'doze';
+    this.shoneAsleep = dot && asleep && !this.avatar.hidden ? this.shoneAsleep + dt : 0;
+    if (this.shoneAsleep > 3 && !this.state.hints.laserSleep) {
+      this.state.hints.laserSleep = 1;
+      this.hintUi.show('고양이가 자고 있어요. 화면을 톡톡 두드려 깨워 보세요', 5000);
+    }
   }
+  private shoneAsleep = 0;
 
   /** a finger moving the ball of wool: where it is (css px), and where the ball is from the
    *  point on the floor under it */
