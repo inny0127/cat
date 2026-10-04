@@ -7,6 +7,9 @@ import type { Zone } from '../src/sim/zones';
 function stroked(zone: Zone, vx: number, grain: [number, number] = [1, 0], seconds = 8) {
   const s = newCat(Date.now() - 60_000);
   s.trust = 0.15;
+  // (an average cat: no fondness of its own for this place, or dislike of it)
+  s.personality.likes[zone] = 0;
+  s.personality.tolerance = 1;
   const said: string[] = [];
   const quiet = (own: Record<string, unknown> = {}) =>
     new Proxy(own, { get: (t, k) => (k in t ? t[k as string] : () => {}), set: () => true });
@@ -22,7 +25,7 @@ function stroked(zone: Zone, vx: number, grain: [number, number] = [1, 0], secon
 
 describe('a word on why it is annoyed', () => {
   it('stroked against its fur: told to go from the head to the tail', () => {
-    const said = stroked('back', -150, [1, 0]);
+    const said = stroked('back', -300, [1, 0]);
     expect(said.some((t) => t.includes('거꾸로'))).toBe(true);
   });
   it('its tail held: told it does not like that', () => {

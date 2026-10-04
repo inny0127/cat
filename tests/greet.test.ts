@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import * as THREE from 'three';
 import { Motor } from '../src/cat3d/motor';
 import { NEUTRAL } from '../src/cat3d/mood';
@@ -18,6 +18,8 @@ function room() {
   } as unknown as Ctx;
   return { c, m, blinks };
 }
+
+afterEach(() => { vi.restoreAllMocks(); });
 
 describe('a hello when you come back', () => {
   it('up to the glass, sat there looking at you, a slow blink, and in a while about its business', () => {
@@ -40,6 +42,9 @@ describe('a hello when you come back', () => {
   });
 
   it('fond of you: a head pushed at the glass, a cheek along it', () => {
+    // (the same dice every run: as glad as can be it nearly always does, and nearly is not a test)
+    let seed = 12345;
+    vi.spyOn(Math, 'random').mockImplementation(() => (seed = (seed * 16807) % 2147483647) / 2147483647);
     const { c, m } = room();
     m.pos.set(0, 0, 0.18);
     // (as glad as can be: it nearly always does)
