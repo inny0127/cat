@@ -417,8 +417,10 @@ export class PixelAvatar implements Avatar {
       if (!this.act && this.kneading) this.act = knead();
       if (this.act) this.act.update(dt, c);
       else m.setPosture(this.wanted() === 'sit' ? 'sit' : atHome ? this.rest : 'loaf');
+      this.swatStep(dt);
       return;
     }
+    this.swatStep(dt);
     // its own time: carry on with what it is doing, or now and then think of something
     if (this.act) {
       if (!this.act.update(dt, c)) {
@@ -701,10 +703,30 @@ export class PixelAvatar implements Avatar {
     this.cat.motor.jolt(strength);
   }
 
-  swat() {
-    // a quick cuff with the near forepaw: for now a startle with the ears back
-    this.cat.motor.jolt(0.8);
+  /** a quick cuff with a forepaw at the hand on it: struck out at you and back in under half a
+   *  second, the ears back, the head drawn away from it (dirX: which way on the screen) */
+  private swatting: { t: number; paw: 'LF' | 'RF' } | null = null;
+  swat(dirX = 0) {
+    this.cat.motor.jolt(0.5);
     this.cat.motor.flickTail(1.5);
+    if (!this.alive || this.sleep > 0.5) return;
+    // (screen left is the cat's right while it faces you)
+    this.swatting = { t: 0, paw: dirX < 0 ? 'RF' : dirX > 0 ? 'LF' : Math.random() < 0.5 ? 'LF' : 'RF' };
+  }
+  private swatStep(dt: number) {
+    const S = this.swatting, m = this.cat.motor;
+    if (!S) return;
+    const u = (S.t += dt) / 0.42;
+    if (u >= 1 || this.act) {
+      this.swatting = null;
+      if (!this.act) m.layer = null;
+      return;
+    }
+    const k = u < 0.28 ? ease(u / 0.28) : 1 - ease((u - 0.28) / 0.72);
+    m.layer = {
+      pose: { [S.paw]: { planted: 0, frame: 0, x: 0.03, y: 0.1, z: 0.21, flex: 0.2 }, neckPitch: 0.25, headPitch: -0.1, earFlat: 1, earFwd: -0.8, earOut: 0.5 },
+      w: k,
+    };
   }
 
   sigh() {
