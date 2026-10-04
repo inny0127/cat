@@ -171,8 +171,9 @@ export const stretchSideOn = (c: Ctx, then: PoseName, hind?: boolean) => {
     if (hind !== undefined) s.hind = hind;
     return s;
   };
+  // (you are straight ahead of a cat at yaw 0)
   if (Math.abs(Math.sin(c.m.yaw)) > 0.6) return make(then);
-  const y = c.bed('loaf').yaw, a = y + Math.PI / 2, b = y - Math.PI / 2;
+  const a = Math.PI / 2, b = -Math.PI / 2;
   const face = Math.abs(wrapA(a - c.m.yaw)) < Math.abs(wrapA(b - c.m.yaw)) ? a : b;
   return new Seq('stretch', [
     () => new Walk('stretch', [{ to: c.m.pos.clone(), face, stay: 0.3, posture: 'stand' }], 0.22),

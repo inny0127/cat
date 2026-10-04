@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { Cat3D } from '../cat3d/cat';
-import { POSES, type Leg, type PoseLayer, type PoseName } from '../cat3d/pose';
+import { POSES, SIDE_TURN, type Leg, type PoseLayer, type PoseName } from '../cat3d/pose';
 import { NEUTRAL, type Mood } from '../cat3d/mood';
 import type { Avatar } from '../sim/avatar';
 import type { EarMood, TailMood } from '../rig/animator';
@@ -272,10 +272,16 @@ export class PixelAvatar implements Avatar {
   /**
    * Where to stand, and which way to face, so that lying down in posture p puts the body (not the
    * spot it stood on) in the middle of the bed with the face toward the window: curling up, a cat
-   * ends nose to tail, so it lies down facing the wall.
+   * ends nose to tail, so it lies down facing the wall. Lying or sitting up, it settles side on
+   * (SIDE_TURN), whichever way round is the nearer to the way it faces now: it lies down the way it
+   * came in, and shifting from a loaf to sitting up it stays the way round it was.
    */
   bedSpot(p: PoseName) {
-    return this.lieAt(p, this.home, this.home.yaw);
+    const turn = SIDE_TURN[p];
+    if (!turn) return this.lieAt(p, this.home, this.home.yaw);
+    const a = this.lieAt(p, this.home, this.home.yaw + turn), b = this.lieAt(p, this.home, this.home.yaw - turn);
+    const y = this.cat.motor.yaw;
+    return Math.abs(wrap(a.yaw - y)) <= Math.abs(wrap(b.yaw - y)) ? a : b;
   }
 
   /** where to stand and which way to turn so that lying down in posture p puts the middle of the

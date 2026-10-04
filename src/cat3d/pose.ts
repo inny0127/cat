@@ -199,6 +199,13 @@ export type PoseName = keyof typeof POSES;
  */
 export const SHOW_TURN: Partial<Record<PoseName, number>> = { curl: -0.35, curlL: 0.35 };
 
+/**
+ * Lying or sitting up in its bed, how far round from face on it settles, one way or the other:
+ * square on, a loaf or a sitting cat is a lump with a face on it; turned well round, side on, the
+ * line of its back and its tail show, and it turns its head to look at you.
+ */
+export const SIDE_TURN: Partial<Record<PoseName, number>> = { loaf: 1.0, sphinx: 1.0, sit: 1.0 };
+
 /** a pose laid over another: any channel, and any of a paw's numbers */
 export type PoseLayer = { [K in keyof Pose]?: Pose[K] extends Foot ? Partial<Foot> : number };
 
