@@ -1407,6 +1407,22 @@ export const sunbathe = (c: Ctx) => {
   ]);
 };
 
+/** fond of you and drowsy: a nap as near you as it can get, just inside the glass, rather than in
+ *  its bed (lying side-on to you, or flat out on its side across in front of you), dozing off
+ *  there; then back to bed */
+export const byYou = (c: Ctx) => {
+  const bed = c.bed('loaf');
+  const flat = Math.random() < 0.35;
+  const posture: PoseName = flat ? 'side' : 'loaf';
+  const side = Math.random() < 0.5 ? -1 : 1;
+  const at = c.keepClear(new THREE.Vector3(c.window.x + rand(-0.06, 0.06), 0, c.window.z + 0.1), flat ? 0.16 : 0.1);
+  const place = c.lieAt(posture, at, side * (flat ? 1.55 : rand(0.15, 0.35)));
+  return new Walk('by you', [
+    { to: place.to, face: place.yaw, stay: rand(70, 160), posture, nap: true },
+    { to: bed.to, face: bed.yaw, stay: 0.1, posture: 'loaf' },
+  ]);
+};
+
 /** in the heating months, a long while lying on the floor by the warm radiator, then back to bed */
 export const warmUp = (c: Ctx) => {
   const spot = c.warm();
@@ -2343,6 +2359,8 @@ export function chooseAct(c: Ctx, atHome: boolean, posture: PoseName): Act | nul
     if (atHome && posts.length) opts.push([0.3 * (0.4 + m.pleasure) * (1 - m.sleepy), () => new Rub(c, pick(posts))]);
     if (atHome && c.mode === 'rest') opts.push([0.7 + 0.8 * m.sleepy, () => sunbathe(c)]);
     if (atHome && c.mode === 'rest' && c.warm()) opts.push([0.8 + 0.8 * m.sleepy, () => warmUp(c)]);
+    // very fond of you and drowsy: a nap as near you as it can get
+    if (atHome && c.mode === 'rest' && m.trust > 0.55) opts.push([1.2 * (m.trust - 0.5) * (0.3 + m.sleepy), () => byYou(c)]);
     if (atHome && c.yarn()) opts.push([0.6 * (0.4 + m.arousal) * (1 - m.sleepy) * (c.mode === 'rest' ? 1 : 0.4), () => new Play()]);
     // the feathers of the wand lying on the floor: now and then a game with them on its own
     const lure = c.lure();

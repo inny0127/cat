@@ -158,3 +158,25 @@ describe('asking at the empty bowl', () => {
     expect(act.update(0.02, c)).toBe(false);
   });
 });
+
+describe('a nap by you', () => {
+  it('as near the glass as it can get, lying down there where it may doze off, then back to bed', async () => {
+    const { byYou } = await import('../src/pixel/behave');
+    const { c, m } = room();
+    Object.assign(c, {
+      keepClear: (p: THREE.Vector3) => p,
+      lieAt: (_p: string, at: THREE.Vector3, face: number) => ({ to: at.clone(), yaw: face }),
+      bed: () => ({ to: new THREE.Vector3(), yaw: 0 }),
+    });
+    m.snap('loaf');
+    const act = byYou(c);
+    let t = 0;
+    for (; t < 30 && !act.canNap; t += 0.02) { act.update(0.02, c); m.update(0.02); }
+    expect(act.canNap).toBe(true);
+    // (and down it lies)
+    act.update(0.02, c);
+    // (in front of the bed, nearer you than the bed's own edge)
+    expect(m.pos.z).toBeGreaterThan(0.25);
+    expect(['loaf', 'side']).toContain(m.targetPosture);
+  });
+});
