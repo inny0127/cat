@@ -159,6 +159,29 @@ describe('asking at the empty bowl', () => {
   });
 });
 
+describe('found waiting for you at the glass', () => {
+  it('sat there looking out, it sees you: no walk to the glass, straight on to the hello', () => {
+    const { c, m, blinks } = room();
+    m.snap('sit');
+    m.pos.set(0, 0, 0.22);
+    const act = new Greet(0.8, true), seen: string[] = [];
+    let jolted = false;
+    const jolt = m.jolt.bind(m);
+    m.jolt = (k?: number) => { jolted = true; jolt(k); };
+    for (let t = 0; t < 6; t += 0.02) {
+      act.update(0.02, c);
+      m.update(0.02);
+      if (seen[seen.length - 1] !== act.phase) seen.push(act.phase);
+    }
+    expect(seen[0]).toBe('see');
+    expect(seen).not.toContain('come');
+    expect(seen).toContain('sit');
+    expect(jolted).toBe(true);
+    expect(Math.hypot(m.pos.x, m.pos.z - 0.22)).toBeLessThan(0.02);
+    expect(blinks[0]).toBe(true);
+  });
+});
+
 describe('a nap by you', () => {
   it('as near the glass as it can get, lying down there where it may doze off, then back to bed', async () => {
     const { byYou } = await import('../src/pixel/behave');

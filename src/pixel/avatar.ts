@@ -248,6 +248,17 @@ export class PixelAvatar implements Avatar {
     this.act = far && glad > 0.7 && Math.random() < 0.25 ? new Gift() : new Greet(glad);
   }
 
+  /** back after long, and it has been waiting for you at the glass all the while: found sat there
+   *  looking out for you, and there you are (Greet, from where it sits) */
+  waited(glad: number) {
+    if (!this.alive || this.isHidden || this.errand || this.trip || this.perched) { this.greet(glad); return; }
+    this.stopAct();
+    const w = this.ctx.window;
+    this.cat.place(w.x + (Math.random() - 0.5) * 0.08, w.z + 0.02, (Math.random() < 0.5 ? -1 : 1) * (0.25 + 0.2 * Math.random()));
+    this.cat.snap('sit');
+    this.act = new Greet(glad, true);
+  }
+
   /** hungry or thirsty, the bowl empty: it goes and asks you at the bowl (true if it does: awake,
    *  its own master, not up on something or in a game or on its way somewhere) */
   beg(what: 'food' | 'water', urgent: boolean, empty: () => boolean) {

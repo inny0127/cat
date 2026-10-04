@@ -151,6 +151,12 @@ export class Brain {
     if (n.food || n.water || (s.trust > 0.35 && s.lonely > 0.6 && chance(0.6))) {
       this.toAwake('alert');
       if (s.trust > 0.3) this.later(0.8, () => this.say('trill'));
+      // (missing you, gone an hour or more: as often as not it has been sat at the glass waiting
+      // for you all the while, and there you are)
+      if (!n.food && !n.water && away > 3600 && s.trust > 0.45 && this.anim.waited && chance(0.5)) {
+        this.anim.waited(Math.max(glad, 0.5));
+        return;
+      }
       // (up to the glass to see you: hungry, you are why it is glad)
       if (glad > 0.1 || n.food || n.water) this.later(1, () => this.anim.greet?.(Math.max(glad, 0.3)));
       return;

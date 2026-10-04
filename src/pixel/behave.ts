@@ -653,14 +653,31 @@ export class Greet implements Act {
    *  it is lying on) */
   private readonly flop: number;
   private roll = 1;
-  constructor(private readonly glad: number) {
+  /** waiting: found sat at the glass already, waiting for you (and there you are) */
+  constructor(private readonly glad: number, private readonly waiting = false) {
     this.bumps = glad > 0.5 && Math.random() < 0.8 ? (Math.random() < 0.4 ? 2 : 1) : 0;
     this.stay = rand(5, 9) + 8 * glad;
     this.flop = glad > 0.75 && Math.random() < 0.4 ? rand(4.5, 7) : 0;
   }
+  get ownGaze() {
+    return this.waiting && this.phase === 'see' && this.t < 0.7;
+  }
   update(dt: number, c: Ctx) {
     const m = c.m;
     this.t += dt;
+    if (this.phase === 'see' && this.waiting) {
+      // sat at the glass waiting, the head low and the ears easy, looking out past you; then it sees
+      // you: up comes the head, the ears go up and round to you, the eyes wide
+      m.setPosture('sit');
+      const seen = ease((this.t - 0.6) / 0.25);
+      m.lookAt(this.t < 0.6 ? null : c.viewer(), 1);
+      m.layer = { pose: { neckPitch: -0.25 * (1 - seen), headPitch: -0.2 * (1 - seen), earFwd: -0.1 + 0.6 * seen, eyeOpen: 0.7 + 0.3 * seen, pupil: 0.6 + 0.3 * seen }, w: 1 };
+      if (this.t >= 0.6 && this.t - dt < 0.6) m.jolt(0.35);
+      if (this.t < 1.3) return true;
+      this.phase = 'sit';
+      this.t = 0;
+      return true;
+    }
     if (this.phase === 'see') {
       // (where it is, a moment: the ears up and round to you, the eyes on you)
       m.layer = { pose: { earFwd: 0.45 }, w: ease(this.t / 0.3) };
