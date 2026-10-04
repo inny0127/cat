@@ -44,6 +44,7 @@ export class PixelApp {
   private idleHintAt = 14;
   private saveIn = 10;
   private touchedAt = -1e9;
+  private catDull = 0;
   private themeColor = '';
   private readonly aim = new THREE.Vector3(0, 0.12, 0.05);
 
@@ -580,6 +581,9 @@ export class PixelApp {
     this.cat.whiskers.mesh.visible = this.brain.mode !== 'sleep' && this.cat.headUp() > 0.55;
     // in the small hours, the lamp off, its open eyes shine in the dark
     this.cat.setEyeShine(dl.lamp > 0.5 ? 0 : dark);
+    // ill, its coat goes dull (and after it has gone, grey)
+    this.catDull += (this.avatar.desatTarget - this.catDull) * (1 - Math.exp(-dt * 0.5));
+    this.stage.setCatDull(this.catDull);
     this.audio.setRain(rain);
     // a bird outside: the cat's ear goes to it, and if it is awake, a glance at the window
     if (this.audio.setOutside(dt, { day: 1 - dark, hour, month: clock.getMonth(), rain })) this.avatar.hear(this.room.windowMiddle);

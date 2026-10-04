@@ -104,6 +104,7 @@ uniform vec3 uTintSun;   // the colour of the hour: on what the sun lights,
 uniform vec3 uTintShade; // ... on everything else,
 uniform vec3 uTintLamp;  // ... and in the lamp's warm light
 uniform float uBeam;     // how much the sunlight shows in the air
+uniform float uCatDull;  // how much colour an ill cat's coat has lost (0 .. 1)
 uniform vec3 uBeamCol;
 uniform mat4 uProjInv;
 uniform mat4 uViewInv;
@@ -312,6 +313,8 @@ void main() {
     float chroma = max(col.r, max(col.g, col.b)) - min(col.r, min(col.g, col.b));
     col = clamp(mix(vec3(lu), col, 1.0 + 0.22 * smoothstep(0.12, 0.45, lu) * (1.0 - smoothstep(0.3, 0.7, chroma))), 0.0, 1.0);
     col = col * col * (3.0 - 2.0 * col) * 0.35 + col * 0.65;
+    // an ill cat's coat goes dull, and greyer the iller it is
+    if (kind == 1 && uCatDull > 0.0) col = mix(col, vec3(dot(col, vec3(0.299, 0.587, 0.114))) * vec3(0.98, 0.98, 1.02), uCatDull);
     if (glows) glow = 1.0;
     else if (partGlow > 0.0) glow = partGlow;
     else if (ws > 0.5 && level >= 4) glow = 0.16;
@@ -530,6 +533,7 @@ export class Stage {
         uNotes: { value: Array.from({ length: 4 }, () => new THREE.Vector3()) },
         uBug: { value: new THREE.Vector4() }, uBugCol: { value: new THREE.Vector3(1, 1, 1) },
         uTime: { value: 0 },
+        uCatDull: { value: 0 },
         uTintSun: { value: new THREE.Vector3(1, 1, 1) },
         uTintShade: { value: new THREE.Vector3(1, 1, 1) },
         uTintLamp: { value: new THREE.Vector3(1, 1, 1) },
@@ -714,6 +718,11 @@ export class Stage {
     const depth = -at.clone().applyMatrix4(this.camera.matrixWorldInverse).z;
     u.set(a.x, a.y, depth, (kind === 'moth' ? 1 : 2) + (up ? 0.75 : 0.25));
     if (light) (this.pixel.mat.uniforms.uBugCol.value as THREE.Vector3).copy(light);
+  }
+
+  /** how much colour an ill cat's coat has lost (0 .. 1) */
+  setCatDull(v: number) {
+    if (this.pixel) this.pixel.mat.uniforms.uCatDull.value = v;
   }
 
   /** the pixel pass's clock (steam) */
