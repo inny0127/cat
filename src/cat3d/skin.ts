@@ -192,7 +192,18 @@ void main() {
       // lights its edges only while there is daylight in it
       lt = roomLight(vWorld, Np, shp, mix(0.55, 1.0, vAO) * roomAO(vWorld, Np));
       lt.x *= subjectExposure();
+      // seen against the window (your line of sight past it goes on out through the glass): the
+      // daylight behind it catching the fur all along its outline, the top and the sides more
+      // than underneath, as a cat on a sill against a bright window is drawn
+      float wz = min(-Vp.z, -1e-3);
+      vec2 wq = vWorld.xy - Vp.xy * ((uWinZ - vWorld.z) / wz);
+      float behind = vWorld.z > uWinZ && Vp.z > 0.0 ? smoothstep(uWin.x - 0.04, uWin.x + 0.04, wq.x) * smoothstep(uWin.y + 0.04, uWin.y - 0.04, wq.x)
+        * smoothstep(uWin.z - 0.04, uWin.z + 0.04, wq.y) * smoothstep(uWin.w + 0.04, uWin.w - 0.04, wq.y) : 0.0;
+      float dayBack = behind * clamp(uSkyI + uSun, 0.0, 1.0);
+      rim = max(rim, pow(1.0 - max(dot(Np, Vp), 0.0), 1.5) * behind * (0.5 + 0.55 * smoothstep(-0.3, 0.5, Np.y)));
       rim *= clamp(uSkyI + uSun, 0.0, 1.0);
+      // (and the rest of it, against the light, a little darker: a silhouette with a bright edge)
+      lt.x *= 1.0 - 0.22 * dayBack;
       // modelled as a painter models a figure, whatever the room's light, from up on the left: the
       // planes turned up and to the left lit, those facing you a step down, those turned away to
       // the right and down in shade (three planes, so a back or a chest square on to you is not
