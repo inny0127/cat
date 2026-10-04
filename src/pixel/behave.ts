@@ -632,16 +632,21 @@ export const toWindow = (c: Ctx) => {
  */
 export class Greet implements Act {
   readonly name = 'greet';
-  phase: 'see' | 'come' | 'sit' | 'bump' | 'stay' = 'see';
+  phase: 'see' | 'come' | 'sit' | 'bump' | 'flop' | 'stay' = 'see';
   private t = 0;
   private set = false;
   private blinks = 0;
   private bumps: number;
   private side = Math.random() < 0.5 ? -1 : 1;
   private readonly stay: number;
+  /** gladdest of all, now and then: down on its side before you, belly up (how long; which side
+   *  it is lying on) */
+  private readonly flop: number;
+  private roll = 1;
   constructor(private readonly glad: number) {
     this.bumps = glad > 0.5 && Math.random() < 0.8 ? (Math.random() < 0.4 ? 2 : 1) : 0;
     this.stay = rand(5, 9) + 8 * glad;
+    this.flop = glad > 0.75 && Math.random() < 0.4 ? rand(4.5, 7) : 0;
   }
   update(dt: number, c: Ctx) {
     const m = c.m;
@@ -679,10 +684,42 @@ export class Greet implements Act {
       if (this.phase === 'sit' && this.t > 1.5 && this.blinks === 0) { this.blinks = 1; c.blink(true); }
       if (this.phase === 'stay' && this.blinks === 1 && this.glad > 0.4 && this.t > this.stay * 0.6) { this.blinks = 2; c.blink(true); }
       if (this.phase === 'sit' && this.t > 2.8) {
-        this.phase = this.bumps > 0 ? 'bump' : 'stay';
+        this.phase = this.bumps > 0 ? 'bump' : this.flop ? 'flop' : 'stay';
         this.t = 0;
       }
       return this.phase !== 'stay' || this.t < this.stay;
+    }
+    if (this.phase === 'flop') {
+      // down on its side before you, rolled a little over onto its back with the belly your way,
+      // the forepaws curled to its chest, looking at you upside down and wriggling its back on the
+      // floor, the tail sweeping slowly: a cat's warmest welcome (on its right side facing left
+      // across the picture, or its left facing right, whichever is the less of a turn)
+      if (this.t <= dt) this.roll = Math.sin(m.yaw) > 0 ? -1 : 1;
+      const sd = this.roll, face0 = -sd * Math.PI / 2, D = this.flop;
+      m.yaw = wrapA(m.yaw + Math.max(-3, Math.min(3, wrapA(face0 - m.yaw))) * Math.min(1, dt * 4));
+      const S = POSES.side;
+      const w = ease(this.t / 0.7) * (1 - ease((this.t - D) / 0.7));
+      const wr = Math.sin(this.t * 4.2) * ease((this.t - 1) / 0.5) * (1 - ease((this.t - 2.6) / 0.5));
+      const [uf, lf, uh, lh] = sd > 0 ? ['LF', 'RF', 'LH', 'RH'] : ['RF', 'LF', 'RH', 'LH'];
+      m.setPosture('crouch');
+      m.layer = {
+        pose: {
+          hipY: S.hipY, hipZ: S.hipZ, hipPitch: S.hipPitch, hipRoll: sd * (S.hipRoll + 0.28 + 0.12 * wr), lumbarPitch: 0.05,
+          chestRoll: sd * (S.chestRoll + 0.22 - 0.12 * wr), chestPitch: -0.05,
+          neckPitch: 0.12, headPitch: -0.05, headRoll: sd * 0.25,
+          [uf]: { planted: 0, frame: 0, x: 0.07, y: 0.085, z: 0.1, flex: 0.85 },
+          [lf]: { planted: 0, frame: 0, x: -0.05, y: 0.04, z: 0.13, flex: 0.6 },
+          [uh]: { planted: 0, frame: 0, x: 0.09, y: 0.07, z: -0.2, flex: 0.3 },
+          [lh]: { planted: 0, frame: 0, x: -0.06, y: 0.025, z: -0.24, flex: 0.2 },
+          pastern: S.pastern, hindFlat: S.hindFlat,
+          earFwd: 0.1, earOut: 0.15, eyeOpen: 0.8, squint: 0.3,
+          tailLift: S.tailLift, tailSide: 0.5 * Math.sin(this.t * 1.6), tailCurve: S.tailCurve, tailSag: 1,
+        },
+        w,
+      };
+      if (this.blinks === 1 && this.t > 3.2) { this.blinks = 2; c.blink(true); }
+      if (this.t > D + 0.7) { m.layer = null; this.phase = 'stay'; this.t = 0; }
+      return true;
     }
     // a head pushed at the glass as at a hand, the eyes shut; then the cheek along it, the head
     // turned and tipped into it, the side of the neck after
@@ -702,7 +739,7 @@ export class Greet implements Act {
     if (u >= 1) {
       this.t = 0;
       this.side = -this.side;
-      if (--this.bumps <= 0) this.phase = 'stay';
+      if (--this.bumps <= 0) this.phase = this.flop ? 'flop' : 'stay';
     }
     return true;
   }
