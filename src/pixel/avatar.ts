@@ -412,7 +412,8 @@ export class PixelAvatar implements Avatar {
       return;
     }
     m.setPosture(p);
-    if (!atHome || m.goal || !LYING.includes(m.targetPosture)) return;
+    // (not shuffled about under a hand)
+    if (!atHome || m.goal || !LYING.includes(m.targetPosture) || this.hands.length) return;
     // into the middle of the bed in little scoots, not a glide: now and then a quick shift of a
     // few centimetres
     const dx = b.to.x - m.pos.x, dz = b.to.z - m.pos.z, d = Math.hypot(dx, dz);
@@ -582,6 +583,13 @@ export class PixelAvatar implements Avatar {
       return;
     }
     this.swatStep(dt);
+    // a hand on it: it stops for it, whatever it was about (short of a game, a hunt, the zoomies
+    // or a fright; up on something, it stays up there): not walked out from under the hand
+    if (this.hands.length && this.act && !this.perched
+      && !(this.act instanceof Chase || this.act instanceof Tease || this.act instanceof Play || this.act instanceof Hunt || this.act instanceof Zoomies || this.act instanceof Startle)) {
+      this.stopAct();
+      m.stop();
+    }
     // its own time: carry on with what it is doing, or now and then think of something
     if (this.act) {
       if (!this.act.update(dt, c)) {

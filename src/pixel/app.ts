@@ -485,12 +485,11 @@ export class PixelApp {
   private anchor: { off: THREE.Vector3; nx: number; ny: number; at: THREE.Vector3 } | null = null;
   private anchorTouch(sx: number, sy: number) {
     if (this.focus > 0.3) return;
-    const ray = new THREE.Raycaster();
     const nx = (sx / innerWidth) * 2 - 1, ny = -(sy / innerHeight) * 2 + 1;
-    ray.setFromCamera(new THREE.Vector2(nx, ny), this.stage.camera);
-    const t = this.rayCat(ray.ray, 1.35);
-    if (t < 0) { this.anchor = null; return; }
-    const at = ray.ray.at(t, new THREE.Vector3());
+    // (the very spot of fur under the finger, or near it)
+    const hit = this.senses.hitNear(sx, sy);
+    if (!hit) { this.anchor = null; return; }
+    const at = hit.point.clone();
     // (the spot goes with the cat as it shifts under the hand, smoothly: its middle jumps as it
     // settles into another posture)
     this.anchor = { off: at.clone().sub(this.bodyMiddle()), nx, ny, at };

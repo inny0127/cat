@@ -191,7 +191,9 @@ export class PointerInput {
       this.h.releaseToy?.(tap, e.pointerId);
       return;
     }
-    if (cancelled || g?.pouring) return;
+    // (a pour begun by a timer that ran while the page was too busy to hear the finger lift: by
+    // the events' own times it was a tap, and is taken as one)
+    if (cancelled || (g?.pouring && !tap)) return;
     // swipe down: mostly vertical, quick, long enough
     const totalDy = c.sy - c.y0;
     if (totalDy > 70 && dur < 700 && c.travel < totalDy * 1.5) {
