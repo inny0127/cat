@@ -951,6 +951,8 @@ export class PawGlass implements Act {
   private readonly cameFor = new THREE.Vector3(1e3, 0, 0);
   /** a paw met the glass this frame: which (null: none) */
   landed: PawSide | null = null;
+  /** before the first pat, as often as not, a sniff at it */
+  private sniff = Math.random() < 0.6;
   /** asking you for a game: how many times yet, and whether it has said so this time */
   private asks = 1 + Math.floor(Math.random() * 2);
   private said = false;
@@ -1022,6 +1024,15 @@ export class PawGlass implements Act {
       // after it, as far as it could): after it
       if (Math.abs(L.x) > 0.13 && this.t > 0.4 && Math.abs(f!.at.x - this.cameFor.x) > 0.1) {
         this.phase = 'come'; this.going = false; this.t = 0; m.layer = null;
+        return true;
+      }
+      // first, as often as not, a sniff at it: leant in to it, the head pushed out, the whiskers
+      // forward and the nose working (a breath or two misting the glass there)
+      if (this.sniff && this.goes === 0 && this.t > 0.3) {
+        const u = this.t - 0.3, k = hump(u, 1.5, 0.35);
+        m.layer = { pose: { ...keen, chestPitch: -1.02 + 0.16 * k, neckPitch: 0.06 - 0.1 * k, headPitch: 0.05 * Math.sin(u * 40) * k, whisker: 1, earFwd: 1 }, w: 1 };
+        for (const at of [0.6, 1.05]) if (u >= at && u - dt < at) c.breathe(c.mouthAt());
+        if (u > 1.5) { this.sniff = false; this.t = 0; this.wait = 0.35 + Math.random() * 0.4; }
         return true;
       }
       if (this.t > this.wait) {

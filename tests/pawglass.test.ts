@@ -10,12 +10,14 @@ function room() {
   m.snap('sit');
   m.pos.set(0, 0, 0.3);
   const said: string[] = [];
+  const breaths: THREE.Vector3[] = [];
   const c = {
     m, home: new THREE.Vector3(), window: new THREE.Vector3(0, 0, 0.3),
     room: { minX: -1, maxX: 1, minZ: -1, maxZ: 1 }, mode: 'rest', mood: { ...NEUTRAL, trust: 0.8 }, kneading: false,
     keepClear: (p: THREE.Vector3) => p, sound: () => {}, say: (k: string) => said.push(k), viewer: () => new THREE.Vector3(0, 1.4, 3),
+    mouthAt: () => m.pos.clone().setY(0.2), breathe: (at: THREE.Vector3) => breaths.push(at.clone()),
   } as unknown as Ctx;
-  return { c, m, said };
+  return { c, m, said, breaths };
 }
 
 /** play the game with a finger on the glass (null: lifted) for so long; the paws that met the glass */
@@ -63,6 +65,28 @@ describe('a finger on the glass', () => {
     // the finger gone: a look for it, and the game over
     expect(r.phases.has('look')).toBe(true);
     expect(r.going).toBe(false);
+  });
+
+  it('as often as not, a sniff at it first: a breath on the glass before the first pat', () => {
+    let sniffed = 0;
+    for (const seed0 of [12345, 67890, 13579, 24680, 11111, 99999, 31337, 8675309]) {
+      let seed = seed0;
+      vi.spyOn(Math, 'random').mockImplementation(() => (seed = (seed * 16807) % 2147483647) / 2147483647);
+      const { c, m, breaths } = room();
+      const at = new THREE.Vector3(0.05, 0.1, 0.5);
+      const act = new PawGlass(() => ({ at, still: 0 }));
+      let firstPat = -1, firstBreath = -1;
+      for (let t = 0; t < 6; t += 0.02) {
+        act.update(0.02, c);
+        m.update(0.02);
+        if (act.landed && firstPat < 0) firstPat = t;
+        if (breaths.length && firstBreath < 0) firstBreath = t;
+      }
+      if (firstBreath >= 0) { sniffed++; expect(firstBreath).toBeLessThan(firstPat); }
+      vi.restoreAllMocks();
+    }
+    expect(sniffed).toBeGreaterThan(1);
+    expect(sniffed).toBeLessThan(8);
   });
 
   it('a finger kept still: a pat or two to see if it would go, then no game in it', () => {
