@@ -523,6 +523,13 @@ export class PixelAvatar implements Avatar {
         cb?.();
       }
     }
+    // asleep, now and then it opens an eye to see what you are up to (the upper one, lying on
+    // its side; the brain says when and how far)
+    {
+      const want = this.alive && this.sleep > 0.5 ? Math.min(0.6, this.eyeTarget) : 0;
+      this.cat.peek += (want - this.cat.peek) * (1 - Math.exp(-dt * (want > this.cat.peek ? 4 : 6)));
+      this.cat.peekEye = m.posture === 'curlL' ? 1 : 0;
+    }
     // eyes on the finger, or on you (through the window); asleep, dead or busy, nowhere (up on
     // the sill it looks where it likes: out of the window)
     const busy = this.errand || (this.act && this.act.name !== 'window' && this.act.name !== 'knead');
