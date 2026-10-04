@@ -1,3 +1,4 @@
+import { Capacitor } from '@capacitor/core';
 import { PixelApp } from './app';
 
 const canvas = document.getElementById('stage') as HTMLCanvasElement;
@@ -11,3 +12,12 @@ PixelApp.create(canvas, hint).catch((err) => {
   document.getElementById('loading')?.remove();
   document.body.appendChild(d);
 });
+
+// the installable web version (iOS and Android alike): the room there offline too, and the
+// notifications shown through the service worker (Android's Chrome shows them no other way) and
+// brought to the front when tapped
+if ('serviceWorker' in navigator && import.meta.env.PROD && !Capacitor.isNativePlatform() && location.protocol === 'https:') {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+  });
+}
