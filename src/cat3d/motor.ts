@@ -233,6 +233,10 @@ export class Motor {
     this.goal = null;
   }
 
+  /** round on the spot this fast, with nowhere to go (rad/s, + to the left; 0 to stop): after its
+   *  own tail */
+  spin = 0;
+
   lookAt(p: THREE.Vector3 | null, weight = 1) {
     this.lookTarget = p ? p.clone() : null;
     this.lookWTarget = p ? weight : 0;
@@ -332,6 +336,7 @@ export class Motor {
 
   private locomote(dt: number) {
     let want = 0, turn = 0;
+    if (!this.goal && this.spin && this.standing) turn = this.spin;
     if (this.goal && this.standing) {
       const dx = this.goal.x - this.pos.x, dz = this.goal.z - this.pos.z;
       const dist = Math.hypot(dx, dz);

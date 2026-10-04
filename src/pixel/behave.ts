@@ -1171,6 +1171,86 @@ export class PawGlass implements Act {
   }
 }
 
+/**
+ * Its own tail: the tip of it twitching at the edge of its eye, and it is after it. A look back
+ * over its shoulder, low on its legs; then round after it, faster and faster, twice or three times,
+ * the tail always swinging away just out of reach; a pounce on it as it comes round at last, held
+ * down and bitten; and up it sits as if nothing had happened, a look round at you, and a lick or two
+ * at its chest.
+ */
+export class TailChase implements Act {
+  readonly name = 'tail';
+  phase: 'see' | 'spin' | 'catch' | 'after' = 'see';
+  private t = 0;
+  /** which way round it goes (the side the tail is on) */
+  private readonly dir = Math.random() < 0.5 ? 1 : -1;
+  private readonly turns = 1.6 + Math.random() * 1.4;
+  private turned = 0;
+  get ownGaze() {
+    return this.phase !== 'after';
+  }
+  update(dt: number, c: Ctx) {
+    const m = c.m, d = this.dir;
+    this.t += dt;
+    if (this.phase === 'see') {
+      // the tail tip ticking, and the head round over the shoulder after it
+      m.setPosture('crouch');
+      m.lookAt(null);
+      m.layer = {
+        pose: { neckYaw: d * 1.1, headYaw: d * 0.6, headRoll: -d * 0.15, earFwd: 0.85, pupil: 0.95, eyeOpen: 1, whisker: 0.6, tailSide: d * 0.9, tailLift: -0.15, tailCurl: 1.4 * Math.sin(this.t * 17), hipY: 0.15, hipPitch: -0.08 },
+        w: ease(this.t / 0.3),
+      };
+      if (this.t > 1.1) { this.phase = 'spin'; this.t = 0; }
+      return true;
+    }
+    if (this.phase === 'spin') {
+      // round after it, the head leading and the tail swinging away out of reach
+      m.spin = d * 5.5 * ease(this.t / 0.5);
+      this.turned += Math.abs(m.yawRate) * dt / (Math.PI * 2);
+      m.layer = { pose: { neckYaw: d * 0.9, headYaw: d * 0.4, earFwd: 0.7, pupil: 1, eyeOpen: 1, tailSide: d * 1.3, tailLift: -0.05, tailCurl: 0.6, hipY: 0.15 }, w: 1 };
+      // (round enough: off the brakes where it will come to rest more or less facing you, the way
+      // it is going carrying it a radian or so on as it stops)
+      const ahead = ((d * (0 - m.yaw)) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
+      const carry = Math.abs(m.yawRate) / 5;
+      if ((this.turned >= this.turns && Math.abs(ahead - carry) < 0.35) || this.t > 6) {
+        m.spin = 0;
+        this.phase = 'catch';
+        this.t = 0;
+        c.sound('thump', 0.08);
+      }
+      return true;
+    }
+    if (this.phase === 'catch') {
+      // got it: down on it, a forepaw on it and the head round and down to bite
+      m.setPosture('sit');
+      const bite = Math.max(0, Math.sin(Math.PI * Math.min(1, Math.max(0, (this.t - 0.35) / 0.5))));
+      m.layer = {
+        pose: {
+          neckYaw: d * 1.25, neckPitch: -0.55, headYaw: d * 0.5, headPitch: -0.35, jaw: 0.28 * bite, eyeOpen: 0.7, earFwd: 0.4,
+          tailSide: d * 1.6, tailLift: -0.9, tailCurve: 1.2, tailCurl: 0.3,
+          [d > 0 ? 'LF' : 'RF']: { planted: 0, frame: 0, x: 0.06, y: 0.045, z: 0.09, flex: 0.6 },
+        },
+        w: ease(this.t / 0.2) * (1 - ease((this.t - 1.2) / 0.4)),
+      };
+      if (this.t > 1.6) { this.phase = 'after'; this.t = 0; m.layer = null; }
+      return true;
+    }
+    // as if nothing had happened: sat up, a look at you, and a lick or two at the chest
+    m.setPosture('sit');
+    m.lookAt(this.t < 1.4 ? c.viewer() : null, 1);
+    if (this.t > 1.4) {
+      const u = this.t - 1.4;
+      m.layer = { pose: { neckPitch: -0.75, headPitch: -0.55 + 0.12 * Math.sin(u * 8.5), jaw: 0.1 * Math.max(0, Math.sin(u * 8.5)), eyeOpen: 0.4 }, w: ease(u / 0.4) * (1 - ease((u - 1.6) / 0.4)) };
+    }
+    return this.t < 3.5;
+  }
+  stop(c: Ctx) {
+    c.m.spin = 0;
+    c.m.layer = null;
+    c.m.lookAt(null);
+  }
+}
+
 export class Gift implements Act {
   readonly name = 'gift';
   phase: 'go' | 'pounce' | 'take' | 'bring' | 'drop' | 'show' = 'go';
@@ -2277,6 +2357,8 @@ export function chooseAct(c: Ctx, atHome: boolean, posture: PoseName): Act | nul
     if (atHome && m.trust > 0.3) opts.push([0.35 * Math.max(0, m.arousal - 0.15) * Math.min(1, m.trust + 0.2) * (1 - m.sleepy), () => new PawGlass(c.finger, true)]);
     const box = c.box();
     if (atHome && box) opts.push([0.7 * (1 - 0.4 * m.sleepy), () => new Box(box)]);
+    // playful and with nothing better to do: its own tail
+    if (atHome) opts.push([0.18 * Math.max(0, m.arousal - 0.1) * (1 - m.sleepy), () => new TailChase()]);
     // now and then, more at dusk and after dark, a mad few seconds
     if (atHome) opts.push([0.28 * (0.3 + m.arousal) * (1 - m.sleepy) * (1 + 1.2 * c.night), () => new Zoomies(c)]);
     const sill = c.sill();
