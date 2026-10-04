@@ -162,6 +162,25 @@ class Seq implements Act {
   }
 }
 
+/** a stretch where it can be seen for one: side on to you (round to it first, whichever way is the
+ *  less of a turn, if it is facing you or away), then, at home, round again to lie down in the
+ *  middle of its bed facing you */
+export const stretchSideOn = (c: Ctx, then: PoseName, hind?: boolean) => {
+  const make = (end: PoseName) => {
+    const s = new Stretch(end);
+    if (hind !== undefined) s.hind = hind;
+    return s;
+  };
+  if (Math.abs(Math.sin(c.m.yaw)) > 0.6) return make(then);
+  const y = c.bed('loaf').yaw, a = y + Math.PI / 2, b = y - Math.PI / 2;
+  const face = Math.abs(wrapA(a - c.m.yaw)) < Math.abs(wrapA(b - c.m.yaw)) ? a : b;
+  return new Seq('stretch', [
+    () => new Walk('stretch', [{ to: c.m.pos.clone(), face, stay: 0.3, posture: 'stand' }], 0.22),
+    () => make('stand'),
+    () => toBed(c, then === 'sit' ? 'sit' : 'loaf'),
+  ]);
+};
+
 /** waking of itself from a long sleep: a big yawn where it lies, the head hardly lifted from the
  *  bed; then up and round side on to you (whichever way is the less of a turn), a long stretch,
  *  forelegs and then hind legs, and round to lie down on its chest to get on with the day */
@@ -169,18 +188,7 @@ export const wakeUp = (c: Ctx) => new Seq('wake', [
   () => new Layered('yawn', 2.6, 0.8, () => ({
     jaw: 1, eyeOpen: 0.08, squint: 0.8, neckPitch: -0.2, headPitch: 0, earOut: 0.35, earFwd: -0.3,
   }), null, { at: 0.5, sound: 'yawn', gain: 0.22 }),
-  () => {
-    const y = c.bed('loaf').yaw, a = y + Math.PI / 2, b = y - Math.PI / 2;
-    const face = Math.abs(wrapA(a - c.m.yaw)) < Math.abs(wrapA(b - c.m.yaw)) ? a : b;
-    return new Walk('wake', [{ to: c.m.pos.clone(), face, stay: 0.3, posture: 'stand' }], 0.22);
-  },
-  () => {
-    const s = new Stretch('stand');
-    s.hind = Math.random() < 0.8;
-    return s;
-  },
-  // (and round to lie down facing you, in the middle of the bed)
-  () => toBed(c, 'loaf'),
+  () => stretchSideOn(c, 'loaf', Math.random() < 0.8),
 ]);
 
 /** washing a flank: head round to the side and down, licking in strokes */
@@ -1474,7 +1482,7 @@ export function chooseAct(c: Ctx, atHome: boolean, posture: PoseName): Act | nul
   if (c.mode === 'rest' || c.mode === 'alert') {
     opts.push([0.8 + m.sleepy, yawn]);
     if (lying) opts.push([1 + m.pleasure, groomFlank], [0.6, groomChest], [0.8, washFace]);
-    opts.push([0.35, () => new Stretch(posture === 'sit' ? 'sit' : 'loaf')]);
+    opts.push([0.35, () => stretchSideOn(c, posture === 'sit' ? 'sit' : 'loaf')]);
     opts.push([0.1, () => sneeze(c)]);
     opts.push([0.22, scratchEar]);
     opts.push([0.25 * (0.5 + m.arousal) * (1 - m.sleepy), () => new Stare(c)]);

@@ -4,7 +4,7 @@ import { POSES, type PoseLayer, type PoseName } from '../cat3d/pose';
 import { NEUTRAL, type Mood } from '../cat3d/mood';
 import type { Avatar } from '../sim/avatar';
 import type { EarMood, TailMood } from '../rig/animator';
-import { Stretch, chooseAct, groomChest, groomFlank, knead, restingPose, sneeze, toBed, toWindow, wander, warmUp, washFace, yawn, type Act, type Ctx, sunbathe, Play, Sill, Hunt, Box, Zoomies, Walk, Stare, Rub, scratchEar, wakeUp, type SillSpot } from './behave';
+import { chooseAct, groomChest, groomFlank, knead, restingPose, sneeze, toBed, toWindow, wander, warmUp, washFace, yawn, type Act, type Ctx, sunbathe, Play, Sill, Hunt, Box, Zoomies, Walk, Stare, Rub, scratchEar, wakeUp, stretchSideOn, type SillSpot } from './behave';
 
 const LYING: PoseName[] = ['loaf', 'sphinx', 'side', 'curl'];
 const wrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
@@ -334,7 +334,7 @@ export class PixelAvatar implements Avatar {
     this.stopAct();
     const c = this.ctx;
     this.act = name === 'yawn' ? yawn() : name === 'groom' ? groomFlank() : name === 'groom chest' ? groomChest() : name === 'wash' ? washFace()
-      : name === 'stretch' ? new Stretch('loaf') : name === 'window' ? toWindow(c) : name === 'wander' ? wander(c)
+      : name === 'stretch' ? stretchSideOn(c, 'loaf') : name === 'window' ? toWindow(c) : name === 'wander' ? wander(c)
         : name === 'knead' ? knead() : name === 'sun' ? sunbathe(c) : name === 'play' ? new Play()
           : name === 'sill' && this.sillSpot ? new Sill(this.sillSpot())
             : name === 'box' && this.boxSpot?.() ? new Box(this.boxSpot()!) : name === 'zoomies' ? new Zoomies(c) : name === 'warm' ? warmUp(c) ?? toBed(c, 'loaf') : name === 'sneeze' ? sneeze(c) : name === 'stare' ? new Stare(c)
