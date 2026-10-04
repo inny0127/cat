@@ -8,7 +8,7 @@ import { boop, byYou, chooseAct, groomChest, groomFlank, knead, restingPose, sne
 import { Chase, Startle, type LaserDot } from './chase';
 import { Tease, type Lure } from './tease';
 
-const LYING: PoseName[] = ['loaf', 'sphinx', 'side', 'curl', 'curlL'];
+const LYING: PoseName[] = ['loaf', 'sphinx', 'side', 'back', 'curl', 'curlL'];
 const CURLED = (p: PoseName) => p === 'curl' || p === 'curlL';
 const wrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
 const ease = (x: number) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x));
@@ -646,6 +646,9 @@ export class PixelAvatar implements Avatar {
    * came in, and shifting from a loaf to sitting up it stays the way round it was.
    */
   bedSpot(p: PoseName) {
+    // (on its back: across the bed with its belly to you, the head turned over toward you)
+    // (the body's own way round, whichever way its head is turned over)
+    if (p === 'back') return this.lieAt(p, this.home, this.home.yaw + 1.4 + this.cat.footprint(p).face);
     const turn = SIDE_TURN[p];
     if (!turn) return this.lieAt(p, this.home, this.home.yaw);
     const a = this.lieAt(p, this.home, this.home.yaw + turn), b = this.lieAt(p, this.home, this.home.yaw - turn);
@@ -965,7 +968,8 @@ export class PixelAvatar implements Avatar {
     if (this.sleep > 0.75) {
       if (!this.deep) {
         this.deep = true;
-        this.curlPose = Math.random() < 0.5 ? 'curl' : 'curlL';
+        // (now and then, a cat quite sure of you, belly up)
+        this.curlPose = this.mood.trust > 0.7 && Math.random() < 0.18 ? 'back' : Math.random() < 0.5 ? 'curl' : 'curlL';
       }
       return this.curlPose;
     }

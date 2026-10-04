@@ -158,6 +158,19 @@ export const POSES = {
     eyeOpen: 0.25, squint: 0.4, earFwd: -0.1, earOut: 0.3, breath: 1,
   }),
 
+  /** asleep on its back, belly up, the forepaws curled over the chest and the hind legs fallen
+   *  open, the head turned over on its side: as a cat sleeps that is warm and quite sure of you */
+  back: make({
+    hipY: 0.055, hipZ: -0.14, hipPitch: 0, hipRoll: -2.95,
+    lumbarPitch: -0.05, chestRoll: -0.05,
+    neckPitch: -0.15, neckYaw: 0.7, headPitch: -0.2, headYaw: 0.5, headRoll: 0.3,
+    LF: foot(0.02, 0.15, 0.11, 0, 0, 0.9), RF: foot(0.035, 0.16, 0.09, 0, 0, 0.9),
+    LH: foot(0.1, 0.13, -0.14, 0, 0, 0.4), RH: foot(0.1, 0.14, -0.12, 0, 0, 0.4),
+    pastern: 0.9, hindFlat: 0.2,
+    tailLift: 0, tailSide: -0.6, tailCurve: 0.15, tailCurl: 0.2, tailSag: 1,
+    eyeOpen: 0, squint: 0.3, earFwd: -0.1, earOut: 0.35, breath: 1,
+  }),
+
   /** curled up asleep on the right side, nose to tail */
   curl: CURL,
   /** the same, on the left side */
