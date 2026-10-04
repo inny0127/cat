@@ -424,6 +424,17 @@ export class PixelAvatar implements Avatar {
 
   /** its toy mouse thrown (where it is going): awake, its own master, and fond enough of you, it is
    *  after it (and now and then brings it back to you); else its eyes go after it */
+  /** the lamp put out: a cat awake and not settled, now and then, takes the dark for its own and
+   *  has a mad few minutes round the room (a moment after, its eyes shining as it goes) */
+  lightsOut() {
+    if (!this.alive || this.isHidden || this.sleep > 0.3 || this.errand || this.trip || this.perched || this.act || this.hands.length) return false;
+    if (this.mode !== 'rest' && this.mode !== 'alert') return false;
+    if (Math.random() > 0.15 + 0.35 * Math.max(0, this.mood.arousal) + 0.15 * (1 - this.mood.sleepy)) return false;
+    this.lightsOutIn = 0.8 + Math.random() * 1.5;
+    return true;
+  }
+  private lightsOutIn = 0;
+
   fetchNow() {
     const M = this.ground?.mouse();
     if (!M || !this.alive || this.isHidden || this.sleep > 0.3 || this.errand || this.trip || this.perched) return false;
@@ -927,6 +938,10 @@ export class PixelAvatar implements Avatar {
     this.lickHand(dt);
     this.blepNow(dt);
     this.keepTime(dt);
+    // (the lights out a moment ago, and the cat still free: off it goes)
+    if (this.lightsOutIn > 0 && (this.lightsOutIn -= dt) <= 0 && !this.act && !this.hands.length && this.sleep < 0.3 && !this.perched) {
+      this.act = new Zoomies(this.ctx);
+    }
     this.playRest = Math.max(0, this.playRest - dt);
     this.huntRest = Math.max(0, this.huntRest - dt);
     this.pawRest = Math.max(0, this.pawRest - dt);
