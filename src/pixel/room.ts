@@ -1895,7 +1895,7 @@ export class Room {
   sillSpot() {
     const { l, r, b, z } = this.win;
     const x = (l + r) / 2;
-    return { launch: new THREE.Vector3(x, 0, z + 0.44), seat: new THREE.Vector3(x, 0, z + 0.08), land: new THREE.Vector3(x + 0.03, 0, z + 0.46), height: b };
+    return { launch: new THREE.Vector3(x, 0, z + 0.44), seat: new THREE.Vector3(x, 0, z + 0.08), land: new THREE.Vector3(x + 0.03, 0, z + 0.46), height: b, edge: z + 0.27 };
   }
 
   /** the little flock of birds going by outside, as the sky draws them (by day, not in rain): the

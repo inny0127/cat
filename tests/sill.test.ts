@@ -129,6 +129,37 @@ describe('up on the sill', () => {
     expect(act.phase).toBe('look');
   });
 
+  it('a jump that comes up short: hung over the edge, the hind legs going, hauled up, and a look round and a wash as if nothing had happened', () => {
+    const { c, m, spot, looks } = sill();
+    m.snap('stand');
+    m.pos.copy(spot.launch);
+    const holds: { phase: string; y: number }[] = [], sounds: string[] = [];
+    const act = new Sill(spot);
+    (c as unknown as { hold: (y: number | null) => void }).hold = (y) => { if (y !== null) holds.push({ phase: act.phase, y }); };
+    (c as unknown as { sound: (n: string) => void }).sound = (n) => { sounds.push(n); };
+    act.miss = true;
+    act.phase = 'gather';
+    const seen: string[] = [];
+    let washed = false, lookedFirst = false;
+    for (let t = 0; t < 9; t += 0.02) {
+      act.update(0.02, c);
+      m.update(0.02);
+      if (seen[seen.length - 1] !== act.phase) seen.push(act.phase);
+      if (act.phase === 'sit' && !washed && looks.length > 0) lookedFirst = true;
+      if (act.phase === 'sit' && m.pose.tongue > 0.4 && Math.abs(m.pose.neckYaw) > 0.5) washed = true;
+    }
+    // (gathered already: off it goes at once)
+    expect(seen.slice(0, 5), seen.join(' ')).toEqual(['up', 'hang', 'haul', 'settle', 'sit']);
+    // (hung well below the top of the sill, the forearms over its edge, then up)
+    const hung = holds.filter((h) => h.phase === 'hang');
+    expect(hung.length).toBeGreaterThan(10);
+    expect(Math.max(...hung.map((h) => h.y))).toBeLessThan(spot.height - 0.15);
+    expect(sounds.filter((n) => n === 'scrabble').length).toBeGreaterThanOrEqual(3);
+    // sat, a look round at you first, then the wash
+    expect(lookedFirst).toBe(true);
+    expect(washed).toBe(true);
+  });
+
   it('the pencil by its paws as well: one or the other, never both at once', () => {
     vi.spyOn(Math, 'random').mockReturnValue(0.1);
     const { c, m, spot, pushes } = sill(true);

@@ -116,7 +116,11 @@ export interface Ctx {
   breathe: (at: THREE.Vector3) => void;
 }
 
-export interface SillSpot { launch: THREE.Vector3; seat: THREE.Vector3; land: THREE.Vector3; height: number }
+export interface SillSpot {
+  launch: THREE.Vector3; seat: THREE.Vector3; land: THREE.Vector3; height: number;
+  /** how far out into the room the sill's front edge comes (z; if not given, a little in front of the seat) */
+  edge?: number;
+}
 
 /** one thing the cat does: update returns false when it is over; stop cuts it short cleanly */
 export interface Act {
@@ -2144,9 +2148,22 @@ export class Box implements Act {
  * then turn round on it, look down, jump down, and back to bed. Asked to come down early (to sleep,
  * to go and eat) it finishes what it is doing and comes down; up there it is never just dropped.
  */
+/** hanging from the sill after a jump that came up short: how far below the top of it the legs
+ *  are measured from (its forearms over the edge) */
+const HANG = 0.185;
+
 export class Sill implements Act {
   readonly name = 'sill';
-  phase: 'go' | 'gather' | 'up' | 'settle' | 'sit' | 'nap' | 'about' | 'knock' | 'look' | 'down' | 'done' = 'go';
+  phase: 'go' | 'gather' | 'up' | 'hang' | 'haul' | 'settle' | 'sit' | 'nap' | 'about' | 'knock' | 'look' | 'down' | 'done' = 'go';
+  /** the jump comes up short (one in eleven or so; set beforehand to have it so): the forepaws
+   *  hooked over the edge, the rest of it hanging, the hind legs going like mad, and hauled up */
+  miss: boolean | null = null;
+  /** up the hard way: sat, a look round to see who saw (you did), and a brisk wash of a shoulder
+   *  as if nothing had happened (how far into that, which shoulder) */
+  private oops = -1;
+  private oopsSide = 1;
+  private scrabbleIn = 0;
+  private readonly hangAt = new THREE.Vector3();
   /** how deep asleep the cat is (set by the avatar): asleep up here, it dozes on the sill */
   nap = 0;
 
@@ -2204,6 +2221,27 @@ export class Sill implements Act {
     return this.phase !== 'go' && this.phase !== 'gather' && this.phase !== 'done';
   }
 
+  /** hanging from the sill by the forearms: the body down the front of it, the hind legs kicking
+   *  (k: how hard; pawY: how far up the sill's top is from where the legs are measured from) */
+  private hanging(s: number, k: number, pawY: number): PoseLayer {
+    const f = s * Math.PI * 2 * 4.5;
+    // (the hind legs out to the sides as they kick, so that from behind you see them going)
+    const kick = (ph: number) => ({
+      planted: 0, frame: 0, x: 0.05 + 0.02 * k * Math.max(0, Math.sin(f + ph)), y: 0.012 + 0.05 * k * Math.max(0, Math.sin(f + ph)),
+      z: -0.005 - 0.05 * k * Math.cos(f + ph), flex: 0.3 + 0.4 * Math.max(0, Math.sin(f + ph)),
+    });
+    // (the forearms flat on the sill, well apart, the claws in)
+    const fore = (side: number) => ({ planted: 0, frame: 0, x: 0.05, y: pawY, z: 0.17 + 0.012 * side * k * Math.sin(f * 0.5), flex: 0.05 });
+    return {
+      hipY: 0.07 + 0.008 * k * Math.sin(f * 2), hipPitch: 0.95, hipRoll: 0.16 * k * Math.sin(f), hipYaw: 0.1 * k * Math.sin(f + 1),
+      lumbarPitch: 0.3, chestPitch: -0.75, chestRoll: -0.08 * k * Math.sin(f),
+      // the head down over the sill, ears back with the effort of it
+      neckPitch: -0.5, headPitch: -0.45, earFwd: -0.5, earOut: 0.4, earFlat: 0.25, eyeOpen: 1, pupil: 0.9,
+      LF: fore(1), RF: fore(-1), LH: kick(0), RH: kick(Math.PI), hindFlat: 0,
+      tailLift: -0.3 + 0.4 * k * Math.sin(s * 7), tailSide: 1.2 * Math.sin(s * 6.1), tailCurve: 0.4, tailCurl: 0.8 * k * Math.sin(s * 11),
+    };
+  }
+
   private next(phase: Sill['phase'], dur = 0) {
     this.phase = phase;
     this.t = 0;
@@ -2232,11 +2270,32 @@ export class Sill implements Act {
         if (this.t > this.dur) {
           this.from.copy(m.pos);
           c.hold(0);
-          this.next('up', 0.44);
+          if (this.miss === null) this.miss = Math.random() < 0.09;
+          // (where it would hang: in front of the edge, its forearms over it)
+          if (this.miss) this.hangAt.set(S.seat.x, 0, (S.edge ?? S.seat.z + 0.19) + 0.08);
+          this.next('up', this.miss ? 0.36 : 0.44);
         }
         return true;
       }
       case 'up': {
+        if (this.miss) {
+          // short: the forepaws come down over the edge, and the rest of it does not follow
+          const u = Math.min(1, this.t / this.dur);
+          m.pos.lerpVectors(this.from, this.hangAt, smooth(u));
+          m.yaw = Math.PI;
+          const H = S.height - HANG;
+          c.hold(H * smooth(Math.min(1, u * 1.1)) + 0.06 * Math.sin(Math.PI * u));
+          m.setPosture('sit');
+          m.lookAt(null);
+          m.layer = { pose: this.hanging(0, 0, S.height + 0.005 - H), w: ease(u / 0.7) };
+          if (u >= 1) {
+            c.sound('thump', 0.14);
+            c.sound('scrabble', 0.3);
+            this.scrabbleIn = 0.2;
+            this.next('hang', rand(0.8, 1.3));
+          }
+          return true;
+        }
         // the spring: the body up in an arc onto the sill, forelegs reaching up and forward, hind
         // legs driving back and then tucked under
         const u = Math.min(1, this.t / this.dur);
@@ -2253,6 +2312,59 @@ export class Sill implements Act {
           m.layer = null;
           c.sound('thump', 0.28);
           this.next('settle', 0.6);
+        }
+        return true;
+      }
+      case 'hang': {
+        // hanging there by its forearms, the hind legs going like mad against the radiator and
+        // the tail flailing; a slip down a little at first, and then a grip
+        const slip = 0.012 * Math.sin(Math.PI * Math.min(1, this.t / 0.35));
+        const H = S.height - HANG - slip;
+        c.hold(H);
+        m.pos.copy(this.hangAt);
+        m.yaw = Math.PI;
+        m.setPosture('sit');
+        m.lookAt(null);
+        m.layer = { pose: this.hanging(this.t, 1, S.height + 0.005 - H), w: 1 };
+        if ((this.scrabbleIn -= dt) <= 0) { c.sound('scrabble', 0.2); this.scrabbleIn = rand(0.17, 0.28); }
+        if (this.t > this.dur) this.next('haul', 0.55);
+        return true;
+      }
+      case 'haul': {
+        // a shove from the hind legs, and it slithers forward over the edge and is up
+        const u = Math.min(1, this.t / this.dur), e = smooth(u);
+        const H = S.height - HANG;
+        c.hold(H + (S.height - H) * e);
+        m.pos.lerpVectors(this.hangAt, S.seat, e);
+        m.yaw = Math.PI;
+        m.setPosture('crouch');
+        m.lookAt(null);
+        // (the body coming round from hanging to lying along the sill as it rises: the head
+        // hardly higher, the hips swung up level with it; the forepaws on the sill throughout)
+        const A = this.hanging(this.t + 1.3, 1 - u, S.height + 0.005 - H - (S.height - H) * e) as Record<string, unknown>;
+        const B = POSES.crouch as unknown as Record<string, unknown>;
+        const L: Record<string, unknown> = {};
+        for (const k in A) {
+          const a = A[k], b = B[k];
+          if (typeof a === 'number') L[k] = typeof b === 'number' ? a + (b - a) * e : a * (1 - e);
+          else if (k === 'LF' || k === 'RF') L[k] = { ...(a as object), z: 0.17 + (0.115 - 0.17) * e };
+          else {
+            // (the hind paws not set down till it is up: set down on the way, they would stay
+            // behind there, down in the sill)
+            const fa = a as Record<string, number>, fb = b as Record<string, number>, f: Record<string, number> = {};
+            for (const q in fa) f[q] = q === 'planted' || q === 'frame' ? fa[q] : fa[q] + (fb[q] - fa[q]) * e;
+            L[k] = f;
+          }
+        }
+        m.layer = { pose: L as PoseLayer, w: 1 };
+        if (u >= 1) {
+          c.perch(S.height);
+          c.hold(null);
+          m.layer = null;
+          c.sound('thump', 0.2);
+          this.oops = 0;
+          this.oopsSide = Math.random() < 0.5 ? 1 : -1;
+          this.next('settle', 0.35);
         }
         return true;
       }
@@ -2274,6 +2386,30 @@ export class Sill implements Act {
         return true;
       }
       case 'sit': {
+        if (this.oops >= 0) {
+          this.oops += dt;
+          const o = this.oops;
+          m.setPosture('sit');
+          if (o < 1.1) {
+            // a look round, the ears out to the sides: did anyone see that (you did)
+            m.lookAt(o > 0.25 ? c.viewer() : null, 1);
+            m.layer = { pose: { earOut: 0.45, earFwd: -0.15, eyeOpen: 1, tailLift: -1.2, tailSag: 1, tailCurl: 0.6 * Math.sin(o * 9) }, w: ease(o / 0.25) };
+            return true;
+          }
+          // and a brisk wash of a shoulder, eyes half shut: nothing happened
+          const g = o - 1.1, d = 2.8, lk = Math.max(0, Math.sin(g * 11));
+          m.lookAt(null);
+          m.layer = {
+            pose: {
+              neckYaw: this.oopsSide * 1.05, headYaw: this.oopsSide * 0.7, neckPitch: -0.35, headPitch: -0.35 + 0.14 * Math.sin(g * 11),
+              jaw: 0.12 * lk, tongue: 0.8 * lk, tongueUp: -0.3, eyeOpen: 0.35, squint: 0.3, earOut: 0.25 * (1 - Math.min(1, g / d)),
+              tailLift: -1.2, tailSag: 1,
+            },
+            w: Math.min(1, ease(g / 0.3) + (1 - Math.min(1, o / 1.4))) * ease((d - g) / 0.35),
+          };
+          if (g > d) { this.oops = -1; m.layer = null; }
+          return true;
+        }
         if (this.nap > 0.3 && !this.leaving) {
           m.layer = null; m.lookAt(null); this.drop = null; c.drop(null); this.sniff = -1;
           this.next('nap');
