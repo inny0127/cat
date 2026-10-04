@@ -25,7 +25,9 @@ export interface Contact {
 }
 
 export interface InputHandlers {
-  hitCat(sx: number, sy: number): boolean;
+  /** is the cat under a screen point (held: a finger already stroking it, which a fingertip's
+   *  width off its edge does not take off it) */
+  hitCat(sx: number, sy: number, held?: boolean): boolean;
   toP(sx: number, sy: number): [number, number];
   catTouchStart(c: Contact): void;
   catTouchEnd(c: Contact, tap: boolean): void;
@@ -147,7 +149,7 @@ export class PointerInput {
     c.last = e.timeStamp;
     c.press = this.pressOf(e);
     c.maxSpeed = Math.max(c.maxSpeed, Math.hypot(c.vx, c.vy));
-    c.onCat = c.startedOnCat && this.h.hitCat(e.clientX, e.clientY);
+    c.onCat = c.startedOnCat && this.h.hitCat(e.clientX, e.clientY, true);
 
     const g = this.glass.get(e.pointerId);
     if (!g || c.startedOnCat) return;

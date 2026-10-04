@@ -133,7 +133,9 @@ src/audio    녹음 없이 합성한 소리 (골골송, 트릴, 야옹, 하악, 
              lofi.ts: 실시간으로 만들어지는 라디오 음악(일렉피아노 코드 진행, 베이스, 스윙 드럼, 레코드 잡음)
 src/input    터치 제스처, 흔들기 감지
 tools/       그림 → 레이어 파이프라인 (Real-ESRGAN 업스케일, 알파 매팅, LaMa 인페인팅), 스크린샷 도구
-             (stills.mjs 시간대별 스틸, appreel.mjs 게임 시간으로 찍는 GIF, lofirender.mjs 음악 미리 듣기)
+             (stills.mjs 시간대별 스틸, appreel.mjs 게임 시간으로 찍는 GIF, lofirender.mjs 음악 미리 듣기,
+             soak.mjs 몇십 분의 삶을 빠르게 돌려 보는 점검, touch_e2e.mjs 휴대폰처럼 실제 터치 이벤트로
+             라디오·크레딧·물 주기·쓰다듬기·레이저 포인터·낚싯대를 차례로 확인)
 ```
 
 `tools/build_layers.py`가 원본 그림 한 장을 배경과 분리하고, 몸·꼬리 끝·머리·양쪽 귀 레이어로 나누고, 움직일 때 드러나는 부분(턱 밑, 귀 뒤, 꼬리 아래)을 채워 `public/assets/`에 내보냅니다. 다른 그림으로 바꾸려면 이 스크립트의 다각형과 `rig.json` 기준점을 새 그림에 맞추면 됩니다.

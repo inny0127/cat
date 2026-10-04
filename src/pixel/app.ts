@@ -165,7 +165,7 @@ export class PixelApp {
     this.avatar.settle();
 
     this.input = new PointerInput(canvas, {
-      hitCat: (sx, sy) => !this.avatar.hidden && !!this.senses.hitNear(sx, sy),
+      hitCat: (sx, sy, held) => !this.avatar.hidden && !!this.senses.hitNear(sx, sy, held ? 16 : 7),
       toP: (sx, sy) => [sx * this.senses.k, sy * this.senses.k],
       catTouchStart: (c) => { this.anchorTouch(c.sx, c.sy); this.brain.touchStart(c); },
       catTouchEnd: (c, tap) => { this.gestureEnd(); this.brain.touchEnd(c, tap); },
@@ -446,7 +446,7 @@ export class PixelApp {
       const q = A.clone().project(cam);
       const depth = cam.position.z - A.z;
       let dx = (a.nx - q.x) * depth * tvp * cam.aspect, dy = (a.ny - q.y) * depth * tvp;
-      const lim = 0.45 * depth * tvp;
+      const lim = 0.7 * depth * tvp;
       dx = Math.max(-lim * cam.aspect, Math.min(lim * cam.aspect, dx));
       dy = Math.max(-lim, Math.min(lim, dy));
       cam.position.x -= dx * w;
@@ -482,7 +482,7 @@ export class PixelApp {
   /** a finger come down on the cat, the view not yet close: it comes in round the spot touched,
    *  which stays under the finger (as under a pinch), rather than draw the cat to the middle of
    *  the screen from under it. Where on the body (from its middle), and where on the screen */
-  private anchor: { off: THREE.Vector3; nx: number; ny: number; at: THREE.Vector3 } | null = null;
+  private anchor: { bone: THREE.Object3D; local: THREE.Vector3; nx: number; ny: number; at: THREE.Vector3 } | null = null;
   private anchorTouch(sx: number, sy: number) {
     if (this.focus > 0.3) return;
     const nx = (sx / innerWidth) * 2 - 1, ny = -(sy / innerHeight) * 2 + 1;
@@ -490,9 +490,12 @@ export class PixelApp {
     const hit = this.senses.hitNear(sx, sy);
     if (!hit) { this.anchor = null; return; }
     const at = hit.point.clone();
-    // (the spot goes with the cat as it shifts under the hand, smoothly: its middle jumps as it
-    // settles into another posture)
-    this.anchor = { off: at.clone().sub(this.bodyMiddle()), nx, ny, at };
+    // (the spot is on a bone, and goes with it as the cat shifts under the hand: sits up, settles)
+    const bone = this.cat.byName.get(hit.bone);
+    if (!bone) { this.anchor = null; return; }
+    bone.updateWorldMatrix(true, false);
+    const local = at.clone().applyMatrix4(new THREE.Matrix4().copy(bone.matrixWorld).invert());
+    this.anchor = { bone, local, nx, ny, at };
   }
 
   private moveCamera(dt: number, touching: boolean) {
@@ -504,7 +507,9 @@ export class PixelApp {
     if (this.focus < 0.01) this.catAim.copy(want);
     else this.catAim.lerp(want, 1 - Math.exp(-dt * 2.5));
     if (this.anchor) {
-      this.anchor.at.lerp(this.tmpA.copy(want).add(this.anchor.off), 1 - Math.exp(-dt * 2.5));
+      const a = this.anchor;
+      a.bone.updateWorldMatrix(true, false);
+      a.at.lerp(this.tmpA.copy(a.local).applyMatrix4(a.bone.matrixWorld), 1 - Math.exp(-dt * 6));
       if (this.focusT === 0 && this.focus < 0.01) this.anchor = null;
     }
     // the room view follows as the cat goes off toward an edge, a little ahead of it the way it is
