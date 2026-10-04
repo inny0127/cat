@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { Cat3D } from './cat';
-import { NMAT, PIX, PIX_GLSL, rampTexture, setCoatRamps } from './pixclass';
+import { NMAT, PIX, PIX_GLSL, PIX_STEPS, rampTexture, setCoatRamps } from './pixclass';
 import { ROOM_LIGHT_GLSL, roomLightUniforms, type DayLight } from './roomlight';
 
 const FLOOR_VERT = /* glsl */ `
@@ -201,7 +201,7 @@ int kindAt(ivec2 q, out int mat, out float light, out float third) {
   return t.a > 0.9 ? 1 : (t.a > 0.4 && t.a < 0.6) ? 2 : 0;
 }
 
-const float TH[4] = float[](0.16, 0.32, 0.52, 0.76);
+const float TH[4] = float[](${PIX_STEPS.join(', ')});
 // the step of the ramp a light falls on; big smooth surfaces dither across the edges of their
 // bands (a narrow seam of checkers, as a pixel artist would), everything else keeps clean bands
 float stepPos(float L) {
@@ -655,13 +655,13 @@ export class Stage {
     const r = this.renderer;
     // the art is drawn a little wider than the screen: the same view, with a margin round it
     const cam = this.camera, n = P.nominal, mg = (P.rt.width - n.x) / 2, mgy = (P.rt.height - n.y) / 2;
-    cam.setViewOffset(n.x, n.y, -mg, -mgy, P.rt.width, P.rt.height);
+    cam.setViewOffset(n.x, n.y, -mg, -mgy + this.shiftPx, P.rt.width, P.rt.height);
     r.setRenderTarget(P.rt);
     r.render(this.scene, cam);
     const u = P.mat.uniforms;
     u.uProjInv.value.copy(cam.projectionMatrixInverse);
     u.uViewInv.value.copy(cam.matrixWorld);
-    cam.clearViewOffset();
+    this.level();
     // paint it
     P.quad.material = P.mat;
     r.setRenderTarget(P.art);
@@ -826,6 +826,30 @@ export class Stage {
     this.camera.aspect = innerWidth / innerHeight;
     this.camera.updateProjectionMatrix();
     this.sizePixel();
+    this.level();
+  }
+
+  /** the lens shifted (as an architect's camera has it): the camera kept level and the picture
+   *  slid up or down instead of the camera tipped, so that upright things stay upright in the
+   *  picture, as pixel art draws them (a tipped camera leans them in, and every leaning line is a
+   *  line of steps). How far, in halves of the picture's height (positive: the picture shows what
+   *  is below the level of the camera); whole art pixels in pixel art */
+  private shift = 0;
+  private shiftPx = 0;
+  setShift(s: number) {
+    if (s === this.shift) return;
+    this.shift = s;
+    this.level();
+  }
+
+  /** the camera's own view (what rays and projections use) with the lens shifted */
+  private level() {
+    const cam = this.camera;
+    const n = this.pixel ? this.pixel.nominal : this.renderer.getDrawingBufferSize(new THREE.Vector2());
+    const px = this.pixel ? Math.round((this.shift * n.y) / 2) : (this.shift * n.y) / 2;
+    this.shiftPx = this.pixel ? px : 0;
+    if (px === 0) cam.clearViewOffset();
+    else cam.setViewOffset(n.x, n.y, 0, px, n.x, n.y);
   }
 
   render() {

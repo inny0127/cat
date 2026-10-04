@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { AO_GLSL, LIGHT_GLSL } from '../cat3d/fur';
 import { ROOM_LIGHT_GLSL, NOCC, cloudAt, dayLight, fogAt, moonLit, moonPhase, rainAt, skyDay, stormAt, type DayLight } from '../cat3d/roomlight';
-import { PIX, PIX_GLSL, type Material } from '../cat3d/pixclass';
+import { PIX, PIX_GLSL, PIX_STEPS, type Material } from '../cat3d/pixclass';
 import type { CatState } from '../sim/state';
 import { seasonAt } from './season';
 
@@ -40,6 +40,8 @@ uniform vec3 uLampPos;
 uniform float uLampInt;
 uniform vec3 uRug;       // centre x, z and radius
 uniform float uWallZ;
+uniform float uSide;     // a curtain: which way the window is from it (-1 its right, 1 its left)
+const float PIX_STEP[4] = float[](${PIX_STEPS.join(', ')});
 varying vec3 vN;
 varying vec3 vWorld;
 varying vec2 vUv;
@@ -59,6 +61,7 @@ void main() {
   vec3 N = normalize(vN) * (gl_FrontFacing ? 1.0 : -1.0);
   int m = int(uMat + 0.5);
   float tone = uTone;
+  int fold = 0;
   if (uPattern == 1) {
     // floorboards running away from you, their ends staggered: a dark seam between them with a
     // catch of light on the edge beside it, long streaks of grain, a knot here and there, and now
@@ -138,6 +141,17 @@ void main() {
     // the upper left, then the middle tone, the far edge in shade (the light alone is too even
     // across something this small to give it form)
     tone += 0.16 * (dot(N, normalize(vec3(-0.42, 0.55, 0.72))) - 0.55);
+  } else if (uPattern == 10) {
+    // a curtain hanging in folds, painted as folds are painted: in upright bands, the cloth's own
+    // colour with a narrow line of light up the side of each fold that faces the window and a band
+    // of shade down the side away from it into the fold. The light on it is the flat cloth's, and
+    // the folds are steps of the ramp up or down from it (below): lit fold by fold, the falloff of
+    // the lamp's and the fairy lights' light broke the bands into flames and bows
+    // (t: across a fold from the deepest of it, 0, up the side facing the window to the top, 0.5,
+    // and down the far side)
+    float t = fract(uSide * (vLocal.x / 0.17 * 5.0 + 0.5) * 0.5);
+    fold = t >= 0.14 && t < 0.27 ? 1 : t >= 0.6 && t < 0.93 ? -1 : 0;
+    N = normalize(vec3(0.0, N.y, N.z));
   } else if (uPattern == 4) {
     // fleece: soft and a little uneven
     tone += (vnoise(vWorld.xz * 70.0) - 0.5) * 0.08;
@@ -162,9 +176,11 @@ void main() {
   }
   // the floor darkens toward the wall's foot
   if (uPattern == 1 || uPattern == 2) tone -= 0.1 * (1.0 - smoothstep(0.0, 0.12, vWorld.z - uWallZ));
-  float sh = keyShadow(vWorld, N);
-  float ao = capsuleAO(vWorld, N) * roomAO(vWorld, N);
-  vec3 lt = roomLight(vWorld, N, sh, ao);
+  // (a curtain is lit where the flat of the cloth would be, not fold by fold: see above)
+  vec3 P = uPattern == 10 ? vWorld - vec3(0.0, 0.0, vLocal.z) : vWorld;
+  float sh = keyShadow(P, N);
+  float ao = capsuleAO(P, N) * roomAO(P, N);
+  vec3 lt = roomLight(P, N, sh, ao);
   if (uPattern == 8) {
     // a leaf lets the light through: with the sun or the bright window behind it, it glows
     float back = uSun * max(-dot(N, uKeyDir), 0.0) * sunThrough(vWorld) * keyShadow(vWorld, -N) * 0.7 + uSkyI * skyThrough(vWorld, -N) * 0.45;
@@ -172,6 +188,15 @@ void main() {
     lt = vec3(tot, lt.y * lt.x / max(tot, 1e-4), (lt.z * lt.x + back) / max(tot, 1e-4));
   }
   lt.x = max(lt.x * (1.0 + 1.3 * tone) + 0.25 * tone, 0.0);
+  if (uPattern == 10) {
+    // (the step of the ramp the cloth's light is on (the art pass's steps), so many steps up or
+    // down, and the middle of that step: the light's steps run level across the curtain, the
+    // folds straight down it)
+    int lv = 0;
+    for (int i = 0; i < 4; i++) if (lt.x >= PIX_STEP[i]) lv = i + 1;
+    lv = clamp(lv + fold, 0, 4);
+    lt.x = lv == 0 ? 0.5 * PIX_STEP[0] : lv == 4 ? 0.5 * (PIX_STEP[3] + 1.0) : 0.5 * (PIX_STEP[lv - 1] + PIX_STEP[lv]);
+  }
   // what glows: all of it at once (a candle's jar, the radio's dial), or a lit lamp's shade, which
   // is brightest at its open foot and dimmer up toward its top
   float glowAmt = 0.0;
@@ -849,7 +874,7 @@ export class Room {
   private readonly potAt = new THREE.Vector3();
   private plantShake = 0;
   /** the curtains, each swinging a little from its rod (how far, how fast) */
-  private readonly curtains: { mesh: THREE.Object3D; x: number; a: number; v: number; seed: number }[] = [];
+  private readonly curtains: { mesh: THREE.Object3D; x: number; a: number; v: number }[] = [];
   /** the monstera's leaves rustling (how hard) */
   onRustle: ((k: number) => void) | null = null;
   /** the standard lamp rocking on its foot (tipped so far each way, and how fast), and where its
@@ -1176,10 +1201,10 @@ export class Room {
       g.computeVertexNormals();
       // (hung from the rod: it swings about the top, brushed by a cat going by)
       g.translate(0, -ch / 2, 0);
-      const c = shadowy(new THREE.Mesh(g, this.mat('curtain')));
+      const c = shadowy(new THREE.Mesh(g, this.mat('curtain', { pattern: 10, side })));
       const x = side < 0 ? winL - 0.07 : winR + 0.07;
       add(c, x, winT + 0.09, wallZ + 0.07);
-      this.curtains.push({ mesh: c, x, a: 0, v: 0, seed: side * 1.7 });
+      this.curtains.push({ mesh: c, x, a: 0, v: 0 });
     }
     // fairy lights along the top of the window: a sagging wire and warm bulbs
     const n = 11, wire: THREE.Vector3[] = [];
@@ -2175,12 +2200,13 @@ export class Room {
     const H = this.held;
     H.visible = true;
     const D = 1.25, tv = Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2);
-    const hh = tv * D, hw = hh * cam.aspect;
+    const hh = tv * D;
     // (the hand just below the bottom edge, right of the middle; above whatever of the phone's own
     // the bottom of the screen has, safe: a fraction of the screen's height)
     // (shining, it is mostly down out of the way, only its end showing; not, more of it, to tap)
     this.heldUp += ((at ? 0 : 1) - this.heldUp) * Math.min(1, dt * 8);
-    const hx = 0.62 * hw, hy = -hh - 0.05 + 0.028 * this.heldUp + 2 * hh * safe;
+    const edge = Room.atDepth(cam, 0.62, -1 + 2 * safe, D);
+    const hx = edge.x, hy = edge.y - 0.05 + 0.028 * this.heldUp;
     // the way to the dot on the screen, from the hand (in the camera's plane), eased
     let ax = -0.5, ay = 0.75;
     if (at) {
@@ -2201,6 +2227,13 @@ export class Room {
   }
   private heldEye!: THREE.ShaderMaterial;
   private heldUp = 1;
+
+  /** what a point of the picture (-1 .. 1 each way) is at a distance straight ahead of the camera,
+   *  in the camera's own space (the lens may be shifted: see stage.ts setShift) */
+  static atDepth(cam: THREE.PerspectiveCamera, nx: number, ny: number, depth: number, out = new THREE.Vector3()) {
+    out.set(nx, ny, 0.5).applyMatrix4(cam.projectionMatrixInverse);
+    return out.multiplyScalar(depth / -out.z);
+  }
 
   /** where a laser pointed through a screen point lands: the first thing in the room it meets,
    *  what that is (the floor or the bed, the sill, the books and mug on them, anything else
@@ -2364,7 +2397,7 @@ export class Room {
   mugTop = new THREE.Vector3();
   private readonly nightU = { value: 0 };
 
-  private mat(name: Material, o: { pattern?: number; tone?: number; rug?: THREE.Vector3; wallZ?: number } = {}) {
+  private mat(name: Material, o: { pattern?: number; tone?: number; rug?: THREE.Vector3; wallZ?: number; side?: number } = {}) {
     const L = this.lights;
     const shared: Record<string, { value: unknown }> = {};
     for (const k of ['uKeyDir', 'uLampPos', 'uLampInt', 'uShadowMap', 'uShadowMatrix', 'uShadowOn', 'uShadowSoft', 'uCaps',
@@ -2374,7 +2407,7 @@ export class Room {
         ...shared,
         uMat: { value: PIX[name] }, uPattern: { value: o.pattern ?? 0 }, uGlow: { value: 0 }, uTone: { value: o.tone ?? 0 },
         uSpec: { value: 0 },
-        uRug: { value: o.rug ?? new THREE.Vector3() }, uWallZ: { value: o.wallZ ?? -10 },
+        uRug: { value: o.rug ?? new THREE.Vector3() }, uWallZ: { value: o.wallZ ?? -10 }, uSide: { value: o.side ?? 1 },
       },
       vertexShader: VERT,
       fragmentShader: FRAG,
@@ -2846,6 +2879,11 @@ export class Room {
   }
 
   /** the size of an art pixel at the window (metres), so the sky is drawn in whole art pixels */
+  /** where the sky in the window is (its plane's z) */
+  get skyZ() {
+    return this.win.z - 0.06;
+  }
+
   setPixel(px: number) {
     this.sky.uniforms.uSkyPx.value.set(0.68 / px, 0.8 / px);
     this.sky.uniforms.uPxSize.value = px;
@@ -2935,11 +2973,13 @@ export class Room {
       S.group.rotation.set(S.ax, 0, S.az);
       this.lampPos.set(S.home.x - Math.sin(S.az) * S.home.y, S.home.y, S.home.z + Math.sin(S.ax) * S.home.y);
     }
-    // the curtains: the air hardly stirs them; brushed, they swing out and back, and settle
+    // the curtains: brushed, they swing out and back, and settle, and hang straight (still air
+    // does not stir them; a stir too small to see would only make their folds' edges flicker)
     for (const C of this.curtains) {
       C.v += (-26 * C.a - 2.6 * C.v) * Math.min(dt, 0.05);
       C.a += C.v * Math.min(dt, 0.05);
-      C.mesh.rotation.x = C.a + 0.006 * Math.sin(this.time * 0.37 + C.seed);
+      if (Math.abs(C.a) < 1e-4 && Math.abs(C.v) < 1e-3) C.a = C.v = 0;
+      C.mesh.rotation.x = C.a;
     }
     this.rollYarn(dt);
     this.flyBug(dt, d.lamp > 0.5, 1 - Room.dark(hour), date.getMonth(), rain);

@@ -218,7 +218,7 @@ export class PixelApp {
         // (on the pointer in your hand, or where it lay on the sill: a tap puts it down there)
         const home = this.room.pointerHome.clone().project(this.stage.camera);
         const nearHome = Math.hypot((home.x * 0.5 + 0.5) * innerWidth - x, (-home.y * 0.5 + 0.5) * innerHeight - y) < 26;
-        if (nearHome || this.hitThing(this.room.heldPointer, x, y, 26)) { L.downOn = id; return true; }
+        if (nearHome || this.hitThing(this.room.heldPointer, x, y, 26) || this.nearLength(this.room.heldPointer, -0.045, 0.045, x, y, 26)) { L.downOn = id; return true; }
         L.id = id;
         L.sx = x;
         L.sy = y;
@@ -386,7 +386,9 @@ export class PixelApp {
     // the cat by its window: as wide as the window at the bed (the curtains, the lamp and the
     // plant at the edges), from the bed up to the top of the window, a little from above
     const d = Math.max(0.37 / (tv * cam.aspect), 0.66 / tv);
-    this.roomView.target.set(this.aim.x, 0.5, this.aim.z - 0.2);
+    // (a level camera sees a little less of the floor before the bed than a tipped one: looked at
+    // from a little lower, it sees as much)
+    this.roomView.target.set(this.aim.x, 0.45, this.aim.z - 0.2);
     this.roomView.dir.set(0, Math.sin(el), Math.cos(el));
     this.roomView.dist = d;
     // close to the cat: a third of a metre across (and 0.6 m up and down) round its body
@@ -422,12 +424,17 @@ export class PixelApp {
     target.lerp(this.catAim, f);
     const dist = rv.dist + (this.closeDist - rv.dist) * f;
     const dir = rv.dir.clone().lerp(new THREE.Vector3(0, Math.sin(0.27), Math.cos(0.27)), f).normalize();
-    cam.position.copy(target).addScaledVector(dir, dist);
-    cam.lookAt(target);
+    // (from a little above, but with the camera level and the picture slid down to what it looks
+    // at (stage.ts setShift): upright things stay upright, as pixel art draws them; as far off,
+    // straight ahead, as the distance looked at was)
+    const tvp = Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2);
+    const el = Math.atan2(dir.y, dir.z);
+    cam.position.copy(target).addScaledVector(dir, dist / Math.cos(el));
+    cam.rotation.set(0, 0, 0);
     cam.updateMatrixWorld();
+    this.stage.setShift(Math.tan(el) / tvp);
     // keep the camera on the art's grid (an art pixel at the distance looked at), so the room's
     // pixels hold still as the view drifts, and let the finished picture slide by the rest
-    const tvp = Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2);
     const px = (2 * tvp * dist) / this.stage.pixelRows();
     const right = this.tmpR.setFromMatrixColumn(cam.matrixWorld, 0), up = this.tmpU.setFromMatrixColumn(cam.matrixWorld, 1);
     const rx = cam.position.dot(right), uy = cam.position.dot(up);
@@ -437,8 +444,8 @@ export class PixelApp {
     this.stage.setSubPixel((rx - sx) / px, (uy - sy) / px);
     // the sky through the window, in art pixels
     if (this.room) {
-      const tv = Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2);
-      this.room.setPixel(2 * tv * cam.position.distanceTo(this.room.spots.bed.clone().setZ(this.room.spots.bed.z - 0.62)) / this.stage.pixelRows());
+      // (the window faces the camera square: an art pixel is the same size all over it)
+      this.room.setPixel(2 * tvp * (cam.position.z - this.room.skyZ) / this.stage.pixelRows());
       this.room.setView(cam.position.x);
     }
   }
@@ -527,6 +534,22 @@ export class PixelApp {
     return Math.hypot((p.x * 0.5 + 0.5) * innerWidth - sx, (-p.y * 0.5 + 0.5) * innerHeight - sy) < near;
   }
 
+  /** is a screen point within so many css px of a long thin thing as the screen shows it (from a
+   *  to b along its own x): a fingertip is wider than it is, and comes down beside it as often as
+   *  on it */
+  private nearLength(o: THREE.Object3D, a: number, b: number, sx: number, sy: number, near: number) {
+    o.updateWorldMatrix(true, false);
+    const cam = this.stage.camera;
+    const scr = (x: number) => {
+      const p = o.localToWorld(new THREE.Vector3(x, 0, 0)).project(cam);
+      return [(p.x * 0.5 + 0.5) * innerWidth, (-p.y * 0.5 + 0.5) * innerHeight];
+    };
+    const [ax, ay] = scr(a), [bx, by] = scr(b);
+    const dx = bx - ax, dy = by - ay;
+    const t = Math.max(0, Math.min(1, ((sx - ax) * dx + (sy - ay) * dy) / (dx * dx + dy * dy || 1)));
+    return Math.hypot(ax + dx * t - sx, ay + dy * t - sy) < near;
+  }
+
   /** the laser pointer: taken up off the sill or not; the finger shining it (which, where, and how
    *  far above the fingertip the dot shows, so that it is not under the finger); the touch that
    *  took it up, or that came down on it in your hand (a tap there puts it down); where those
@@ -574,8 +597,9 @@ export class PixelApp {
     // the floor or swinging in the air)
     const tip = p.add(new THREE.Vector3(0, 0.27, 0));
     // (the hand off the bottom right corner: the cane comes in across the picture, not up it)
-    const tv = Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2), D = 1.5;
-    const hand = new THREE.Vector3(1.05 * tv * D * cam.aspect, -tv * D - 0.03, -D).applyMatrix4(cam.matrixWorld);
+    const hand = Room.atDepth(cam, 1.05, -1, 1.5);
+    hand.y -= 0.03;
+    hand.applyMatrix4(cam.matrixWorld);
     this.room.aimWand(tip, hand);
   }
 

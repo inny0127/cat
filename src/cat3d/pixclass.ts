@@ -68,6 +68,9 @@ export const RAMPS: string[][] = [
 ];
 export const NMAT = 34;
 
+/** where the light passes from one step of a ramp to the next (the art pass, stage.ts) */
+export const PIX_STEPS = [0.16, 0.32, 0.52, 0.76];
+
 /** other coats than ginger (a cat adopted later may be any of them): the ramps for the coat's own
  *  colour, its stripes and its lighter parts (the white stays white) */
 export const COATS: Record<string, { ginger: string[]; stripe: string[]; cream: string[] }> = {
