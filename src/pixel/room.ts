@@ -2088,8 +2088,12 @@ export class Room {
     const down = W.pos.clone().sub(W.tip);
     if (down.lengthSq() < 1e-8) down.set(0, -1, 0);
     down.normalize().addScaledVector(W.vel, -0.12);
-    // (lying on the floor, or the bed: flat on it)
-    if (W.pos.y < 0.016 || (W.pos.y < 0.046 && W.slack > 0.01)) down.y = Math.min(down.y, -0.05) * 0.2;
+    // (lying on the floor, or the bed: flat on it; held under a cat's paws or hugged to it, the
+    // same: they do not hang down through the floor)
+    if (W.pos.y < 0.016 || (W.pos.y < 0.046 && W.slack > 0.01) || W.pinned > 0) {
+      if (Math.hypot(down.x, down.z) < 0.05) down.set(1, 0, 0);
+      down.y = Math.min(down.y, -0.05) * 0.2;
+    }
     W.lure.position.copy(W.pos);
     W.lure.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), down.normalize());
   }

@@ -241,7 +241,7 @@ export class Tease implements Act {
         const k1 = Math.max(0, Math.sin(ph)), k2 = Math.max(0, Math.sin(ph + 1.9));
         const bite = Math.max(0, Math.sin(this.t * 9));
         const belly = new THREE.Vector3(Math.cos(m.yaw), 0, -Math.sin(m.yaw)).multiplyScalar(sd);
-        if (L.pinned || this.t < 0.2) c.pinLure(0.25, m.pos.clone().addScaledVector(belly, 0.11).addScaledVector(this.fwd, 0.05).setY(0.06));
+        if (L.pinned || this.t < 0.2) c.pinLure(0.25, m.pos.clone().addScaledVector(belly, 0.155).addScaledVector(this.fwd, 0.05).setY(0.05));
         // (the upper paws, the ones on the side that is up, and the lower)
         const [uf, lf, uh, lh] = sd > 0 ? ['LF', 'RF', 'LH', 'RH'] : ['RF', 'LF', 'RH', 'LH'];
         m.setPosture('crouch');
@@ -249,8 +249,8 @@ export class Tease implements Act {
           pose: {
             hipY: S.hipY, hipZ: S.hipZ, hipPitch: S.hipPitch, hipRoll: sd * S.hipRoll, lumbarPitch: -0.3, chestRoll: sd * S.chestRoll, chestPitch: -0.1,
             neckPitch: -0.55, neckYaw: sd * 0.05, headPitch: -0.35 - 0.12 * bite, headRoll: sd * S.headRoll, jaw: 0.3 * bite,
-            [uf]: { planted: 0, frame: 0, x: 0.1, y: 0.085, z: 0.075, flex: 0.75 },
-            [lf]: { planted: 0, frame: 0, x: -0.085, y: 0.04, z: 0.08, flex: 0.75 },
+            [uf]: { planted: 0, frame: 0, x: 0.13, y: 0.075, z: 0.07, flex: 0.75 },
+            [lf]: { planted: 0, frame: 0, x: -0.12, y: 0.035, z: 0.08, flex: 0.75 },
             [uh]: { planted: 0, frame: 0, x: 0.11, y: 0.06, z: -0.21 + 0.17 * k1, flex: 0.35 },
             [lh]: { planted: 0, frame: 0, x: -0.08, y: 0.025, z: -0.2 + 0.16 * k2, flex: 0.35 },
             pastern: S.pastern, hindFlat: S.hindFlat,
