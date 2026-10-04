@@ -271,6 +271,10 @@ export class Motor {
   private hissT = -1;
   /** how far into the hiss itself (0 .. 1): the coat shader draws the lip up off the fangs with it */
   hissNow = 0;
+  /** the upper lip drawn up (0 .. 1) this frame, asked for by whoever has the face (the flehmen),
+   *  and as it is, eased toward that (the coat shader draws it up as for a snarl) */
+  lipUp = 0;
+  lipUpNow = 0;
   /** the hiss itself: the mouth flung wide on the fangs, the ears flat back, the whiskers back,
    *  the head drawn back, then easing to a snarl */
   hiss() {
@@ -512,6 +516,9 @@ export class Motor {
       p.headPitch += 0.16 * env;
       p.neckPitch -= 0.12 * env;
     } else this.hissNow = 0;
+    // (asked for frame by frame: when nobody asks, it goes down again)
+    this.lipUpNow += (this.lipUp - this.lipUpNow) * Math.min(1, dt * 7);
+    this.lipUp = 0;
     // talking: the mouth shaped by the sound, in time with it. A meow is "mi-aow", lips parting on
     // the "m", wide on the "aow" and closing as it trails off, the head lifting a little toward
     // whoever it is said to; a plea longer and wider, a soft one small; a trill is said with the

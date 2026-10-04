@@ -458,7 +458,7 @@ export class Cat3D {
     if (this.tongue) poseTongue(this.tongue, p.tongue, p.tongueUp);
     if (this.skin) {
       this.skin.uniforms.uJawOpen.value = p.jaw;
-      this.skin.uniforms.uSnarl.value = Math.max(motor.feel.snarl, motor.hissNow);
+      this.skin.uniforms.uSnarl.value = Math.max(motor.feel.snarl, motor.hissNow, motor.lipUpNow);
     }
   }
 

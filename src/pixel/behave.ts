@@ -567,7 +567,9 @@ interface Leg {
   /** seconds there */
   stay: number;
   posture: PoseName;
-  layer?: (t: number) => PoseLayer;
+  layer?: (t: number, m: Motor) => PoseLayer;
+  /** the upper lip drawn up, so far (0 .. 1), at a time there (the flehmen) */
+  lip?: (t: number) => number;
   /** it may doze off here, where it lies (in the sun, by the radiator), and stays till it wakes */
   nap?: boolean;
   /** where it would rather be now (the patch of sun having moved on): it gets up and goes there
@@ -657,7 +659,8 @@ export class Walk implements Act {
     }
     this.t += dt;
     c.m.setPosture(leg.posture);
-    c.m.layer = leg.layer ? { pose: leg.layer(this.t), w: hump(this.t, leg.stay, 0.5) } : null;
+    c.m.layer = leg.layer ? { pose: leg.layer(this.t, c.m), w: hump(this.t, leg.stay, 0.5) } : null;
+    if (leg.lip) c.m.lipUp = leg.lip(this.t) * hump(this.t, leg.stay, 0.5);
     if (this.t > leg.stay) {
       c.m.layer = null;
       this.i++;
@@ -1845,6 +1848,32 @@ export class Gift implements Act {
   }
 }
 
+/** how long a flehmen face is held, with the head coming up into it and going back */
+const FLEHMEN = 3.0;
+/**
+ * The flehmen: a smell worth more than a sniff taken in through the mouth, to taste it. After the
+ * sniff (from `from`), the head comes up a little, the mouth hangs open, the upper lip is drawn up
+ * off the teeth, the eyes go half shut and the whiskers back; and it stays like that, quite still,
+ * a long moment, lost in it (a cat's "what IS that"), and then it is over.
+ */
+const flehmen = (from: number, before: (t: number) => PoseLayer) => (t: number, m: Motor): PoseLayer => {
+  if (t < from) return before(t);
+  // (the head up into it, and kept up; the face let go of before the end, the leg's own easing
+  // then letting the head go too: not back down into the sniff. Lost in it, the head comes round
+  // toward you as it comes up: most things worth a sniff are by the walls, the face away from you)
+  const up = ease((t - from) / 0.45), k = flehmenLip(from)(t);
+  const b = before(from);
+  const mix = (a: number | undefined, z: number, w: number) => (a ?? 0) + (z - (a ?? 0)) * w;
+  const toYou = Math.max(-1.4, Math.min(1.4, wrapA(0 - m.yaw)));
+  return {
+    neckYaw: 0.6 * toYou * up, headYaw: 0.4 * toYou * up,
+    neckPitch: mix(b.neckPitch, -0.15, up), headPitch: mix(b.headPitch, 0.28 * k, up), jaw: 0.32 * k,
+    eyeOpen: 1 - 0.5 * k, squint: 0.55 * k, earFwd: mix(b.earFwd, 0.3 - 0.4 * k, up), earOut: 0.25 * k, whisker: mix(b.whisker, -0.5 * k, up),
+    hipY: b.hipY,
+  };
+};
+const flehmenLip = (from: number) => (t: number) => t < from ? 0 : ease((t - from) / 0.45) * (1 - ease((t - from - FLEHMEN + 1.0) / 0.5));
+
 /** potter about: a spot or two on the floor, a sniff there, home again */
 export const wander = (c: Ctx) => {
   // somewhere on the floor round the bed, clear of it
@@ -1857,7 +1886,11 @@ export const wander = (c: Ctx) => {
   // one or two of the room's places worth a sniff, or a spot on the floor
   const places = c.sniff().slice().sort(() => Math.random() - 0.5);
   const first = places.length ? places[0] : { to: spot(), face: null as number | null };
-  const legs: Leg[] = [{ to: first.to, face: first.face, stay: rand(1.5, 3), posture: 'stand', layer: sniff }];
+  const s1 = rand(1.5, 3);
+  // (now and then something there worth more than a sniff: the flehmen after it)
+  const legs: Leg[] = [Math.random() < 0.22
+    ? { to: first.to, face: first.face, stay: s1 + FLEHMEN, posture: 'stand', layer: flehmen(s1, sniff), lip: flehmenLip(s1) }
+    : { to: first.to, face: first.face, stay: s1, posture: 'stand', layer: sniff }];
   if (Math.random() < 0.5) {
     const next = places.length > 1 && Math.random() < 0.6 ? places[1] : { to: spot(), face: null as number | null };
     legs.push({ to: next.to, face: next.face, stay: rand(2, 5), posture: pick<PoseName>(['sit', 'stand']) });
