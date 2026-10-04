@@ -1,7 +1,8 @@
 // node tools/smooth/reel.mjs out.mp4 "<query>" '[[sec, "js using lab"], ...]' [fps] [seconds] [w,h]
-// Records the smooth cat in fixed steps (its director told what to do when: lab.director.auto = false,
-// lab.director.begin('tilt') ...) and encodes an H.264 video with ffmpeg. BASE= another page to record
-// (a static build of tools/smooth/artifact.mjs, so editing the source mid-recording cannot reload it).
+// Records the smooth cat in fixed steps, its own life running (smooth.html?still), with things done at
+// given times (lab.avatar.startAct('zoomies'), lab.brain.mode = 'doze', ...), and encodes an H.264
+// video with ffmpeg. BASE= another page to record (a static build of tools/smooth/artifact.mjs, so
+// editing the source mid-recording cannot reload it). For petting, see tools/smooth/showcase.mjs.
 import { chromium } from 'playwright-core';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, rmSync } from 'node:fs';
@@ -16,7 +17,7 @@ const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-119
 const page = await b.newPage({ viewport: { width: w, height: h } });
 page.on('pageerror', (e) => console.log('ERR', e.message));
 page.on('console', (m) => { if (m.type() === 'error' && !m.text().includes('404')) console.log('CONSOLE', m.text().slice(0, 400)); });
-await page.goto((process.env.BASE || 'http://localhost:5173/smooth.html') + '?still&demo&' + query);
+await page.goto((process.env.BASE || 'http://localhost:5173/smooth.html') + '?still&' + query);
 await page.waitForFunction(() => window.ready, null, { timeout: 180000 });
 const frames = Math.round(fps * seconds);
 let next = 0;
