@@ -221,6 +221,19 @@ export class PixelAvatar implements Avatar {
     this.teaseRest = Math.max(this.teaseRest, 8);
   }
 
+  /** one of its toys taken up (where it is): awake, it knows what that means: the ears go up and
+   *  its eyes to it, and now and then a little trill of it */
+  perk(at: THREE.Vector3, keen = 0.5) {
+    if (!this.alive || this.isHidden || this.sleep > 0.5) return;
+    this.cat.motor.flickEar('both', 0.5);
+    if (!this.act && !this.errand && !this.trip) this.heard = { at: at.clone(), t: 1.6 + Math.random() * 0.8, tilt: 0 };
+    if (Math.random() < keen) {
+      const k = Math.random() < 0.6 ? 'trill' : 'chirp';
+      this.outside?.sound(k, 0.5);
+      this.vocalize(k, k === 'trill' ? 0.29 : 0.11, 0.2);
+    }
+  }
+
   /** thunder (loud 0 .. 1): it looks to the window; awake, a near clap may send it to cover, into
    *  the box if it is out, or to its bed */
   thunder(loud: number, at: THREE.Vector3) {

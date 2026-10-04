@@ -243,6 +243,9 @@ export class PixelApp {
           this.wandFinger = { x, y, id };
           this.room.holdWand(true);
           this.aimWand(x, y);
+          // (a jingle of its bell as it comes up: the cat knows that sound)
+          this.audio.play('bell', { gain: 0.12 });
+          this.avatar.perk(this.room.lureAt(), 0.3 + 0.4 * Math.max(0, this.state.trust));
           canvas.style.cursor = 'grabbing';
           if (!this.state.hints.wand) {
             this.state.hints.wand = 1;
@@ -616,6 +619,8 @@ export class PixelApp {
     this.room.takePointer(up);
     this.audio.play('pencil', { gain: 0.12, rate: up ? 1.5 : 1.25 });
     this.haptic.tap?.();
+    // (the cat knows that sound)
+    if (up) this.avatar.perk(this.room.pointerHome, 0.35 + 0.4 * Math.max(0, this.state.trust));
     this.canvas.style.cursor = up ? 'crosshair' : '';
     if (up && !this.state.hints.laser) {
       this.state.hints.laser = 1;
