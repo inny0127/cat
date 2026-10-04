@@ -618,6 +618,14 @@ export class Walk implements Act {
       this.t = Math.max(0, leg.stay - rand(6, 15));
     }
     if (!this.arrived) {
+      // (the next thing to do where it already is, facing about the way it is: no getting up for
+      // it, as from a roll in the sun to lying in it)
+      if (this.i > 0 && Math.hypot(leg.to.x - c.m.pos.x, leg.to.z - c.m.pos.z) < 0.04 && leg.face !== null
+        && Math.abs(wrapA(leg.face - c.m.yaw)) < 0.3 && leg.posture !== 'stand' && !c.m.goal) {
+        this.arrived = true;
+        this.t = 0;
+        return true;
+      }
       // up on its feet (again, if something sat it down on the way)
       c.m.setPosture('stand');
       // on a longer way, now and then a stop part way along: stood still a moment, the head up
@@ -791,26 +799,8 @@ export class Greet implements Act {
       if (this.t <= dt) this.roll = Math.sin(m.yaw) > 0 ? -1 : 1;
       const sd = this.roll, face0 = -sd * Math.PI / 2, D = this.flop;
       m.yaw = wrapA(m.yaw + Math.max(-3, Math.min(3, wrapA(face0 - m.yaw))) * Math.min(1, dt * 4));
-      const S = POSES.side;
-      const w = ease(this.t / 0.7) * (1 - ease((this.t - D) / 0.7));
-      const wr = Math.sin(this.t * 4.2) * ease((this.t - 1) / 0.5) * (1 - ease((this.t - 2.6) / 0.5));
-      const [uf, lf, uh, lh] = sd > 0 ? ['LF', 'RF', 'LH', 'RH'] : ['RF', 'LF', 'RH', 'LH'];
       m.setPosture('crouch');
-      m.layer = {
-        pose: {
-          hipY: S.hipY, hipZ: S.hipZ, hipPitch: S.hipPitch, hipRoll: sd * (S.hipRoll + 0.28 + 0.12 * wr), lumbarPitch: 0.05,
-          chestRoll: sd * (S.chestRoll + 0.22 - 0.12 * wr), chestPitch: -0.05,
-          neckPitch: 0.12, headPitch: -0.05, headRoll: sd * 0.25,
-          [uf]: { planted: 0, frame: 0, x: 0.07, y: 0.085, z: 0.1, flex: 0.85 },
-          [lf]: { planted: 0, frame: 0, x: -0.05, y: 0.04, z: 0.13, flex: 0.6 },
-          [uh]: { planted: 0, frame: 0, x: 0.09, y: 0.07, z: -0.2, flex: 0.3 },
-          [lh]: { planted: 0, frame: 0, x: -0.06, y: 0.025, z: -0.24, flex: 0.2 },
-          pastern: S.pastern, hindFlat: S.hindFlat,
-          earFwd: 0.1, earOut: 0.15, eyeOpen: 0.8, squint: 0.3,
-          tailLift: S.tailLift, tailSide: 0.5 * Math.sin(this.t * 1.6), tailCurve: S.tailCurve, tailSag: 1,
-        },
-        w,
-      };
+      m.layer = bellyUp(sd, this.t, D, 0);
       if (this.blinks === 1 && this.t > 3.2) { this.blinks = 2; c.blink(true); }
       if (this.t > D + 0.7) { m.layer = null; this.phase = 'stay'; this.t = 0; }
       return true;
@@ -2040,7 +2030,38 @@ export const wander = (c: Ctx) => {
   return new Walk('wander', legs);
 };
 
-/** lie a long while in the patch of sun on the floor, as cats will, then back to bed */
+/**
+ * Down on its side and rolled over onto its back, the belly up, the forepaws curled to its chest
+ * and the hind legs loose, the back wriggled on the floor, the tail sweeping slowly; rocked (rock
+ * 0 .. 1) right over onto its back and half back again, for the joy of it (sd: which side it is on,
+ * 1 its right; t: how long into it; D: how long it lasts, coming out of it after)
+ */
+const bellyUp = (sd: number, t: number, D: number, rock: number): { pose: PoseLayer; w: number } => {
+  const S = POSES.side;
+  const w = ease(t / 0.7) * (1 - ease((t - D) / 0.7));
+  const wr = Math.sin(t * 4.2) * ease((t - 1) / 0.5) * (1 - ease((t - Math.min(2.6, D - 1)) / 0.5) * (1 - rock));
+  const over = rock * 0.45 * (0.5 - 0.5 * Math.cos(t * 1.7)) * ease((t - 0.8) / 0.6) * (1 - ease((t - D + 1) / 0.6));
+  const [uf, lf, uh, lh] = sd > 0 ? ['LF', 'RF', 'LH', 'RH'] : ['RF', 'LF', 'RH', 'LH'];
+  return {
+    pose: {
+      hipY: S.hipY, hipZ: S.hipZ, hipPitch: S.hipPitch, hipRoll: sd * (S.hipRoll + 0.28 + 0.12 * wr + over), lumbarPitch: 0.05,
+      chestRoll: sd * (S.chestRoll + 0.22 - 0.12 * wr + 0.8 * over), chestPitch: -0.05,
+      neckPitch: 0.12, headPitch: -0.05, headRoll: sd * (0.25 + 0.4 * over),
+      [uf]: { planted: 0, frame: 0, x: 0.07, y: 0.085 + 0.02 * over, z: 0.1, flex: 0.85 },
+      [lf]: { planted: 0, frame: 0, x: -0.05, y: 0.04 + 0.04 * over, z: 0.13, flex: 0.6 },
+      [uh]: { planted: 0, frame: 0, x: 0.09, y: 0.07 + 0.03 * over, z: -0.2, flex: 0.3 },
+      [lh]: { planted: 0, frame: 0, x: -0.06, y: 0.025 + 0.04 * over, z: -0.24, flex: 0.2 },
+      pastern: S.pastern, hindFlat: S.hindFlat,
+      earFwd: 0.1, earOut: 0.15 + 0.15 * rock, eyeOpen: 0.8 - 0.35 * rock, squint: 0.3 + 0.3 * rock,
+      tailLift: S.tailLift, tailSide: 0.5 * Math.sin(t * 1.6), tailCurve: S.tailCurve, tailSag: 1,
+    },
+    w,
+  };
+};
+
+/** lie a long while in the patch of sun on the floor, as cats will, then back to bed (now and
+ *  then first a roll in the warm of it: over onto its back, wriggling, rocking from side to back
+ *  and back, the eyes half shut) */
 export const sunbathe = (c: Ctx) => {
   const spot = c.sun();
   if (!spot) return null;
@@ -2061,9 +2082,12 @@ export const sunbathe = (c: Ctx) => {
   };
   const ok = options(spot);
   if (!ok.length) return null;
-  // (flat out on its side more often than not, where there is room to)
+  // (flat out on its side more often than not, where there is room to; and now and then a roll
+  // first, for which it lies facing to the left across the picture: flat out on its right side, as
+  // it always is, that has its belly your way, rolled up to the sky)
   const flat = ok.filter(([p]) => p === 'side');
-  const [posture, face] = flat.length && Math.random() < 0.6 ? pick(flat) : pick(ok);
+  const rolls = Math.random() < 0.35 && flat.some(([, f]) => Math.sin(f) < 0);
+  const [posture, face] = rolls ? pick(flat.filter(([, f]) => Math.sin(f) < 0)) : flat.length && Math.random() < 0.6 ? pick(flat) : pick(ok);
   const place = c.lieAt(posture, spot, face);
   // (as the sun moves round and the patch goes off it, it gets up and lies down in it again, the
   // same way if it fits there)
@@ -2078,7 +2102,13 @@ export const sunbathe = (c: Ctx) => {
     const f = there.find(([, f]) => f === face)?.[1] ?? there[0][1];
     return c.lieAt(posture, s, f);
   };
+  // (rolled over the side it will lie on after, so it comes out of the roll into it)
+  const roll: Leg[] = rolls ? [{
+    to: place.to, face: place.yaw, stay: 5.5, posture: 'side',
+    layer: (t) => bellyUp(1, t, 5.5, 1).pose,
+  }] : [];
   return new Walk('sun', [
+    ...roll,
     { to: place.to, face: place.yaw, stay: rand(60, 160), posture, nap: true, follow },
     { to: bed.to, face: bed.yaw, stay: 0.1, posture: 'loaf' },
   ]);
