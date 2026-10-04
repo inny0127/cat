@@ -313,15 +313,18 @@ export function makeEye(radius: number, side: 1 | -1, lights: EyeLights): CatEye
   return { group, ball, eyeMat, side };
 }
 
-/** set openness 0 (shut) .. 1 (wide); squint lifts the lower lid */
 /**
- * Set the lids of one eye: open 0 (shut) .. 1 (wide); squint lifts the lower lid. The lids are
- * furred skin drawn by the coat shader, which reads `lids` (left upper/lower, right upper/lower).
+ * Set the lids of one eye: open 0 (shut) .. 1 (wide); squint lifts the lower lid; smile (0 .. 1,
+ * the eyes of a cat at its bliss) bows the narrowed eye up into an arch. The lids are furred skin
+ * drawn by the coat shader, which reads `lids` (left upper/lower, right upper/lower).
  */
-export function setLids(e: CatEye, lids: THREE.Vector4, open: number, squint = 0) {
+export function setLids(e: CatEye, lids: THREE.Vector4, open: number, squint = 0, smile = 0) {
   const o = Math.max(0, Math.min(1, open));
-  // the lower lid rises a little as the eye shuts; the upper one comes down to meet it
-  const lower = -0.43 + 0.3 * Math.max(0, Math.min(1, squint)) + 0.15 * (1 - o);
+  // the lower lid rises a little as the eye shuts; the upper one comes down to meet it. Narrowed
+  // with pleasure, the lower lid is pushed up in the middle past level, so that the slit arches
+  // (as a painter draws a blissful cat's eyes: narrowed straight, by annoyance, they read as a sulk)
+  const arch = 0.55 * Math.max(0, Math.min(1, smile)) * Math.max(0, Math.min(1, (1 - o) / 0.6));
+  const lower = -0.43 + 0.3 * Math.max(0, Math.min(1, squint)) + 0.15 * (1 - o) + arch;
   const upper = lower - 0.04 + (0.5 - lower + 0.04) * o;
   e.eyeMat.uniforms.uLower.value = lower;
   e.eyeMat.uniforms.uUpper.value = upper;

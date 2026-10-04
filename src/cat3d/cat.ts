@@ -403,10 +403,14 @@ export class Cat3D {
     const ey = motor.eyes;
     const c01 = (x: number) => Math.max(0, Math.min(1, x));
     const open = c01(p.eyeOpen + ey.open * Math.min(1, p.eyeOpen / 0.6)) * (1 - motor.blink);
+    // (narrowed with pleasure, not annoyance: the eyes smile; and a slow blink, a cat's smile at
+    // you, closes them in an arch too)
+    const md = motor.mood;
+    const smile = Math.max(c01((md.pleasure - 0.15) / 0.5) * (1 - c01(md.irritation * 2.5)) * (1 - md.fear), motor.slowBlinking ? motor.blink : 0);
     for (let i = 0; i < this.eyes.length; i++) {
       const e = this.eyes[i];
       // (asleep, one eye a little open to see what you are up to)
-      setLids(e, this.shared.uLids.value, i === this.peekEye ? Math.max(open, this.peek * (1 - motor.blink)) : open, c01(p.squint + ey.squint));
+      setLids(e, this.shared.uLids.value, i === this.peekEye ? Math.max(open, this.peek * (1 - motor.blink)) : open, c01(p.squint + ey.squint), smile);
       e.eyeMat.uniforms.uPupil.value = c01(p.pupil + ey.pupil);
       e.eyeMat.uniforms.uShine.value = ey.shine;
     }

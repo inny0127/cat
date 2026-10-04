@@ -122,6 +122,10 @@ export class Motor {
   private blinkT = 2;
   private blinkPhase = -1;
   private blinkSlow = false;
+  /** a slow blink (the cat's smile at someone) is under way */
+  get slowBlinking() {
+    return this.blinkSlow && this.blinkPhase >= 0;
+  }
   /** what the cat feels (see mood.ts); its eyes follow a beat behind */
   readonly mood: Mood = { ...NEUTRAL };
   /** how far the feeling moves the eyes from the posture's own face (lids, lower lid, pupil),
