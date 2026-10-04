@@ -129,6 +129,11 @@ int tabby(int cls, vec3 P) {
   }
   // (and the sides of the head behind the eyes: ginger, short of the white of the chin and throat)
   if ((cls == ${PIX.white} || cls == ${PIX.pink}) && P.z > 0.11 && P.z < 0.165 && P.y > 0.215) return ${PIX.ginger};
+  // the belly's white kept to the belly: the flank above it ginger (and striped) down to a little
+  // above the belly's line, the line rising toward the chest and the haunch. Curled up asleep on
+  // its side, the lower flank is what shows, and the white there read as a flat sheet over it
+  float bellyTop = mix(0.11, 0.4, max(smoothstep(-0.03, 0.06, P.z), 1.0 - smoothstep(-0.15, -0.08, P.z)));
+  if (cls == ${PIX.white} && P.z < 0.085 && P.y > bellyTop) cls = ${PIX.ginger};
   if (cls != ${PIX.ginger} && cls != ${PIX.stripe} && cls != ${PIX.cream}) return cls;
   if (P.z > 0.085) return cls;
   bool band;
