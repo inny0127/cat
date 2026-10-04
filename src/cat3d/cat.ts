@@ -409,6 +409,10 @@ export class Cat3D {
     this.tail.update(dt, p, tmp.q.setFromEuler(group.rotation), group.position, 0, this.shared.uCaps.value, TRUNK_CAPS);
     this.updateCaps();
     kin.apply(this.bones);
+    // its middle, where the room's light on the cat as a whole is taken (roomlight.ts)
+    const mid = tmp.a.copy(kin.wp[kin.i('spine2')]).applyMatrix4(group.matrixWorld);
+    const S = this.shared.uSubject.value;
+    S.x = mid.x; S.y = mid.y; S.z = mid.z;
     this.byName.get('head')!.scale.setScalar(this.headScale);
 
     // face: the posture's own, moved by what the cat feels (mood.ts); a posture with the eyes

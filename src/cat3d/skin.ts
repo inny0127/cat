@@ -191,10 +191,13 @@ void main() {
       // in the room: the window, the sun through it, the lamp (roomlight.ts); the window behind
       // lights its edges only while there is daylight in it
       lt = roomLight(vWorld, Np, shp, mix(0.55, 1.0, vAO) * roomAO(vWorld, Np));
+      lt.x *= subjectExposure();
       rim *= clamp(uSkyI + uSun, 0.0, 1.0);
-      // modelled as a painter models a figure, whatever the room's light: lighter where the body
-      // turns up and toward you from the left, darker where it turns down and away
-      lt.x *= mix(0.62, 1.24, smoothstep(-0.45, 0.75, dot(Np, normalize(vec3(-0.45, 0.8, 0.4)))));
+      // modelled as a painter models a figure, whatever the room's light, from up on the left: the
+      // planes turned up and to the left lit, those facing you a step down, those turned away to
+      // the right and down in shade (three planes, so a back or a chest square on to you is not
+      // all one flat colour)
+      lt.x *= mix(0.45, 1.35, smoothstep(-0.2, 0.9, dot(Np, normalize(vec3(-0.65, 0.7, 0.3)))));
       // and in its own shade low down, where it meets what it lies or stands on (the lower flanks
       // of a loaf, paws tucked under, the belly), as a form darkens toward the ground
       float under = 1.0 - smoothstep(-0.3, 0.6, Np.y);

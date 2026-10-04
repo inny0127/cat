@@ -31,7 +31,7 @@ varying vec3 vN;
 void main() {
   vec3 N = normalize(vN) * (gl_FrontFacing ? 1.0 : -1.0);
   // (wet: a little more light on it than on the coat round it)
-  vec3 lt = uRoomLit > 0.5 ? roomLight(vWorld, N, 1.0, 0.85) * vec3(1.12, 1.0, 1.0)
+  vec3 lt = uRoomLit > 0.5 ? roomLight(vWorld, N, 1.0, 0.85) * vec3(1.12 * subjectExposure(), 1.0, 1.0)
     : vec3(0.3 + 0.55 * max(dot(N, uKeyDir), 0.0), 0.0, 0.0);
   if (uSolid > 0.5) { gl_FragColor = pixOutLit(${PIX.tongue}, lt, 0.0); return; }
   gl_FragColor = vec4(vec3(0.86, 0.46, 0.5) * (0.35 + 0.8 * lt.x), 1.0);

@@ -3354,6 +3354,10 @@ export class Room {
     L.uFloorB.value = d.floorB;
     (L.uFill.value as THREE.Vector4).w = d.fill;
     L.uFairyInt.value = d.fairy;
+    // how bright the cat is to be painted, however dim the room (roomlight.ts subjectExposure): by
+    // day as it is; at night lifted toward the lamp's light on it, less with the lamp out
+    const day = 1 - Room.dark(hour);
+    (L.uSubject.value as THREE.Vector4).w = 0.42 * day + (1 - day) * (0.2 + 0.1 * Math.min(1, d.lamp / 2));
     // where the sun through the window lies on the floor: its middle, its size, how bright
     const K = d.keyDir;
     const { l, r, b, t, z } = this.win;

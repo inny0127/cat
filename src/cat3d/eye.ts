@@ -221,11 +221,11 @@ void main() {
       vec3 Nl = normalize(vN);
       if (lidIn < 0.0 && !seam) {
         int cls = uLidTex > 0.5 ? pixClass(texture2D(uLidMap, vec2(dot(uLidU, vec3(dlo.xy, 1.0)), dot(uLidV, vec3(dlo.xy, 1.0)))).rgb) : ${PIX.white};
-        vec3 lt = uRoomLit > 0.5 ? roomLight(cameraPosition - vView, Nl, 1.0, 0.85)
+        vec3 lt = uRoomLit > 0.5 ? roomLight(cameraPosition - vView, Nl, 1.0, 0.85) * vec3(subjectExposure(), 1.0, 1.0)
           : vec3(smoothstep(-0.15, 0.55, dot(Nl, uKeyDir)) * 0.62 + (Nl.y * 0.5 + 0.5) * 0.25 + 0.06, 0.0, 0.0);
         gl_FragColor = pixOutLit(cls, lt, 0.0);
       } else {
-        vec3 lt = uRoomLit > 0.5 ? roomLight(cameraPosition - vView, normalize(vN), 1.0, 0.7) * vec3(0.8, 1.0, 1.0) : vec3(0.42, 0.0, 0.0);
+        vec3 lt = uRoomLit > 0.5 ? roomLight(cameraPosition - vView, normalize(vN), 1.0, 0.7) * vec3(0.8 * subjectExposure(), 1.0, 1.0) : vec3(0.42, 0.0, 0.0);
         gl_FragColor = pixOutLit(${PIX.dark}, lt, 0.0);
       }
       return;

@@ -26,6 +26,7 @@ uniform vec4 uFill;        // light from the room behind you: its direction and 
 uniform vec4 uFairy;       // the fairy lights' wire: from x, to x, y, z
 uniform float uFairyInt;
 uniform vec4 uOcc[${2 * NOCC}];   // the room's things: capsules, a.xyz + radius, b.xyz + strength
+uniform vec4 uSubject;     // the cat's middle, and how bright the picture would have it (0: as it is)
 
 // is a point in the sun: looking toward the sun from it, do you see out through the window
 float sunThrough(vec3 P) {
@@ -101,6 +102,16 @@ vec3 roomLight(vec3 P, vec3 N, float shadow, float ao) {
   float total = sun + (sky + bounce + fill + amb) * ao + warm;
   return vec3(total, warm / max(total, 1e-4), sun / max(total, 1e-4));
 }
+
+// the cat is what the picture is of: however dim the room, it is painted in the whole of its ramps
+// (as a painter keys a night scene to the figure in it, the room's dimness kept only in part). The
+// room's light on its middle, facing you, and not the sun's (which comes and goes on it), lifted
+// to what the hour would have it (never lowered: by day it is as it is)
+float subjectExposure() {
+  if (uSubject.w <= 0.0) return 1.0;
+  float r = roomLight(uSubject.xyz, normalize(cameraPosition - uSubject.xyz), 0.0, 1.0).x;
+  return clamp(uSubject.w / max(r, 1e-3), 1.0, 2.6);
+}
 `;
 
 /** the uniforms ROOM_LIGHT_GLSL reads (merged into the cat's shared uniforms) */
@@ -117,6 +128,7 @@ export function roomLightUniforms() {
     uFill: { value: new THREE.Vector4(0, 0.35, 0.94, 0.15) },
     uFairy: { value: new THREE.Vector4(0, 0, -10, 0) },
     uFairyInt: { value: 0 },
+    uSubject: { value: new THREE.Vector4(0, 0.15, 0, 0) },
     // (unused slots must be all zero: a Vector4 starts with w = 1, a metre-wide shade at the origin)
     uOcc: { value: Array.from({ length: 2 * NOCC }, () => new THREE.Vector4(0, 0, 0, 0)) },
   };
