@@ -768,20 +768,23 @@ void main() {
     }
   }
 
-  // snow falling: flakes drifting down slowly, swaying, near ones bigger
+  // snow falling, swaying as it drifts down: far off a faint pixel, slow and many; nearer, a bright
+  // one, quicker; the nearest a soft two by two, few and quickest (not crosses everywhere, which
+  // read as a field of stars)
   if (uRain > 0.01 && uSnowing > 0.5) {
     vec3 flake = mix(vec3(1.0), c, 0.2) * mix(1.0, 0.8, night);
-    for (int k = 0; k < 2; k++) {
+    for (int k = 0; k < 3; k++) {
       float fk = float(k);
-      float cell = 7.0 + fk * 5.0;
-      vec2 q = vec2(px.x, px.y + uTime * (6.0 + fk * 5.0));
+      float cell = 6.0 + fk * 5.0;
+      vec2 q = vec2(px.x, px.y + uTime * (4.0 + fk * 4.5));
       vec2 ci = floor(q / cell);
       float hf = hash2(ci + fk * 17.0);
-      if (hf < uRain * 0.6) {
+      if (hf < uRain * (k == 0 ? 0.55 : k == 1 ? 0.4 : 0.2)) {
         vec2 fp = (ci + vec2(0.2 + 0.6 * h1(hf * 9.0), 0.5)) * cell;
-        fp.x += 2.0 * sin(uTime * (0.8 + hf) + hf * 30.0);
-        vec2 dd = abs(q - floor(fp));
-        if (fk < 0.5 ? (dd.x + dd.y < 0.5) : (dd.x + dd.y < 1.5)) c = mix(c, flake, 0.85);
+        fp.x += (1.0 + fk) * sin(uTime * (0.8 + hf) + hf * 30.0);
+        vec2 d = q - floor(fp);
+        bool on = k < 2 ? (abs(d.x) < 0.5 && abs(d.y) < 0.5) : (d.x > -0.5 && d.x < 1.5 && d.y > -0.5 && d.y < 1.5);
+        if (on) c = mix(c, flake, k == 0 ? 0.45 : k == 1 ? 0.8 : 0.9);
       }
     }
   }
