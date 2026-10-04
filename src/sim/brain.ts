@@ -58,6 +58,10 @@ export class Brain {
   private napLeft = rand(600, 1500);
   private peekIn = rand(40, 160);
   private lastTouch = -1e9;
+  /** the hands on it this time: how long all told, how long against the lie of its fur, and
+   *  where (seconds by zone); when they have been gone a moment, a cat often puts its coat to
+   *  rights where it was touched */
+  private session = { t: 0, against: 0, zones: {} as Partial<Record<Zone, number>>, endedAt: -1 };
   private lastToy = -1e9;
   private touchCount = 0;
   private pokes: number[] = [];
@@ -356,8 +360,12 @@ export class Brain {
       this.stim += dt * (1 + 0.4 * (contacts.length - 1));
       s.stats.petSeconds += dt;
       s.lastPetAt = Date.now();
+      this.session.t += dt;
+      this.session.endedAt = -1;
     } else {
       this.stim = Math.max(0, this.stim - dt * 0.6);
+      if (this.session.t > 0 && this.session.endedAt < 0) this.session.endedAt = now;
+      this.tidyUp(now);
     }
 
     // ---- emotions settle
@@ -394,6 +402,7 @@ export class Brain {
     const s = this.s;
     const zone = this.senses.zoneAt(c.px, c.py);
     if (zone === 'none') return 0;
+    this.session.zones[zone] = (this.session.zones[zone] ?? 0) + dt;
     const speed = Math.hypot(c.vx, c.vy);
     let base = ZONE_LIKE[zone] + (s.personality.likes[zone] ?? 0);
     const trust = s.trust;
@@ -409,7 +418,7 @@ export class Brain {
     if (speed > 40 && !GRAIN_TOLERANT[zone]) {
       const [gx, gy] = this.senses.grainAt(c.px, c.py);
       const along = (c.vx * gx + c.vy * gy) / speed;
-      if (along < -0.3) p -= 0.38 * -along;
+      if (along < -0.3) { p -= 0.38 * -along; this.session.against += dt; }
       else if (along > 0.3) p += 0.07;
     }
     if (c.press > 0.8) p -= 0.15;
@@ -640,6 +649,23 @@ export class Brain {
     if ((this.napLeft -= dt) > 0) return;
     this.toAwake('rest', true);
     this.anim.wakeStretch?.();
+  }
+
+  /** the hands gone a moment after a good while on it: as often as not the cat puts its coat to
+   *  rights where it was touched (more often if it was rubbed the wrong way): a paw over the face
+   *  for its head, a lick down the chest, or at the flank */
+  private tidyUp(now: number) {
+    const S = this.session;
+    if (S.endedAt < 0 || now - S.endedAt < 1.6) return;
+    const { t, against, zones } = S;
+    this.session = { t: 0, against: 0, zones: {}, endedAt: -1 };
+    if (t < 2.5 || this.mode === 'sleep' || this.mode === 'doze' || this.mode === 'angry') return;
+    if (!chance(0.35 + 0.45 * clamp(against / 1.5) + 0.15 * clamp(t / 15))) return;
+    let most: Zone = 'back', mt = 0;
+    for (const [z, zt] of Object.entries(zones) as [Zone, number][]) if (zt > mt) { mt = zt; most = z; }
+    const where = most === 'belly' || most === 'paw' ? 'chest'
+      : most === 'face' || most === 'chin' || most === 'cheek' || most === 'head' || most === 'ear' ? 'face' : 'flank';
+    this.anim.tidy?.(where);
   }
 
   /** now and then a sleeping cat opens its eyes, checks on you, and goes back to sleep (and

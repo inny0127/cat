@@ -167,7 +167,7 @@ export class PixelApp {
     this.input = new PointerInput(canvas, {
       hitCat: (sx, sy) => !this.avatar.hidden && !!this.senses.hitNear(sx, sy),
       toP: (sx, sy) => [sx * this.senses.k, sy * this.senses.k],
-      catTouchStart: (c) => this.brain.touchStart(c),
+      catTouchStart: (c) => { this.anchorTouch(c.sx, c.sy); this.brain.touchStart(c); },
       catTouchEnd: (c, tap) => { this.gestureEnd(); this.brain.touchEnd(c, tap); },
       glassTap: (x, y) => {
         this.gestureEnd();
@@ -291,7 +291,9 @@ export class PixelApp {
       releaseToy: (tap, id) => {
         const L = this.laser;
         if (L.held) {
-          if (id === L.downOn && tap) this.takeLaser(false);
+          // (a finger on the pointer that has not gone off it to shine it puts it down, however
+          // long it was there: on a busy phone a quick tap is not always quick)
+          if (id === L.downOn) this.takeLaser(false);
           if (id === L.id) {
             L.id = -1;
             if (canvas.style.cursor === 'none') canvas.style.cursor = 'crosshair';
@@ -414,6 +416,7 @@ export class PixelApp {
   /** the room view drifts sideways after the cat, so wherever it goes it stays in view */
   private panX = 0;
   private readonly tmpR = new THREE.Vector3();
+  private readonly tmpA = new THREE.Vector3();
   private readonly tmpU = new THREE.Vector3();
 
   private placeCamera() {
@@ -434,6 +437,22 @@ export class PixelApp {
     cam.rotation.set(0, 0, 0);
     cam.updateMatrixWorld();
     this.stage.setShift(Math.tan(el) / tvp);
+    // coming in close round a spot on the cat touched: the view slid square to itself till that
+    // spot is under the finger again (fully while the hand is on it or the view holds close; going
+    // back out, less and less), so far that the middle of the cat stays well on the screen
+    if (this.anchor && this.room) {
+      const a = this.anchor, w = this.focusT === 1 ? 1 : f;
+      const A = a.at;
+      const q = A.clone().project(cam);
+      const depth = cam.position.z - A.z;
+      let dx = (a.nx - q.x) * depth * tvp * cam.aspect, dy = (a.ny - q.y) * depth * tvp;
+      const lim = 0.45 * depth * tvp;
+      dx = Math.max(-lim * cam.aspect, Math.min(lim * cam.aspect, dx));
+      dy = Math.max(-lim, Math.min(lim, dy));
+      cam.position.x -= dx * w;
+      cam.position.y -= dy * w;
+      cam.updateMatrixWorld();
+    }
     // keep the camera on the art's grid (an art pixel at the distance looked at), so the room's
     // pixels hold still as the view drifts, and let the finished picture slide by the rest
     const px = (2 * tvp * dist) / this.stage.pixelRows();
@@ -452,16 +471,43 @@ export class PixelApp {
   }
 
   /** a hand on the cat brings the view in close; some seconds after the last, back out */
+  /** the middle of the cat's body, wherever it lies */
+  private bodyMiddle(out = new THREE.Vector3()) {
+    const m = this.cat.motor;
+    const fp = this.cat.footprint(m.targetPosture);
+    const c = Math.cos(m.yaw), sn = Math.sin(m.yaw);
+    return out.set(m.pos.x + fp.x * c + fp.z * sn, 0.11, m.pos.z - fp.x * sn + fp.z * c);
+  }
+
+  /** a finger come down on the cat, the view not yet close: it comes in round the spot touched,
+   *  which stays under the finger (as under a pinch), rather than draw the cat to the middle of
+   *  the screen from under it. Where on the body (from its middle), and where on the screen */
+  private anchor: { off: THREE.Vector3; nx: number; ny: number; at: THREE.Vector3 } | null = null;
+  private anchorTouch(sx: number, sy: number) {
+    if (this.focus > 0.3) return;
+    const ray = new THREE.Raycaster();
+    const nx = (sx / innerWidth) * 2 - 1, ny = -(sy / innerHeight) * 2 + 1;
+    ray.setFromCamera(new THREE.Vector2(nx, ny), this.stage.camera);
+    const t = this.rayCat(ray.ray, 1.35);
+    if (t < 0) { this.anchor = null; return; }
+    const at = ray.ray.at(t, new THREE.Vector3());
+    // (the spot goes with the cat as it shifts under the hand, smoothly: its middle jumps as it
+    // settles into another posture)
+    this.anchor = { off: at.clone().sub(this.bodyMiddle()), nx, ny, at };
+  }
+
   private moveCamera(dt: number, touching: boolean) {
     if (touching) { this.focusT = 1; this.focusHold = 9; }
     else if ((this.focusHold -= dt) <= 0) this.focusT = 0;
     const m = this.cat.motor;
     // the middle of the body, wherever it lies
-    const fp = this.cat.footprint(m.targetPosture);
-    const c = Math.cos(m.yaw), sn = Math.sin(m.yaw);
-    const want = new THREE.Vector3(m.pos.x + fp.x * c + fp.z * sn, 0.11, m.pos.z - fp.x * sn + fp.z * c);
+    const want = this.bodyMiddle();
     if (this.focus < 0.01) this.catAim.copy(want);
     else this.catAim.lerp(want, 1 - Math.exp(-dt * 2.5));
+    if (this.anchor) {
+      this.anchor.at.lerp(this.tmpA.copy(want).add(this.anchor.off), 1 - Math.exp(-dt * 2.5));
+      if (this.focusT === 0 && this.focus < 0.01) this.anchor = null;
+    }
     // the room view follows as the cat goes off toward an edge, a little ahead of it the way it is
     // walking (not when it is tearing about: it lags behind then, rather than swinging to and fro),
     // never past the room's ends

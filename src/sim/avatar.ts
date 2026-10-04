@@ -54,6 +54,8 @@ export interface Avatar {
   /** you are back after a while away and it is awake: hello, if the body can say it (up to the
    *  glass, tail up; glad: how glad, 0 .. 1) */
   greet?(glad: number): void;
+  /** the hands gone, it puts its coat to rights where they were, if the body can show it */
+  tidy?(where: 'face' | 'flank' | 'chest'): void;
   /** leave: dir -1 left, 1 right; calm walks off rather than bolting; reason: the errand, if one
    *  (a body with a room to show it in goes to the bowl or the box) */
   bolt(dir: number, onDone?: () => void, calm?: boolean, reason?: string): void;

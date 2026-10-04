@@ -234,6 +234,19 @@ export class PixelAvatar implements Avatar {
     this.act = new Greet(glad);
   }
 
+  /** the hands gone, it puts its coat to rights where they were: a paw licked and drawn over the
+   *  face, a lick or two down the chest, or at the flank (not up on something, nor busy with
+   *  something of its own) */
+  tidy(where: 'face' | 'flank' | 'chest') {
+    if (!this.alive || this.isHidden || this.sleep > 0.3 || this.errand || this.trip || this.perched || this.hands.length) return;
+    if (this.act && this.act.name !== 'knead') return;
+    this.stopAct();
+    this.act = this.tidying = where === 'face' ? washFace() : where === 'chest' ? groomChest() : groomFlank();
+  }
+  /** a tidy-up of the coat under way (it carries on in the minute or so the hands' pleasure
+   *  lingers, as long as none come back) */
+  private tidying: Act | null = null;
+
   /** one of its toys taken up (where it is): awake, it knows what that means: the ears go up and
    *  its eyes to it, and now and then a little trill of it */
   perk(at: THREE.Vector3, keen = 0.5) {
@@ -504,7 +517,7 @@ export class PixelAvatar implements Avatar {
       return;
     }
     this.act.stop(this.ctx);
-    this.act = null;
+    this.act = this.tidying = null;
   }
 
   /** the cat's own business: the brain's state decides what is allowed (asleep: back to bed
@@ -554,7 +567,13 @@ export class PixelAvatar implements Avatar {
     this.nodOff(dt, false);
     if (this.mode === 'enjoy' || this.mode === 'annoyed' || this.mode === 'angry') {
       // in somebody's hands: stop and stay; tread with the front paws when it is happy there
+      // (the hands gone, it may be putting its coat to rights)
       if (this.perched) { this.act!.update(dt, c); return; }
+      if (this.act && this.act === this.tidying && !this.hands.length) {
+        if (!this.act.update(dt, c)) { this.act.stop(c); this.act = this.tidying = null; }
+        this.swatStep(dt);
+        return;
+      }
       if (this.act && !(this.act.name === 'knead' && this.kneading)) this.stopAct();
       if (!this.act && this.kneading) this.act = knead();
       if (this.act) this.act.update(dt, c);
