@@ -283,6 +283,10 @@ export class PixelAvatar implements Avatar {
       if (F.from.distanceTo(at) > 0.01) { F.moved = this.clock; F.from.copy(at); }
     }
   }
+  /** at the glass asking you for a game just now */
+  get asking() {
+    return this.act instanceof PawGlass && this.act.asking;
+  }
   /** a paw patted at the glass this frame: which (null: none) */
   get pawLanded() {
     return this.act instanceof PawGlass ? this.act.landed : null;

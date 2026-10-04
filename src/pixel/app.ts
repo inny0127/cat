@@ -898,6 +898,8 @@ export class PixelApp {
    *  point on the floor under it */
   private toyFinger: { x: number; y: number; off: THREE.Vector3 } | null = null;
   private toyWasPinned = false;
+  /** the hint given for this time it is asking you for a game */
+  private askHinted = false;
   /** the prints of a paw on the glass, drying (fresh 1 .. 0), and the mist of a breath on it */
   private prints: { at: THREE.Vector3; age: number; fresh: number; mist?: boolean }[] = [];
   private readonly bugLight = new THREE.Vector3();
@@ -1230,6 +1232,15 @@ export class PixelApp {
       this.hintUi.show('선물을 물어 왔어요. 장난감 쥐를 톡 치면 던져 줄 수 있어요', 6000);
       return;
     }
+    // asking you for a game at the glass, the first times: how to play it (once each time)
+    const asking = this.avatar.asking;
+    if (asking && !this.askHinted && (s.hints.ask ?? 0) < 2 && !touching && !this.input.touching) {
+      this.askHinted = true;
+      s.hints.ask = (s.hints.ask ?? 0) + 1;
+      this.hintUi.show('고양이가 놀자고 해요. 유리에 손가락을 대고 천천히 움직여 보세요', 6000);
+      return;
+    }
+    if (!asking) this.askHinted = false;
     // the first time it plays with its ball of wool: that you can roll it too
     if (this.avatar.doing === 'play' && !s.hints.yarnDrag && !touching && !this.toyFinger) {
       s.hints.yarnDrag = 1;
