@@ -64,6 +64,8 @@ export interface Avatar {
   beg?(what: 'food' | 'water', urgent: boolean, empty: () => boolean): boolean;
   /** the hands gone, it puts its coat to rights where they were, if the body can show it */
   tidy?(where: 'face' | 'flank' | 'chest'): void;
+  /** a love bite on the finger stroking it, gently, and a lick (true if it did) */
+  loveBite?(): boolean;
   /** leave: dir -1 left, 1 right; calm walks off rather than bolting; reason: the errand, if one
    *  (a body with a room to show it in goes to the bowl or the box) */
   bolt(dir: number, onDone?: () => void, calm?: boolean, reason?: string): void;

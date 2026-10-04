@@ -241,6 +241,23 @@ export class PixelAvatar implements Avatar {
     if (Math.random() < 0.35) this.blepFor = -(1.8 + Math.random());
   }
 
+  /** a love bite: a good long while under a hand it likes, and that will do for now; the head
+   *  round to the finger, the mouth on it, gently, a moment, let go, and the place licked (true if
+   *  it did) */
+  loveBite() {
+    const m = this.cat.motor, h = this.hands[0];
+    if (!h || !this.alive || this.sleep > 0.3 || this.errand || this.trip || m.licking || !this.feel || m.hissNow > 0) return false;
+    const hit = this.feel(h.sx, h.sy);
+    if (!hit) return false;
+    this.cat.group.updateMatrixWorld(true);
+    const E = this.cat.body.eyes(this.eyesAt).applyMatrix4(this.cat.group.matrixWorld);
+    const toYou = this.ctx.viewer().sub(E).normalize();
+    this.lickAt = hit.point.clone().addScaledVector(toYou, 0.08).setY(Math.max(hit.point.y, E.y - 0.02));
+    m.nibble();
+    this.lickRest = Math.max(this.lickRest, 20);
+    return true;
+  }
+
   /** a blep: after a lick or a wash, now and then the tip of the tongue stays out a few seconds,
    *  forgotten there, until something else takes its mind */
   private blepNow(dt: number) {

@@ -63,3 +63,39 @@ describe('stroked in its sleep', () => {
     expect(r.jolts).toBeGreaterThan(0);
   });
 });
+
+describe('a love bite', () => {
+  it('a good long while under a hand it likes: the mouth on the finger once, gently, and it settles', () => {
+    let s = 4242;
+    const rnd = Math.random;
+    Math.random = () => ((s = (s * 16807) % 2147483647) / 2147483647);
+    try {
+      const now = Date.now();
+      const st = newCat(now - 30 * 864e5);
+      st.trust = 0.8;
+      st.lastTick = now;
+      st.personality.tolerance = 1;
+      const quiet = (own: Record<string, unknown> = {}) =>
+        new Proxy(own, { get: (t, k) => (k in t ? t[k as string] : () => {}), set: () => true });
+      const bites: number[] = [];
+      let t = 0;
+      const anim = quiet({ loveBite: () => { bites.push(t); return true; } });
+      const senses = quiet({ zoneAt: () => 'head', grainAt: () => [1, 0], headScreen: () => ({ x: 0, y: 0 }) });
+      const b = new Brain(st, anim as never, quiet({ play: () => 0.5 }) as never, quiet() as never, quiet() as never, senses as never);
+      b.wake(0, false, 0);
+      for (; t < 5; t += 0.05) b.update(0.05, t, []);
+      (b as unknown as { toAwake: (m: string) => void }).toAwake('rest');
+      const c: Contact = { id: 1, sx: 100, sy: 100, x0: 100, y0: 100, px: 100, py: 100, vx: 120, vy: 0, t0: t, last: t, onCat: true, startedOnCat: true, travel: 0, press: 0.4, maxSpeed: 120 };
+      b.touchStart(c);
+      const start = t;
+      let enjoyed = false;
+      for (; t < start + 110; t += 0.05) { b.update(0.05, t, [c]); if (b.mode === 'enjoy') enjoyed = true; }
+      expect(enjoyed, `mode ${b.mode} pleasure ${b.pleasure}`).toBe(true);
+      expect(bites.length).toBe(1);
+      // (not straight away: after a good long while of it)
+      expect(bites[0] - start).toBeGreaterThan(40);
+    } finally {
+      Math.random = rnd;
+    }
+  });
+});

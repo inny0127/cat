@@ -1244,6 +1244,11 @@ export class PixelApp {
     // (keeping time with the radio, when it is in the mood)
     this.cat.motor.beat = this.avatar.groove > 0.01 ? this.avatar.groove * this.audio.beat() : 0;
     this.cat.update(dt);
+    // (its teeth on your finger, gently: felt, a little firmer than a lick)
+    if (this.cat.motor.nibbled) {
+      this.cat.motor.nibbled = false;
+      this.haptic.tapSoon('medium');
+    }
     // (its tongue on your finger: each lick felt, a little rasp, and heard, hardly)
     if (this.cat.motor.lickLanded) {
       this.cat.motor.lickLanded = false;

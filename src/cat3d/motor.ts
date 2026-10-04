@@ -304,8 +304,16 @@ export class Motor {
     this.licks = { t: 0, n };
   }
   get licking() {
-    return this.licks !== null;
+    return this.licks !== null || this.nibbleT >= 0;
   }
+  /** a love bite: the mouth opened on a finger, shut on it gently and held a moment, let go; and
+   *  then the place licked, two or three times (how far into it; -1: none) */
+  private nibbleT = -1;
+  nibble() {
+    this.nibbleT = 0;
+  }
+  /** set as the teeth close on the finger (for whoever wants to feel it, to clear) */
+  nibbled = false;
   /** set as each lick lands (for whoever wants to feel it or hear it, to clear) */
   lickLanded = false;
   /** the tip of the tongue left out between the lips, forgotten there (0 .. 1): a blep */
@@ -547,6 +555,21 @@ export class Motor {
         p.earFwd += 0.4 * lift;
         if (x > 1.25) this.voice = null;
       }
+    }
+    // a love bite: the mouth open to it (0 .. 0.35 s), shut on it softly and held, the eyes half
+    // shut (to 1 s), let go (to 1.2 s); and then the licks
+    if (this.nibbleT >= 0) {
+      const u = this.nibbleT, was = u;
+      this.nibbleT += dt;
+      const open = u < 0.35 ? ease(u / 0.35) * 0.42 : u < 0.47 ? 0.42 - 0.32 * ease((u - 0.35) / 0.12) : u < 1 ? 0.1 : u < 1.2 ? 0.1 + 0.12 * Math.sin(Math.PI * (u - 1) / 0.2) : 0;
+      p.jaw = Math.max(p.jaw, open);
+      if (u > 0.35 && u < 1.1) {
+        p.eyeOpen = Math.min(p.eyeOpen, 0.35);
+        p.squint = Math.max(p.squint, 0.5);
+        p.earFwd -= 0.25;
+      }
+      if (was < 0.45 && this.nibbleT >= 0.45) this.nibbled = true;
+      if (this.nibbleT >= 1.25) { this.nibbleT = -1; this.lick(2 + Math.floor(Math.random() * 2)); }
     }
     // licks: each one the tongue out, its tip curled up, and back in, the head lifting into it
     const L = this.licks;

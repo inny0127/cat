@@ -76,7 +76,7 @@ export class Brain {
   /** the hands on it this time: how long all told, how long against the lie of its fur, and
    *  where (seconds by zone); when they have been gone a moment, a cat often puts its coat to
    *  rights where it was touched */
-  private session = { t: 0, against: 0, zones: {} as Partial<Record<Zone, number>>, endedAt: -1 };
+  private session = { t: 0, against: 0, zones: {} as Partial<Record<Zone, number>>, endedAt: -1, bit: false };
   /** what made the hands on it unpleasant of late (a tally for each reason, fading), and whether
    *  it has been said this time it was annoyed */
   private why: Record<string, number> = {};
@@ -464,6 +464,18 @@ export class Brain {
     if (this.irritation < 0.15) this.whySaid = false;
     else if (touching && this.irritation > 0.3 && !this.whySaid) this.sayWhy();
 
+    // ---- a love bite: a good long while under a hand it likes, nearly enough of it, and it says
+    // so, fondly: the mouth on the finger, gently, a moment, and a lick after (once a session; and
+    // it settles it a little: a cat that has said so minds the next while less)
+    if (touching && this.mode === 'enjoy' && !this.session.bit && s.trust > 0.5 && this.pleasure > 0.5 && this.irritation < 0.25) {
+      const tol = (22 + 75 * clamp(s.trust)) * s.personality.tolerance;
+      if (this.stim > tol * 0.82 && chance(dt * 0.6) && this.anim.loveBite?.()) {
+        this.session.bit = true;
+        this.stim = Math.max(0, this.stim - 8);
+        if (chance(0.4)) this.later(1.3, () => this.say('trill'));
+      }
+    }
+
     // ---- mode from feelings while awake
     if (this.mode !== 'sleep' && this.mode !== 'doze' && this.mode !== 'angry') {
       if (touching && this.pleasure > 0.45 && this.irritation < 0.35) this.setMode('enjoy');
@@ -770,7 +782,7 @@ export class Brain {
     const S = this.session;
     if (S.endedAt < 0 || now - S.endedAt < 1.6) return;
     const { t, against, zones } = S;
-    this.session = { t: 0, against: 0, zones: {}, endedAt: -1 };
+    this.session = { t: 0, against: 0, zones: {}, endedAt: -1, bit: false };
     if (t < 2.5 || this.mode === 'sleep' || this.mode === 'doze' || this.mode === 'angry') return;
     if (!chance(0.35 + 0.45 * clamp(against / 1.5) + 0.15 * clamp(t / 15))) return;
     let most: Zone = 'back', mt = 0;
