@@ -1446,6 +1446,7 @@ export class Room {
     lamp.add(pole, shadeM);
     this.group.add(lamp);
     this.lampSway.group = lamp;
+    this.lampShade = shadeM;
     this.lampPos = new THREE.Vector3(lx, 0.97, lz);
     this.lampSway.home.copy(this.lampPos);
 
@@ -3221,12 +3222,37 @@ export class Room {
   }
 
   private readonly light = dayLight(12);
+  /** the lamp switched by hand (a tap on it): on or off, held until the hour would have switched it
+   *  so anyway (or a few hours on); and how far on it is now, a click being quick but not nothing */
+  private lampHand: { on: boolean; natural: boolean; left: number } | null = null;
+  private lampOn = 1;
+  /** the lamp's shade, to tap */
+  lampShade: THREE.Object3D = new THREE.Group();
+  private lampLitNow = false;
+
+  /** a tap on the lamp: switched the other way (true: now on) */
+  switchLamp() {
+    const on = !this.lampLitNow;
+    this.lampHand = { on, natural: this.lampNatural, left: 3 * 3600 };
+    return on;
+  }
+  private lampNatural = false;
 
   /** the bowls and box as the cat's state has them; the light and the sky by the hour (and that
    *  light, for the pixel pass's colours) */
   update(s: CatState, hour = 12, dt = 0, rain = 0, date: Date = new Date()): DayLight {
     const fog = this.fogOverride ?? fogAt(date, rain);
     const d = dayLight(hour, this.light, rain, moonLit(date), fog);
+    // (the lamp, if it has been switched by hand: off, or on when the hour would have it out; the
+    // hand's say lasting until the hour comes round to it, or a few hours)
+    const natural = d.lamp > 0.5;
+    this.lampNatural = natural;
+    if (this.lampHand && (this.lampHand.natural !== natural || (this.lampHand.left -= dt) <= 0)) this.lampHand = null;
+    const want = this.lampHand ? (this.lampHand.on ? 1 : 0) : natural ? 1 : 0;
+    this.lampOn += (want - this.lampOn) * Math.min(1, dt * 14);
+    if (dt === 0) this.lampOn = want;
+    d.lamp = natural ? d.lamp * this.lampOn : 2.0 * this.lampOn;
+    this.lampLitNow = d.lamp > 0.5;
     this.sky.uniforms.uFog.value = fog;
     this.sky.uniforms.uRain.value = rain;
     this.sky.uniforms.uMoon.value = this.moonOverride ?? moonPhase(date);

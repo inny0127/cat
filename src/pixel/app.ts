@@ -216,6 +216,14 @@ export class PixelApp {
           this.haptic.tap?.();
           return;
         }
+        // the lamp: a tap on its shade switches it, with a click
+        if (this.hitThing(this.room.lampShade, x, y, 26)) {
+          const on = this.room.switchLamp();
+          this.audio.play('pencil', { gain: 0.09, rate: on ? 2.3 : 2.0, pan: -0.5 });
+          this.avatar.hear(this.room.lampPos.clone());
+          this.haptic.tap?.();
+          return;
+        }
         if (this.hitThing(this.room.radio, x, y, 24)) {
           this.audio.music(!this.audio.musicOn);
           this.avatar.hear(this.room.radio.getWorldPosition(new THREE.Vector3()));
