@@ -1,6 +1,6 @@
 // node tools/soak.mjs [minutes]: runs the pixel cat's life in fixed steps of game time with acts,
 // hours and weather changing at random, and reports anything wrong (errors, NaN, a cat left up in
-// the air or perched off the sill).
+// the air or perched off the sill, a still thing of the room's that moved).
 import { chromium } from 'playwright-core';
 const minutes = +(process.argv[2] ?? 10);
 const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
@@ -122,10 +122,16 @@ const report = await page.evaluate(async (minutes) => {
     const wants = (app.avatar.trip && !app.avatar.hidden && (!app.avatar.errand || app.avatar.errand.phase !== 'do'));
     stillFor = wants && !moved ? stillFor + 0.05 : 0;
     if (stillFor > 12) { issues.push(`stuck on a ${app.avatar.trip.kind} at ${i} (${app.avatar.errand ? app.avatar.errand.phase : ''}; act ${app.avatar.doing}, goal ${!!m.goal}, ${m.posture}, last act started ${lastAct})`); stillFor = -1e9; }
+    // the room's still things, merged into a few meshes, must never move or change
+    if (i % 600 === 599) {
+      app.stage.scene.updateMatrixWorld(true);
+      const mv = app.room.stillMoved();
+      if (mv.length) issues.push(`still things moved or changed at ${i}: ${mv.length} (${mv.slice(0, 3).map((o) => o.name || o.geometry.type).join(', ')})`);
+    }
     if (i % 2400 === 0) await new Promise((r) => setTimeout(r, 0));
   }
   app.stage.render();
-  return { issues: issues.slice(0, 20), seen, drags, errands, laserUses, wandUses, returns, tosses, mug: app.room.mugUp ? 'up' : 'down', mode: app.brain.mode, doing: app.avatar.doing };
+  return { issues: issues.slice(0, 20), batch: app.room.batchCount, seen, drags, errands, laserUses, wandUses, returns, tosses, mug: app.room.mugUp ? 'up' : 'down', mode: app.brain.mode, doing: app.avatar.doing };
 }, minutes);
 console.log(JSON.stringify(report), 'errors:', errs.slice(0, 10));
 await b.close();

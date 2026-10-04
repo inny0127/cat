@@ -19,8 +19,16 @@ varying vec3 vN;
 varying vec3 vWorld;
 varying vec2 vUv;
 varying vec3 vLocal;
+#ifdef BATCHED
+// (still things merged into one mesh: each vertex's place in its own thing, for its patterns)
+attribute vec3 local;
+#endif
 void main() {
+#ifdef BATCHED
+  vLocal = local;
+#else
   vLocal = position;
+#endif
   vec4 wp = modelMatrix * vec4(position, 1.0);
   vWorld = wp.xyz;
   vN = normalize(mat3(modelMatrix) * normal);
@@ -1697,6 +1705,121 @@ export class Room {
     S.posts.push(V(lx, 0, lz));
     const O = L.uOcc.value as THREE.Vector4[];
     occ.slice(0, NOCC).forEach(([a, b2, r, k], i) => { O[2 * i].set(a.x, a.y, a.z, r); O[2 * i + 1].set(b2.x, b2.y, b2.z, k); });
+    this.batchStill();
+  }
+
+  /** the still things of the room merged, one mesh for each look they share */
+  private readonly batched: { mesh: THREE.Mesh; at: THREE.Matrix4; look: string }[] = [];
+
+  /**
+   * Hundreds of the room's things never move or change: the books, the trailing plant's leaves,
+   * the radiator's columns, the window's frame. Each its own mesh, each was a draw call of its own
+   * every frame (and another for its shadow), which is what a phone's graphics are slowest at.
+   * Every mesh nothing keeps hold of (no field of the room reaches it, its material or a group it
+   * hangs from: what moves or changes is always so reached) is merged with the others of its look
+   * into one mesh. The originals stay where they were, hidden, for what reaches for them (the red
+   * dot finds what it falls on among them); `stillMoved` says if any ever moves or changes.
+   */
+  private batchStill() {
+    const held = new Set<THREE.Object3D>(), heldMats = new Set<THREE.Material>();
+    const reach = (v: unknown, depth: number) => {
+      if (!v || typeof v !== 'object' || depth > 3) return;
+      if ((v as THREE.Object3D).isObject3D) held.add(v as THREE.Object3D);
+      else if ((v as THREE.Material).isMaterial) heldMats.add(v as THREE.Material);
+      else if (Array.isArray(v)) for (const x of v) reach(x, depth + 1);
+      else if (v instanceof Map) for (const x of v.values()) reach(x, depth + 1);
+      else if (Object.getPrototypeOf(v) === Object.prototype) for (const x of Object.values(v)) reach(x, depth + 1);
+    };
+    for (const [k, v] of Object.entries(this)) if (v !== this.group && k !== 'mats' && k !== 'batched') reach(v, 0);
+    this.group.updateMatrixWorld(true);
+    const looks = new Map<string, THREE.Mesh[]>();
+    this.group.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh || m.children.length || m.renderOrder !== 0 || Array.isArray(m.material)) return;
+      for (let p: THREE.Object3D | null = m; p && p !== this.group; p = p.parent) if (held.has(p) || !p.visible) return;
+      const mat = m.material as THREE.ShaderMaterial, g = m.geometry;
+      if (heldMats.has(mat) || mat.vertexShader !== VERT || mat.fragmentShader !== FRAG || mat.transparent || !g.attributes.normal || g.drawRange.count !== Infinity) return;
+      const key = this.lookOf(m);
+      looks.set(key, [...(looks.get(key) ?? []), m]);
+    });
+    const inv = this.group.matrixWorld.clone().invert();
+    const M = new THREE.Matrix4(), N = new THREE.Matrix3(), p = new THREE.Vector3(), n = new THREE.Vector3();
+    for (const [look, meshes] of looks) {
+      if (meshes.length < 2) continue;
+      let nv = 0, ni = 0;
+      for (const m of meshes) {
+        nv += m.geometry.attributes.position.count;
+        ni += m.geometry.index ? m.geometry.index.count : m.geometry.attributes.position.count;
+      }
+      const pos = new Float32Array(nv * 3), nrm = new Float32Array(nv * 3), uv = new Float32Array(nv * 2), local = new Float32Array(nv * 3);
+      const idx = nv > 65535 ? new Uint32Array(ni) : new Uint16Array(ni);
+      let v0 = 0, i0 = 0;
+      for (const m of meshes) {
+        const g = m.geometry, P = g.attributes.position, Nm = g.attributes.normal, U = g.attributes.uv, I = g.index;
+        M.multiplyMatrices(inv, m.matrixWorld);
+        // (the normal as the shader takes it: the model matrix's 3x3 times it, made unit length)
+        N.setFromMatrix4(M);
+        for (let i = 0; i < P.count; i++) {
+          p.fromBufferAttribute(P, i);
+          local.set([p.x, p.y, p.z], (v0 + i) * 3);
+          p.applyMatrix4(M);
+          pos.set([p.x, p.y, p.z], (v0 + i) * 3);
+          n.fromBufferAttribute(Nm, i).applyMatrix3(N).normalize();
+          nrm.set([n.x, n.y, n.z], (v0 + i) * 3);
+          if (U) uv.set([U.getX(i), U.getY(i)], (v0 + i) * 2);
+        }
+        // (a thing drawn mirrored is wound the other way round: so its faces still face out)
+        const flip = M.determinant() < 0, count = I ? I.count : P.count;
+        for (let i = 0; i < count; i += 3) {
+          const a = I ? I.getX(i) : i, b = I ? I.getX(i + 1) : i + 1, c = I ? I.getX(i + 2) : i + 2;
+          idx[i0 + i] = v0 + a;
+          idx[i0 + i + 1] = v0 + (flip ? c : b);
+          idx[i0 + i + 2] = v0 + (flip ? b : c);
+        }
+        v0 += P.count;
+        i0 += count;
+      }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      g.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
+      g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+      g.setAttribute('local', new THREE.BufferAttribute(local, 3));
+      g.setIndex(new THREE.BufferAttribute(idx, 1));
+      g.computeBoundingSphere();
+      const src = meshes[0].material as THREE.ShaderMaterial;
+      const one = new THREE.Mesh(g, new THREE.ShaderMaterial({
+        uniforms: src.uniforms, vertexShader: VERT, fragmentShader: FRAG, side: src.side, defines: { ...src.defines, BATCHED: 1 },
+      }));
+      one.castShadow = meshes[0].castShadow;
+      one.receiveShadow = meshes[0].receiveShadow;
+      // (a ray, the red dot's, finds what it falls on among the originals)
+      one.raycast = () => {};
+      this.group.add(one);
+      for (const m of meshes) {
+        m.visible = false;
+        m.userData.batched = true;
+        this.batched.push({ mesh: m, at: m.matrixWorld.clone(), look });
+      }
+    }
+  }
+
+  /** what a mesh looks like, all a merged one can share: its material's own settings (not the
+   *  room's light, which all share), its shadow */
+  private lookOf(m: THREE.Mesh) {
+    const mat = m.material as THREE.ShaderMaterial, L = this.lights;
+    const u = Object.entries(mat.uniforms).map(([k, v]) => (v === L[k] ? k : k + '=' + JSON.stringify(v.value)));
+    return [u.join(), mat.side, JSON.stringify(mat.defines), mat.depthTest, mat.depthWrite, mat.colorWrite, mat.blending, m.castShadow, m.receiveShadow].join('|');
+  }
+
+  /** the merged still things that have since moved, been shown or changed (none: they were still) */
+  stillMoved() {
+    return this.batched.filter((b) => b.mesh.visible || this.lookOf(b.mesh) !== b.look
+      || b.mesh.matrixWorld.elements.some((e, i) => Math.abs(e - b.at.elements[i]) > 1e-6)).map((b) => b.mesh);
+  }
+
+  /** how many meshes were merged, into how many */
+  get batchCount() {
+    return { merged: this.batched.length, into: new Set(this.batched.map((b) => b.look)).size };
   }
 
   /** the window opening, for the sunbeam and the dust in it */
@@ -2375,7 +2498,7 @@ export class Room {
     for (const h of hits) {
       let o: THREE.Object3D | null = h.object, seen = true;
       for (; o; o = o.parent) {
-        if (!o.visible || o === this.held) { seen = false; break; }
+        if ((!o.visible && !o.userData.batched) || o === this.held) { seen = false; break; }
       }
       if (!seen || !(h.object as THREE.Mesh).isMesh) continue;
       const p = h.point.clone();
