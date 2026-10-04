@@ -19,6 +19,8 @@ export interface Senses {
   motionShake: boolean; // can the phone itself be shaken?
   /** which ear a touch at this point is on (default: the painting's left half is the left ear) */
   earSide?(px: number, py: number): 'L' | 'R';
+  /** is a touch at this point on the nose */
+  noseAt?(px: number, py: number): boolean;
 }
 
 const HINT = {
@@ -217,6 +219,15 @@ export class Brain {
     const zone = this.senses.zoneAt(c.px, c.py);
     this.pokes = this.pokes.filter((t) => this.time - t < 4);
     this.pokes.push(this.time);
+    // a boop on the nose, once, from a hand it trusts, awake and at its ease: the face screwed up a
+    // moment, a lick of the nose and a shake of the head, and (as often as not) a mrrp; no harm done
+    if (this.pokes.length <= 2 && this.s.trust > 0.35 && (this.mode === 'rest' || this.mode === 'alert' || this.mode === 'enjoy')
+      && this.senses.noseAt?.(c.px, c.py) && this.anim.booped?.()) {
+      this.irritation = clamp(this.irritation + 0.03);
+      this.haptic.tap('light');
+      if (chance(0.4)) this.say('trill', { delay: 1.15 });
+      return;
+    }
     const rough = 0.1 + 0.07 * (this.pokes.length - 1) + (zone === 'face' ? 0.12 : 0);
     this.irritation = clamp(this.irritation + rough * (this.s.trust < 0 ? 1.4 : 1));
     this.anim.twitchEar(zone === 'ear' ? this.earSide(c) : 'both', 1.2);

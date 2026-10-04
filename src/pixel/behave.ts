@@ -315,6 +315,18 @@ export const knead = () => new Layered('knead', 1e9, 0.5, (t) => {
   return { LF: { y: 0.012 + 0.02 * l, flex: 0.4 * l }, RF: { y: 0.012 + 0.02 * r, flex: 0.4 * r }, eyeOpen: 0.3, squint: 0.5 };
 }, 'sphinx');
 
+/** booped on the nose: the face screwed up a moment, the eyes squeezed shut and the whiskers back,
+ *  the head drawn back a little; then a lick of the nose and a quick shake of the head */
+export const boop = () => new Layered('boop', 1.6, 0.06, (t) => {
+  const scr = hump(t, 0.55, 0.08);
+  const lick = t > 0.6 && t < 1.05 ? Math.max(0, Math.sin((t - 0.6) * 28)) : 0;
+  const shake = t > 1.05 ? Math.sin((t - 1.05) * 42) * Math.max(0, 1 - (t - 1.05) / 0.45) : 0;
+  return {
+    eyeOpen: 1 - 0.92 * scr, squint: scr, whisker: -0.7 * scr, earFwd: -0.35 * scr,
+    headPitch: 0.18 * scr, neckPitch: -0.08 * scr, jaw: 0.13 * lick, headRoll: 0.2 * shake,
+  };
+});
+
 /** a sneeze: a breath in with the head up a little and the eyes squeezing shut, then a sharp
  *  little nod down with the sound of it; now and then two */
 export const sneeze = (c: Ctx) => {

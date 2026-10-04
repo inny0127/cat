@@ -661,6 +661,7 @@ export class PixelApp {
       viewW: () => innerWidth,
       motionShake: this.motion.supported,
       earSide: (px, py) => this.senses.earSide(px, py),
+      noseAt: (px, py) => this.senses.noseAt(px, py),
     });
     this.brain.onWantNotify = () => { this.askNotify = true; };
     this.brain.onWantMotion = () => { if (this.motion.canAsk) this.askMotion = true; };

@@ -4,7 +4,7 @@ import { POSES, SIDE_TURN, type Leg, type PoseLayer, type PoseName } from '../ca
 import { NEUTRAL, type Mood } from '../cat3d/mood';
 import type { Avatar } from '../sim/avatar';
 import type { EarMood, TailMood } from '../rig/animator';
-import { byYou, chooseAct, groomChest, groomFlank, knead, restingPose, sneeze, toBed, toWindow, wander, warmUp, washFace, yawn, type Act, type Ctx, sunbathe, Play, Sill, Hunt, Box, Zoomies, Walk, Stare, Rub, scratchEar, wakeUp, stretchSideOn, Greet, Gift, Snub, Beg, PawGlass, TailChase, type GlassFinger, type SillSpot } from './behave';
+import { boop, byYou, chooseAct, groomChest, groomFlank, knead, restingPose, sneeze, toBed, toWindow, wander, warmUp, washFace, yawn, type Act, type Ctx, sunbathe, Play, Sill, Hunt, Box, Zoomies, Walk, Stare, Rub, scratchEar, wakeUp, stretchSideOn, Greet, Gift, Snub, Beg, PawGlass, TailChase, type GlassFinger, type SillSpot } from './behave';
 import { Chase, Startle, type LaserDot } from './chase';
 import { Tease, type Lure } from './tease';
 
@@ -257,6 +257,17 @@ export class PixelAvatar implements Avatar {
     this.cat.place(w.x + (Math.random() - 0.5) * 0.08, w.z + 0.02, (Math.random() < 0.5 ? -1 : 1) * (0.25 + 0.2 * Math.random()));
     this.cat.snap('sit');
     this.act = new Greet(glad, true);
+  }
+
+  /** a boop on the nose: the face screwed up, a lick of the nose, a shake of the head (not in the
+   *  middle of a game, a hunt or a fright, nor up on something or on its way somewhere) */
+  booped() {
+    if (!this.alive || this.isHidden || this.sleep > 0.3 || this.errand || this.trip || this.perched) return false;
+    if (this.act instanceof Chase || this.act instanceof Tease || this.act instanceof Startle || this.act instanceof Play || this.act instanceof Hunt
+      || this.act instanceof Zoomies || this.act instanceof PawGlass || this.act instanceof TailChase) return false;
+    this.stopAct();
+    this.act = boop();
+    return true;
   }
 
   /** hungry or thirsty, the bowl empty: it goes and asks you at the bowl (true if it does: awake,
@@ -700,9 +711,10 @@ export class PixelAvatar implements Avatar {
         this.swatStep(dt);
         return;
       }
-      if (this.act && !(this.act.name === 'knead' && this.kneading)) this.stopAct();
+      // (a boop on the nose is seen through, though)
+      if (this.act && !(this.act.name === 'knead' && this.kneading) && this.act.name !== 'boop') this.stopAct();
       if (!this.act && this.kneading) this.act = knead();
-      if (this.act) this.act.update(dt, c);
+      if (this.act && !this.act.update(dt, c) && this.act.name === 'boop') this.stopAct();
       else m.setPosture(this.wanted() === 'sit' ? 'sit' : atHome ? this.rest : 'loaf');
       this.swatStep(dt);
       return;

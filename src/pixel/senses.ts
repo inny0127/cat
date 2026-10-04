@@ -109,6 +109,14 @@ export class Senses3D {
     return 'flank';
   }
 
+  /** is a point on the screen on the nose (a finger's width of it) */
+  noseAt(px: number, py: number) {
+    const h = this.hitNear(px / this.k, py / this.k);
+    if (!h || h.bone !== 'head') return false;
+    const p = this.local('head', h.point, this.t.a).sub(this.cat.body.eyeOffset);
+    return Math.abs(p.x) < 0.014 && p.y < -0.006 && p.y > -0.032 && p.z > 0.015;
+  }
+
   /** which way the fur lies at a point, on screen (unit vector, y down) */
   grainAt(px: number, py: number): [number, number] {
     const h = this.hitNear(px / this.k, py / this.k);
