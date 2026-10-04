@@ -4,7 +4,7 @@ import { POSES, SIDE_TURN, type Leg, type PoseLayer, type PoseName } from '../ca
 import { NEUTRAL, type Mood } from '../cat3d/mood';
 import type { Avatar } from '../sim/avatar';
 import type { EarMood, TailMood } from '../rig/animator';
-import { chooseAct, groomChest, groomFlank, knead, restingPose, sneeze, toBed, toWindow, wander, warmUp, washFace, yawn, type Act, type Ctx, sunbathe, Play, Sill, Hunt, Box, Zoomies, Walk, Stare, Rub, scratchEar, wakeUp, stretchSideOn, Greet, Gift, type SillSpot } from './behave';
+import { chooseAct, groomChest, groomFlank, knead, restingPose, sneeze, toBed, toWindow, wander, warmUp, washFace, yawn, type Act, type Ctx, sunbathe, Play, Sill, Hunt, Box, Zoomies, Walk, Stare, Rub, scratchEar, wakeUp, stretchSideOn, Greet, Gift, Snub, type SillSpot } from './behave';
 import { Chase, Startle, type LaserDot } from './chase';
 import { Tease, type Lure } from './tease';
 
@@ -141,6 +141,10 @@ export class PixelAvatar implements Avatar {
   /** fingers on the cat now (screen points, set by the app), and what is under one: a bone of
    *  the body and the point on it */
   hands: { sx: number; sy: number }[] = [];
+  /** how long since the last hand left it, and whether it has turned its back on you since it
+   *  was last annoyed */
+  private sinceHands = 0;
+  private snubbed = false;
   feel: ((sx: number, sy: number) => { bone: string; point: THREE.Vector3 } | null) | null = null;
   private rub = 0;
   /** after eating: a wash of the face before it goes */
@@ -602,10 +606,25 @@ export class PixelAvatar implements Avatar {
       return;
     }
     this.nodOff(dt, false);
+    this.sinceHands = this.hands.length ? 0 : this.sinceHands + dt;
+    if (this.mode !== 'annoyed' && this.mode !== 'angry') this.snubbed = false;
     if (this.mode === 'enjoy' || this.mode === 'annoyed' || this.mode === 'angry') {
       // in somebody's hands: stop and stay; tread with the front paws when it is happy there
       // (the hands gone, it may be putting its coat to rights)
       if (this.perched) { this.act!.update(dt, c); return; }
+      // annoyed by them, the hands gone a moment, as often as not it turns its back on you
+      if (this.mode === 'annoyed' && !this.snubbed && this.sinceHands > 1.2 && !this.act) {
+        this.snubbed = true;
+        if (Math.random() < 0.6) this.act = new Snub();
+      }
+      if (this.act instanceof Snub) {
+        if (this.hands.length) this.stopAct();
+        else {
+          if (!this.act.update(dt, c)) this.stopAct();
+          this.swatStep(dt);
+          return;
+        }
+      }
       if (this.act && this.act === this.tidying && !this.hands.length) {
         if (!this.act.update(dt, c)) { this.act.stop(c); this.act = this.tidying = null; }
         this.swatStep(dt);

@@ -766,6 +766,62 @@ export class Greet implements Act {
  * head and its tail up; there it lets it fall at your feet, sits and looks at you and tells you
  * so (a mrrow: look what I have brought you)
  */
+/**
+ * Annoyed by a hand, and the hand gone: it turns its back on you. Up and round on the spot till
+ * it faces away (the window, more or less), and down to sit with its back to you, its ears turned
+ * out to the sides; a while on, once, a look back over its shoulder at you, and away again; and
+ * when it is over it, it is itself again (as often as not putting its coat to rights after).
+ */
+export class Snub implements Act {
+  readonly name = 'snub';
+  phase: 'turn' | 'sit' = 'turn';
+  private t = 0;
+  private set = false;
+  private readonly glance = rand(2.5, 5);
+  constructor(private readonly yaw = Math.PI + (Math.random() < 0.5 ? -1 : 1) * rand(0.3, 0.7)) {}
+  /** its eyes are its own business: not on you (but for the glance back) */
+  get ownGaze() {
+    return true;
+  }
+  /** already lying with its back to you: it stays as it is */
+  private still = false;
+  update(dt: number, c: Ctx) {
+    const m = c.m;
+    this.t += dt;
+    if (this.phase === 'turn') {
+      if (!this.set) {
+        this.set = true;
+        m.lookAt(null);
+        if (Math.abs(wrapA(m.yaw - Math.PI)) < 0.9) {
+          this.still = true;
+          this.phase = 'sit';
+          this.t = 0;
+          return true;
+        }
+      }
+      // (up first: it may have been on its way down)
+      m.setPosture('stand');
+      if (!m.goal) m.walkTo(m.pos.clone(), 0.2, this.yaw, () => { this.phase = 'sit'; this.t = 0; });
+      m.layer = { pose: { earFwd: -0.35 }, w: ease(this.t / 0.4) };
+      // (if it cannot get round, it gives it up)
+      return this.t < 5;
+    }
+    if (!this.still) m.setPosture('sit');
+    // the glance back over its shoulder at you: the head comes round as far as it goes, a moment
+    const g = this.t - this.glance;
+    const look = g > 0 && g < 1.8 ? hump(g, 1.8, 0.45) : 0;
+    m.lookAt(look > 0.05 ? c.viewer() : null, look);
+    m.layer = { pose: { earFwd: -0.35 + 0.45 * look }, w: ease(this.t / 0.5) };
+    // over it: back to itself
+    if (c.mode !== 'annoyed' && c.mode !== 'angry' && this.t > 1.5) return false;
+    return this.t < 45;
+  }
+  stop(c: Ctx) {
+    c.m.layer = null;
+    c.m.lookAt(null);
+  }
+}
+
 export class Gift implements Act {
   readonly name = 'gift';
   phase: 'go' | 'pounce' | 'take' | 'bring' | 'drop' | 'show' = 'go';
