@@ -433,6 +433,7 @@ export class PixelApp {
   private readonly roomView = { target: new THREE.Vector3(), dir: new THREE.Vector3(0, 0.3, 1), dist: 3 };
   /** where the eye is off to the side of the glass, the phone tipped (metres; eased after it) */
   private readonly head = new THREE.Vector2();
+  private headMoving = false;
   private readonly still = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
   private closeDist = 1.5;
   /** how close it comes this time: no closer than keeps the cat's face on the screen */
@@ -646,6 +647,7 @@ export class PixelApp {
     // tipped toward you, the eye gone up, looking down through it)
     const mo = this.motion, k = 1 - Math.exp(-dt * 6);
     const wx = this.still ? 0 : -0.14 * mo.tiltX, wy = this.still ? 0 : 0.08 * mo.tiltY;
+    this.headMoving = Math.abs(wx - this.head.x) + Math.abs(wy - this.head.y) > 0.002;
     this.head.x += (wx - this.head.x) * k;
     this.head.y += (wy - this.head.y) * k;
     this.placeCamera();
@@ -1082,10 +1084,13 @@ export class PixelApp {
 
   private loop(nowMs: number) {
     requestAnimationFrame((t) => this.loop(t));
-    // pixel art wants no more than 60 frames a second, and a cat asleep with nobody touching it
-    // no more than 30 (on a 120 Hz screen, every other frame or three in four are let go): the
-    // phone stays cool and its battery lasts, left open on a desk all evening
-    const calm = this.brain.mode === 'sleep' && nowMs / 1000 - this.touchedAt > 3 && this.room.yarnSpeed < 0.01;
+    // pixel art wants no more than 60 frames a second, and a cat asleep, or sat or lying still
+    // where it is, with nobody touching anything, no more than 30 (on a 120 Hz screen, every other
+    // frame or three in four are let go): the phone stays cool and its battery lasts, left open on
+    // a desk all evening
+    const m = this.cat.motor;
+    const still = this.brain.mode === 'sleep' || (m.speed < 0.02 && Math.abs(m.yawRate) < 0.15 && !m.goal);
+    const calm = still && !this.headMoving && nowMs / 1000 - this.touchedAt > 3 && !this.input.touching && this.room.yarnSpeed < 0.01;
     if (this.last && nowMs - this.last < 1000 / (calm ? 30 : 60) - 3) return;
     const dt = Math.min(0.05, this.last ? (nowMs - this.last) / 1000 : 0.016);
     this.last = nowMs;
