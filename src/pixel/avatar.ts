@@ -233,7 +233,10 @@ export class PixelAvatar implements Avatar {
       return;
     }
     this.stopAct();
-    this.act = new Greet(glad);
+    // (gladdest, now and then it fetches you its toy mouse by way of a hello)
+    const M = this.ground?.mouse();
+    const far = M && M.state === 'floor' && Math.hypot(M.p.x - this.ctx.window.x, M.p.z - this.ctx.window.z) > 0.3;
+    this.act = far && glad > 0.7 && Math.random() < 0.25 ? new Gift() : new Greet(glad);
   }
 
   /** where its mouth is (between the lips, under the nose), in the room */
