@@ -163,14 +163,24 @@ class Seq implements Act {
 }
 
 /** waking of itself from a long sleep: a big yawn where it lies, the head hardly lifted from the
- *  bed; then up, round to face the room, a long stretch toward you, and down onto its chest to
- *  get on with the day */
+ *  bed; then up and round side on to you (whichever way is the less of a turn), a long stretch,
+ *  forelegs and then hind legs, and round to lie down on its chest to get on with the day */
 export const wakeUp = (c: Ctx) => new Seq('wake', [
   () => new Layered('yawn', 2.6, 0.8, () => ({
     jaw: 1, eyeOpen: 0.08, squint: 0.8, neckPitch: -0.2, headPitch: 0, earOut: 0.35, earFwd: -0.3,
   }), null, { at: 0.5, sound: 'yawn', gain: 0.22 }),
-  () => new Walk('wake', [{ to: c.m.pos.clone(), face: c.bed('loaf').yaw, stay: 0.3, posture: 'stand' }], 0.22),
-  () => new Stretch('loaf'),
+  () => {
+    const y = c.bed('loaf').yaw, a = y + Math.PI / 2, b = y - Math.PI / 2;
+    const face = Math.abs(wrapA(a - c.m.yaw)) < Math.abs(wrapA(b - c.m.yaw)) ? a : b;
+    return new Walk('wake', [{ to: c.m.pos.clone(), face, stay: 0.3, posture: 'stand' }], 0.22);
+  },
+  () => {
+    const s = new Stretch('stand');
+    s.hind = Math.random() < 0.8;
+    return s;
+  },
+  // (and round to lie down facing you, in the middle of the bed)
+  () => toBed(c, 'loaf'),
 ]);
 
 /** washing a flank: head round to the side and down, licking in strokes */
@@ -399,7 +409,7 @@ export class Stretch implements Act {
   private pulls = 0;
   /** after the forelegs, now and then the hind legs: up on all fours, one hind leg and then the
    *  other pushed out straight behind, the toes spread, a moment each */
-  private hind = Math.random() < 0.6;
+  hind = Math.random() < 0.6;
   private hindAsked = false;
   constructor(private readonly then: PoseName) {}
   update(dt: number, c: Ctx) {
