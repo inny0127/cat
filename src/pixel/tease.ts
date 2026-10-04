@@ -70,7 +70,11 @@ export class Tease implements Act {
     this.t = 0;
     this.dur = dur;
     this.hit = false;
+    this.best = 1e9;
+    this.stuck = 0;
   }
+  private best = 1e9;
+  private stuck = 0;
 
   /** a point in front of the cat, in its own frame (x to its left, y up, z ahead) */
   private local(c: Ctx, p: THREE.Vector3) {
@@ -135,9 +139,12 @@ export class Tease implements Act {
         return true;
       }
       case 'go': {
-        // after them: to a stop short of where they hang or lie (under them, if in the air)
+        // after them: to a stop short of where they hang or lie (under them, if in the air); no
+        // nearer for a good while (round and round a point it cannot quite turn in to), it stops
         const short = h < 0.09 ? 0.27 : 0.18;
-        if (dist < short + 0.08 && !m.goal) { m.zoom = 0; this.next('watch'); return true; }
+        if (dist < this.best - 0.02) { this.best = dist; this.stuck = 0; }
+        else this.stuck += dt;
+        if ((dist < short + 0.08 && !m.goal) || this.stuck > 1.6) { m.stop(); m.zoom = 0; this.next('watch'); return true; }
         if (!m.goal || Math.hypot(L.p.x - this.aim.x, L.p.z - this.aim.z) > 0.06) {
           this.aim.copy(L.p);
           const stop = new THREE.Vector3(L.p.x - (dx / (dist || 1)) * short, 0, L.p.z - (dz / (dist || 1)) * short);

@@ -99,6 +99,23 @@ describe('the red dot of a laser pointer', () => {
     expect(sb.has('leap')).toBe(true);
   });
 
+  it('round something in the way and on to it, not round and round the way round', () => {
+    const { c, m, world } = room();
+    m.pos.set(0.47, 0, -0.09);
+    m.yaw = 2.5;
+    // (a way round close by and off to the side, as a table leg would give)
+    let asked = 0;
+    (c as unknown as { detour: () => THREE.Vector3 | null }).detour = () => (asked++ === 0 ? new THREE.Vector3(0.37, 0, -0.06) : null);
+    world.dot = { p: new THREE.Vector3(0.2, 0.25, -0.4), on: 'up', n: new THREE.Vector3(0, 0, 1) };
+    const act = new Chase(c), seen = new Set<string>();
+    for (let t = 0; t < 6 && !seen.has('rear'); t += 0.025) {
+      act.update(0.025, c);
+      m.update(0.025);
+      seen.add(act.phase);
+    }
+    expect(seen.has('rear')).toBe(true);
+  });
+
   it('after long enough, it has had enough: down on its chest, only watching', () => {
     const { c, m, world } = room();
     world.dot = floorDot(0.1, 0.5);

@@ -1944,7 +1944,7 @@ export class Room {
   private readonly wand = {
     rod: new THREE.Group() as THREE.Object3D, lure: new THREE.Group() as THREE.Object3D,
     held: false, tip: new THREE.Vector3(), tipV: new THREE.Vector3(), aim: new THREE.Vector3(), end: new THREE.Vector3(),
-    restTip: new THREE.Vector3(0.1, 0.006, 0.47), restEnd: new THREE.Vector3(0.55, 0.006, 1.15),
+    restTip: new THREE.Vector3(0.17, 0.006, 0.47), restEnd: new THREE.Vector3(0.6, 0.006, 1.15),
     pos: new THREE.Vector3(), prev: new THREE.Vector3(), vel: new THREE.Vector3(), L: 0.27, pinned: 0, pinAt: new THREE.Vector3(),
     ring: 0, slack: 0,
   };

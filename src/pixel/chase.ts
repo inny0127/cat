@@ -62,8 +62,13 @@ export class Chase implements Act {
   private readonly from = new THREE.Vector3();
   /** asked to stop (sleep, the bowl): down off the sill first if it is up there */
   private leaving = false;
-  /** a way round something in the way */
+  /** a way round something in the way (and how long it has been going that way) */
   private via: THREE.Vector3 | null = null;
+  private viaT = 0;
+  /** going after it: the nearest it has come yet, and how long since it came any nearer (a cat
+   *  going round and round a point it cannot quite turn in to is better stopped and started again) */
+  private best = 1e9;
+  private stuck = 0;
   /** at the end, a wash (as if nothing had happened) */
   private wash: Act | null = null;
   private readonly sill: SillSpot | null;
@@ -102,6 +107,8 @@ export class Chase implements Act {
     this.phase = phase;
     this.t = 0;
     this.dur = dur;
+    this.best = 1e9;
+    this.stuck = 0;
   }
 
   /** keep track of the dot */
@@ -147,11 +154,14 @@ export class Chase implements Act {
 
   /** after the dot, running or creeping, to a point short of it, facing it (round anything in the
    *  way); re-aimed whenever the dot has gone somewhere else */
-  private goAfter(c: Ctx, L: LaserDot, short: number, speed: number) {
+  private goAfter(c: Ctx, L: LaserDot, short: number, speed: number, dt: number) {
     const m = c.m, T = this.T;
     if (this.via) {
-      if (Math.hypot(this.via.x - m.pos.x, this.via.z - m.pos.z) > 0.08 && m.goal) return;
+      // (near enough the way round, or long enough at it: on to the dot itself)
+      this.viaT += dt;
+      if (Math.hypot(this.via.x - m.pos.x, this.via.z - m.pos.z) > 0.12 && m.goal && this.viaT < 2.5) return;
       this.via = null;
+      this.aim.set(NaN, 0, 0);
     }
     if (m.goal && Math.hypot(T.x - this.aim.x, T.z - this.aim.z) < 0.05) return;
     this.aim.copy(T);
@@ -162,6 +172,7 @@ export class Chase implements Act {
     const round = c.detour(m.pos, stop, 0.12);
     if (round) {
       this.via = round;
+      this.viaT = 0;
       m.walkTo(round, speed, null, null, true);
       return;
     }
@@ -217,7 +228,7 @@ export class Chase implements Act {
         if (this.ds > 0.6 || d > 0.95) { this.next('run'); return true; }
         if (d < 0.33 && !this.via) { m.stop(); this.next('wiggle', rand(0.35, 0.9)); return true; }
         m.setPosture('crouch');
-        this.goAfter(c, L!, 0.27, 0.2);
+        this.goAfter(c, L!, 0.27, 0.2, dt);
         m.layer = {
           pose: { ...keen, hipY: 0.135, neckPitch: -0.45, headPitch: 0.1, tailLift: -0.35, tailSide: 0.3 * Math.sin(this.t * 6.5) },
           w: Math.min(1, this.t / 0.3),
@@ -237,13 +248,16 @@ export class Chase implements Act {
           else { this.leaps = 0; this.next('leap', rand(0.5, 1)); }
           return true;
         }
+        // (no nearer for a good while: stopped, and a fresh start at it)
+        if (d < this.best - 0.02) { this.best = d; this.stuck = 0; }
+        else if ((this.stuck += dt) > 1.6) { m.stop(); m.zoom = 0; this.best = 1e9; this.stuck = 0; this.via = null; this.aim.set(NaN, 0, 0); }
         // (close, and running straight at a dot on the floor: a running pounce)
         const err = Math.abs(wrapA(Math.atan2(L!.p.x - m.pos.x, L!.p.z - m.pos.z) - m.yaw));
         if (flat && d < 0.42 && d > 0.2 && m.speed > 0.55 && err < 0.3) { this.pounce(c); return true; }
         const fast = d > 0.5 || this.ds > 0.6;
         m.setPosture('stand');
         m.zoom = fast ? 0.8 : 0.3;
-        this.goAfter(c, L!, short, fast ? rand(1.05, 1.3) : 0.5);
+        this.goAfter(c, L!, short, fast ? rand(1.05, 1.3) : 0.5, dt);
         m.layer = { pose: { ...keen, hipY: 0.185, neckPitch: 0.05, tailLift: 0.45, tailCurve: -0.2 }, w: Math.min(1, this.t / 0.15) };
         if (Math.abs(m.yawRate) > 2.6 && m.speed > 0.5 && this.scrabbleIn <= 0) {
           this.scrabbleIn = 0.6;
@@ -531,10 +545,13 @@ export class Chase implements Act {
         m.yaw = wrapA(m.yaw + clamp(wrapA(face - m.yaw), -3, 3) * Math.min(1, dt * 5));
         // (a quick spring along the sill to it, when it is off a way)
         if (L && L.on === 'sill' && d > 0.16 && this.t > 0.35 && Math.abs(wrapA(face - m.yaw)) < 0.5) {
-          this.from.copy(m.pos);
           this.pinAt.set(sx(at.x - (dx / d) * 0.12), 0, clamp(at.z - (dz / d) * 0.12, S.seat.z - 0.02, S.seat.z + 0.1));
-          this.next('spring', 0.3);
-          return true;
+          // (only if it gets it anywhere: off past the radio, it stays and watches it there)
+          if (Math.hypot(this.pinAt.x - m.pos.x, this.pinAt.z - m.pos.z) > 0.05) {
+            this.from.copy(m.pos);
+            this.next('spring', 0.3);
+            return true;
+          }
         }
         const wg = Math.sin(this.t * Math.PI * 2 * 5);
         const pat = L && d < 0.2 ? Math.max(0, Math.sin(this.t * 7)) : 0;
