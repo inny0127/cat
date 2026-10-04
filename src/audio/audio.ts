@@ -190,6 +190,7 @@ export class CatAudio {
       ['scoop', () => S.litterScoop(sr), 2],
       ['crunch', () => S.crunch(sr), 4],
       ['lap', () => S.lap(sr), 4],
+      ['lick', () => S.lick(sr), 3],
       ['scratch', () => S.scratch(sr), 3],
       ['scrabble', () => S.scrabble(sr), 2],
       ['rugScratch', () => S.rugScratch(sr), 3],

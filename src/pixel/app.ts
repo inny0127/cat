@@ -1146,6 +1146,12 @@ export class PixelApp {
     this.avatar.update(dt);
     const landed = this.avatar.pawLanded;
     this.cat.update(dt);
+    // (its tongue on your finger: each lick felt, a little rasp, and heard, hardly)
+    if (this.cat.motor.lickLanded) {
+      this.cat.motor.lickLanded = false;
+      this.haptic.tapSoon('light');
+      this.audio.play('lick', { gain: 0.16, pan: this.catPan() });
+    }
     // (a paw patted at the glass where your finger is: felt under it, heard, softly, and its print
     // left on the glass where the paw is, to dry)
     if (landed) {

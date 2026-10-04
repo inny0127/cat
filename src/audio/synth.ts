@@ -547,6 +547,22 @@ export function sigh(sr: number) {
   return normalize(fade(out, sr, 0.02, 0.1), 0.4);
 }
 
+/** a lick: the rough tongue drawn once over skin, a short dry rasp (the papillae catching), with
+ *  a faint wet tick where it starts */
+export function lick(sr: number) {
+  const dur = rnd(0.11, 0.15), n = Math.floor(dur * sr);
+  const out = new Float32Array(n);
+  const f = new Biquad(sr, 'bp', rnd(2600, 3600), 1.1);
+  for (let i = 0; i < n; i++) {
+    const x = i / n;
+    // (the rasp: noise in grains, catching and letting go, swelling and dying away)
+    const grain = 0.55 + 0.45 * Math.sin(i / sr * 2 * Math.PI * rnd(150, 190));
+    out[i] = f.run(noise()) * Math.sin(Math.PI * x) ** 1.4 * grain;
+  }
+  clicks(out, sr, 0.004, 2, 0.01, 1500, 3000, 0.25, 0.002);
+  return normalize(fade(out, sr, 0.004, 0.02), 0.45);
+}
+
 /** a cat's sneeze: a faint quick breath in, then a tiny sharp "tch", a burst of breath snapped off */
 export function sneeze(sr: number) {
   const n = Math.floor(0.32 * sr);

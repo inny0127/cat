@@ -242,13 +242,14 @@ export const groomFlank = () => {
   const side = Math.random() < 0.5 ? 1 : -1, d = rand(5, 9);
   return new Layered('groom', d, 0.7, (t) => ({
     neckYaw: side * 1.05, headYaw: side * 0.7, neckPitch: -0.35, headPitch: -0.35 + 0.13 * Math.sin(t * 9),
-    jaw: 0.12 * Math.max(0, Math.sin(t * 9)), eyeOpen: 0.35, squint: 0.3,
+    jaw: 0.12 * Math.max(0, Math.sin(t * 9)), tongue: 0.8 * Math.max(0, Math.sin(t * 9)), tongueUp: -0.3, eyeOpen: 0.35, squint: 0.3,
   }));
 };
 
 /** washing the chest: chin tucked, licking down the bib */
 export const groomChest = () => new Layered('groom chest', rand(3, 6), 0.6, (t) => ({
-  neckPitch: -0.75, headPitch: -0.55 + 0.12 * Math.sin(t * 8.5), jaw: 0.1 * Math.max(0, Math.sin(t * 8.5)), eyeOpen: 0.4,
+  neckPitch: -0.75, headPitch: -0.55 + 0.12 * Math.sin(t * 8.5), jaw: 0.1 * Math.max(0, Math.sin(t * 8.5)),
+  tongue: 0.75 * Math.max(0, Math.sin(t * 8.5)), tongueUp: -0.5, eyeOpen: 0.4,
 }));
 
 /** washing the face: sitting up, a forepaw raised to the mouth and licked, then drawn up over the
@@ -276,6 +277,7 @@ export const washFace = () => {
       headPitch: -0.32 - 0.25 * reach * (1 - w) + 0.1 * w, headYaw: s * 0.35 * w, headRoll: s * 0.4 * w,
       neckPitch: -0.1 * reach,
       jaw: lick ? 0.16 * Math.max(0, Math.sin(t * 15)) : 0.04,
+      tongue: lick ? 0.9 * Math.max(0, Math.sin(t * 15)) : 0, tongueUp: -0.2,
       eyeOpen: 0.3, squint: 0.55, earFwd: -0.2 * w,
     };
     return pose;
@@ -325,7 +327,7 @@ export const boop = () => new Layered('boop', 1.6, 0.06, (t) => {
   const shake = t > 1.05 ? Math.sin((t - 1.05) * 42) * Math.max(0, 1 - (t - 1.05) / 0.45) : 0;
   return {
     eyeOpen: 1 - 0.92 * scr, squint: scr, whisker: -0.7 * scr, earFwd: -0.35 * scr,
-    headPitch: 0.18 * scr, neckPitch: -0.08 * scr, jaw: 0.13 * lick, headRoll: 0.2 * shake,
+    headPitch: 0.18 * scr, neckPitch: -0.08 * scr, jaw: 0.13 * lick, tongue: lick, tongueUp: 1, headRoll: 0.2 * shake,
   };
 });
 
@@ -1050,6 +1052,7 @@ export class PawGlass implements Act {
         pose: {
           [this.bout?.paw ?? 'LF']: { planted: 0, frame: 0, x: 0.012, y: 0.06 + 0.15 * reach, z: 0.08 + 0.055 * reach, flex: 0.85 },
           headPitch: -0.32 - 0.25 * reach, neckPitch: -0.1 * reach, jaw: this.t > 0.35 && this.t < 1.5 ? 0.16 * Math.max(0, Math.sin(this.t * 15)) : 0.04,
+          tongue: this.t > 0.35 && this.t < 1.5 ? 0.9 * Math.max(0, Math.sin(this.t * 15)) : 0, tongueUp: -0.2,
           eyeOpen: 0.35, squint: 0.5,
         },
         w: 1,

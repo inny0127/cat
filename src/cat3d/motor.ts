@@ -292,6 +292,20 @@ export class Motor {
     this.voice = { kind, t: -delay, dur: Math.max(0.08, dur) };
   }
 
+  /** licks (a hand held still by its face): how far through, how many */
+  private licks: { t: number; n: number } | null = null;
+  /** n rough licks, about three a second: the tongue out, tip up, and in again each time */
+  lick(n = 4) {
+    this.licks = { t: 0, n };
+  }
+  get licking() {
+    return this.licks !== null;
+  }
+  /** set as each lick lands (for whoever wants to feel it or hear it, to clear) */
+  lickLanded = false;
+  /** the tip of the tongue left out between the lips, forgotten there (0 .. 1): a blep */
+  blep = 0;
+
   /** asleep and dreaming: a forepaw twitches, the whiskers quiver */
   dreamTwitch() {
     this.dreamPaw = Math.random() < 0.5 ? 'LF' : 'RF';
@@ -511,6 +525,29 @@ export class Motor {
         p.earFwd += 0.4 * lift;
         if (x > 1.25) this.voice = null;
       }
+    }
+    // licks: each one the tongue out, its tip curled up, and back in, the head lifting into it
+    const L = this.licks;
+    if (L) {
+      const per = 0.34, k0 = L.t / per;
+      L.t += dt;
+      const k = L.t / per;
+      if (Math.floor(k0 + 0.5) !== Math.floor(k + 0.5) && k < L.n) this.lickLanded = true;
+      if (k >= L.n) this.licks = null;
+      else {
+        const s = Math.sin(Math.PI * (k - Math.floor(k)));
+        p.tongue = Math.max(p.tongue, s);
+        p.tongueUp += (0.7 - p.tongueUp) * Math.min(1, 3 * s);
+        p.jaw = Math.max(p.jaw, 0.13 * s);
+        p.headPitch += 0.1 * s;
+        p.eyeOpen = Math.min(p.eyeOpen, 0.5);
+      }
+    }
+    // a blep: the tip of the tongue just showing
+    if (this.blep > 0.01) {
+      p.tongue = Math.max(p.tongue, 0.38 * this.blep);
+      p.tongueUp = Math.min(p.tongueUp, -0.15 * this.blep);
+      p.jaw = Math.max(p.jaw, 0.035 * this.blep);
     }
     // leaning into a hand
     {

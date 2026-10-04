@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bell, pencil, rugScratch, rustle, shatter, sigh, sneeze, yawn } from '../src/audio/synth';
+import { bell, lick, pencil, rugScratch, rustle, shatter, sigh, sneeze, yawn } from '../src/audio/synth';
 
 const check = (d: Float32Array, sr: number, minS: number, maxS: number) => {
   expect(d.length / sr).toBeGreaterThan(minS);
@@ -13,6 +13,10 @@ const check = (d: Float32Array, sr: number, minS: number, maxS: number) => {
 describe("the cat's small sounds", () => {
   it('a pull of claws through the rug is a short, dry rasp', () => {
     for (let i = 0; i < 4; i++) check(rugScratch(22050), 22050, 0.2, 0.4);
+  });
+
+  it('a lick is a short dry rasp, quieter than a scratch', () => {
+    for (let i = 0; i < 6; i++) check(lick(22050), 22050, 0.08, 0.2);
   });
 
   it('a sneeze is short', () => {

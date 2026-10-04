@@ -154,6 +154,13 @@ export class PixelAvatar implements Avatar {
   private snubbed = false;
   feel: ((sx: number, sy: number) => { bone: string; point: THREE.Vector3 } | null) | null = null;
   private rub = 0;
+  /** a hand held still: since when, and where (screen px); what it licks (null: nothing), and a
+   *  while before it licks a hand again */
+  private still = { t: 0, sx: 0, sy: 0 };
+  private lickAt: THREE.Vector3 | null = null;
+  private lickRest = 15;
+  /** the tip of its tongue left out (how long yet), and how far out it is now */
+  private blepFor = 0;
   /** after eating: a wash of the face before it goes */
   private washAfter: Act | null = null;
   private rubSide = 1;
@@ -185,6 +192,57 @@ export class PixelAvatar implements Avatar {
     else if (b === 'head' || b.startsWith('ear')) { T.roll = side * (0.3 + rubbing) * keen; T.yaw = side * 0.22 * keen; }
     else if (b === 'neck1' || b === 'neck2') { T.pitch = 0.2 * keen; T.roll = side * 0.15 * keen; }
     else if (b === 'hips' || b === 'tail0' || b === 'tail1') T.rump = keen;
+  }
+
+  /**
+   * A hand held still on its head (or its cheek, under its chin) while it is in bliss under it,
+   * from a cat that trusts you: it turns its face up to the hand and licks it, a few rough licks
+   * of the tongue, the eyes half shut, and is done; now and then, not every time.
+   */
+  private lickHand(dt: number) {
+    const m = this.cat.motor, S = this.still, h = this.hands[0];
+    this.lickRest = Math.max(0, this.lickRest - dt);
+    if (this.lickAt) {
+      if (m.licking) { m.lookAt(this.lickAt, 1); return; }
+      this.lickAt = null;
+      m.lookAt(null);
+    }
+    if (!h) { S.t = 0; return; }
+    if (Math.hypot(h.sx - S.sx, h.sy - S.sy) > 8) { S.t = 0; S.sx = h.sx; S.sy = h.sy; return; }
+    S.t += dt;
+    // (treading the bed with its forepaws as it purrs is no bar to it)
+    if (S.t < 1.6 || this.mode !== 'enjoy' || this.mood.trust < 0.55 || this.lickRest > 0 || (this.act && this.act.name !== 'knead') || this.errand || this.trip
+      || !this.alive || this.sleep > 0.3 || !this.feel || Math.random() > dt * 1.2) return;
+    const hit = this.feel(h.sx, h.sy);
+    if (!hit || !/^(head|jaw|neck|ear)/.test(hit.bone)) return;
+    // (the hand is on this side of the glass: the face goes up and out to it, not to the spot on
+    // its own head)
+    this.cat.group.updateMatrixWorld(true);
+    const E = this.cat.body.eyes(this.eyesAt).applyMatrix4(this.cat.group.matrixWorld);
+    const toYou = this.ctx.viewer().sub(E).normalize();
+    this.lickAt = hit.point.clone().addScaledVector(toYou, 0.09).setY(Math.max(hit.point.y, E.y) + 0.02);
+    m.lick(3 + Math.floor(Math.random() * 3));
+    this.lickRest = 25 + Math.random() * 25;
+    // (and after, as often as not, the tip of the tongue forgotten out a moment)
+    if (Math.random() < 0.35) this.blepFor = -(1.8 + Math.random());
+  }
+
+  /** a blep: after a lick or a wash, now and then the tip of the tongue stays out a few seconds,
+   *  forgotten there, until something else takes its mind */
+  private blepNow(dt: number) {
+    const m = this.cat.motor;
+    // (a negative time: waiting to start, after the licks)
+    if (this.blepFor < 0) {
+      this.blepFor = m.licking ? this.blepFor : Math.min(0, this.blepFor + dt);
+      if (this.blepFor === 0) this.blepFor = 2.5 + Math.random() * 4;
+    } else this.blepFor = Math.max(0, this.blepFor - dt);
+    const on = this.blepFor > 0 && !m.licking && this.alive && !m.hissNow;
+    m.blep += ((on ? 1 : 0) - m.blep) * Math.min(1, dt * (on ? 3 : 8));
+  }
+
+  /** after a wash (and, by the app, a lick of the nose), now and then a blep */
+  maybeBlep(p = 0.15) {
+    if (this.blepFor === 0 && Math.random() < p) this.blepFor = -(0.6 + Math.random());
   }
 
   /** a sound it turned to: where, for how much longer it looks, and whether (and which way) it
@@ -712,14 +770,14 @@ export class PixelAvatar implements Avatar {
         }
       }
       if (this.act && this.act === this.tidying && !this.hands.length) {
-        if (!this.act.update(dt, c)) { this.act.stop(c); this.act = this.tidying = null; }
+        if (!this.act.update(dt, c)) { this.act.stop(c); this.maybeBlep(0.15); this.act = this.tidying = null; }
         this.swatStep(dt);
         return;
       }
       // (a boop on the nose is seen through, though)
       if (this.act && !(this.act.name === 'knead' && this.kneading) && this.act.name !== 'boop') this.stopAct();
       if (!this.act && this.kneading) this.act = knead();
-      if (this.act && !this.act.update(dt, c) && this.act.name === 'boop') this.stopAct();
+      if (this.act && !this.act.update(dt, c) && this.act.name === 'boop') { this.stopAct(); this.maybeBlep(0.3); }
       else m.setPosture(this.wanted() === 'sit' ? 'sit' : atHome ? this.rest : 'loaf');
       this.swatStep(dt);
       return;
@@ -741,6 +799,8 @@ export class PixelAvatar implements Avatar {
         if (this.act instanceof Chase) this.chaseRest = this.act.tired ? 90 : 2;
         if (this.act instanceof Tease) this.teaseRest = this.act.tired ? 60 : 2;
         if (this.act instanceof Hunt) this.huntRest = 40 + Math.random() * 60;
+        // (a wash done, or the nose licked: now and then the tip of the tongue stays out)
+        if (/^(wash|groom|boop)/.test(this.act.name)) this.maybeBlep(this.act.name === 'boop' ? 0.3 : 0.15);
         this.act = null;
       }
       return;
@@ -826,6 +886,8 @@ export class PixelAvatar implements Avatar {
     }
     if (this.errand) this.doErrand(dt);
     this.leanIntoHand(dt);
+    this.lickHand(dt);
+    this.blepNow(dt);
     this.playRest = Math.max(0, this.playRest - dt);
     this.huntRest = Math.max(0, this.huntRest - dt);
     this.pawRest = Math.max(0, this.pawRest - dt);
@@ -1142,7 +1204,9 @@ export class PixelAvatar implements Avatar {
         return;
       }
       const chew = e.reason === 'eat' ? 0.25 * Math.max(0, Math.sin(e.t * 8)) : 0.14 * Math.max(0, Math.sin(e.t * 15));
-      m.layer = { pose: { neckPitch: -0.85, headPitch: -0.25, jaw: chew }, w: Math.min(1, e.t * 1.5) };
+      // (drinking, the tongue lapping, curled down to scoop: four or five laps a second)
+      const lap = e.reason === 'drink' ? Math.max(0, Math.sin(e.t * 15)) : 0;
+      m.layer = { pose: { neckPitch: -0.85, headPitch: -0.25, jaw: chew, tongue: lap, tongueUp: -0.9 }, w: Math.min(1, e.t * 1.5) };
     } else if (e.phase === 'off' && Math.abs(m.pos.x) > this.offstage) {
       m.zoom = 0;
       m.layer = null;

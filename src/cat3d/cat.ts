@@ -5,6 +5,7 @@ import { makeSkinMaterial } from './skin';
 import { makeStrands } from './strands';
 import { makeEye, setLids, type CatEye } from './eye';
 import { makeWhiskers, type Whiskers } from './whiskers';
+import { makeTongue, poseTongue, type Tongue } from './tongue';
 import { Kin } from './kin';
 import { Body } from './body';
 import { Tail } from './tail';
@@ -182,7 +183,18 @@ export class Cat3D {
     this.whiskers = makeWhiskers(v3(LM.padL), v3(LM.padR), v3(LM.eyeL), v3(LM.eyeR));
     this.whiskers.mesh.position.copy(headRest).negate();
     head.add(this.whiskers.mesh);
+    // the tongue, on the jaw: its root back on the floor of the mouth, a little behind the lips
+    const jaw = byName.get('jaw');
+    const jawDef = asset.bones.find((b) => b.name === 'jaw');
+    if (jaw && jawDef) {
+      const nose = v3(LM.nose);
+      this.tongue = makeTongue(new THREE.Vector3(0, nose.y - 0.0182, nose.z - 0.031), v3(jawDef.pos), shared as unknown as Record<string, { value: unknown }>);
+      jaw.add(this.tongue.mesh);
+    }
   }
+
+  /** its tongue (on the jaw), if the model has a jaw */
+  tongue: Tongue | null = null;
 
   /** a sigh: the next breath slow and deep */
   private sighT = -1;
@@ -439,6 +451,7 @@ export class Cat3D {
     if (this.rippleAt >= 0 && (this.rippleAt += dt / 0.32) > 1.3) this.rippleAt = -1;
     this.shared.uRipple.value = this.rippleAt >= 0 ? 0.0065 * Math.min(1, 0.4 + this.ripple) : 0;
     this.shared.uRippleAt.value = Math.max(0, this.rippleAt);
+    if (this.tongue) poseTongue(this.tongue, p.tongue, p.tongueUp);
     if (this.skin) {
       this.skin.uniforms.uJawOpen.value = p.jaw;
       this.skin.uniforms.uSnarl.value = Math.max(motor.feel.snarl, motor.hissNow);

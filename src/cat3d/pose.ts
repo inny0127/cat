@@ -41,6 +41,8 @@ export interface Pose {
   earFwd: number; earOut: number; earFlat: number;
   /** face */
   eyeOpen: number; squint: number; pupil: number; whisker: number; jaw: number;
+  /** the tongue: how far out (0 in .. 1 out past the lips), and its tip curled up (+) or down (-) */
+  tongue: number; tongueUp: number;
   /** how deep the breathing is */
   breath: number;
   /** fur standing on end */
@@ -60,7 +62,7 @@ const BASE: Pose = {
   pastern: 0.35, hindFlat: 0,
   tailLift: 0.25, tailSide: 0, tailCurve: -0.5, tailCurl: 0.3, tailHook: 0, tailSag: 0,
   earFwd: 0.2, earOut: 0, earFlat: 0,
-  eyeOpen: 0.95, squint: 0.03, pupil: 0.7, whisker: 0, jaw: 0,
+  eyeOpen: 0.95, squint: 0.03, pupil: 0.7, whisker: 0, jaw: 0, tongue: 0, tongueUp: 0,
   breath: 0.6, puff: 0,
 };
 
@@ -224,7 +226,7 @@ export const GROUPS = {
   hind: ['LH', 'RH', 'hindFlat'],
   tail: ['tailLift', 'tailSide', 'tailCurve', 'tailCurl', 'tailHook', 'tailSag'],
   ears: ['earFwd', 'earOut', 'earFlat'],
-  face: ['eyeOpen', 'squint', 'pupil', 'whisker', 'jaw', 'breath', 'puff'],
+  face: ['eyeOpen', 'squint', 'pupil', 'whisker', 'jaw', 'tongue', 'tongueUp', 'breath', 'puff'],
 } as const;
 export type Group = keyof typeof GROUPS;
 
