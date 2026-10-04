@@ -276,7 +276,7 @@ export class SmoothStage {
     this.scene.background = this.paper;
     this.camera = new THREE.PerspectiveCamera(28, innerWidth / innerHeight, 0.01, 40);
     this.askSS = opts.ss;
-    this.lineCss = opts.line ?? 1.25;
+    this.lineCss = opts.line ?? 0.75;
     this.whiskerCss = opts.whisker ?? 1.1;
 
     const s = (opts.shadowSize ?? 0.9) / 2;
