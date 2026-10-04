@@ -111,6 +111,8 @@ npx cap open android     # Android Studio 에서 실행/서명
 
 Android 알림 아이콘으로 `android/app/src/main/res/drawable/ic_stat_cat.png`(흰색 실루엣)를 넣으면 됩니다. `public/icons/badge-96.png`를 그대로 써도 됩니다.
 
+앱 아이콘(`public/icons`)은 앱의 픽셀아트로 그렸어요: 랩이 고양이를 64×64 아트 픽셀로 그리고, 노을 진 창가 앞에 앉혀 정수 배로 키웁니다(안드로이드 원형 마스크용은 고양이를 조금 작게). 알림 배지는 같은 고양이 머리의 실루엣이에요. 다시 만들 땐 개발 서버를 켜고 `node tools/icons.mjs`. 네이티브 프로젝트의 아이콘은 `npx @capacitor/assets generate`에 `icon-512.png`를 넘기면 됩니다.
+
 ## 구조
 
 ```
