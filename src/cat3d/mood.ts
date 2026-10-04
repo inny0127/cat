@@ -69,7 +69,10 @@ export function eyesFor(m: Mood): EyeLook {
   pupil += (1 - pupil) * (0.8 * m.fear + 0.55 * m.arousal);
   pupil -= pupil * 0.6 * m.irritation * calm;
   pupil -= 0.06 * m.pleasure;
-  const open = 0.95 - 0.42 * m.pleasure - 0.6 * m.sleepy - 0.32 * m.sick - 0.24 * m.irritation * calm + 0.05 * (m.fear + m.arousal);
+  // (a little sleepiness, as of a cat awake and at its ease, leaves the eyes open: a pixel off them
+  // and they look sullen, not at peace; it is drowsiness that brings the lids down)
+  const drowsy = clamp01((m.sleepy - 0.15) / 0.85);
+  const open = 0.95 - 0.42 * m.pleasure - 0.6 * drowsy - 0.32 * m.sick - 0.24 * m.irritation * calm + 0.05 * (m.fear + m.arousal);
   const squint = 0.03 + 0.3 * m.pleasure + 0.32 * m.irritation * calm + 0.25 * m.sick;
   const fondness = clamp01((m.pleasure - 0.2) / 0.6) * clamp01((m.trust + 0.1) / 0.6) * calm;
   return {
