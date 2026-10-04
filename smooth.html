@@ -79,6 +79,8 @@
       opacity: 0.8;
       pointer-events: none;
     }
+    .still #stage { transition: none; }
+    .still #loading, .still #hint, .still #credit { display: none; }
     @media (prefers-reduced-motion: reduce) {
       #loading span { animation: none; }
     }

@@ -425,18 +425,35 @@ export class SmoothStage {
   }
 }
 
+/** how the eyes are drawn: their size (the pixel cat's are 1.3 times the model's, for an eye a few
+ *  pixels across), how far a bigger eye is set back into its socket (1: its front where the model's
+ *  is, so it grows into the face and not out of it), the lids' dark margin (eyeball radii; the
+ *  pixel cat's 0.16 is about an art pixel) and the size of the spark of light in it */
+export interface EyeLook {
+  scale: number;
+  /** how much of that growth goes into the eye's depth too (0: wider and taller only, its front
+   *  no further out of the face; 1: a bigger ball) */
+  deep: number;
+  recess: number;
+  rim: number;
+  glint: number;
+}
+export const EYE_LOOK: EyeLook = { scale: 1.2, deep: 1, recess: 0.5, rim: 0.1, glint: 0.09 };
+
 /**
  * The eyes as pixel art draws them hold a few pixel-art habits that only make sense at a few
- * pixels across: a pupil slit exactly one art pixel wide and a square spark of light. Drawn
- * smooth, the slit keeps a width of its own (a narrow spindle, as a cat's is by day) and the spark
- * is round. The eye shader is shared with the pixel cat, so it is changed here, on this cat's own
- * copy, and the file is left as it is.
+ * pixels across: a pupil slit exactly one art pixel wide, a square spark of light, a lid margin an
+ * art pixel thick, and the whole eye half as big again, grown about its middle (out of its socket).
+ * Drawn smooth, the slit keeps a width of its own (a narrow spindle, as a cat's is by day), the
+ * spark is round, the margin a fine line, the eye a little bigger and sitting in its socket. The
+ * eye shader is shared with the pixel cat, so it is changed here, on this cat's own copy, and the
+ * file is left as it is.
  */
 function smoothEyes(cat: Cat3D) {
   for (const e of cat.eyes) {
     const m = e.eyeMat;
     const before = m.fragmentShader;
-    m.fragmentShader = m.fragmentShader
+    m.fragmentShader = 'uniform float uRimW;\n' + m.fragmentShader
       // the slit: never narrower than a sliver of the iris (it was one art pixel)
       .replace('vec2 q = ip / vec2(mix(0.5 * pxI, max(0.5 * pxI, 0.42), open), 0.46 + 0.1 * uPupil);',
         'vec2 q = ip / vec2(mix(max(0.5 * pxI, 0.075), max(0.5 * pxI, 0.42), open), 0.46 + 0.1 * uPupil);')
@@ -445,8 +462,29 @@ function smoothEyes(cat: Cat3D) {
         'float pupil = open < 0.5 ? step(abs(q.x), 1.0 - q.y * q.y) * step(abs(q.y), 1.0) : step(length(q), 1.0);')
       // the sparks of light round, not square
       .replace('float glint = max(step(max(gq.x, gq.y), 0.12) * step(0.3, uShine), step(max(gq2.x, gq2.y), 0.05) * step(0.75, uShine));',
-        'float glint = max(step(length(gq), 0.12) * step(0.3, uShine), step(length(gq2), 0.05) * step(0.75, uShine));');
-    if (m.fragmentShader === before) console.warn('smooth eyes: the eye shader has changed; the eyes are drawn as pixel art draws them');
+        'float glint = max(step(length(gq), 0.12) * step(0.3, uShine), step(length(gq2), 0.05) * step(0.75, uShine));')
+      // the lids' dark margin as thick as asked
+      .replace('float rim = uFlat > 0.5 ? 0.16 : 0.07;', 'float rim = uFlat > 0.5 ? uRimW : 0.07;');
+    if (m.fragmentShader.split('\n').length !== before.split('\n').length + 1 || !m.fragmentShader.includes('uRimW : 0.07') || m.fragmentShader.includes('max(gq.x, gq.y), 0.12)')) {
+      console.warn('smooth eyes: the eye shader has changed; some of the eyes are drawn as pixel art draws them');
+    }
+    m.uniforms.uRimW = { value: EYE_LOOK.rim };
     m.needsUpdate = true;
+    e.group.userData.rest = e.group.position.clone();
+  }
+  setEyeLook(cat, EYE_LOOK);
+}
+
+/** size, depth, margin and spark of the eyes (see EyeLook) */
+export function setEyeLook(cat: Cat3D, look: EyeLook) {
+  for (const e of cat.eyes) {
+    const r = (e.ball.geometry as THREE.SphereGeometry).parameters.radius;
+    const rest = e.group.userData.rest as THREE.Vector3;
+    const zs = 1 + (look.scale - 1) * look.deep;
+    e.group.scale.set(look.scale, look.scale, zs);
+    const fwd = new THREE.Vector3(0, 0, 1).applyEuler(e.group.rotation);
+    e.group.position.copy(rest).addScaledVector(fwd, -(zs - 1) * r * look.recess);
+    e.eyeMat.uniforms.uRimW.value = look.rim;
+    e.eyeMat.uniforms.uGlint.value = look.glint;
   }
 }

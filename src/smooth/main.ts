@@ -3,7 +3,7 @@ import { Cat3D } from '../cat3d/cat';
 import { loadCatAsset } from '../cat3d/load';
 import type { PoseName } from '../cat3d/pose';
 import { MOODS, type MoodName } from '../cat3d/mood';
-import { SmoothStage } from './stage';
+import { EYE_LOOK, SmoothStage, setEyeLook } from './stage';
 import { Director } from './director';
 import { subdividePN } from './subdivide';
 
@@ -37,6 +37,10 @@ async function main() {
   if (sub > 1) for (const k of Object.keys(asset.meshes)) asset.meshes[k] = subdividePN(asset.meshes[k], sub);
   const cat = new Cat3D(asset, { shells: 1, strands: 0 });
   stage.add(cat);
+  // (?eye=1.2&deep=1&recess=0.5&rim=0.1&glint=0.09: the eyes' size, how deep they grow, how far set
+  // back, the lid line, the spark)
+  const eyeLook = { scale: num('eye', EYE_LOOK.scale), deep: num('deep', EYE_LOOK.deep), recess: num('recess', EYE_LOOK.recess), rim: num('rim', EYE_LOOK.rim), glint: num('glint', EYE_LOOK.glint) };
+  setEyeLook(cat, eyeLook);
   cat.snap((q.get('pose') as PoseName | null) ?? 'sit');
   const mood = (q.get('mood') as MoodName | null) ?? 'neutral';
   if (MOODS[mood]) cat.motor.setMood(MOODS[mood], true);
@@ -45,7 +49,7 @@ async function main() {
   // head's own movements still show)
   // (unless asked, the distance keeps the head and chest in a narrow, tall screen too: back a
   // little, the eyes a little above the middle)
-  const autoD = !q.has('d');
+  let autoD = !q.has('d');
   const frameDist = () => 0.6 * Math.max(1, 0.86 / cam.aspect);
   let orbit = { az: num('az', 0), el: num('el', 0.12), d: autoD ? frameDist() : num('d', 0.6) };
   const offset = new THREE.Vector3(num('tx', 0), num('ty', -0.035), num('tz', 0));
@@ -117,7 +121,9 @@ async function main() {
 
   const api = {
     THREE, scene, cam, renderer, cat, stage, step, draw, MOODS, director,
+    eyes(look: Partial<typeof eyeLook>) { Object.assign(eyeLook, look); setEyeLook(cat, eyeLook); },
     view(az: number, el: number, dist: number, ty = -0.035, tz = 0, tx = 0) {
+      autoD = false;
       orbit = { az, el, d: dist };
       offset.set(tx, ty, tz);
       placeCam(0);
@@ -141,6 +147,8 @@ async function main() {
     }
     requestAnimationFrame(loop);
   };
+  // (screenshots: no fades, no words over the picture)
+  if (still) document.body.classList.add('still');
   if (still) draw();
   else loop();
   document.getElementById('stage')?.classList.add('on');
