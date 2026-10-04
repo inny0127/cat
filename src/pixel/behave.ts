@@ -108,6 +108,10 @@ export interface Ctx {
   mouse: () => { p: THREE.Vector3; state: 'floor' | 'mouth' | 'air'; moving: boolean } | null;
   carry: (at: THREE.Vector3 | null, yaw?: number) => void;
   mouthAt: () => THREE.Vector3;
+  /** a finger on the glass, if there is one (GlassFinger) */
+  finger: () => GlassFinger | null;
+  /** its breath on the glass, from its nose at a point: a little mist there */
+  breathe: (at: THREE.Vector3) => void;
 }
 
 export interface SillSpot { launch: THREE.Vector3; seat: THREE.Vector3; land: THREE.Vector3; height: number }
@@ -742,6 +746,8 @@ export class Greet implements Act {
       },
       w: 1,
     };
+    // (its nose to the glass at the push: a breath on it)
+    if (this.t >= 0.36 && this.t - dt < 0.36) c.breathe(c.mouthAt());
     if (u >= 1) {
       this.t = 0;
       this.side = -this.side;
@@ -923,10 +929,15 @@ interface Bout {
  * glass when it goes out of reach. Each pat lands on the glass (`landed`: which paw, for the app to
  * leave its print there, and make it felt under the finger and heard). The finger gone, it is
  * looked for a moment; after a few goes the game is over.
+ *
+ * Asking (invite): in the mood for a game and nobody playing, it comes to the glass of its own
+ * accord, sits and looks at you, says so (a chirp, a trill), and pats at the glass in front of it,
+ * or stands up and puts its paws to it; once or twice, and a while waiting. A finger on the glass
+ * then, and the game is on.
  */
 export class PawGlass implements Act {
   readonly name = 'paw';
-  phase: 'come' | 'watch' | 'pat' | 'look' = 'come';
+  phase: 'come' | 'ask' | 'watch' | 'pat' | 'look' = 'come';
   private t = 0;
   private goes = 0;
   private wait = 0.5 + Math.random() * 0.5;
@@ -940,7 +951,10 @@ export class PawGlass implements Act {
   private readonly cameFor = new THREE.Vector3(1e3, 0, 0);
   /** a paw met the glass this frame: which (null: none) */
   landed: PawSide | null = null;
-  constructor(private readonly finger: () => GlassFinger | null) {}
+  /** asking you for a game: how many times yet, and whether it has said so this time */
+  private asks = 1 + Math.floor(Math.random() * 2);
+  private said = false;
+  constructor(private readonly finger: () => GlassFinger | null, private invite = false) {}
   get ownGaze() {
     return true;
   }
@@ -963,6 +977,14 @@ export class PawGlass implements Act {
     this.landed = null;
     const f = this.finger();
     const keen: PoseLayer = { earFwd: 0.85, pupil: 0.9, eyeOpen: 1, whisker: 0.8, tailCurl: 0.5 * Math.sin(this.t * 7) };
+    // asked, and here is a finger on the glass: the game is on
+    if (this.invite && f && this.phase === 'ask') {
+      this.invite = false;
+      this.phase = 'watch';
+      this.t = 0;
+      this.wait = 0.3;
+    }
+    if (this.invite) return this.ask(dt, c, keen);
     if (this.phase === 'come') {
       if (!f) return false;
       if (!this.going) {
@@ -1025,6 +1047,49 @@ export class PawGlass implements Act {
       this.phase = 'watch';
       this.t = 0;
       this.wait = 0.45 + Math.random() * 1.1;
+    }
+    return true;
+  }
+  /** asking for a game: up to the glass, sat looking at you, a word, and a pat or two at the
+   *  glass in front of it (or up on its hind legs with its paws to it); a while waiting */
+  private ask(dt: number, c: Ctx, keen: PoseLayer) {
+    const m = c.m;
+    if (this.phase === 'come') {
+      if (!this.going) {
+        this.going = true;
+        const to = c.keepClear(c.window.clone(), 0.08);
+        if (Math.hypot(to.x - m.pos.x, to.z - m.pos.z) < 0.1) { this.phase = 'ask'; this.t = 0; }
+        else {
+          m.setPosture('stand');
+          m.walkTo(to, 0.35, 0, () => { this.phase = 'ask'; this.t = 0; });
+        }
+      }
+      m.lookAt(c.viewer(), 1);
+      return this.t < 10;
+    }
+    m.setPosture('sit');
+    m.lookAt(c.viewer(), 1);
+    if (this.phase === 'ask') {
+      m.layer = { pose: keen, w: ease(this.t / 0.3) };
+      if (this.t > 0.7 && !this.said) { this.said = true; c.say(Math.random() < 0.6 ? 'chirp' : 'trill'); }
+      if (this.t > 1.5 && this.asks > 0) {
+        this.asks--;
+        this.phase = 'pat';
+        this.t = 0;
+        // (at the glass just in front of its face; or up to it)
+        this.fl.set((Math.random() < 0.5 ? -1 : 1) * 0.04, Math.random() < 0.5 ? 0.32 : 0.19, 0.2);
+        this.bout = this.plan(this.fl);
+        this.aimAt(this.fl, 1);
+      }
+      return this.t < 6;
+    }
+    const B = this.bout!, u = this.t;
+    for (const b of B.beats) if (u >= b.at && u - dt < b.at) this.landed = b.paw;
+    m.layer = { pose: { ...keen, ...this.reach(B, u) }, w: this.weight(B, u) };
+    if (u >= B.end) {
+      this.phase = 'ask';
+      this.t = 0;
+      this.said = Math.random() < 0.5;
     }
     return true;
   }
@@ -2207,6 +2272,9 @@ export function chooseAct(c: Ctx, atHome: boolean, posture: PoseName): Act | nul
     if (atHome && toy && toy.state === 'floor' && Math.hypot(toy.p.x - c.window.x, toy.p.z - c.window.z) > 0.3) {
       opts.push([0.45 * Math.max(0, (m.trust - 0.35) / 0.65) * (0.5 + m.arousal) * (1 - m.sleepy), () => new Gift()]);
     }
+    // in the mood for a game and fond of you, now and then it comes and asks you for one at the
+    // glass
+    if (atHome && m.trust > 0.3) opts.push([0.35 * Math.max(0, m.arousal - 0.15) * Math.min(1, m.trust + 0.2) * (1 - m.sleepy), () => new PawGlass(c.finger, true)]);
     const box = c.box();
     if (atHome && box) opts.push([0.7 * (1 - 0.4 * m.sleepy), () => new Box(box)]);
     // now and then, more at dusk and after dark, a mad few seconds

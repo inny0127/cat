@@ -9,12 +9,13 @@ function room() {
   const m = new Motor();
   m.snap('sit');
   m.pos.set(0, 0, 0.3);
+  const said: string[] = [];
   const c = {
-    m, home: new THREE.Vector3(), window: new THREE.Vector3(0, 0, 0.2),
+    m, home: new THREE.Vector3(), window: new THREE.Vector3(0, 0, 0.3),
     room: { minX: -1, maxX: 1, minZ: -1, maxZ: 1 }, mode: 'rest', mood: { ...NEUTRAL, trust: 0.8 }, kneading: false,
-    keepClear: (p: THREE.Vector3) => p, sound: () => {}, say: () => {}, viewer: () => new THREE.Vector3(0, 1.4, 3),
+    keepClear: (p: THREE.Vector3) => p, sound: () => {}, say: (k: string) => said.push(k), viewer: () => new THREE.Vector3(0, 1.4, 3),
   } as unknown as Ctx;
-  return { c, m };
+  return { c, m, said };
 }
 
 /** play the game with a finger on the glass (null: lifted) for so long; the paws that met the glass */
@@ -75,6 +76,33 @@ describe('a finger on the glass', () => {
     expect(r.landed.length).toBeGreaterThan(0);
     expect(r.going).toBe(false);
     expect(r.t).toBeLessThan(8);
+  });
+
+  it('asking for a game: to the glass, a word, a pat or two at it, and a while waiting', () => {
+    let seed = 2024;
+    vi.spyOn(Math, 'random').mockImplementation(() => (seed = (seed * 16807) % 2147483647) / 2147483647);
+    const { c, m, said } = room();
+    m.pos.set(0.2, 0, 0);
+    const act = new PawGlass(() => null, true);
+    const r = play(act, c, m, () => null, 20);
+    expect(said.length).toBeGreaterThan(0);
+    expect(r.landed.length).toBeGreaterThan(0);
+    // (sat at the glass, and in a while, nobody coming to play, over)
+    expect(Math.hypot(m.pos.x, m.pos.z - 0.3)).toBeLessThan(0.08);
+    expect(r.going).toBe(false);
+  });
+
+  it('asked, and a finger comes: the game is on', () => {
+    let seed = 555;
+    vi.spyOn(Math, 'random').mockImplementation(() => (seed = (seed * 16807) % 2147483647) / 2147483647);
+    const { c, m } = room();
+    const at = new THREE.Vector3(0.05, 0.1, 0.5);
+    const act = new PawGlass(() => null, true);
+    // (nobody there for its first ask; then a finger low on the glass)
+    const r = play(act, c, m, (t) => (t > 4 ? { at, still: 0 } : null), 12);
+    expect(r.phases.has('ask')).toBe(true);
+    expect(r.phases.has('watch')).toBe(true);
+    expect(r.landed.filter((p) => p === 'LF').length).toBeGreaterThan(0);
   });
 
   it('out of reach where it cannot get any nearer: no to and fro, it pats as far as it can', () => {

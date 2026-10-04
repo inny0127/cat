@@ -874,8 +874,8 @@ export class PixelApp {
    *  point on the floor under it */
   private toyFinger: { x: number; y: number; off: THREE.Vector3 } | null = null;
   private toyWasPinned = false;
-  /** the prints of a paw on the glass, drying (fresh 1 .. 0) */
-  private prints: { at: THREE.Vector3; age: number; fresh: number }[] = [];
+  /** the prints of a paw on the glass, drying (fresh 1 .. 0), and the mist of a breath on it */
+  private prints: { at: THREE.Vector3; age: number; fresh: number; mist?: boolean }[] = [];
   private readonly bugLight = new THREE.Vector3();
 
   /** a paw walking into the ball of wool sends it rolling on a little, the way the cat is going
@@ -1121,10 +1121,17 @@ export class PixelApp {
       this.prints.push({ at: this.cat.body.reached[landed].clone().applyMatrix4(this.cat.group.matrixWorld), age: 0, fresh: 1 });
       if (this.prints.length > 4) this.prints.shift();
     }
+    // (its nose to the glass: a breath of mist there, gone in a moment)
+    const breath = this.avatar.takeBreath();
+    if (breath) {
+      // (where the breath meets the glass: a little below the mouth)
+      this.prints.push({ at: breath.setY(breath.y - 0.012), age: 0, fresh: 0, mist: true });
+      if (this.prints.length > 4) this.prints.shift();
+    }
     if (this.prints.length) {
       for (const P of this.prints) {
         P.age += dt;
-        P.fresh = P.age < 2.5 ? 1 : 1 - (P.age - 2.5) / 5;
+        P.fresh = P.mist ? Math.min(1, P.age / 0.2) * Math.sqrt(1 - Math.min(1, P.age / 2.2)) : P.age < 2.5 ? 1 : 1 - (P.age - 2.5) / 5;
       }
       this.prints = this.prints.filter((P) => P.fresh > 0);
       this.stage.setPrints(this.prints);

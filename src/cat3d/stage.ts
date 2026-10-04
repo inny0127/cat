@@ -104,7 +104,7 @@ uniform vec3 uStrA;      // a string (the feather wand's): from here (art pixels
 uniform vec3 uStrB;      // ... to here
 uniform vec2 uStrSag;    // how far it sags at its middle (art pixels; and whether there is one)
 uniform vec4 uPrints[4]; // paw prints on the glass: where (art pixels), a paw's width there (art
-                         // pixels), how fresh (1 .. 0: none)
+                         // pixels; less than 0: a breath's mist, as wide), how fresh (1 .. 0: none)
 uniform float uTime;
 uniform vec3 uTintSun;   // the colour of the hour: on what the sun lights,
 uniform vec3 uTintShade; // ... on everything else,
@@ -444,10 +444,20 @@ void main() {
     glow = max(glow, g * uLaser.z);
   }
   // the prints a paw left on the glass, over everything (they are on the glass): the pad and the
-  // four toes in a faint pale smear, going as they dry in a dissolve of checks
-  float smear = 0.0;
+  // four toes in a faint pale smear, going as they dry in a dissolve of checks; and a breath's mist,
+  // round, going as it came, drawing in to the middle
+  float smear = 0.0, mist = 0.0;
   for (int i = 0; i < 4; i++) {
     if (uPrints[i].w <= 0.0) continue;
+    if (uPrints[i].z < 0.0) {
+      // (thickest in the middle, thinning outward in steps, as a pixel artist draws a glow; a
+      // little wider than high; as it goes it draws in to the middle)
+      vec2 d = vec2(p) + 0.5 - uPrints[i].xy;
+      float r = length(d * vec2(0.85, 1.0)) / max(-uPrints[i].z * 0.5, 2.5);
+      float R = sqrt(uPrints[i].w);
+      mist = max(mist, r < R * 0.5 ? 1.0 : r < R * 0.78 ? 0.6 : r < R ? 0.3 : 0.0);
+      continue;
+    }
     vec2 q = (vec2(p) + 0.5 - uPrints[i].xy) / max(uPrints[i].z, 6.0);
     if (abs(q.x) > 0.7 || abs(q.y) > 0.7) continue;
     vec2 pd = (q - vec2(0.0, -0.14)) / vec2(0.36, 0.27);
@@ -459,8 +469,10 @@ void main() {
     }
     if (on && min(1.0, uPrints[i].w * 2.0) > bayer(p)) smear = 1.0;
   }
-  // (a cool haze: lighter over the dark, a shade greyer over the light)
+  // (a cool haze: lighter over the dark, a shade greyer over the light; the mist paler and
+  // thicker)
   col = mix(col, vec3(0.84, 0.88, 0.96), 0.27 * smear);
+  col = mix(col, vec3(0.9, 0.93, 0.97), 0.32 * mist);
   gl_FragColor = vec4(col, glow);
 }`;
 
@@ -802,9 +814,9 @@ export class Stage {
     u.set(a.x, a.y, bright);
   }
 
-  /** paw prints on the glass: each where it is (a world point on the glass) and how fresh (1 .. 0);
-   *  a paw is `paw` metres across */
-  setPrints(prints: readonly { at: THREE.Vector3; fresh: number }[], paw = 0.034) {
+  /** paw prints on the glass: each where it is (a world point on the glass) and how fresh (1 .. 0),
+   *  and (mist) a breath's mist rather than a paw; a paw is `paw` metres across, a mist `mist` */
+  setPrints(prints: readonly { at: THREE.Vector3; fresh: number; mist?: boolean }[], paw = 0.034, mist = 0.085) {
     if (!this.pixel) return;
     const u = this.pixel.mat.uniforms.uPrints.value as THREE.Vector4[];
     for (let i = 0; i < u.length; i++) {
@@ -813,7 +825,7 @@ export class Stage {
       const a = this.toArt(P.at, new THREE.Vector2());
       const z = -P.at.clone().applyMatrix4(this.camera.matrixWorldInverse).z;
       const px = (2 * Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2) * z) / this.pixelRows();
-      u[i].set(a.x, a.y, paw / px, P.fresh);
+      u[i].set(a.x, a.y, P.mist ? -mist / px : paw / px, P.fresh);
     }
   }
 

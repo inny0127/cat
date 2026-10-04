@@ -276,6 +276,13 @@ export class PixelAvatar implements Avatar {
   get pawLanded() {
     return this.act instanceof PawGlass ? this.act.landed : null;
   }
+  /** its breath on the glass since last asked: where its nose was (null: none) */
+  private breath: THREE.Vector3 | null = null;
+  takeBreath() {
+    const b = this.breath;
+    this.breath = null;
+    return b;
+  }
   /** the finger on the glass now (null: gone) */
   private fingerNow(): GlassFinger | null {
     const F = this.glassFinger;
@@ -431,6 +438,8 @@ export class PixelAvatar implements Avatar {
       mouse: () => this.ground?.mouse() ?? null,
       carry: (at, yaw) => this.ground?.carry(at, yaw),
       mouthAt: () => this.mouthAt(),
+      finger: () => this.fingerNow(),
+      breathe: (at) => { this.breath = at.clone(); },
     };
   }
 
@@ -520,7 +529,7 @@ export class PixelAvatar implements Avatar {
   }
 
   /** start one of its acts now (for the lab and tests) */
-  startAct(name: 'yawn' | 'groom' | 'groom chest' | 'wash' | 'stretch' | 'window' | 'wander' | 'knead' | 'bed' | 'sun' | 'play' | 'sill' | 'box' | 'zoomies' | 'warm' | 'sneeze' | 'stare' | 'rub' | 'scratch' | 'greet' | 'gift') {
+  startAct(name: 'yawn' | 'groom' | 'groom chest' | 'wash' | 'stretch' | 'window' | 'wander' | 'knead' | 'bed' | 'sun' | 'play' | 'sill' | 'box' | 'zoomies' | 'warm' | 'sneeze' | 'stare' | 'rub' | 'scratch' | 'greet' | 'gift' | 'ask') {
     // (not on its way somewhere, to the bowls or out of the room: the walk there is its business)
     if (this.perched || this.trip) return;
     this.stopAct();
@@ -530,7 +539,7 @@ export class PixelAvatar implements Avatar {
         : name === 'knead' ? knead() : name === 'sun' ? sunbathe(c) : name === 'play' ? new Play()
           : name === 'sill' && this.sillSpot ? new Sill(this.sillSpot())
             : name === 'box' && this.boxSpot?.() ? new Box(this.boxSpot()!) : name === 'zoomies' ? new Zoomies(c) : name === 'warm' ? warmUp(c) ?? toBed(c, 'loaf') : name === 'sneeze' ? sneeze(c) : name === 'stare' ? new Stare(c)
-              : name === 'rub' && c.posts().length ? new Rub(c, c.posts()[0]) : name === 'scratch' ? scratchEar() : name === 'greet' ? new Greet(0.9) : name === 'gift' ? new Gift() : toBed(c, 'loaf');
+              : name === 'rub' && c.posts().length ? new Rub(c, c.posts()[0]) : name === 'scratch' ? scratchEar() : name === 'greet' ? new Greet(0.9) : name === 'gift' ? new Gift() : name === 'ask' ? new PawGlass(c.finger, true) : toBed(c, 'loaf');
   }
 
   /** the red dot of a laser pointer: awake and its own master, it drops what it was doing and is

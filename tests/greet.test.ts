@@ -9,14 +9,16 @@ function room() {
   const m = new Motor();
   m.snap('loaf');
   const blinks: boolean[] = [];
+  const breaths: THREE.Vector3[] = [];
   const c = {
     m, home: new THREE.Vector3(), window: new THREE.Vector3(0, 0, 0.2),
     room: { minX: -1, maxX: 1, minZ: -1, maxZ: 1 }, mode: 'rest', mood: { ...NEUTRAL, trust: 0.8 }, kneading: false,
     bed: () => ({ to: new THREE.Vector3(), yaw: 0 }), sound: () => {}, say: () => {},
     viewer: () => new THREE.Vector3(0, 1.4, 3), perch: () => {}, hold: () => {}, bump: () => {},
     blink: (slow: boolean) => blinks.push(slow),
+    mouthAt: () => m.pos.clone().setY(0.2), breathe: (at: THREE.Vector3) => breaths.push(at.clone()),
   } as unknown as Ctx;
-  return { c, m, blinks };
+  return { c, m, blinks, breaths };
 }
 
 afterEach(() => { vi.restoreAllMocks(); });
@@ -45,7 +47,7 @@ describe('a hello when you come back', () => {
     // (the same dice every run: as glad as can be it nearly always does, and nearly is not a test)
     let seed = 12345;
     vi.spyOn(Math, 'random').mockImplementation(() => (seed = (seed * 16807) % 2147483647) / 2147483647);
-    const { c, m } = room();
+    const { c, m, breaths } = room();
     m.pos.set(0, 0, 0.18);
     // (as glad as can be: it nearly always does)
     let bumped = 0;
@@ -59,6 +61,8 @@ describe('a hello when you come back', () => {
       if (seen.has('bump')) bumped++;
     }
     expect(bumped).toBeGreaterThan(2);
+    // (its nose to the glass at each push: a breath on it)
+    expect(breaths.length).toBeGreaterThanOrEqual(bumped);
   });
 });
 
