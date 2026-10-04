@@ -7,6 +7,7 @@ import { MotionInput } from '../input/motion';
 import { CatAudio } from '../audio/audio';
 import { Haptic } from '../platform/haptics';
 import { KeepAwake } from '../platform/awake';
+import { GlassFog, fogOnGlass } from './glassfog';
 import { Notifier, forecast } from '../platform/notify';
 import { Hint } from '../ui/hint';
 import { Brain } from '../sim/brain';
@@ -374,8 +375,10 @@ export class PixelApp {
         if (tap && f) this.flickYarn(f.x, f.y);
       },
     });
-    canvas.addEventListener('pointerdown', () => { this.audio.start(); this.awake.touched(); this.inputAt = performance.now() / 1000; });
-    canvas.addEventListener('pointermove', () => { this.inputAt = performance.now() / 1000; }, { passive: true });
+    // (a finger on the glass wipes the mist off it where it goes)
+    const wipe = (e: PointerEvent) => { if (e.pointerType !== 'mouse' || e.buttons) this.glassFog.wipe(e.clientX / innerWidth, e.clientY / innerHeight, e.pointerType === 'mouse' ? 0.03 : 0.045); };
+    canvas.addEventListener('pointerdown', (e) => { this.audio.start(); this.awake.touched(); this.inputAt = performance.now() / 1000; wipe(e); });
+    canvas.addEventListener('pointermove', (e) => { this.inputAt = performance.now() / 1000; wipe(e); }, { passive: true });
     this.audio.unlockOn(window);
     this.native();
     this.motion.onShake = (k) => this.brain.kibble(k);
@@ -1084,6 +1087,11 @@ export class PixelApp {
   private readonly hourOverride = new URLSearchParams(location.search).get('hour');
   /** ?rain=1: rain now (0: none) */
   private readonly rainOverride = new URLSearchParams(location.search).get('rain');
+  /** your side of the glass misted over (a cold morning, a wet day; or as asked, ?mist=0.8), and
+   *  whether it has been settled to the hour yet */
+  private readonly mistOverride = new URLSearchParams(location.search).get('mist');
+  readonly glassFog = new GlassFog();
+  private fogSettled = false;
 
   /** ?date=2027-01-15: the room's day of the year, for looking at another season */
   private readonly dateOverride = new URLSearchParams(location.search).get('date');
@@ -1198,6 +1206,12 @@ export class PixelApp {
     this.brushYarn(dt);
     // the weather: now and then a few hours of rain (or as asked, ?rain=1)
     const rain = this.rainOverride !== null ? +this.rainOverride : rainAt(clock);
+    // (the glass misting on your side: settled to the hour at once the first time, after that
+    // creeping back over where a finger wiped it)
+    this.glassFog.level = this.mistOverride !== null ? +this.mistOverride : fogOnGlass(clock, rain);
+    if (!this.fogSettled) { this.glassFog.settle(); this.fogSettled = true; }
+    this.glassFog.update(dt);
+    this.stage.setFog(this.glassFog);
     const dl = this.room.update(s, hour, dt, rain, clock);
     this.stage.setDayLight(dl);
     // the whiskers in the light the face is in: dimmer after dark, warm while the lamp is lit;

@@ -106,6 +106,9 @@ uniform vec2 uStrSag;    // how far it sags at its middle (art pixels; and wheth
 uniform vec4 uPrints[4]; // paw prints on the glass: where (art pixels), a paw's width there (art
                          // pixels; less than 0: a breath's mist, as wide), how fresh (1 .. 0: none)
 uniform float uTime;
+uniform sampler2D uFog;  // the mist on your side of the glass (0 .. 1), over the screen ...
+uniform vec4 uFogRect;   // ... the screen within the art (art pixels: from x, y, across, up)
+uniform float uFogOn;
 uniform vec3 uTintSun;   // the colour of the hour: on what the sun lights,
 uniform vec3 uTintShade; // ... on everything else,
 uniform vec3 uTintLamp;  // ... and in the lamp's warm light
@@ -493,6 +496,24 @@ void main() {
   // thicker)
   col = mix(col, vec3(0.84, 0.88, 0.96), 0.27 * smear);
   col = mix(col, vec3(0.9, 0.93, 0.97), 0.32 * mist);
+  // the glass misted on your side of it (a cold morning, a wet day): in three steps, dithered where
+  // one gives way to the next, the light through it softened and cooled; beads of water here and
+  // there in the thick of it, a bright pixel with its shadow under it; clear where a finger has
+  // wiped it (glassfog.ts)
+  if (uFogOn > 0.5) {
+    vec2 fuv = (vec2(p) + 0.5 - uFogRect.xy) / uFogRect.zw;
+    float fg = texture2D(uFog, vec2(fuv.x, 1.0 - fuv.y)).r;
+    // (clean bands, checkered only in a seam a pixel or two wide where one gives way to the next,
+    // however slowly the mist thins: not a screen of dots all over)
+    float sl = fwidth(fg * 3.0);
+    float lv = clamp(floor(fg * 3.0 + 0.5 + (bayer(p) - 0.47) * clamp(sl * 2.2, 0.0, 0.5) - 0.5), 0.0, 3.0) / 3.0;
+    if (lv > 0.0) {
+      vec3 haze = vec3(0.8, 0.84, 0.9) + 0.12 * vec3(dot(col, vec3(0.3, 0.59, 0.11)));
+      col = mix(col, haze, 0.56 * lv);
+      float hb = fract(sin(dot(floor(vec2(p) / vec2(1.0, 2.0)), vec2(41.3, 289.1))) * 43758.5453);
+      if (fg > 0.55 && hb > 0.988) col = mod(float(p.y), 2.0) > 0.5 ? mix(col, vec3(1.0), 0.45) : col * 0.82;
+    }
+  }
   gl_FragColor = vec4(col, glow);
 }`;
 
@@ -636,6 +657,7 @@ export class Stage {
         uBug: { value: new THREE.Vector4() }, uBugCol: { value: new THREE.Vector3(1, 1, 1) },
         uLaser: { value: new THREE.Vector3() },
         uPrints: { value: Array.from({ length: 4 }, () => new THREE.Vector4()) },
+        uFog: { value: null as THREE.Texture | null }, uFogRect: { value: new THREE.Vector4(0, 0, 1, 1) }, uFogOn: { value: 0 },
         uStrA: { value: new THREE.Vector3() }, uStrB: { value: new THREE.Vector3() }, uStrSag: { value: new THREE.Vector2() },
         uTime: { value: 0 },
         uCatDull: { value: 0 },
@@ -847,6 +869,33 @@ export class Stage {
       const px = (2 * Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2) * z) / this.pixelRows();
       u[i].set(a.x, a.y, P.mist ? -mist / px : paw / px, P.fresh);
     }
+  }
+
+  /** the mist on your side of the glass (glassfog.ts): its field over the screen, 0 .. 1 a cell
+   *  (null or nothing in it: clear glass) */
+  private fogTex: THREE.DataTexture | null = null;
+  setFog(fog: { w: number; h: number; amount: Float32Array; level: number; dirty: boolean } | null) {
+    if (!this.pixel) return;
+    const u = this.pixel.mat.uniforms;
+    const any = !!fog && (fog.level > 0.001 || fog.amount.some((v) => v > 0.004));
+    u.uFogOn.value = any ? 1 : 0;
+    if (!fog || !any) return;
+    if (!this.fogTex || this.fogTex.image.width !== fog.w || this.fogTex.image.height !== fog.h) {
+      this.fogTex?.dispose();
+      this.fogTex = new THREE.DataTexture(new Uint8Array(fog.w * fog.h), fog.w, fog.h, THREE.RedFormat, THREE.UnsignedByteType);
+      this.fogTex.minFilter = this.fogTex.magFilter = THREE.LinearFilter;
+      this.fogTex.flipY = false;
+      fog.dirty = true;
+    }
+    if (fog.dirty) {
+      const d = this.fogTex.image.data as Uint8Array;
+      for (let i = 0; i < d.length; i++) d[i] = Math.round(Math.max(0, Math.min(1, fog.amount[i])) * 255);
+      this.fogTex.needsUpdate = true;
+      fog.dirty = false;
+    }
+    u.uFog.value = this.fogTex;
+    const P = this.pixel, n = P.nominal;
+    (u.uFogRect.value as THREE.Vector4).set((P.rt.width - n.x) / 2, (P.rt.height - n.y) / 2, n.x, n.y);
   }
 
   /** a string from one world point to another, sagging so far at its middle (metres; null: none) */
