@@ -274,6 +274,7 @@ export class Tease implements Act {
         if (!this.hit && u > 0.45) {
           this.hit = true;
           const pawAt = m.pos.clone().addScaledVector(this.fwd, out).add(new THREE.Vector3(Math.cos(m.yaw), 0, -Math.sin(m.yaw)).multiplyScalar(this.side * across)).setY(reach);
+          c.bump(pawAt, 0.3);
           if (pawAt.distanceTo(L.p) < 0.09) {
             // caught on a claw now and then; mostly sent swinging off the way the paw went
             if (Math.random() < 0.2) { c.pinLure(rand(0.8, 1.6), m.pos.clone().addScaledVector(this.fwd, 0.16).setY(0.012)); this.next('pin'); return true; }
@@ -335,6 +336,7 @@ export class Tease implements Act {
         if (!this.hit && u > 0.45) {
           this.hit = true;
           const top = m.pos.clone().addScaledVector(this.fwd, 0.1).setY(0.3 + H);
+          c.bump(top, 0.5);
           if (top.distanceTo(L.p) < 0.14) {
             if (Math.random() < 0.4) c.pinLure(rand(1.2, 2.4), m.pos.clone().addScaledVector(this.fwd, 0.16).setY(0.012));
             else c.batLure(this.fwd.clone().multiplyScalar(0.5).add(new THREE.Vector3(0, 0.9, 0)));

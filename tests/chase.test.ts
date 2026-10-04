@@ -23,6 +23,7 @@ function room() {
     books: () => new THREE.Vector3(0.6, 0, 0.6),
     lure: () => world.lure, batLure: () => { calls.bat++; }, pinLure: () => { calls.pin++; },
     pencil: () => null, pushPencil: () => {}, viewer: () => new THREE.Vector3(0, 1.4, 3), perch: () => {}, hold: () => {},
+    bump: () => {},
   } as unknown as Ctx;
   return { c, m, calls, world };
 }

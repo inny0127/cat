@@ -76,6 +76,9 @@ export class Chase implements Act {
   private onBooks = false;
   /** up on the sill, how long the dot has been off it */
   private offSill = 0;
+  /** the last pat that knocked at the wall, and whether this leap has */
+  private patK = -1;
+  private patted = false;
 
   /** onSill: it is up on the windowsill already (it was sitting there when the dot came) */
   constructor(c: Ctx, onSill = false) {
@@ -259,6 +262,8 @@ export class Chase implements Act {
         m.zoom = fast ? 0.8 : 0.3;
         this.goAfter(c, L!, short, fast ? rand(1.05, 1.3) : 0.5, dt);
         m.layer = { pose: { ...keen, hipY: 0.185, neckPitch: 0.05, tailLift: 0.45, tailCurve: -0.2 }, w: Math.min(1, this.t / 0.15) };
+        // (brushing past things at a run)
+        if (m.speed > 0.6) c.bump(m.pos.clone().setY(0.12), dt * 1.2);
         if (Math.abs(m.yawRate) > 2.6 && m.speed > 0.5 && this.scrabbleIn <= 0) {
           this.scrabbleIn = 0.6;
           c.sound('scrabble', 0.16);
@@ -309,6 +314,7 @@ export class Chase implements Act {
           c.sound('thump', books ? 0.12 : 0.18);
           const paws = m.pos.clone().addScaledVector(this.fwd, books ? 0.18 : 0.2);
           this.pinAt.copy(paws);
+          c.bump(paws.clone().setY(0.05), 0.4);
           if (books && !this.onBooks) {
             this.onBooks = true;
             c.knockMug(this.fwd.clone(), !!L?.mug);
@@ -368,6 +374,8 @@ export class Chase implements Act {
         const lx = (D.p.x - m.pos.x) * Math.cos(m.yaw) - (D.p.z - m.pos.z) * Math.sin(m.yaw);
         const out = clamp((D.p.x - m.pos.x) * Math.sin(m.yaw) + (D.p.z - m.pos.z) * Math.cos(m.yaw), 0.1, 0.22);
         const k = Math.floor(this.t / 0.36), u = (this.t % 0.36) / 0.36, pat = Math.sin(Math.PI * u);
+        // (each pat a knock at whatever it is on: the pot shakes its leaves, a curtain swings)
+        if (k !== this.patK && u > 0.45) { this.patK = k; c.bump(m.pos.clone().addScaledVector(this.fwd, out + 0.04).setY(h), 0.3); }
         const right = (k + (lx > 0 ? 1 : 0)) % 2 === 0;
         const up = ease(this.t / 0.35);
         const hit = { planted: 0, frame: 0, x: 0.02 + Math.abs(lx) * 0.5, y: 0.05 + (h + 0.02 * pat - 0.05) * up, z: 0.07 + (out - 0.07 - 0.015 * pat) * up, flex: 0.25 + 0.3 * pat };
@@ -407,10 +415,12 @@ export class Chase implements Act {
         const fore = { planted: 0, frame: 0, x: 0.03, y: 0.012 + (0.13 + H * 0.4) * Math.sin(Math.PI * Math.min(1, u * 1.2)), z: 0.1 + 0.03 * s, flex: 0.2 + 0.3 * s };
         const hind = { planted: 0, frame: 0, x: 0.04, y: 0.013 + 0.02 * s, z: -0.12 - 0.05 * s };
         m.layer = { pose: { ...keen, hipY: 0.18, chestPitch: 0.75 * s, neckPitch: 0.35 * s, headPitch: 0.1, LF: fore, RF: fore, LH: hind, RH: hind, tailLift: -0.3 + 0.6 * s }, w: 1 };
+        if (u > 0.45 && !this.patted) { this.patted = true; c.bump(m.pos.clone().addScaledVector(this.fwd, 0.12).setY(0.3 + H), 0.6); }
         if (u >= 1) {
           c.hold(null);
           c.sound('thump', 0.15);
           this.leaps++;
+          this.patted = false;
           this.next('leap', rand(0.5, 1.1));
         }
         return true;

@@ -197,6 +197,7 @@ export class CatAudio {
       ['pencil', () => S.pencil(sr), 3],
       ['shatter', () => S.shatter(sr), 2],
       ['bell', () => S.bell(sr), 4],
+      ['rustle', () => S.rustle(sr), 3],
       ['step', () => S.step(sr), 4],
       ['rain', () => S.rain(sr), 1],
       ['birdChip', () => S.birdChip(sr), 4],

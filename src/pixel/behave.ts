@@ -89,6 +89,9 @@ export interface Ctx {
    *  where the books stand */
   knockMug: (dir: THREE.Vector3, sure?: boolean) => boolean;
   books: () => THREE.Vector3;
+  /** a paw (or the body) knocks against whatever is at a point, so hard (0 .. 1): the plant's
+   *  leaves shake, a curtain swings */
+  bump: (at: THREE.Vector3, k: number) => void;
   /** the feathers on the wand, if it is about (tease.ts); a paw sending them swinging (m/s), and
    *  paws holding them down a while at a point */
   lure: () => Lure | null;
@@ -419,6 +422,8 @@ export class Rub implements Act {
     // (the tail's sweep over before the pass ends, so that it does not jump back when it does: the
     // pass is no longer than the view can follow out at that side of the room)
     const k = bell(cheek, -0.03, 0.1), kf = bell(flank, -0.06, 0.08), kt = bell(tail, -0.02, 0.02);
+    // (leaning into it, the pole rocks a little on its foot)
+    c.bump(new THREE.Vector3(this.post.x, 0.2, this.lineZ), (k + kf) * 0.35 * dt);
     m.layer = {
       pose: {
         neckYaw: side * 0.65 * k, headYaw: side * 0.35 * k, headRoll: -side * 0.4 * k, neckPitch: -0.12 * k,
@@ -1005,6 +1010,8 @@ export class Zoomies implements Act {
       // low and quick, the tail up and hooked, the ears back
       m.setPosture('stand');
       m.layer = { pose: { tailLift: 1.25, tailHook: 0.7, earFwd: -0.35, earOut: 0.25, hipY: 0.185, neckPitch: 0.1, puff: 0.2 }, w: ease(this.t / 0.2) };
+      // brushing past the plant, the curtains, they shake and swing
+      c.bump(m.pos.clone().setY(0.12), dt * 1.5);
       // the ball of wool in the way goes flying
       const y = c.yarn();
       if (y && !this.kicked && Math.hypot(y.x - m.pos.x, y.z - m.pos.z) < 0.13) {

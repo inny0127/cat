@@ -442,6 +442,19 @@ export function shatter(sr: number) {
   return fade(normalize(out, 0.85), sr, 0.0003, 0.08);
 }
 
+/** a big-leaved plant knocked: its leaves brushing and patting against each other a moment */
+export function rustle(sr: number) {
+  const out = new Float32Array(Math.floor(0.42 * sr));
+  for (let k = 0; k < 7; k++) {
+    const at = Math.pow(Math.random(), 1.4) * 0.3, len = rnd(0.025, 0.07), a = rnd(0.35, 1) * (1 - at * 1.8);
+    const i0 = Math.floor(at * sr), n = Math.floor(len * sr);
+    for (let i = 0; i < n && i0 + i < out.length; i++) out[i0 + i] += noise() * a * Math.sin(Math.PI * i / n) ** 2;
+  }
+  filter(out, sr, 'bp', rnd(2400, 3400), 0.7);
+  filter(out, sr, 'hp', 900, 0.7);
+  return fade(normalize(out, 0.5), sr, 0.004, 0.06);
+}
+
 /** the little bell on a cat toy: a jingle (the ball inside striking the shell two or three times),
  *  bright and thin, its partials not in tune with one another as a small bell's are not */
 export function bell(sr: number) {

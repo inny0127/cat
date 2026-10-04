@@ -88,6 +88,7 @@ export class PixelApp {
       detour: (from, to, r) => this.room.detour(from, to, r),
       knockMug: (dir, sure) => this.room.knockMug(dir, sure),
       books: this.room.books,
+      bump: (at, k) => this.room.bump(at, k),
       batLure: (v) => this.room.batLure(v),
       pinLure: (sec, at) => {
         this.room.pinLure(sec, at);
@@ -95,6 +96,8 @@ export class PixelApp {
         if (this.wandFinger) this.haptic.tap('medium');
       },
     };
+    // the monstera knocked: its leaves rustle
+    this.room.onRustle = (k) => this.audio.play('rustle', { gain: 0.08 + 0.18 * Math.min(1, k), pan: 0.5 });
     // the little bell on the wand's feathers; the feathers pulled out from under a paw (felt)
     this.room.onBell = (k) => this.audio.play('bell', { gain: 0.06 + 0.12 * k, pan: Math.max(-0.8, Math.min(0.8, this.room.lureAt().clone().project(this.stage.camera).x * 0.8)) });
     this.room.onLureFree = () => this.haptic.tap?.();

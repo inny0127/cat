@@ -91,6 +91,7 @@ export class PixelAvatar implements Avatar {
     detour: (from: THREE.Vector3, to: THREE.Vector3, r: number) => THREE.Vector3 | null;
     knockMug: (dir: THREE.Vector3, sure?: boolean) => boolean;
     books: THREE.Vector3;
+    bump: (at: THREE.Vector3, k: number) => void;
     batLure: (v: THREE.Vector3) => void;
     pinLure: (sec: number, at: THREE.Vector3) => void;
   } | null = null;
@@ -308,6 +309,7 @@ export class PixelAvatar implements Avatar {
       detour: (from, to, r) => this.ground?.detour(from, to, r) ?? null,
       knockMug: (dir, sure) => this.ground?.knockMug(dir, sure) ?? false,
       books: () => this.ground?.books ?? new THREE.Vector3(9, 0, 9),
+      bump: (at, k) => this.ground?.bump(at, k),
       lure: () => this.wand,
       batLure: (v) => this.ground?.batLure(v),
       pinLure: (sec, at) => this.ground?.pinLure(sec, at),

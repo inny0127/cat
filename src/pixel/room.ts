@@ -845,6 +845,36 @@ export class Room {
   private readonly bulbs: THREE.ShaderMaterial[] = [];
   /** the monstera's leaves, as they were set, to stir about that */
   private readonly leaves: { leaf: THREE.Mesh; x: number; z: number; seed: number }[] = [];
+  /** where the monstera's pot stands, and how much its leaves are shaking (knocked) */
+  private readonly potAt = new THREE.Vector3();
+  private plantShake = 0;
+  /** the curtains, each swinging a little from its rod (how far, how fast) */
+  private readonly curtains: { mesh: THREE.Object3D; x: number; a: number; v: number; seed: number }[] = [];
+  /** the monstera's leaves rustling (how hard) */
+  onRustle: ((k: number) => void) | null = null;
+  /** the standard lamp rocking on its foot (tipped so far each way, and how fast), and where its
+   *  light is when it stands straight */
+  private readonly lampSway = { group: new THREE.Group() as THREE.Object3D, ax: 0, az: 0, vx: 0, vz: 0, home: new THREE.Vector3() };
+
+  /** a cat knocks against something, at a point, so hard (0 .. 1): the monstera's pot, and its
+   *  leaves shake and rustle; a curtain, and it swings */
+  bump(at: THREE.Vector3, k: number) {
+    if (Math.hypot(at.x - this.potAt.x, at.z - this.potAt.z) < 0.3 && at.y < 0.5) {
+      if (this.plantShake < 0.3) this.onRustle?.(k);
+      this.plantShake = Math.min(1, this.plantShake + k);
+    }
+    // the lamp: knocked, it rocks on its foot, away from the knock
+    const S = this.lampSway, dx = S.home.x - at.x, dz = S.home.z - at.z, dl = Math.hypot(dx, dz);
+    if (dl < 0.16) {
+      S.vz += (dx / (dl || 1)) * k * 0.09;
+      S.vx -= (dz / (dl || 1)) * k * 0.09;
+    }
+    const w = this.win;
+    for (const C of this.curtains) {
+      // (out toward the room, and back)
+      if (Math.abs(at.x - C.x) < 0.16 && at.z < w.z + 0.4) C.v -= k * 0.5 * (0.7 + 0.3 * Math.random());
+    }
+  }
   private readonly mats: THREE.ShaderMaterial[] = [];
   private time = 0;
 
@@ -1139,12 +1169,17 @@ export class Room {
     // the curtains on their rod, gathered in soft folds
     add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, ww + 0.5, 8).rotateZ(Math.PI / 2), this.mat('metal'))), bx, winT + 0.09, wallZ + 0.06);
     for (const side of [-1, 1]) {
-      const g = new THREE.PlaneGeometry(0.17, winT + 0.09 - 0.22, 18, 1);
+      const ch = winT + 0.09 - 0.22;
+      const g = new THREE.PlaneGeometry(0.17, ch, 18, 1);
       const pos = g.attributes.position as THREE.BufferAttribute;
       for (let i = 0; i < pos.count; i++) pos.setZ(i, 0.018 * Math.sin(pos.getX(i) / 0.17 * Math.PI * 5));
       g.computeVertexNormals();
+      // (hung from the rod: it swings about the top, brushed by a cat going by)
+      g.translate(0, -ch / 2, 0);
       const c = shadowy(new THREE.Mesh(g, this.mat('curtain')));
-      add(c, side < 0 ? winL - 0.07 : winR + 0.07, 0.22 + (winT + 0.09 - 0.22) / 2, wallZ + 0.07);
+      const x = side < 0 ? winL - 0.07 : winR + 0.07;
+      add(c, x, winT + 0.09, wallZ + 0.07);
+      this.curtains.push({ mesh: c, x, a: 0, v: 0, seed: side * 1.7 });
     }
     // fairy lights along the top of the window: a sagging wire and warm bulbs
     const n = 11, wire: THREE.Vector3[] = [];
@@ -1337,13 +1372,24 @@ export class Room {
     // (its foot a low dome, which catches the light along its top; a flat disc is a black blot)
     add(shadowy(new THREE.Mesh(new THREE.SphereGeometry(0.08, 24, 8, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 0.32, 1), this.mat('metal', { tone: 0.08, pattern: 9 }))), lx, 0.004, lz);
     add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.082, 0.083, 0.006, 24), this.mat('metal', { tone: 0.08 }))), lx, 0.003, lz);
-    add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 1.0, 8), this.mat('metal'))), lx, 0.5, lz);
+    // (the pole and the shade on it rock a little on the foot when a cat knocks into it, and the
+    // light with them)
+    const lamp = new THREE.Group();
+    lamp.position.set(lx, 0.006, lz);
+    const pole = shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 1.0, 8), this.mat('metal')));
+    pole.position.y = 0.494;
     this.shade = this.mat('shade', { pattern: 7 });
-    add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.12, 0.16, 24, 1, true), this.shade)), lx, 1.02, lz);
+    const shadeM = shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.12, 0.16, 24, 1, true), this.shade));
+    shadeM.position.y = 1.014;
+    lamp.add(pole, shadeM);
+    this.group.add(lamp);
+    this.lampSway.group = lamp;
     this.lampPos = new THREE.Vector3(lx, 0.97, lz);
+    this.lampSway.home.copy(this.lampPos);
 
     // a monstera in a terracotta pot by the box: big split leaves fanned out toward the room
     const px = bx + 0.43, pz = wallZ + 0.24;
+    this.potAt.set(px, 0, pz);
     add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.085, 0.2, 20), this.mat('pot'))), px, 0.1, pz);
     add(shadowy(new THREE.Mesh(new THREE.TorusGeometry(0.108, 0.012, 6, 24).rotateX(Math.PI / 2), this.mat('pot', { tone: 0.06 }))), px, 0.2, pz);
     add(new THREE.Mesh(new THREE.CircleGeometry(0.1, 16).rotateX(-Math.PI / 2), this.mat('brown', { tone: -0.1 })), px, 0.19, pz);
@@ -2618,7 +2664,7 @@ export class Room {
   /** how high the floor is at a point: the bed's cushion and its soft rim, the lamp's domed foot
    *  (paws stand on them) */
   groundAt(x: number, z: number) {
-    const L = this.lampPos, rl = Math.hypot(x - L.x, z - L.z);
+    const L = this.lampSway.home, rl = Math.hypot(x - L.x, z - L.z);
     if (rl < 0.083) return rl < 0.08 ? 0.004 + 0.0256 * Math.sqrt(1 - (rl / 0.08) ** 2) : 0.006;
     // inside the box: its cardboard floor
     const B = this.box;
@@ -2870,11 +2916,30 @@ export class Room {
     this.updateVisitor(dt, hour > 7 && hour < 17.5 && rain < 0.1 && !se.snowing);
     (su.uBolt.value as THREE.Vector3).set(this.storm.x, this.storm.seed, this.storm.bolt && flash > 0.2 ? 1 : 0);
     // the air in the room just stirs the monstera's leaves, now one, now another, slowly
+    // (knocked, they shake, quickly at first, and settle)
+    const sh = this.plantShake;
+    this.plantShake *= Math.exp(-dt * 2.2);
     for (const L of this.leaves) {
       const t = this.time * 0.45 + L.seed;
       const w = Math.sin(t) * 0.6 + Math.sin(t * 2.3 + 1.7) * 0.4;
-      L.leaf.rotation.x = L.x + 0.025 * w;
-      L.leaf.rotation.z = L.z + 0.018 * Math.sin(t * 0.8 + 2.1);
+      L.leaf.rotation.x = L.x + 0.025 * w + 0.14 * sh * Math.sin(this.time * 13 + L.seed * 5);
+      L.leaf.rotation.z = L.z + 0.018 * Math.sin(t * 0.8 + 2.1) + 0.1 * sh * Math.sin(this.time * 11 + L.seed * 3);
+    }
+    // the lamp rocking on its foot, settling; its light goes with it
+    {
+      const S = this.lampSway, h = Math.min(dt, 0.05);
+      S.vx += (-30 * S.ax - 1.6 * S.vx) * h;
+      S.vz += (-30 * S.az - 1.6 * S.vz) * h;
+      S.ax += S.vx * h;
+      S.az += S.vz * h;
+      S.group.rotation.set(S.ax, 0, S.az);
+      this.lampPos.set(S.home.x - Math.sin(S.az) * S.home.y, S.home.y, S.home.z + Math.sin(S.ax) * S.home.y);
+    }
+    // the curtains: the air hardly stirs them; brushed, they swing out and back, and settle
+    for (const C of this.curtains) {
+      C.v += (-26 * C.a - 2.6 * C.v) * Math.min(dt, 0.05);
+      C.a += C.v * Math.min(dt, 0.05);
+      C.mesh.rotation.x = C.a + 0.006 * Math.sin(this.time * 0.37 + C.seed);
     }
     this.rollYarn(dt);
     this.flyBug(dt, d.lamp > 0.5, 1 - Room.dark(hour), date.getMonth(), rain);
