@@ -202,8 +202,10 @@ void main() {
     float open = smoothstep(0.5, 0.9, uPupil);
     vec2 q = ip / vec2(mix(0.5 * pxI, max(0.5 * pxI, 0.42), open), 0.46 + 0.1 * uPupil);
     float pupil = open < 0.5 ? step(abs(q.x), 1.0) * step(abs(q.y), 1.0) : step(length(q), 1.0);
-    // (never smaller than about an art pixel, so even a small eye keeps its spark)
-    vec2 gq = abs(ip - vec2(-0.2, 0.22) - vec2(-0.5, 0.5) * max(0.0, uGlint - 0.12)) * 0.12 / uGlint;
+    // (never smaller than about an art pixel, so even a small eye keeps its spark; and low enough
+    // in the eye, just up and out from the pupil, that the upper lid's dark rim does not cover it
+    // when the eye is only half open, as it mostly is)
+    vec2 gq = abs(ip - vec2(-0.3, 0.1) - vec2(-0.3, 0.0) * max(0.0, uGlint - 0.12)) * 0.12 / uGlint;
     vec2 gq2 = abs(ip - vec2(0.2, -0.2));
     float glint = max(step(max(gq.x, gq.y), 0.12) * step(0.3, uShine), step(max(gq2.x, gq2.y), 0.05) * step(0.75, uShine));
     vec3 c = mix(iris, vec3(0.004), pupil);
