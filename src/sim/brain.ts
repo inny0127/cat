@@ -236,6 +236,8 @@ export class Brain {
     this.lastToy = this.time;
     this.attention = { x: sx, y: sy, until: this.time + 0.5 };
     this.arousal = clamp(this.arousal + dt * 0.3);
+    // (a good game tires a cat: the nap after it comes the sooner)
+    this.wantSleepIn = Math.max(8, this.wantSleepIn - dt * 0.25);
     if (this.mode === 'rest') this.setMode('alert');
     const s = this.s;
     s.lonely = Math.max(0, s.lonely - dt * 0.006);

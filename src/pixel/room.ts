@@ -1996,7 +1996,9 @@ export class Room {
     if (W.pinned > 0) return;
     // (Verlet: a change of velocity is a change of where it was)
     W.prev.addScaledVector(v, -1 / 240);
-    W.ring = Math.max(W.ring, 0.6);
+    // (and the bell rings)
+    this.onBell?.(Math.min(1, 0.4 + v.length() / 3));
+    W.ring = 0.4;
   }
 
   /** a cat's paws come down on the feathers: held there a while, at a point, however the string is
@@ -2033,8 +2035,9 @@ export class Room {
         W.prev.copy(W.pinAt);
         if (W.held && W.tip.distanceTo(W.pinAt) > W.L + 0.16) {
           W.pinned = 0;
-          W.ring = 1;
           this.onLureFree?.();
+          this.onBell?.(0.8);
+          W.ring = 0.4;
         }
         continue;
       }

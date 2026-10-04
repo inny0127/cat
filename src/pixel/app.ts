@@ -221,6 +221,8 @@ export class PixelApp {
         L.sy = y;
         L.idle = 0;
         if (kind === 'mouse') canvas.style.cursor = 'none';
+        // (the little click of its button)
+        this.audio.play('pencil', { gain: 0.035, rate: 2.4 });
         return true;
       },
       // the laser pointer on the sill: taken up (and if the finger goes on, the dot is on);
@@ -792,6 +794,12 @@ export class PixelApp {
       return;
     }
     this.audio.start();
+    // (Esc: the laser pointer put down, the credits shut)
+    if (k === 'escape') {
+      if (this.laser.held) this.takeLaser(false);
+      if (this.creditsOpen) this.showCredits(false);
+      return;
+    }
     if (k === 'f') this.brain.kibble(0.9);
     else if (k === 'w') this.brain.pourStart();
     else if (k === 'l' || k === 's') this.brain.scoop();

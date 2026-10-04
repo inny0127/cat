@@ -5,9 +5,9 @@ const config: CapacitorConfig = {
   appId: 'com.inny0127.catwindow',
   appName: '창가의 고양이',
   webDir: 'dist',
-  backgroundColor: '#fffbfa',
-  ios: { contentInset: 'never', backgroundColor: '#fffbfa' },
-  android: { backgroundColor: '#fffbfa' },
+  backgroundColor: '#c99486',
+  ios: { contentInset: 'never', backgroundColor: '#c99486' },
+  android: { backgroundColor: '#c99486' },
   plugins: {
     LocalNotifications: {
       smallIcon: 'ic_stat_cat',
