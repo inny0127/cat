@@ -43,12 +43,12 @@ const T = [
   [1.0, 'pet', ['head', 2.6]], [3.8, 'pet', ['cheek', 2.4]], [6.4, 'pet', ['chin', 3.2]],
   [16.5, 'js', 'lab.brain.mode = "rest"; lab.app.yarn.kick(new lab.THREE.Vector3(-0.6, 0, 0.4), 0.55); lab.avatar.playNow()'],
   [27.0, 'rub', ['tail', 7]],
-  [37.0, 'js', 'if (lab.brain.mode === "away") lab.app.state.awayUntil = lab.app.state.lastTick + 1500'],
-  [46.0, 'js', 'lab.avatar.startAct("yawn")'],
-  [49.0, 'js', 'lab.avatar.startAct("stretch")'],
-  [55.0, 'js', 'lab.brain.mode = "doze"; lab.brain.sleepDepth = 0.6'],
+  [33.0, 'back'],
+  [52.0, 'js', 'lab.avatar.startAct("yawn")'],
+  [55.0, 'js', 'lab.avatar.startAct("stretch")'],
+  [61.0, 'js', 'lab.brain.mode = "doze"; lab.brain.sleepDepth = 0.6'],
 ];
-const END = 62;
+const END = 68;
 let touch = null; // { kind, zone, until, w, t0, down }
 const frames = Math.round(END * fps);
 const t0 = Date.now();
@@ -58,6 +58,10 @@ for (let i = 0; i < frames; i++) {
     if (ev.done || ev[0] > t + 1e-6) continue;
     ev.done = true;
     if (ev[1] === 'js') await page.evaluate((js) => { const lab = window.lab; eval(js); }, ev[2]);
+    else if (ev[1] === 'back') {
+      // (once it has gone off in a huff, it is let back in a few seconds; asked every frame till then)
+      if (!await page.evaluate(() => { const L = window.lab; if (L.brain.mode !== 'away') return false; L.app.state.awayUntil = L.app.state.lastTick + 2500; return true; })) ev.done = false;
+    }
     else if (ev[1] === 'rub' && !ev.waited && await page.evaluate(() => !!window.lab.avatar.doing || !window.lab.cat.motor.settled) && t < ev[0] + 3) {
       // (not yet: the cat is busy; asked again next frame)
       ev.done = false;
