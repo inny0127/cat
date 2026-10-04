@@ -100,6 +100,8 @@ export interface Ctx {
   /** up on something this high (null: on the floor), and held in the air at a height (a jump) */
   perch: (h: number | null) => void;
   hold: (lift: number | null) => void;
+  /** a blink (slow: a cat's long, soft blink at someone it trusts) */
+  blink: (slow: boolean) => void;
 }
 
 export interface SillSpot { launch: THREE.Vector3; seat: THREE.Vector3; land: THREE.Vector3; height: number }
@@ -618,6 +620,94 @@ export const toWindow = (c: Ctx) => {
     { to: bed.to, face: bed.yaw, stay: 0.1, posture: 'loaf' },
   ]);
 };
+
+/**
+ * You are back after a while away, and it has seen you: the ears come up and round to you, and it
+ * comes up to the glass at a brisk walk, its tail carried up with the tip hooked over (a cat's
+ * hello: how high, as far as it trusts you, the walk says). There it sits close and looks up at
+ * you, gives you a slow blink, and (fond of you) pushes its head at the glass as it would at a
+ * hand, a cheek along it after, once or twice; a while longer there looking at you, and then it is
+ * about its business. glad: how glad it is (0 .. 1)
+ */
+export class Greet implements Act {
+  readonly name = 'greet';
+  phase: 'see' | 'come' | 'sit' | 'bump' | 'stay' = 'see';
+  private t = 0;
+  private set = false;
+  private blinks = 0;
+  private bumps: number;
+  private side = Math.random() < 0.5 ? -1 : 1;
+  private readonly stay: number;
+  constructor(private readonly glad: number) {
+    this.bumps = glad > 0.5 && Math.random() < 0.8 ? (Math.random() < 0.4 ? 2 : 1) : 0;
+    this.stay = rand(5, 9) + 8 * glad;
+  }
+  update(dt: number, c: Ctx) {
+    const m = c.m;
+    this.t += dt;
+    if (this.phase === 'see') {
+      // (where it is, a moment: the ears up and round to you, the eyes on you)
+      m.layer = { pose: { earFwd: 0.45 }, w: ease(this.t / 0.3) };
+      if (this.t < 0.8) return true;
+      this.phase = 'come';
+      this.t = 0;
+    }
+    if (this.phase === 'come') {
+      // (the walk carries the tail; the eyes are on you, the avatar's business)
+      m.setPosture('stand');
+      m.layer = { pose: { earFwd: 0.35 }, w: 1 };
+      if (!this.set) {
+        this.set = true;
+        m.walkTo(c.window, 0.3, 0, () => { this.phase = 'sit'; this.t = 0; this.set = false; });
+      }
+      return true;
+    }
+    if (this.phase === 'sit' || this.phase === 'stay') {
+      m.setPosture('sit');
+      // looking up at you (the eyes and the head are on you of themselves), the ears to you; sat
+      // down, the tail is still up a moment before it comes down round the paws
+      const up = this.phase === 'sit' ? 1 - ease((this.t - 0.5) / 1.4) : 0;
+      const S = POSES.sit;
+      m.layer = {
+        pose: { earFwd: 0.3, tailLift: S.tailLift + (1.25 - S.tailLift) * up, tailHook: S.tailHook + (0.6 - S.tailHook) * up, tailSag: S.tailSag * (1 - up) },
+        w: ease(this.t / 0.4) || (this.phase === 'stay' ? 1 : 0),
+      };
+      // a slow blink at you once it is settled (and, gladder, another later on)
+      if (this.phase === 'sit' && this.t > 1.5 && this.blinks === 0) { this.blinks = 1; c.blink(true); }
+      if (this.phase === 'stay' && this.blinks === 1 && this.glad > 0.4 && this.t > this.stay * 0.6) { this.blinks = 2; c.blink(true); }
+      if (this.phase === 'sit' && this.t > 2.8) {
+        this.phase = this.bumps > 0 ? 'bump' : 'stay';
+        this.t = 0;
+      }
+      return this.phase !== 'stay' || this.t < this.stay;
+    }
+    // a head pushed at the glass as at a hand, the eyes shut; then the cheek along it, the head
+    // turned and tipped into it, the side of the neck after
+    m.setPosture('sit');
+    const T = 1.7, u = this.t / T;
+    const push = hump(this.t, 0.75, 0.25), cheek = hump(this.t - 0.45, T - 0.45, 0.35);
+    const sd = this.side, S = POSES.sit;
+    m.layer = {
+      pose: {
+        neckPitch: S.neckPitch + 0.2 * push - 0.05 * cheek, headPitch: S.headPitch - 0.18 * push, chestPitch: S.chestPitch - 0.06 * push,
+        neckYaw: sd * 0.3 * cheek, headYaw: sd * 0.4 * cheek, headRoll: -sd * 0.42 * cheek,
+        squint: Math.max(push, 0.8 * cheek), eyeOpen: 1 - 0.85 * Math.max(push, 0.7 * cheek), earOut: 0.25 * Math.max(push, cheek), earFwd: 0.15,
+        tailLift: S.tailLift + 0.4 * cheek, tailHook: S.tailHook + 0.3 * cheek,
+      },
+      w: 1,
+    };
+    if (u >= 1) {
+      this.t = 0;
+      this.side = -this.side;
+      if (--this.bumps <= 0) this.phase = 'stay';
+    }
+    return true;
+  }
+  stop(c: Ctx) {
+    c.m.layer = null;
+    c.m.stop();
+  }
+}
 
 /** potter about: a spot or two on the floor, a sniff there, home again */
 export const wander = (c: Ctx) => {

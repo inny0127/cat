@@ -96,8 +96,9 @@ export class Brain {
     return this.senses.earSide ? this.senses.earSide(c.px, c.py) : c.px < 120 ? 'L' : 'R';
   }
 
-  /** decide how we find the cat when the window is opened */
-  wake(now: number, firstEver: boolean) {
+  /** decide how we find the cat when the window is opened (away: how long since it was last
+   *  open, seconds) */
+  wake(now: number, firstEver: boolean, away = 0) {
     const s = this.s;
     this.time = now;
     if (!s.alive) {
@@ -114,19 +115,39 @@ export class Brain {
     }
     this.anim.setHidden(false);
     const n = needs(s);
-    const nightly = nightness(now);
+    // (by the clock on the wall: now is the brain's own time, seconds since the page opened)
+    const nightly = nightness(Date.now());
     if (firstEver) {
       this.toSleep(1);
       return;
     }
+    // back after a while: it has seen you, and is glad of it as far as it is fond of you, and the
+    // longer you were gone (a look round from it after a minute; after a quarter of an hour, all
+    // of a hello)
+    const glad = clamp((s.trust - 0.15) / 0.6) * clamp(away / 900);
     if (n.food || n.water || (s.trust > 0.35 && s.lonely > 0.6 && chance(0.6))) {
       this.toAwake('alert');
       if (s.trust > 0.3) this.later(0.8, () => this.say('trill'));
+      // (up to the glass to see you: hungry, you are why it is glad)
+      if (glad > 0.1 || n.food || n.water) this.later(1, () => this.anim.greet?.(Math.max(glad, 0.3)));
       return;
     }
-    if (chance(0.72 + nightly * 0.2)) this.toSleep(rand(0.6, 1));
-    else this.toAwake('rest');
+    // (a cat fond of you, after long enough, as often as not gets up out of its nap for you)
+    if (chance((0.72 + nightly * 0.2) * (1 - 0.35 * glad))) {
+      this.toSleep(rand(0.6, 1));
+      // (asleep, it heard you come all the same: an eye opens on you in a moment, and if it trusts
+      // you a slow blink, before it goes back to sleep)
+      if (glad > 0.05) this.greetPeek = rand(1.5, 4);
+    } else {
+      this.toAwake('rest');
+      if (glad > 0.2 && chance(0.35 + 0.65 * glad)) {
+        this.later(0.9, () => this.say('trill'));
+        this.later(1, () => this.anim.greet?.(glad));
+      }
+    }
   }
+  /** an eye opened on you this soon after you came back (s; 0: none) */
+  private greetPeek = 0;
 
   // ------------------------------------------------------------------ input events
   touchStart(c: Contact) {
@@ -621,14 +642,16 @@ export class Brain {
     this.anim.wakeStretch?.();
   }
 
-  /** now and then a sleeping cat opens its eyes, checks on you, and goes back to sleep */
+  /** now and then a sleeping cat opens its eyes, checks on you, and goes back to sleep (and
+   *  when you have just come back, it surely does) */
   private peek(dt: number) {
     this.peekIn -= dt;
-    if (this.peekIn > 0) return;
+    const back = this.greetPeek > 0 && (this.greetPeek -= dt) <= 0;
+    if (this.peekIn > 0 && !back) return;
     this.peekIn = rand(50, 200);
     const s = this.s;
     const a = this.anim;
-    if (chance(0.5)) {
+    if (back || chance(0.5)) {
       this.peekEye = s.trust > 0.3 ? 0.35 : 0.55;
       this.later(rand(1.6, 3.2), () => {
         if (s.trust > 0.4 && (this.mode === 'sleep' || this.mode === 'doze')) a.doBlink(true);

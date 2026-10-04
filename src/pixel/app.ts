@@ -155,12 +155,13 @@ export class PixelApp {
     const now = Date.now();
     const firstEver = !localStorageHas();
     this.state = loadState(now);
-    stepLife(this.state, Math.max(0, now - this.state.lastTick), true);
+    const away = Math.max(0, now - this.state.lastTick);
+    stepLife(this.state, away, true);
     this.state.lastTick = now;
     this.state.stats.visits++;
     this.makeBrain();
     this.stage.setCoat(this.state.personality.coat);
-    this.brain.wake(performance.now() / 1000, firstEver);
+    this.brain.wake(performance.now() / 1000, firstEver, away / 1000);
     this.avatar.settle();
 
     this.input = new PointerInput(canvas, {
@@ -843,7 +844,7 @@ export class PixelApp {
     this.audio.resume();
     if (gap > 90_000 || wasAway !== (this.state.where === 'away') || wasAlive !== this.state.alive) {
       this.state.stats.visits++;
-      this.brain.wake(performance.now() / 1000, false);
+      this.brain.wake(performance.now() / 1000, false, gap / 1000);
     }
   }
 

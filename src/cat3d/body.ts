@@ -141,8 +141,11 @@ export class Body {
     const chain: [number, number, number][] = [[I.neck1, 0.34, 0.12], [I.neck2, 0.5, 0.25], [I.head, 1, 1]];
     const eye = this.t.a, D = this.t.b, up = this.t.c, x = this.t.d;
     const Qt = this.t.q1, Qh = this.t.q2, Dq = this.t.q3;
-    const chestFwd = this.t.e.set(0, 0, 1).applyQuaternion(kin.wq[I.chest]);
-    const chestYaw = Math.atan2(chestFwd.x, chestFwd.z);
+    // (which way the chest faces, from its side-to-side axis: the forward one points up as the cat
+    // sits up, and tipped past upright on the way down to a sit it would read as facing the other
+    // way, and turn the head right round with it)
+    const chestRight = this.t.e.set(1, 0, 0).applyQuaternion(kin.wq[I.chest]);
+    const chestYaw = Math.atan2(-chestRight.z, chestRight.x);
     const F = this.lookF;
     for (const [b, fy, fp] of chain) {
       this.eyes(eye);

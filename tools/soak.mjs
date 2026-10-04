@@ -12,9 +12,9 @@ await page.goto((process.env.REEL_BASE ?? 'http://localhost:5173/') + 'index.htm
 await page.waitForFunction(() => window.__pcat, null, { timeout: 180000 });
 const report = await page.evaluate(async (minutes) => {
   const app = window.__pcat;
-  const acts = ['wander', 'sun', 'warm', 'play', 'sill', 'box', 'wash', 'zoomies', 'stare', 'sneeze', 'rub', 'scratch', 'window', 'groom', 'yawn', 'stretch', 'bed'];
+  const acts = ['wander', 'sun', 'warm', 'play', 'sill', 'box', 'wash', 'zoomies', 'stare', 'sneeze', 'rub', 'scratch', 'window', 'groom', 'yawn', 'stretch', 'bed', 'greet'];
   const issues = [];
-  let t = 1, seen = {}, drag = null, drags = 0, errands = 0, laser = null, wand = null, laserUses = 0, wandUses = 0;
+  let t = 1, seen = {}, drag = null, drags = 0, errands = 0, laser = null, wand = null, laserUses = 0, wandUses = 0, returns = 0;
   // a cat that wants to go somewhere and does not move
   let stillFor = 0, lastAct = '';
   const lastPos = { x: 0, z: 0 };
@@ -34,6 +34,8 @@ const report = await page.evaluate(async (minutes) => {
     if (i % 1100 === 700 && Math.random() < 0.6 && app.brain.mode !== 'away') { app.brain.leave(['eat', 'drink', 'litter'][Math.floor(Math.random() * 3)]); errands++; }
     if (app.brain.mode === 'away' && i % 400 === 0) app.state.awayUntil = Math.min(app.state.awayUntil, app.state.lastTick + 5000);
     if (i % 2000 === 1500) app.brain.toAwake('rest');
+    // now and then the app is shut and opened again half an hour later (the cat says hello)
+    if (i % 2600 === 1300 && app.brain.mode !== 'away') { app.onVisibility(false); app.state.lastTick -= 1800e3; app.onVisibility(true); returns++; }
     // now and then a finger takes the ball of wool and drags it about a few seconds
     if (i % 300 === 0 && !drag && !laser && !wand && Math.random() < 0.4) {
       const p = app.room.yarnAt().clone().project(app.stage.camera);
@@ -114,7 +116,7 @@ const report = await page.evaluate(async (minutes) => {
     if (i % 2400 === 0) await new Promise((r) => setTimeout(r, 0));
   }
   app.stage.render();
-  return { issues: issues.slice(0, 20), seen, drags, errands, laserUses, wandUses, mug: app.room.mugUp ? 'up' : 'down', mode: app.brain.mode, doing: app.avatar.doing };
+  return { issues: issues.slice(0, 20), seen, drags, errands, laserUses, wandUses, returns, mug: app.room.mugUp ? 'up' : 'down', mode: app.brain.mode, doing: app.avatar.doing };
 }, minutes);
 console.log(JSON.stringify(report), 'errors:', errs.slice(0, 10));
 await b.close();

@@ -51,6 +51,9 @@ export interface Avatar {
   wakeStretch?(): void;
   /** something it cannot make out (a tap on the glass): the head tipped to one side a moment */
   puzzled?(): void;
+  /** you are back after a while away and it is awake: hello, if the body can say it (up to the
+   *  glass, tail up; glad: how glad, 0 .. 1) */
+  greet?(glad: number): void;
   /** leave: dir -1 left, 1 right; calm walks off rather than bolting; reason: the errand, if one
    *  (a body with a room to show it in goes to the bowl or the box) */
   bolt(dir: number, onDone?: () => void, calm?: boolean, reason?: string): void;
