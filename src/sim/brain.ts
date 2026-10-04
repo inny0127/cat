@@ -35,6 +35,17 @@ const HINT = {
   notify: '고양이가 당신을 부를 수 있게 알림을 허용해 주세요',
 };
 
+/** the first time a hand annoys it for a reason, what the reason was (once for each) */
+const WHY: Record<string, string> = {
+  against: '털을 거꾸로 쓸면 싫어해요. 머리에서 꼬리 쪽으로 쓰다듬어 주세요',
+  tail: '꼬리를 만지는 건 싫어해요',
+  belly: '배를 만지는 건 아직 싫어해요',
+  paw: '발을 만지는 건 싫어해요',
+  face: '얼굴 한가운데보다는 볼이나 턱 밑을 좋아해요',
+  rough: '너무 빠르게 쓰다듬으면 싫어해요. 천천히 쓰다듬어 주세요',
+  over: '오래 쓰다듬으니 귀찮아해요. 잠깐 쉬게 해 주세요',
+};
+
 /** how long each voice lasts (s), for a mouth to move with when the sound itself is not playing */
 const VOICE_LEN: Record<string, number> = { trill: 0.29, meow: 0.65, meowSoft: 0.44, meowPlead: 0.92, chirp: 0.11 };
 
@@ -62,6 +73,10 @@ export class Brain {
    *  where (seconds by zone); when they have been gone a moment, a cat often puts its coat to
    *  rights where it was touched */
   private session = { t: 0, against: 0, zones: {} as Partial<Record<Zone, number>>, endedAt: -1 };
+  /** what made the hands on it unpleasant of late (a tally for each reason, fading), and whether
+   *  it has been said this time it was annoyed */
+  private why: Record<string, number> = {};
+  private whySaid = false;
   private lastToy = -1e9;
   private touchCount = 0;
   private pokes: number[] = [];
@@ -385,6 +400,11 @@ export class Brain {
     if (this.irritation > 0.93 || this.fear > 0.93) this.leave('sulk');
     if (this.mode === 'angry' && now > this.angryUntil) this.setMode(this.irritation > 0.4 ? 'annoyed' : 'alert');
 
+    // ---- what annoyed it, said once for each reason the first time it does
+    for (const k in this.why) this.why[k] *= Math.exp(-dt / 20);
+    if (this.irritation < 0.15) this.whySaid = false;
+    else if (touching && this.irritation > 0.3 && !this.whySaid) this.sayWhy();
+
     // ---- mode from feelings while awake
     if (this.mode !== 'sleep' && this.mode !== 'doze' && this.mode !== 'angry') {
       if (touching && this.pleasure > 0.45 && this.irritation < 0.35) this.setMode('enjoy');
@@ -415,14 +435,16 @@ export class Brain {
     if (trust < -0.15) base -= 0.35 * clamp(-trust * 2);
     let p = base;
     // how it's done
+    let rough = 0, against = 0;
     if (speed < 25) p += 0.02; // a resting hand
     else if (speed < 260) p += 0.06;
-    else if (speed < 650) p -= 0.15 * (speed - 260) / 390;
-    else p -= 0.15 + Math.min(0.7, (speed - 650) / 700);
+    else if (speed < 650) rough = 0.15 * (speed - 260) / 390;
+    else rough = 0.15 + Math.min(0.7, (speed - 650) / 700);
+    p -= rough;
     if (speed > 40 && !GRAIN_TOLERANT[zone]) {
       const [gx, gy] = this.senses.grainAt(c.px, c.py);
       const along = (c.vx * gx + c.vy * gy) / speed;
-      if (along < -0.3) { p -= 0.38 * -along; this.session.against += dt; }
+      if (along < -0.3) { against = 0.38 * -along; p -= against; this.session.against += dt; }
       else if (along > 0.3) p += 0.07;
     }
     if (c.press > 0.8) p -= 0.15;
@@ -430,6 +452,14 @@ export class Brain {
     const tol = (22 + 75 * clamp(trust)) * s.personality.tolerance;
     const over = Math.max(0, this.stim - tol) / 18;
     p -= over;
+    // (what it was that it did not like, for a word on it if it comes to annoy it)
+    if (p < 0) {
+      const W = this.why;
+      if (base < 0) W[zone] = (W[zone] ?? 0) - base * dt;
+      W.against = (W.against ?? 0) + against * dt;
+      W.rough = (W.rough ?? 0) + rough * dt;
+      W.over = (W.over ?? 0) + over * dt;
+    }
     if (this.mode === 'angry') p = Math.min(p, -0.4);
     if (s.health < THRESH.sick) p *= 0.5;
 
@@ -450,6 +480,17 @@ export class Brain {
     if (zone === 'tail' && chance(dt * 3)) this.anim.flickTail(1);
     if (over > 0.3 && chance(dt * 1.5)) this.anim.flickTail(1.2);
     return p;
+  }
+
+  /** a hand has annoyed it: the first time for this reason, a word on what it was (against the
+   *  lie of its fur, a place it does not like touched, too fast, too long) */
+  private sayWhy() {
+    this.whySaid = true;
+    const [why, much] = Object.entries(this.why).sort((a, b) => b[1] - a[1])[0] ?? ['', 0];
+    const text = WHY[why];
+    if (!text || much < 0.1 || this.s.hints['why-' + why]) return;
+    this.s.hints['why-' + why] = 1;
+    this.later(0.6, () => this.hint.show(text, 5500));
   }
 
   private hiss(contacts: Contact[]) {
