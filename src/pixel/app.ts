@@ -416,6 +416,7 @@ export class PixelApp {
     this.roomView.dist = d;
     // close to the cat: a third of a metre across (and 0.6 m up and down) round its body
     this.closeDist = Math.max(0.18 / (tv * cam.aspect), 0.3 / tv);
+    this.closeNow = this.closeDist;
     this.placeCamera();
     // the brain's touch speeds are in the painted cat's pixels: about 600 across the window
     this.senses.k = 600 / Math.max(1, innerWidth);
@@ -428,6 +429,8 @@ export class PixelApp {
   /** where the view is: the whole room, or (touching the cat) close on it, easing between */
   private readonly roomView = { target: new THREE.Vector3(), dir: new THREE.Vector3(0, 0.3, 1), dist: 3 };
   private closeDist = 1.5;
+  /** how close it comes this time: no closer than keeps the cat's face on the screen */
+  private closeNow = 1.5;
   private focus = 0;
   private focusT = 0;
   private focusHold = 0;
@@ -446,7 +449,7 @@ export class PixelApp {
     const target = rv.target.clone();
     target.x += this.panX;
     target.lerp(this.catAim, f);
-    const dist = rv.dist + (this.closeDist - rv.dist) * f;
+    const dist = rv.dist + (this.closeNow - rv.dist) * f;
     const dir = rv.dir.clone().lerp(new THREE.Vector3(0, Math.sin(0.27), Math.cos(0.27)), f).normalize();
     // (from a little above, but with the camera level and the picture slid down to what it looks
     // at (stage.ts setShift): upright things stay upright, as pixel art draws them; as far off,
@@ -469,6 +472,15 @@ export class PixelApp {
       const lim = 0.7 * depth * tvp;
       dx = Math.max(-lim * cam.aspect, Math.min(lim * cam.aspect, dx));
       dy = Math.max(-lim, Math.min(lim, dy));
+      // (and a little further, if that leaves the face off the screen: the fur slides a little
+      // under the finger, rather than the face be lost)
+      const e = this.tmpA.copy(this.eyesW).project(cam), dE = cam.position.z - this.eyesW.z;
+      if (dE > 0.1) {
+        const sx = dE * tvp * cam.aspect, sy = dE * tvp;
+        const [fx, fy] = this.faceIn(e.x + dx / sx, e.y + dy / sy, sx, sy);
+        dx += fx * sx;
+        dy += fy * sy;
+      }
       cam.position.x -= dx * w;
       cam.position.y -= dy * w;
       cam.updateMatrixWorld();
@@ -518,6 +530,51 @@ export class PixelApp {
     this.anchor = { bone, local, nx, ny, at };
   }
 
+  /** the face (round the eyes, a hand's breadth across and a little more above them, for the
+   *  ears) where the view would show it (ex, ey on the screen, -1 .. 1; sx, sy the world size of
+   *  the screen's half there): how far to slide the picture to have it on (-1 .. 1 of the screen,
+   *  no further than a little: beyond that it stays off) */
+  private faceIn(ex: number, ey: number, sx: number, sy: number) {
+    const m = 0.94, rx = 0.07 / sx, up = 0.08 / sy, down = 0.06 / sy;
+    const mx = (0.15 * 2), my = (0.15 * 2 * innerWidth) / Math.max(1, innerHeight);
+    const ox = Math.max(0, -m - (ex - rx)) - Math.max(0, ex + rx - m), oy = Math.max(0, -m - (ey - down)) - Math.max(0, ey + up - m);
+    return [Math.max(-mx, Math.min(mx, ox)), Math.max(-my, Math.min(my, oy))];
+  }
+
+  /** how near the close view may come round a spot touched (its distance, at nearest closeDist)
+   *  with the spot under the finger (or nearly) and the face on the screen: the camera where
+   *  placeCamera puts it all the way in, worked out for a distance, and the nearest that fits
+   *  found by halving */
+  private nearest(a: { nx: number; ny: number; at: THREE.Vector3 }, eyes: THREE.Vector3) {
+    const cam = this.stage.camera, tvp = Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2), asp = cam.aspect;
+    const T = this.catAim, te = Math.tan(0.27), shift = te / tvp;
+    const fits = (d: number) => {
+      const cx = T.x, cy = T.y + d * te, cz = T.z + d, dA = cz - a.at.z;
+      const lim = 0.7 * dA * tvp;
+      const qx = (a.at.x - cx) / (dA * tvp * asp), qy = (a.at.y - cy) / (dA * tvp) + shift;
+      const x = cx - Math.max(-lim * asp, Math.min(lim * asp, (a.nx - qx) * dA * tvp * asp));
+      const y = cy - Math.max(-lim, Math.min(lim, (a.ny - qy) * dA * tvp));
+      const dE = cz - eyes.z;
+      if (dE < 0.1) return true;
+      const sx = dE * tvp * asp, sy = dE * tvp;
+      const ex = (eyes.x - x) / sx, ey = (eyes.y - y) / sy + shift;
+      const [fx, fy] = this.faceIn(ex, ey, sx, sy);
+      const [gx, gy] = this.faceIn(ex + fx, ey + fy, sx, sy);
+      return Math.abs(gx) < 1e-4 && Math.abs(gy) < 1e-4;
+    };
+    let lo = this.closeDist, hi = Math.max(lo, this.roomView.dist);
+    if (fits(lo)) return lo;
+    if (!fits(hi)) return hi;
+    for (let i = 0; i < 10; i++) {
+      const mid = (lo + hi) / 2;
+      if (fits(mid)) hi = mid;
+      else lo = mid;
+    }
+    return hi;
+  }
+  /** where the cat's eyes are (world), for the close view */
+  private readonly eyesW = new THREE.Vector3();
+
   private moveCamera(dt: number, touching: boolean) {
     if (touching) { this.focusT = 1; this.focusHold = 9; }
     else if ((this.focusHold -= dt) <= 0) this.focusT = 0;
@@ -537,6 +594,13 @@ export class PixelApp {
       a.at.lerp(this.tmpA.copy(a.local).applyMatrix4(a.bone.matrixWorld), 1 - Math.exp(-dt * 6));
       if (this.focusT === 0 && this.focus < 0.01) this.anchor = null;
     }
+    // (in round a spot on its back or its flank, as near as that leaves its face on the screen:
+    // its face is what answers the hand. Out again at once if the face would go off; in again
+    // slowly as it comes back)
+    this.cat.body.eyes(this.eyesW).applyMatrix4(this.cat.group.matrixWorld);
+    const need = this.anchor ? this.nearest(this.anchor, this.eyesW) : this.closeDist;
+    this.closeNow += (need - this.closeNow) * (1 - Math.exp(-dt * (need > this.closeNow ? 5 : 1.2)));
+    if (this.focus < 0.01) this.closeNow = need;
     // the room view follows as the cat goes off toward an edge, a little ahead of it the way it is
     // walking (not when it is tearing about: it lags behind then, rather than swinging to and fro),
     // never past the room's ends
