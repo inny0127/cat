@@ -206,8 +206,9 @@ export function dayLight(hour: number, out?: DayLight, rain = 0, moon = 1, fog =
   const night = 1 - day;
   // by night the moon, high in the left of the window, lays its own cool patch over the bed and
   // the floor to the right of it, away from the lamp's warm pool, the window's cross in it
-  // (a full moon gives its whole light, a thin one only a little)
-  const moonUp = ss(0.55, 0.9, night) * (1 - rain) * (0.35 + 0.65 * moon);
+  // (a full moon gives its whole light, a thin one less; but even a thin one enough, in the small
+  // hours with the lamp out, to see the cat asleep in its bed by, the sill pale under the glass)
+  const moonUp = ss(0.55, 0.9, night) * (1 - rain) * (0.55 + 0.45 * moon);
   const ma = sun > 0 ? 0 : 1;
   const mAz = THREE.MathUtils.degToRad(-15), mEl = THREE.MathUtils.degToRad(40);
   const keyDir = (out?.keyDir ?? new THREE.Vector3()).set(
@@ -232,7 +233,7 @@ export function dayLight(hour: number, out?: DayLight, rain = 0, moon = 1, fog =
   // giving back only a little; in the gold hours the sky dims and the room with it, and the low
   // sun is all the stronger for it
   // (in a mist the sun comes through soft and weak)
-  o.sun = (ma ? 0.34 * moonUp : 0.8 * sun * (1 - rain) * (1 + 0.6 * gold)) * (1 - 0.65 * fog);
+  o.sun = (ma ? 0.6 * moonUp : 0.8 * sun * (1 - rain) * (1 + 0.6 * gold)) * (1 - 0.65 * fog);
   o.sky = (0.9 * day + 0.12 * night) * (1 - 0.45 * rain) * (1 - 0.55 * gold);
   o.amb = (0.11 * day + 0.03) * dim * (1 - 0.5 * gold);
   o.floorB = 0.45 * day * dim;
