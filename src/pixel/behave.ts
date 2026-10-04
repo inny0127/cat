@@ -76,6 +76,10 @@ export interface Ctx {
    *  pushing it along the sill (metres toward the room, and sideways) */
   pencil: () => { at: THREE.Vector3; onSill: boolean } | null;
   pushPencil: (dz: number, dx: number) => void;
+  /** the mug of tea (the middle of its foot, and whether it is still standing on the sill), if
+   *  there is one; a paw pushing it along the sill (as the pencil) */
+  mug: () => { at: THREE.Vector3; onSill: boolean } | null;
+  pushMug: (dz: number, dx: number) => void;
   /** where you are, to look at */
   viewer: () => THREE.Vector3;
   /** the red dot of a laser pointer shining in the room, if there is one (chase.ts) */
@@ -85,9 +89,7 @@ export interface Ctx {
    *  round whatever is in the way (null: the way is clear) */
   keepClear: (p: THREE.Vector3, r: number) => THREE.Vector3;
   detour: (from: THREE.Vector3, to: THREE.Vector3, r: number) => THREE.Vector3 | null;
-  /** a pounce on the books: the mug on them knocked the way it is going (true if it went over);
-   *  where the books stand */
-  knockMug: (dir: THREE.Vector3, sure?: boolean) => boolean;
+  /** where the books stand (a pounce on them lands on top) */
   books: () => THREE.Vector3;
   /** a paw (or the body) knocks against whatever is at a point, so hard (0 .. 1): the plant's
    *  leaves shake, a curtain swings */
@@ -2086,9 +2088,10 @@ export class Sill implements Act {
   /** snow going by: one flake after another followed down with the head (how far after this one,
    *  how long it takes to fall from sight, which way it is) */
   private flake = { t: 0, len: 1.8, yaw: 0 };
-  /** the pencil by its paws, turned to face the room: a look at it, a look at you, a pat at it
-   *  (how many so far), and again, until it goes over; watched all the way down */
-  private knock = { step: 'eye' as 'eye' | 'you' | 'paw' | 'watch' | 'after', t: 0, len: 0, taps: 0, pushed: false };
+  /** the pencil (or the mug of tea) by its paws, turned to face the room: a step over to it, a
+   *  look at it, a look at you, a pat at it (how many so far), and again, until it goes over;
+   *  watched all the way down */
+  private knock = { what: 'pencil' as 'pencil' | 'mug', step: 'eye' as 'to' | 'eye' | 'you' | 'paw' | 'watch' | 'after', t: 0, len: 0, taps: 0, pushed: false };
   constructor(private readonly spot: SillSpot) {}
 
   /** asked down: it comes down as soon as it can, and stops there */
@@ -2245,13 +2248,15 @@ export class Sill implements Act {
         return true;
       }
       case 'about':
-        // round on the sill to face the room (and now and then, the pencil there by its paws...)
+        // round on the sill to face the room (and now and then, the pencil there by its paws, or
+        // the mug of tea by its side...)
         m.setPosture('stand');
         if (!m.goal) m.walkTo(m.pos.clone(), 0.12, 0, () => {
-          const P = c.pencil();
-          const near = P && P.onSill && Math.abs(P.at.x - m.pos.x) < 0.15 && P.at.z - m.pos.z > 0.02 && P.at.z - m.pos.z < 0.2;
-          if (near && !this.leaving && this.nap < 0.3 && Math.random() < 0.4) {
-            Object.assign(this.knock, { step: 'eye', t: 0, len: rand(1.2, 2), taps: 0, pushed: false });
+          const near = (P: { at: THREE.Vector3; onSill: boolean } | null) => !!P && P.onSill && Math.abs(P.at.x - m.pos.x) < 0.15 && P.at.z - m.pos.z > 0.02 && P.at.z - m.pos.z < 0.2;
+          const P = c.pencil(), M = c.mug();
+          const what = near(M) && (!near(P) || Math.random() < 0.5) ? 'mug' : near(P) ? 'pencil' : null;
+          if (what && !this.leaving && this.nap < 0.3 && Math.random() < (what === 'mug' ? 0.3 : 0.4)) {
+            Object.assign(this.knock, { what, step: what === 'mug' ? 'to' : 'eye', t: 0, len: rand(1.2, 2), taps: 0, pushed: false });
             this.next('knock');
           } else this.next('look', 0.6);
         });
@@ -2260,14 +2265,27 @@ export class Sill implements Act {
         // sat facing the room, the pencil by its front paws: a long look at it, a look at you, a pat
         // at it, a look at you... and the last pat sends it over the edge; its eyes follow it all
         // the way down, then come back to you to see what you make of it
-        m.setPosture('sit');
         const K = this.knock;
         K.t += dt;
-        const P = c.pencil();
+        const P = K.what === 'mug' ? c.mug() : c.pencil();
         const go = (step: typeof K.step, len: number) => { K.step = step; K.t = 0; K.len = len; };
         let paw: Record<string, unknown> = {};
         // (called down, or wanted elsewhere: it leaves the pencil be, unless it is on its way down)
         if (!P || (this.leaving && K.step !== 'watch')) { m.layer = null; m.lookAt(null); this.next('look', 0.6); return true; }
+        if (K.step === 'to') {
+          // (the mug is off by its side: a shuffle along the sill, still facing the room, so that it
+          // stands before a forepaw, a little out to that side)
+          m.setPosture('stand');
+          m.lookAt(P.at, 1);
+          const side = P.at.x < m.pos.x ? 1 : -1;
+          const S = this.spot, to = new THREE.Vector3(P.at.x + side * 0.045, 0, Math.max(S.seat.z - 0.03, P.at.z - 0.075));
+          const dx = to.x - m.pos.x, dz = to.z - m.pos.z, d = Math.hypot(dx, dz), step = Math.min(d, 0.1 * dt);
+          if (d > 1e-4) { m.pos.x += (dx / d) * step; m.pos.z += (dz / d) * step; }
+          m.yaw = wrapA(m.yaw * (1 - Math.min(1, dt * 4)));
+          if (d < 0.004 || K.t > 2.5) go('eye', rand(1.2, 2));
+          return true;
+        }
+        m.setPosture('sit');
         if (K.step === 'eye') {
           m.lookAt(P.at, 1);
           if (K.t > K.len) go('you', rand(0.8, 1.5));
@@ -2296,11 +2314,12 @@ export class Sill implements Act {
             // (a pat or two first; then over it goes, a little off to the side, past the end of the
             // bed, where it lies in sight)
             const last = K.taps >= 3 || (K.taps >= 2 && Math.random() < 0.6);
-            c.pushPencil(last ? 0.07 : 0.022, (last ? 0.03 : 0.006) * Math.sign(lx || 1));
+            if (K.what === 'mug') c.pushMug(last ? 0.075 : 0.024, (last ? 0.012 : 0.004) * Math.sign(lx || 1));
+            else c.pushPencil(last ? 0.07 : 0.022, (last ? 0.03 : 0.006) * Math.sign(lx || 1));
           }
           if (u >= 1) {
             K.pushed = false;
-            const p2 = c.pencil();
+            const p2 = K.what === 'mug' ? c.mug() : c.pencil();
             if (p2 && !p2.onSill) go('watch', rand(1.2, 1.6));
             else go(Math.random() < 0.6 ? 'you' : 'eye', rand(0.7, 1.3));
           }

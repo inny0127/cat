@@ -89,7 +89,6 @@ export class PixelAvatar implements Avatar {
   ground: {
     keepClear: (p: THREE.Vector3, r: number) => THREE.Vector3;
     detour: (from: THREE.Vector3, to: THREE.Vector3, r: number) => THREE.Vector3 | null;
-    knockMug: (dir: THREE.Vector3, sure?: boolean) => boolean;
     books: THREE.Vector3;
     bump: (at: THREE.Vector3, k: number) => void;
     batLure: (v: THREE.Vector3) => void;
@@ -135,6 +134,9 @@ export class PixelAvatar implements Avatar {
     drop?: (p: THREE.Vector3 | null) => void;
     /** the pencil (its middle, and whether it is still on the sill), and a paw pushing it along */
     pencil?: () => { at: THREE.Vector3; onSill: boolean }; pushPencil?: (dz: number, dx: number) => void;
+    /** the mug of tea (the middle of its foot, and whether it is still on the sill), and a paw
+     *  pushing it along */
+    mug?: () => { at: THREE.Vector3; onSill: boolean }; pushMug?: (dz: number, dx: number) => void;
   } | null = null;
   /** after a hunt, a while before the next */
   private huntRest = 0;
@@ -218,18 +220,20 @@ export class PixelAvatar implements Avatar {
   }
   /** a crash in the room (the mug in pieces on the floor): it starts at it, asleep or awake;
    *  awake and about, it is off from it at a scramble, and then has a look (up on the sill or in
-   *  the box, it only stares) */
+   *  the box, it only stares). True if it was up on the sill (or in the box): its own doing */
   crash(at: THREE.Vector3) {
-    if (!this.alive || this.isHidden) return;
+    if (!this.alive || this.isHidden) return false;
     this.cat.motor.jolt(1.3);
     this.cat.motor.flickEar('both', 1.2);
-    if (this.sleep > 0.3 || this.errand || this.trip) return;
-    if (this.perched) { this.see(at); return; }
+    if (this.sleep > 0.3 || this.errand || this.trip) return false;
+    // (up on the sill, most likely it was the one that sent it over: it only starts, and looks)
+    if (this.perched) { this.see(at); return true; }
     this.stopAct();
     this.act = new Startle(this.ctx, at);
     // (and no games for a little while after)
     this.chaseRest = Math.max(this.chaseRest, 8);
     this.teaseRest = Math.max(this.teaseRest, 8);
+    return false;
   }
 
   /** you are back after a while away, and it is awake: hello (glad: how glad, 0 .. 1). Its own
@@ -448,11 +452,12 @@ export class PixelAvatar implements Avatar {
       drop: (p) => this.outside?.drop?.(p),
       pencil: () => this.outside?.pencil?.() ?? null,
       pushPencil: (dz, dx) => this.outside?.pushPencil?.(dz, dx),
+      mug: () => this.outside?.mug?.() ?? null,
+      pushMug: (dz, dx) => this.outside?.pushMug?.(dz, dx),
       viewer: () => this.viewer(),
       laser: () => this.laser,
       keepClear: (p, r) => this.ground?.keepClear(p, r) ?? p,
       detour: (from, to, r) => this.ground?.detour(from, to, r) ?? null,
-      knockMug: (dir, sure) => this.ground?.knockMug(dir, sure) ?? false,
       books: () => this.ground?.books ?? new THREE.Vector3(9, 0, 9),
       bump: (at, k) => this.ground?.bump(at, k),
       lure: () => this.wand,

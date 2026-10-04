@@ -10,8 +10,8 @@ const clamp = (x: number, a: number, b: number) => Math.max(a, Math.min(b, x));
 const DOWN = new Set<PoseName>(['loaf', 'sphinx', 'side', 'curl', 'curlL']);
 
 /** the red dot of a laser pointer as the cat sees it: where it is, on what (the floor or the bed,
- *  the windowsill, the books with the mug on them, anything else upright: a wall, the radiator,
- *  the lamp), and which way that faces */
+ *  the windowsill, the books, anything else upright: a wall, the radiator, the lamp), and which
+ *  way that faces */
 export interface LaserDot {
   p: THREE.Vector3;
   on: 'floor' | 'bed' | 'sill' | 'books' | 'up';
@@ -33,9 +33,9 @@ type Phase = 'notice' | 'stalk' | 'run' | 'wiggle' | 'pounce' | 'hold' | 'rear' 
  * wiggles and it is pounced on, both forepaws coming down on it, and then a paw is lifted to see
  * whether it is under there; darting off, it is run after flat out, claws scrabbling at the turns.
  * Low on the wall it is reared up to and patted at; higher, leapt at, again and again; on the sill,
- * the cat goes up after it (and whatever is in the way up there goes over the edge); on the books,
- * it is pounced on there, the mug or no mug. Gone, it is looked for: where it was, round about,
- * under a paw, and then at you. In the end the game palls, and it lies down and only watches.
+ * the cat goes up after it (and whatever is in the way up there, the pencil, the mug of tea, goes
+ * over the edge); on the books, it is pounced on there. Gone, it is looked for: where it was,
+ * round about, under a paw, and then at you. In the end the game palls, and it lies down and only watches.
  */
 export class Chase implements Act {
   readonly name = 'chase';
@@ -76,8 +76,6 @@ export class Chase implements Act {
   /** at the end, a wash (as if nothing had happened) */
   private wash: Act | null = null;
   private readonly sill: SillSpot | null;
-  /** the dot on the books: pounced on there (once), and whether the mug went */
-  private onBooks = false;
   /** up on the sill, how long the dot has been off it */
   private offSill = 0;
   /** the dot on its own body: which part of it, and a moment between goes after it there */
@@ -382,10 +380,6 @@ export class Chase implements Act {
           const paws = m.pos.clone().addScaledVector(this.fwd, books ? 0.18 : 0.2);
           this.pinAt.copy(paws);
           c.bump(paws.clone().setY(0.05), 0.4);
-          if (books && !this.onBooks) {
-            this.onBooks = true;
-            c.knockMug(this.fwd.clone(), !!L?.mug);
-          }
           // on it (as near as a cat can tell): held down; or missed, and after it again
           const near = L && Math.hypot(L.p.x - paws.x, L.p.z - paws.z) < 0.09 && (L.on === 'floor' || L.on === 'bed' || books);
           if (near) { this.side = Math.random() < 0.5 ? 1 : -1; this.next('hold', rand(0.6, 1.2)); }
@@ -699,9 +693,11 @@ export class Chase implements Act {
   /** paws up on the sill coming down by the pencil: it goes over the edge */
   private brush(c: Ctx, at: THREE.Vector3, r: number) {
     const P = c.pencil();
-    if (!P || !P.onSill) return;
-    if (Math.hypot(P.at.x - at.x, P.at.z - at.z) > r + 0.06) return;
-    c.pushPencil(0.12, 0.03 * Math.sign(P.at.x - at.x || 1));
+    if (P && P.onSill && Math.hypot(P.at.x - at.x, P.at.z - at.z) < r + 0.06) c.pushPencil(0.12, 0.03 * Math.sign(P.at.x - at.x || 1));
+    // (the mug, standing up, is knocked by a body or a paw close by: along the sill toward the
+    // room, a long way, or over)
+    const M = c.mug();
+    if (M && M.onSill && Math.hypot(M.at.x - at.x, M.at.z - at.z) < r + 0.045) c.pushMug(0.13, 0.03 * Math.sign(M.at.x - at.x || 1));
   }
 
   stop(c: Ctx) {

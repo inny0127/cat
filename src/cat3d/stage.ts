@@ -93,7 +93,7 @@ uniform float uExposure;
 uniform float uNear;
 uniform float uFar;
 uniform vec3 uPalEye[${PAL_EYE.length}];
-uniform vec3 uSteam;     // steam off a hot drink: where it rises from (art pixels), and how much
+uniform vec4 uSteam;     // steam off a hot drink: where it rises from (art pixels, view depth), and how much
 uniform vec3 uMotes[16]; // dust in the sunlight: where (art pixels), and how bright (0 for none)
 uniform vec3 uNotes[4];  // music notes rising off the radio: where (art pixels), how bright
 uniform vec4 uBug;       // a moth or a fly: where (art pixels), how far off (view depth), and what
@@ -376,14 +376,22 @@ void main() {
   // steam curling up off a hot drink, and dust turning in the sunlight: a soft warm white over
   // whatever is behind
   float haze = 0.0;
-  if (uSteam.z > 0.0) {
-    vec2 q = vec2(p) - uSteam.xy;
-    if (q.y > 0.0 && q.y < 13.0) {
+  // (behind whatever stands nearer)
+  if (uSteam.w > 0.0 && !(depth < 0.99999 && lin(depth) < uSteam.z - 0.04)) {
+    // (two wisps, each a line of single pixels, one to a row, as a pixel artist draws steam:
+    // rising, swaying wider the higher they get, coming apart in lengths that drift up, paler as
+    // they go; the second shorter, from the other side of the cup)
+    ivec2 q = p - ivec2(uSteam.xy);
+    if (q.y >= 2 && q.y < 18 && abs(q.x) < 7) {
       for (int i = 0; i < 2; i++) {
-        float fi = float(i);
-        float x = sin(q.y * 0.55 - uTime * 2.2 + fi * 2.4) * (0.6 + q.y * 0.12) + (fi - 0.5) * 2.0;
-        float gap = fract(q.y * 0.11 - uTime * 0.35 + fi * 0.5);
-        if (abs(q.x - x) < 0.6 && gap > 0.25 && q.y < 13.0 - fi * 3.0) haze = max(haze, 0.42 * (1.0 - q.y / 14.0) * uSteam.z);
+        float fi = float(i), y = float(q.y), H = 17.0 - fi * 5.0;
+        if (y >= H) continue;
+        float x = sin(y * 0.5 - uTime * 2.0 + fi * 2.7) * (0.5 + y * 0.09) + sin(y * 0.11 + uTime * 0.6 + fi * 1.3) * 0.7 + (fi - 0.5) * 2.6;
+        float seg = fract(y * 0.12 - uTime * 0.55 + fi * 0.43);
+        if (q.x == int(floor(x + 0.5)) && seg > 0.3) {
+          float u = y / H;
+          haze = max(haze, (u < 0.4 ? 0.78 : u < 0.75 ? 0.56 : 0.34) * uSteam.w);
+        }
       }
     }
   }
@@ -622,7 +630,7 @@ export class Stage {
         uExposure: { value: exposure }, uNear: { value: this.camera.near }, uFar: { value: this.camera.far },
         uPalEye: { value: eyePalette() },
         uRampTex: { value: rampTexture() },
-        uSteam: { value: new THREE.Vector3() },
+        uSteam: { value: new THREE.Vector4() },
         uMotes: { value: Array.from({ length: 16 }, () => new THREE.Vector3()) },
         uNotes: { value: Array.from({ length: 4 }, () => new THREE.Vector3()) },
         uBug: { value: new THREE.Vector4() }, uBugCol: { value: new THREE.Vector3(1, 1, 1) },
@@ -769,10 +777,10 @@ export class Stage {
   /** steam rising off a hot drink at a world point (amount 0 for none) */
   setSteam(at: THREE.Vector3 | null, amount = 1) {
     if (!this.pixel) return;
-    const u = this.pixel.mat.uniforms.uSteam.value as THREE.Vector3;
-    if (!at || amount <= 0) { u.set(0, 0, 0); return; }
+    const u = this.pixel.mat.uniforms.uSteam.value as THREE.Vector4;
+    if (!at || amount <= 0) { u.set(0, 0, 0, 0); return; }
     const a = this.toArt(at);
-    u.set(Math.floor(a.x), Math.floor(a.y), amount);
+    u.set(Math.floor(a.x), Math.floor(a.y), -at.clone().applyMatrix4(this.camera.matrixWorldInverse).z, amount);
   }
 
   /** dust motes: world points with a brightness each (up to 16) */

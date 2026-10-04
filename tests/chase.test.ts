@@ -11,18 +11,18 @@ import type { Act, Ctx } from '../src/pixel/behave';
 function room() {
   const m = new Motor();
   m.snap('sit');
-  const calls = { knock: [] as boolean[], pin: 0, bat: 0, sounds: [] as string[] };
-  const world = { dot: null as LaserDot | null, lure: null as Lure | null };
+  const calls = { pushes: [] as number[], pin: 0, bat: 0, sounds: [] as string[] };
+  const world = { dot: null as LaserDot | null, lure: null as Lure | null, mug: null as { at: THREE.Vector3; onSill: boolean } | null };
   const c = {
     m, home: new THREE.Vector3(), window: new THREE.Vector3(0, 0, 0.2),
     room: { minX: -1, maxX: 1, minZ: -1, maxZ: 1 }, mode: 'alert', mood: { ...NEUTRAL }, kneading: false,
     bed: () => ({ to: new THREE.Vector3(), yaw: 0 }), sill: () => null, box: () => null,
     sound: (n: string) => calls.sounds.push(n), say: () => {},
     laser: () => world.dot, keepClear: (p: THREE.Vector3) => p, detour: () => null,
-    knockMug: (_d: THREE.Vector3, sure?: boolean) => { calls.knock.push(!!sure); return true; },
     books: () => new THREE.Vector3(0.6, 0, 0.6),
     lure: () => world.lure, batLure: () => { calls.bat++; }, pinLure: () => { calls.pin++; },
-    pencil: () => null, pushPencil: () => {}, viewer: () => new THREE.Vector3(0, 1.4, 3), perch: () => {}, hold: () => {},
+    pencil: () => null, pushPencil: () => {}, mug: () => world.mug, pushMug: (dz: number) => { calls.pushes.push(dz); if (world.mug) world.mug.at.z += dz; },
+    viewer: () => new THREE.Vector3(0, 1.4, 3), perch: () => {}, hold: () => {},
     bump: () => {},
   } as unknown as Ctx;
   return { c, m, calls, world };
@@ -77,15 +77,26 @@ describe('the red dot of a laser pointer', () => {
     expect(going).toBe(false);
   });
 
-  it('on the mug: pounced on there, and over the mug goes', () => {
-    const { c, m, world, calls } = room();
+  it('on the books: pounced on there', () => {
+    const { c, m, world } = room();
     const books = c.books();
     m.pos.set(books.x - 0.5, 0, books.z);
-    world.dot = { p: new THREE.Vector3(books.x, 0.12, books.z), on: 'books', n: new THREE.Vector3(-1, 0, 0), mug: true };
+    world.dot = { p: new THREE.Vector3(books.x, 0.12, books.z), on: 'books', n: new THREE.Vector3(-1, 0, 0) };
     const act = new Chase(c), seen = new Set<string>();
     run(act, c, m, 8, seen);
     expect(seen.has('pounce')).toBe(true);
-    expect(calls.knock).toEqual([true]);
+  });
+
+  it('up on the sill after it: the mug of tea in the way there is knocked over the edge', () => {
+    const { c, m, world, calls } = room();
+    const sill = { launch: new THREE.Vector3(0, 0, 0.5), seat: new THREE.Vector3(0, 0, 0.14), land: new THREE.Vector3(0.03, 0, 0.52), height: 0.36 };
+    (c as unknown as { sill: () => typeof sill }).sill = () => sill;
+    world.mug = { at: new THREE.Vector3(-0.08, 0.36, 0.19), onSill: true };
+    world.dot = { p: new THREE.Vector3(-0.06, 0.36, 0.15), on: 'sill', n: new THREE.Vector3(0, 1, 0) };
+    const act = new Chase(c), seen = new Set<string>();
+    run(act, c, m, 8, seen);
+    expect(seen.has('up')).toBe(true);
+    expect(calls.pushes.length).toBeGreaterThan(0);
   });
 
   it('up the wall within reach: reared up to; out of reach: leapt at', () => {

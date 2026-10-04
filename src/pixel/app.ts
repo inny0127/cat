@@ -86,7 +86,6 @@ export class PixelApp {
     this.avatar.ground = {
       keepClear: (p, r) => this.room.keepClear(p, r),
       detour: (from, to, r) => this.room.detour(from, to, r),
-      knockMug: (dir, sure) => this.room.knockMug(dir, sure),
       books: this.room.books,
       bump: (at, k) => this.room.bump(at, k),
       batLure: (v) => this.room.batLure(v),
@@ -109,16 +108,19 @@ export class PixelApp {
     // the little bell on the wand's feathers; the feathers pulled out from under a paw (felt)
     this.room.onBell = (k) => this.audio.play('bell', { gain: 0.06 + 0.12 * k, pan: Math.max(-0.8, Math.min(0.8, this.room.lureAt().clone().project(this.stage.camera).x * 0.8)) });
     this.room.onLureFree = () => this.haptic.tap?.();
-    // the mug knocked off the books: a clink as it goes; in pieces on the floor, a crash the cat
-    // jumps at (out of its sleep too), and you feel; swept up, a soft brushing
+    // the mug pushed along the sill: a scrape of china; over the edge, a clink as it goes; in
+    // pieces on the floor, a crash the cat jumps at (out of its sleep too), and you feel; swept up,
+    // a soft brushing
     this.room.onMug = (what, at, k) => {
       const pan = Math.max(-0.8, Math.min(0.8, at.clone().project(this.stage.camera).x * 0.8));
-      if (what === 'tip') this.audio.play('pencil', { gain: 0.18, rate: 1.4, pan });
+      if (what === 'nudge') this.audio.play('pencil', { gain: 0.05 + 0.08 * k, rate: 0.75, pan });
+      else if (what === 'tip') this.audio.play('pencil', { gain: 0.18, rate: 1.4, pan });
       else if (what === 'crash') {
         this.audio.play('shatter', { gain: 0.45 + 0.35 * k, pan });
         this.haptic.tap('heavy');
-        this.brain.thunder(0.85);
-        this.avatar.crash(at);
+        // (a fright, unless the cat sent it over itself: then only a start)
+        const own = this.avatar.crash(at);
+        this.brain.thunder(own ? 0.3 : 0.85);
       } else this.audio.play('scoop', { gain: 0.3, rate: 1.3, pan });
     };
     this.avatar.boxSpot = () => this.room.boxSpot();
@@ -131,6 +133,8 @@ export class PixelApp {
       drop: (p) => this.room.setDrop(p),
       pencil: () => this.room.pencilWhere(),
       pushPencil: (dz, dx) => this.room.pushPencil(dz, dx),
+      mug: () => this.room.mugWhere(),
+      pushMug: (dz, dx) => this.room.pushMug(dz, dx),
     };
     // the pencil off the sill: a clack on the boards, quieter at each bounce; put back, a tap
     this.room.onPencil = (what, k) => {

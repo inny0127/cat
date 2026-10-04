@@ -1478,7 +1478,7 @@ export class Room {
       this.leaves.push({ leaf, x: leaf.rotation.x, z: leaf.rotation.z, seed: a * 3.1 + h * 7 });
     }
 
-    // in front: a stack of books with a mug on top, and a ball of yarn the cat plays with
+    // in front: a stack of books, and a ball of yarn the cat plays with
     const fx = bx + 0.42, fz = bz + 0.38;
     this.books.set(fx, 0, fz);
     const stack: [Material, number, number][] = [['bookBlue', 0.2, 0.03], ['bookRed', 0.18, 0.025], ['bookMustard', 0.17, 0.028]];
@@ -1490,9 +1490,13 @@ export class Room {
       fy += t;
     });
     {
-      // the mug of tea, all of a piece (a cat can knock it off), its base at the top of the books
+      // the mug of tea on the sill, steaming against the glass, all of a piece (a cat can push it
+      // off): left of the middle, where a cat sat at the glass has it by its side and, turned
+      // round, by its paw
       const mug = new THREE.Group();
-      const china = this.mat('paint');
+      // (an oatmeal glaze: white china was the brightest thing in the picture; in pieces on the
+      // rug, it shows)
+      const china = this.mat('rugCream', { tone: 0.04 });
       const body = shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.028, 0.07, 16), china));
       body.position.y = 0.035;
       const handle = shadowy(new THREE.Mesh(new THREE.TorusGeometry(0.018, 0.006, 6, 12), china));
@@ -1500,11 +1504,16 @@ export class Room {
       const tea = new THREE.Mesh(new THREE.CircleGeometry(0.028, 14).rotateX(-Math.PI / 2), this.mat('brown'));
       tea.position.y = 0.066;
       mug.add(body, handle, tea);
-      mug.position.set(fx + 0.01, fy, fz);
+      mug.position.set(bx - 0.105, winB, wallZ + 0.13);
+      // (the handle toward the window's middle, a little round toward you)
+      mug.rotation.y = -0.5;
       this.group.add(mug);
       this.cup.mesh = mug;
       this.cup.home.copy(mug.position);
+      this.cup.homeYaw = mug.rotation.y;
       this.cup.tea = tea;
+      // (over the sill's edge once its middle is past it, less a little: it tips)
+      this.cup.edge = wallZ + 0.245;
       // what is left of it on the floor: pieces of china, the handle, and the tea spreading
       const bits = new THREE.Group();
       bits.visible = false;
@@ -1541,7 +1550,6 @@ export class Room {
       this.cup.bits = bits;
       this.cup.pool = pool;
     }
-    this.mugTop = new THREE.Vector3(fx + 0.01, fy + 0.07, fz);
     const wool = this.mat('bookRed', { tone: 0.12, pattern: 5 });
     const yarn = shadowy(new THREE.Mesh(new THREE.SphereGeometry(0.045, 16, 12), wool));
     // (in front of the bed, well in view on a phone, where a finger can find it)
@@ -2547,47 +2555,61 @@ export class Room {
     return null;
   }
 
-  /** the mug of tea on the books: standing there, going over the edge, falling, in pieces on the
-   *  floor (and, swept up, gone a while till there is another); how it moves; its pieces and the
-   *  tea spilled, and how they move */
+  /** the mug of tea on the sill: standing there (pushed along it, maybe), going over the edge,
+   *  falling, in pieces on the floor (and, swept up, gone a while till there is another); how it
+   *  moves; its pieces and the tea spilled, and how they move */
   private readonly cup = {
-    state: 'up' as 'up' | 'tip' | 'fall' | 'broken' | 'gone', mesh: new THREE.Group() as THREE.Object3D, home: new THREE.Vector3(),
+    state: 'up' as 'up' | 'tip' | 'fall' | 'broken' | 'gone', mesh: new THREE.Group() as THREE.Object3D, home: new THREE.Vector3(), homeYaw: 0,
     tea: null as THREE.Object3D | null, bits: new THREE.Group() as THREE.Object3D, pool: new THREE.Group() as THREE.Object3D,
-    t: 0, dir: new THREE.Vector3(1, 0, 0), vel: new THREE.Vector3(), axis: new THREE.Vector3(), spin: 0,
+    t: 0, dir: new THREE.Vector3(1, 0, 0), vel: new THREE.Vector3(), axis: new THREE.Vector3(), spin: 0, edge: 0, from: new THREE.Vector3(),
     pieces: [] as { v: THREE.Vector3; spin: number; axis: THREE.Vector3 }[], spill: 0, at: new THREE.Vector3(), back: 0,
   };
-  /** the mug: falling over the edge (where), in pieces on the floor (where, how hard) */
-  onMug: ((what: 'tip' | 'crash' | 'swept', at: THREE.Vector3, k: number) => void) | null = null;
+  /** the mug: pushed along the sill (where, how hard), going over its edge, in pieces on the floor
+   *  (where, how hard), swept up */
+  onMug: ((what: 'nudge' | 'tip' | 'crash' | 'swept', at: THREE.Vector3, k: number) => void) | null = null;
 
-  /** is there a mug of tea on the books (and steaming) */
+  /** is there a mug of tea on the sill (and steaming) */
   get mugUp() {
     return this.cup.state === 'up';
+  }
+
+  /** where the mug's steam rises from: over the tea, wherever it has been pushed to */
+  get mugTop() {
+    return this.cup.mesh.position.clone().setY(this.cup.mesh.position.y + 0.07);
+  }
+
+  /** where the mug is (the middle of its foot), and whether it is still standing on the sill */
+  mugWhere() {
+    return { at: this.cup.mesh.position.clone(), onSill: this.cup.state === 'up' };
+  }
+
+  /** a paw pushes the mug along the sill toward the room (metres) and aside: a scrape of china on
+   *  the sill; over the edge, off it goes */
+  pushMug(dz: number, dx = 0) {
+    const C = this.cup, M = C.mesh;
+    if (C.state !== 'up') return;
+    M.position.z += dz;
+    M.position.x += dx;
+    M.rotation.y += (Math.random() - 0.5) * 0.3;
+    if (M.position.z < C.edge) {
+      this.onMug?.('nudge', M.position.clone(), Math.min(1, Math.hypot(dz, dx) / 0.07));
+      return;
+    }
+    // over: it tips about the sill's edge, the way it was pushed (toward the room), and falls
+    // (from the edge, not from wherever the shove would have had it: in front of the radiator,
+    // short of the bed, where its pieces are seen)
+    C.state = 'tip';
+    C.t = 0;
+    M.position.z = C.edge;
+    C.from.copy(M.position);
+    C.dir.set(dx, 0, Math.max(dz, 0.01)).normalize();
+    C.axis.set(0, 1, 0).cross(C.dir).normalize();
+    this.onMug?.('tip', M.position.clone(), 1);
   }
 
   /** the pieces on the floor, to tap and sweep up (null: there are none) */
   get mess(): THREE.Object3D | null {
     return this.cup.state === 'broken' ? this.cup.bits : null;
-  }
-
-  /** a paw (or a cat landing) knocks the mug on the books, a way: over it goes, now and then
-   *  (sure: it was what the cat was after); true if it went */
-  knockMug(dir: THREE.Vector3, sure = false) {
-    const C = this.cup;
-    if (C.state !== 'up' || (!sure && Math.random() < 0.4)) return false;
-    C.state = 'tip';
-    C.t = 0;
-    C.dir.set(dir.x, 0, dir.z).normalize();
-    if (C.dir.lengthSq() < 0.5) C.dir.set(1, 0, 0);
-    // (the books stand at the front of the room: knocked toward you, it would land out of the
-    // picture; it goes over the side instead, the side the push was toward)
-    if (C.dir.z > 0.35) {
-      C.dir.z = 0.35;
-      C.dir.x = (Math.sign(C.dir.x) || 1) * Math.sqrt(1 - 0.35 * 0.35);
-    }
-    // (over the edge on the far side: it topples about its foot, then falls clear)
-    C.axis.set(0, 1, 0).cross(C.dir).normalize();
-    this.onMug?.('tip', C.mesh.position.clone(), 1);
-    return true;
   }
 
   /** the pieces swept up (and the tea mopped): gone, and some while after, a fresh cup */
@@ -2605,14 +2627,15 @@ export class Room {
   private moveMug(dt: number) {
     const C = this.cup, M = C.mesh;
     if (C.state === 'tip') {
-      // over about the edge of its foot, sliding the way it was pushed
+      // over about the sill's edge, sliding on off it the way it was pushed
       C.t += dt;
       const ang = Math.min(1.1, 9 * C.t * C.t);
-      M.position.copy(C.home).addScaledVector(C.dir, 0.06 * Math.min(1, C.t / 0.22));
+      M.position.copy(C.from).addScaledVector(C.dir, 0.04 * Math.min(1, C.t / 0.22));
+      M.position.y -= 0.02 * Math.min(1, C.t / 0.22);
       M.quaternion.setFromAxisAngle(C.axis, ang);
       if (C.t > 0.22) {
         C.state = 'fall';
-        C.vel.copy(C.dir).multiplyScalar(0.45).setY(0.05);
+        C.vel.copy(C.dir).multiplyScalar(0.2).setY(0);
         C.spin = 7 + Math.random() * 4;
       }
     } else if (C.state === 'fall') {
@@ -2664,19 +2687,18 @@ export class Room {
       C.pool.scale.set(Math.max(0.005, r), 1, Math.max(0.005, r));
     } else if (C.state === 'gone') {
       if ((C.back -= dt) <= 0) {
-        // a fresh cup of tea on the books
+        // a fresh cup of tea on the sill
         C.state = 'up';
         M.visible = true;
         M.position.copy(C.home);
         M.quaternion.identity();
+        M.rotation.y = C.homeYaw;
       }
     }
   }
 
   /** the little print on the sill (tapping it shows the credits) */
   print: THREE.Object3D = new THREE.Group();
-  /** where the mug's steam rises from */
-  mugTop = new THREE.Vector3();
   private readonly nightU = { value: 0 };
 
   private mat(name: Material, o: { pattern?: number; tone?: number; rug?: THREE.Vector3; wallZ?: number; side?: number } = {}) {
