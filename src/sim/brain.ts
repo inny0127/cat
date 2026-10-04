@@ -152,7 +152,7 @@ export class Brain {
     const glad = clamp((s.trust - 0.15) / 0.6) * clamp(away / 900);
     if (n.food || n.water || (s.trust > 0.35 && s.lonely > 0.6 && chance(0.6))) {
       this.toAwake('alert');
-      if (s.trust > 0.3) this.later(0.8, () => this.say('trill'));
+      if (s.trust > 0.3) { this.later(0.8, () => this.say('trill')); this.chatter(away); }
       // (missing you, gone an hour or more: as often as not it has been sat at the glass waiting
       // for you all the while, and there you are)
       if (!n.food && !n.water && away > 3600 && s.trust > 0.45 && this.anim.waited && chance(0.5)) {
@@ -173,12 +173,28 @@ export class Brain {
       this.toAwake('rest');
       if (glad > 0.2 && chance(0.35 + 0.65 * glad)) {
         this.later(0.9, () => this.say('trill'));
+        this.chatter(away);
         this.later(1, () => this.anim.greet?.(glad));
       }
     }
   }
   /** an eye opened on you this soon after you came back (s; 0: none) */
   private greetPeek = 0;
+
+  /** back after a long day away (five hours and more), a cat fond of you has a deal to say about
+   *  it: after its first hello, as it comes up to the glass, a meow and a trill and a chirp, one
+   *  after another (the more of a talker it is, the more) */
+  private chatter(away: number) {
+    if (away < 5 * 3600 || this.s.trust < 0.45) return;
+    const n = Math.round((2 + Math.random() * 2) * (0.6 + 0.6 * this.s.personality.voice));
+    let t = 1.9;
+    for (let i = 0; i < n; i++) {
+      t += rand(0.6, 1.3);
+      const r = Math.random();
+      const what = r < 0.35 ? 'meow' : r < 0.65 ? 'trill' : r < 0.85 ? 'chirp' : 'meowSoft';
+      this.later(t, () => this.say(what));
+    }
+  }
 
   // ------------------------------------------------------------------ input events
   touchStart(c: Contact) {
