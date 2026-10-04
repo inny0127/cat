@@ -1059,6 +1059,9 @@ export class PixelApp {
       return;
     }
     void this.notifier.cancel();
+    // (back to the room: its time with you counts from now, not from the last touch before you
+    // went, or the first thing on coming back would be the cat asking for you over its welcome)
+    this.nudgedAt = performance.now() / 1000;
     const now = Date.now();
     const gap = now - this.state.lastTick;
     const wasAway = this.state.where === 'away';
