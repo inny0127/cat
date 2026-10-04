@@ -521,11 +521,16 @@ export class PixelAvatar implements Avatar {
     if (!this.alive || this.isHidden) return;
     this.hear(at);
     if (loud < 0.75 || this.sleep > 0.3 || this.perched || this.errand || this.trip || Math.random() < 0.5) return;
-    if (this.act && (this.act.name === 'box' || this.act.name === 'to bed')) return;
+    // (by you already: it stays by you, only starts)
+    if (this.act && (this.act.name === 'box' || this.act.name === 'to bed' || this.act.name === 'by you')) return;
     this.stopAct();
     const box = this.boxSpot?.();
     this.act = box ? new Box(box) : toBed(this.ctx, 'loaf');
+    // and a while after, a cat that trusts you, the storm still going, comes out to be near you
+    if (this.mood.trust > 0.45) this.comfortIn = 10 + Math.random() * 15;
   }
+  /** taken cover from the thunder: how long till it comes out to lie by you instead */
+  private comfortIn = 0;
 
   /** something to do once it is down off the sill (asked to go somewhere while up there) */
   private afterPerch: (() => void) | null = null;
@@ -1002,6 +1007,22 @@ export class PixelAvatar implements Avatar {
     this.huntRest = Math.max(0, this.huntRest - dt);
     this.pawRest = Math.max(0, this.pawRest - dt);
     this.clock += dt;
+    // under cover from the storm a while: out, and over to lie by the glass, near you (out of the
+    // box first if it is in it)
+    if (this.comfortIn > 0 && (this.comfortIn -= dt) <= 0) {
+      if (this.alive && !this.isHidden && this.ctx.rain > 0.3 && this.sleep < 0.5 && !this.errand && !this.trip && !this.hands.length
+        && (this.mode === 'rest' || this.mode === 'alert')) {
+        if (this.perched) {
+          if (!this.afterPerch) {
+            this.afterPerch = () => { this.act = byYou(this.ctx); };
+            (this.act as Sill | Box).leave();
+          }
+        } else {
+          if (this.act) this.stopAct();
+          if (!this.act) this.act = byYou(this.ctx);
+        }
+      }
+    }
     // a glint across the floor: after it or not, as the mood takes it
     if (this.glint && !this.glintSeen) {
       this.glintSeen = true;
