@@ -6,6 +6,7 @@ import { PointerInput, type Contact } from '../input/pointer';
 import { MotionInput } from '../input/motion';
 import { CatAudio } from '../audio/audio';
 import { Haptic } from '../platform/haptics';
+import { KeepAwake } from '../platform/awake';
 import { Notifier, forecast } from '../platform/notify';
 import { Hint } from '../ui/hint';
 import { Brain } from '../sim/brain';
@@ -30,6 +31,10 @@ export class PixelApp {
   readonly stage: Stage;
   readonly audio = new CatAudio();
   readonly haptic = new Haptic();
+  /** the screen kept on while the radio plays (the room left open on a desk) */
+  private readonly awake = new KeepAwake();
+  /** when a finger was last on the screen at all (s, the page's clock) */
+  private inputAt = 0;
   readonly notifier = new Notifier();
   readonly motion = new MotionInput();
   readonly hintUi: Hint;
@@ -367,7 +372,8 @@ export class PixelApp {
         if (tap && f) this.flickYarn(f.x, f.y);
       },
     });
-    canvas.addEventListener('pointerdown', () => this.audio.start());
+    canvas.addEventListener('pointerdown', () => { this.audio.start(); this.awake.touched(); this.inputAt = performance.now() / 1000; });
+    canvas.addEventListener('pointermove', () => { this.inputAt = performance.now() / 1000; }, { passive: true });
     this.audio.unlockOn(window);
     this.native();
     this.motion.onShake = (k) => this.brain.kibble(k);
@@ -1098,7 +1104,10 @@ export class PixelApp {
     const m = this.cat.motor;
     const still = this.brain.mode === 'sleep' || (m.speed < 0.02 && Math.abs(m.yawRate) < 0.15 && !m.goal);
     const calm = still && !this.headMoving && nowMs / 1000 - this.touchedAt > 3 && !this.input.touching && this.room.yarnSpeed < 0.01;
-    if (this.last && nowMs - this.last < 1000 / (calm ? 30 : 60) - 3) return;
+    // (and left a long while with nobody at it, the radio on, the screen kept on: an ambient
+    // picture on a desk, gentler still)
+    const idle = calm && nowMs / 1000 - this.inputAt > 180;
+    if (this.last && nowMs - this.last < 1000 / (idle ? 20 : calm ? 30 : 60) - 3) return;
     const dt = Math.min(0.05, this.last ? (nowMs - this.last) / 1000 : 0.016);
     this.last = nowMs;
     if (this.visible && !this.manual) this.tick(dt, nowMs / 1000);
@@ -1212,8 +1221,10 @@ export class PixelApp {
     const bug = this.room.bugAt();
     this.stage.setBug(bug?.p ?? null, bug?.kind, bug ? !bug.resting && Math.sin(now * (bug.kind === 'moth' ? 38 : 70)) > 0 : false,
       this.bugLight.set(1, 1, 1).lerp(new THREE.Vector3(1.15, 0.95, 0.75), dark));
-    // the radio: its dial lit and notes rising while it plays; slower and softer at night
+    // the radio: its dial lit and notes rising while it plays; slower and softer at night (and the
+    // screen kept on while it does, the page in sight)
     this.stage.setNotes(this.room.setRadio(this.audio.musicPlaying, dt));
+    this.awake.set(this.audio.musicPlaying && this.visible);
     this.audio.setNight(dark);
     this.stage.setTime(now);
     this.hints(dt, contacts.length > 0);
