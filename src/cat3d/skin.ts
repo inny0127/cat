@@ -26,6 +26,8 @@ varying float vReg;
 varying vec3 vAux;
 uniform float uPuff;
 uniform float uBonePuff[NBONES];
+uniform float uBoneRib[NBONES];
+uniform float uBreath;    // the ribcage's swell, metres
 uniform float uJawOpen;
 uniform float uSnarl;
 ${AO_GLSL}
@@ -48,6 +50,13 @@ void main() {
     for (int i = 0; i < 4; i++) pm += skinWeight[i] * uBonePuff[int(skinIndex[i])];
     float rough = fract(sin(dot(position, vec3(127.1, 311.7, 74.7))) * 43758.5453);
     transformed += objectNormal * uPuff * pm * (0.0035 + 0.003 * rough);
+  }
+  // breathing: the ribs and belly swell and settle (more than the fur's, to be seen at all at a few
+  // millimetres to the art pixel)
+  if (reg < 0.5) {
+    float rib = 0.0;
+    for (int i = 0; i < 4; i++) rib += skinWeight[i] * uBoneRib[int(skinIndex[i])];
+    transformed += normal * uBreath * 1.8 * rib;
   }
   #include <skinning_vertex>
   vec4 wp = modelMatrix * vec4(transformed, 1.0);
@@ -214,6 +223,7 @@ export function makeSkinMaterial(map: THREE.Texture, shared: Record<string, { va
     uniforms: {
       ...shared, uMap: { value: map }, uPixMap: { value: pixMap ?? map }, uSolidGain: { value: 1.7 }, uSolidSat: { value: 1.3 },
       uBonePuff: { value: bones.map((b) => bristle(b.name)) },
+      uBoneRib: { value: bones.map((b) => ({ spine1: 0.75, spine2: 1, chest: 0.85, hips: 0.25 } as Record<string, number>)[b.name] ?? 0) },
       uJawOpen: { value: 0 }, uSnarl: { value: 0 },
     },
     vertexShader: VERT,
