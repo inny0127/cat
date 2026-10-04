@@ -63,8 +63,9 @@ const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
 /** the eyes a feeling gives a cat that is awake and at ease in its body */
 export function eyesFor(m: Mood): EyeLook {
   const calm = 1 - m.fear;
-  // light first: the pupil's resting width, then feelings open or close it from there
-  const rest = 0.87 - 0.5 * m.light;
+  // light first: the pupil's resting width, then feelings open or close it from there (indoors by
+  // day an upright oval, not the slit of full sun: a slit in a cat at its ease reads as a glare)
+  const rest = 0.9 - 0.4 * m.light;
   let pupil = rest;
   pupil += (1 - pupil) * (0.8 * m.fear + 0.55 * m.arousal);
   pupil -= pupil * 0.6 * m.irritation * calm;

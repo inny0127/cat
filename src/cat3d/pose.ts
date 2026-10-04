@@ -60,7 +60,7 @@ const BASE: Pose = {
   pastern: 0.35, hindFlat: 0,
   tailLift: 0.25, tailSide: 0, tailCurve: -0.5, tailCurl: 0.3, tailHook: 0, tailSag: 0,
   earFwd: 0.2, earOut: 0, earFlat: 0,
-  eyeOpen: 0.95, squint: 0.03, pupil: 0.62, whisker: 0, jaw: 0,
+  eyeOpen: 0.95, squint: 0.03, pupil: 0.7, whisker: 0, jaw: 0,
   breath: 0.6, puff: 0,
 };
 
@@ -103,7 +103,7 @@ export const POSES = {
   /** alert stand, head up, tail up */
   alert: make({
     hipY: 0.222, chestPitch: 0.04, neckPitch: 0.25, headPitch: -0.12,
-    tailLift: 1.1, tailCurve: -0.9, tailCurl: 0.5, earFwd: 0.6, eyeOpen: 1, pupil: 0.58,
+    tailLift: 1.1, tailCurve: -0.9, tailCurl: 0.5, earFwd: 0.6, eyeOpen: 1, pupil: 0.66,
   }),
 
   /** sitting upright on the haunches, front legs straight, tail round the paws */

@@ -200,7 +200,7 @@ void main() {
     // (by day a slit exactly one art pixel wide however small the eye, so that the iris's colour
     // shows either side of it; opening into a round pupil in the dark, and with excitement or fear)
     float pxI = max(length(vec2(dFdx(ip.x), dFdy(ip.x))), 1e-4);
-    float open = smoothstep(0.5, 0.9, uPupil);
+    float open = smoothstep(0.35, 0.85, uPupil);
     vec2 q = ip / vec2(mix(0.5 * pxI, max(0.5 * pxI, 0.42), open), 0.46 + 0.1 * uPupil);
     float pupil = open < 0.5 ? step(abs(q.x), 1.0) * step(abs(q.y), 1.0) : step(length(q), 1.0);
     // (never smaller than about an art pixel, so even a small eye keeps its spark; and low enough
