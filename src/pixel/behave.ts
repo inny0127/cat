@@ -428,7 +428,7 @@ export class Stare implements Act {
  */
 export class Rub implements Act {
   readonly name = 'rub';
-  private phase: 'go' | 'rub' | 'done' = 'go';
+  phase: 'go' | 'rub' | 'done' = 'go';
   private passes = Math.random() < 0.6 ? 2 : 1;
   private dir: number;
   private readonly lineZ: number;
@@ -701,7 +701,7 @@ export const toWindow = (c: Ctx) => {
   const silent = Math.random() < 0.15 + 0.35 * Math.max(0, trust - 0.3) ? rand(2.5, Math.max(3, stay - 3)) : -1;
   let said = false, blinked = false;
   const meow = silent < 0 ? undefined : (t: number, m: Motor): PoseLayer => {
-    if (!said && t > silent) { said = true; m.vocalize('meow', 0.5); }
+    if (!said && t > silent) { said = true; m.vocalize('meow', 0.5); m.moment = 'silent'; }
     if (said && !blinked && t > silent + 1.3) { blinked = true; if (trust > 0.6) m.slowBlink(); }
     return {};
   };
@@ -800,7 +800,7 @@ export class Greet implements Act {
       // the forepaws curled to its chest, looking at you upside down and wriggling its back on the
       // floor, the tail sweeping slowly: a cat's warmest welcome (on its right side facing left
       // across the picture, or its left facing right, whichever is the less of a turn)
-      if (this.t <= dt) this.roll = Math.sin(m.yaw) > 0 ? -1 : 1;
+      if (this.t <= dt) { this.roll = Math.sin(m.yaw) > 0 ? -1 : 1; m.moment = 'flop'; }
       const sd = this.roll, face0 = -sd * Math.PI / 2, D = this.flop;
       m.yaw = wrapA(m.yaw + Math.max(-3, Math.min(3, wrapA(face0 - m.yaw))) * Math.min(1, dt * 4));
       m.setPosture('crouch');
@@ -2208,7 +2208,10 @@ export const sunbathe = (c: Ctx) => {
   // (rolled over the side it will lie on after, so it comes out of the roll into it)
   const roll: Leg[] = rolls ? [{
     to: place.to, face: place.yaw, stay: 5.5, posture: 'side',
-    layer: (t) => bellyUp(1, t, 5.5, 1).pose,
+    layer: (t, m) => {
+      if (t < 1) m.moment = 'flop';
+      return bellyUp(1, t, 5.5, 1).pose;
+    },
   }] : [];
   return new Walk('sun', [
     ...roll,

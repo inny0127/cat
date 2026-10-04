@@ -291,6 +291,10 @@ export class Motor {
   private tiltNow = 0;
   private readonly pet = { roll: 0, yaw: 0, pitch: 0, rump: 0 };
 
+  /** a moment in what it does worth a word to someone new to cats (a silent meow, a roll on its
+   *  back), just now (for whoever wants it, to clear) */
+  moment: string | null = null;
+
   /** something said (a meow, a trill, a chirp), how long it lasts and when it starts */
   private voice: { kind: string; t: number; dur: number } | null = null;
   vocalize(kind: string, dur: number, delay = 0) {

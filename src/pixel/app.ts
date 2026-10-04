@@ -10,6 +10,7 @@ import { KeepAwake } from '../platform/awake';
 import { GlassFog, fogOnGlass } from './glassfog';
 import { Notifier, forecast } from '../platform/notify';
 import { Hint } from '../ui/hint';
+import { Firsts } from '../ui/firsts';
 import { Brain } from '../sim/brain';
 import { loadState, newCat, saveState, type CatState } from '../sim/state';
 import { stepLife, THRESH } from '../sim/life';
@@ -44,6 +45,7 @@ export class PixelApp {
   readonly notifier = new Notifier();
   readonly motion = new MotionInput();
   readonly hintUi: Hint;
+  private readonly firstWords: Firsts;
   readonly input: PointerInput;
   readonly senses: Senses3D;
   readonly avatar: PixelAvatar;
@@ -71,6 +73,7 @@ export class PixelApp {
     this.stage = new Stage({ pixel: PixelApp.artWidth(), paper: '#f4eee4', shadowSize: 2.6 }, canvas);
     this.stage.add(cat);
     this.hintUi = new Hint(hintEl);
+    this.firstWords = new Firsts(() => this.state.hints, this.hintUi);
     this.senses = new Senses3D(cat, this.stage.camera, canvas);
     this.frame3d();
     this.avatar = new PixelAvatar(cat, { x: 0, z: 0.05, yaw: 0 }, this.halfWidth() + 0.25,
@@ -147,7 +150,10 @@ export class PixelApp {
     this.avatar.boxSpot = () => this.room.boxSpot();
     this.avatar.outside = {
       birds: () => this.room.birds(),
-      chirp: () => this.audio.play('chirp', { gain: 0.45, pan: this.catPan() }),
+      chirp: () => {
+        this.audio.play('chirp', { gain: 0.45, pan: this.catPan() });
+        if (this.avatar.doing !== 'stare') this.justNow.add('chatter');
+      },
       sound: (name, gain) => this.audio.play(name, { gain, pan: this.catPan() }),
       bug: () => this.room.bugAt(),
       scareBug: (from) => this.room.scareBug(from),
@@ -1252,6 +1258,7 @@ export class PixelApp {
     if (this.cat.motor.nibbled) {
       this.cat.motor.nibbled = false;
       this.haptic.tapSoon('medium');
+      this.justNow.add('bite');
     }
     // (its tongue on your finger: each lick felt, a little rasp, and heard, hardly)
     if (this.cat.motor.lickLanded) {
@@ -1332,6 +1339,7 @@ export class PixelApp {
     this.audio.setNight(dark);
     this.stage.setTime(now);
     this.hints(dt, contacts.length > 0);
+    this.firsts(dt);
     this.moveCamera(dt, contacts.length > 0);
     this.shineLaser(dt);
     // the feather wand in the hand: the tip after the finger (the view may have moved under it);
@@ -1421,6 +1429,39 @@ export class PixelApp {
     }
   }
   private toyHintIn = 40;
+
+  /** what it has just done that FIRSTS has a word for (gathered over the frame) */
+  private justNow = new Set<string>();
+  private loafFor = 0;
+
+  /** the first time it does each of the things in FIRSTS, a word on what it means */
+  private firsts(dt: number) {
+    const a = this.avatar, m = this.cat.motor, mode = this.brain.mode;
+    const now = this.justNow;
+    const asleep = mode === 'sleep' || mode === 'doze', doing = a.doing, phase = a.doingPhase;
+    if (m.moment) { now.add(m.moment); m.moment = null; }
+    if (m.slowBlinking && !asleep) now.add('blink');
+    if (this.brain.purr > 0.45 && !asleep) now.add('purr');
+    if (this.brain.purr > 0.3 && asleep) now.add('sleeppurr');
+    if (a.kneading || doing === 'knead') now.add('knead');
+    if (a.nuzzled) now.add('rub');
+    if (m.posture === 'back' && asleep) now.add('back');
+    if (doing === 'greet') now.add('greet');
+    if (m.lipUpNow > 0.7) now.add('flehmen');
+    // (at it, not on its way there)
+    if (doing === 'claw' && (phase === 'rake' || phase === 'pull')) now.add('claw');
+    if (doing === 'rub' && phase === 'rub') now.add('bunt');
+    if (doing === 'stare') now.add('stare');
+    if (doing === 'zoomies') now.add('zoomies');
+    if (doing === 'snub') now.add('snub');
+    if (Math.abs(m.tilt) > 0.25) now.add('tilt');
+    if (m.blep > 0.9 && !asleep) now.add('blep');
+    // (a loaf: lying with its paws tucked under, awake and easy, a good while)
+    this.loafFor = m.posture === 'loaf' && !asleep && !doing && m.speed < 0.02 ? this.loafFor + dt : 0;
+    if (this.loafFor > 20) now.add('loaf');
+    this.firstWords.update(dt, now, this.state.alive && !a.hidden && this.visible);
+    now.clear();
+  }
 }
 
 function localStorageHas() {

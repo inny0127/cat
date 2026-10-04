@@ -732,6 +732,12 @@ export class PixelAvatar implements Avatar {
     return this.act?.name ?? null;
   }
 
+  /** how far into it it is, for those of its acts that go by steps (null: no such act) */
+  get doingPhase(): string | null {
+    const ph = (this.act as { phase?: unknown } | null)?.phase;
+    return typeof ph === 'string' ? ph : null;
+  }
+
   /** a present just laid at your feet (the toy mouse, the cat sat by it looking at you) */
   get presenting() {
     return this.act instanceof Gift && this.act.phase === 'show';

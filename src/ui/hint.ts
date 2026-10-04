@@ -28,6 +28,11 @@ export class Hint {
     this.current = '';
   }
 
+  /** what it says (or is about to; '' when nothing) */
+  get text() {
+    return this.current;
+  }
+
   get visible() {
     return this.el.classList.contains('on');
   }
