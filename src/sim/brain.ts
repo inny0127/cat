@@ -122,9 +122,11 @@ export class Brain {
     // (by the clock on the wall: now is the brain's own time, seconds since the page opened)
     const nightly = nightness(Date.now());
     if (firstEver) {
-      // (the first time: awake in its bed, and it has seen you, a new face at the glass; a cat that
-      // does not know you yet, deep asleep, would only start at the first touch)
+      // (the first time: awake in its bed, and it has seen you, a new face at the glass, and comes
+      // up to it to look at you, curious; a cat that does not know you yet, deep asleep, would only
+      // start at the first touch)
       this.toAwake('rest');
+      this.later(1.2, () => this.anim.greet?.(0.1));
       return;
     }
     // back after a while: it has seen you, and is glad of it as far as it is fond of you, and the
