@@ -118,7 +118,16 @@ void main() {
     // the floor's shadow along the foot of the wall
     tone -= 0.12 * (1.0 - smoothstep(0.0, 0.06, vWorld.y));
   } else if (uPattern == 8) {
-    // a monstera leaf: its midrib and the veins running out between the slits, paler
+    // a monstera leaf: folded a little along its midrib, as a leaf is, so each half takes the light
+    // its own way, one lit and one in shade (a pixel artist's leaf in two tones, not one flat
+    // green): the leaf's own across-direction from how its coordinates run over the screen
+    vec3 dpx = dFdx(vWorld), dpy = dFdy(vWorld);
+    float dvx = dFdx(vLocal.y), dvy = dFdy(vLocal.y);
+    float det = dFdx(vLocal.x) * dvy - dFdy(vLocal.x) * dvx;
+    vec3 T = (dpx * dvy - dpy * dvx) * sign(det);
+    T -= N * dot(T, N);
+    if (dot(T, T) > 1e-14) N = normalize(N - sign(vLocal.x) * normalize(T) * 0.55);
+    // its midrib and the veins running out between the slits, paler
     float ax = abs(vLocal.x);
     if (ax < 0.003 && vLocal.y < 0.215) tone += 0.13;
     else for (int k = 0; k < 5; k++) {
