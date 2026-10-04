@@ -37,18 +37,18 @@ const where = (zone) => page.evaluate((zone) => {
   return { x: best[0], y: best[1], dx: gx, dy: gy };
 }, zone);
 // the script: [start s, what, arg]
+// (play is for a cat at its ease: the ball goes once the purring has settled; the rub waits until
+// the cat is still, so that the tail stays under the finger; a cat gone in a huff is let back soon)
 const T = [
   [1.0, 'pet', ['head', 2.6]], [3.8, 'pet', ['cheek', 2.4]], [6.4, 'pet', ['chin', 3.2]],
-  [12.0, 'js', 'lab.app.yarn.kick(new lab.THREE.Vector3(-0.6, 0, 0.4), 0.55); lab.avatar.playNow()'],
-  [20.0, 'js', 'lab.avatar.startAct("zoomies")'],
-  [24.5, 'js', 'lab.avatar.startAct("wash")'],
-  [29.0, 'rub', ['tail', 4.5]],
-  [34.5, 'js', 'lab.app.state.awayUntil = lab.app.state.lastTick + 1500'],
-  [40.5, 'js', 'lab.avatar.startAct("yawn")'],
-  [43.5, 'js', 'lab.avatar.startAct("stretch")'],
-  [49.0, 'js', 'lab.brain.mode = "doze"; lab.brain.sleepDepth = 0.6'],
+  [16.5, 'js', 'lab.brain.mode = "rest"; lab.app.yarn.kick(new lab.THREE.Vector3(-0.6, 0, 0.4), 0.55); lab.avatar.playNow()'],
+  [27.0, 'rub', ['tail', 7]],
+  [37.0, 'js', 'if (lab.brain.mode === "away") lab.app.state.awayUntil = lab.app.state.lastTick + 1500'],
+  [46.0, 'js', 'lab.avatar.startAct("yawn")'],
+  [49.0, 'js', 'lab.avatar.startAct("stretch")'],
+  [55.0, 'js', 'lab.brain.mode = "doze"; lab.brain.sleepDepth = 0.6'],
 ];
-const END = 56;
+const END = 62;
 let touch = null; // { kind, zone, until, w, t0, down }
 const frames = Math.round(END * fps);
 const t0 = Date.now();
@@ -58,7 +58,11 @@ for (let i = 0; i < frames; i++) {
     if (ev.done || ev[0] > t + 1e-6) continue;
     ev.done = true;
     if (ev[1] === 'js') await page.evaluate((js) => { const lab = window.lab; eval(js); }, ev[2]);
-    else {
+    else if (ev[1] === 'rub' && !ev.waited && await page.evaluate(() => !!window.lab.avatar.doing || !window.lab.cat.motor.settled) && t < ev[0] + 3) {
+      // (not yet: the cat is busy; asked again next frame)
+      ev.done = false;
+    } else {
+      ev.waited = true;
       // (a rub on a disliked place: the tail if it is in view, else a paw, else the belly)
       const zones = ev[1] === 'rub' ? [ev[2][0], 'paw', 'belly'] : [ev[2][0]];
       let w = null, zone = null;
@@ -70,7 +74,10 @@ for (let i = 0; i < frames; i++) {
   if (touch) {
     if (t >= touch.until) { if (touch.down) await page.mouse.up(); touch = null; }
     else {
-      if (t - touch.last > 0.9) { const w2 = await where(touch.zone); if (w2) touch.w = w2; touch.last = t; }
+      if (t - touch.last > (touch.kind === 'rub' ? 0.35 : 0.9)) { const w2 = await where(touch.zone); if (w2) touch.w = w2; touch.last = t; }
+      if (touch.kind === 'rub' && await page.evaluate(() => window.lab.brain.mode === 'leaving' || window.lab.brain.mode === 'away')) { if (touch.down) await page.mouse.up(); touch = null; }
+    }
+    if (touch) {
       const w = touch.w, u = t - touch.t0;
       if (touch.kind === 'pet') {
         // strokes along the fur: 0.55 s each, lifted between
