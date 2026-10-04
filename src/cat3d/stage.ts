@@ -230,7 +230,9 @@ void main() {
       nm[k] = k2 == kind ? m2 : -1; nl[k] = l2; k++;
       if (k2 == kind && m2 == mat) same++;
     }
-    if (same == 0) {
+    // (the cat's coat, its white, cream, ginger and stripes, more strictly: a pixel with only one
+    // neighbour in its colour, a stray end or a nick in a band's edge, goes too)
+    if (same == 0 || (kind == 1 && mat <= ${PIX.stripe} && same <= 1)) {
       int best = mat, bestN = 0;
       for (int i = 0; i < 8; i++) {
         if (nm[i] < 0) continue;
@@ -255,6 +257,24 @@ void main() {
     float sx = nm[3] == mat && nm[4] == mat ? min(abs(stepPos(nl[4]) - s0), abs(s0 - stepPos(nl[3]))) : 0.0;
     float sy = nm[1] == mat && nm[6] == mat ? min(abs(stepPos(nl[6]) - s0), abs(s0 - stepPos(nl[1]))) : 0.0;
     int level = stepOf(L, kind == 2 && dithers(mat), p, max(sx, sy));
+    // the cat: a pixel in a light that none (or only one) of its neighbours in the same colour are
+    // in takes the light most of them are in, so the coat is painted in clean bands of light and
+    // shade, not salted with specks of the one next to it
+    if (kind == 1) {
+      int cnt[5] = int[](0, 0, 0, 0, 0);
+      int nSame = 0, sameLv = 0;
+      for (int i = 0; i < 8; i++) {
+        if (nm[i] != mat) continue;
+        int lv = clamp(int(floor(stepPos(nl[i]) + 0.5)), 0, 4);
+        cnt[lv]++;
+        nSame++;
+        if (lv == level) sameLv++;
+      }
+      if (nSame >= 5 && sameLv <= 1) {
+        int bestN = 0;
+        for (int i = 0; i < 5; i++) if (cnt[i] > bestN) { bestN = cnt[i]; level = i; }
+      }
+    }
     // the cat: the light catching an edge from behind lifts it a step; its outline below and to
     // the right, against whatever is behind it, a step darker in its own colours (a pixel
     // artist's selective outline: the shadow side drawn in, never in black)
