@@ -15,9 +15,19 @@
   <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
   <title>창가의 고양이</title>
   <style>
+    /* the app's words in pixels, as the room is drawn: Galmuri11 (Lee Minseo, SIL OFL 1.1) cut
+       down to the letters the app writes (tools/font_subset.py), renamed as its licence asks */
+    @font-face {
+      font-family: 'Window Pixel';
+      src: url('/src/fonts/window-pixel.woff2') format('woff2');
+      font-display: block;
+    }
     :root {
       --paper: #f4eee4;
       --ink: rgba(92, 70, 58, 0.62);
+      /* the font's pixel, a whole number of the screen's (main.ts sets it) */
+      --fpx: 1px;
+      --pixel-font: 'Window Pixel', -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
     }
     html, body {
       margin: 0;
@@ -51,9 +61,9 @@
       justify-content: center;
       background: #c99486;
       color: #fff5e8;
-      font: 400 13px/1.5 -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
-      letter-spacing: 0.08em;
-      text-shadow: 0 1px 0 rgba(59, 49, 80, 0.45);
+      font: 400 calc(12 * var(--fpx)) / 1.5 var(--pixel-font);
+      letter-spacing: 0;
+      text-shadow: 0 var(--fpx) 0 rgba(59, 49, 80, 0.45);
       transition: opacity 1.4s ease;
       pointer-events: none;
     }
@@ -66,10 +76,13 @@
       right: 16px;
       bottom: calc(28px + env(safe-area-inset-bottom));
       text-align: center;
-      font: 400 13px/1.5 -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
-      letter-spacing: 0.02em;
+      font: 400 calc(12 * var(--fpx)) / 1.6 var(--pixel-font);
+      letter-spacing: 0;
+      word-break: keep-all;
+      overflow-wrap: anywhere;
       color: #fff5e8;
-      text-shadow: 0 1px 0 rgba(43, 30, 48, 0.75), 0 0 8px rgba(43, 30, 48, 0.45);
+      /* (a pixel's shadow under each stroke, and a soft dusk round the line, to read over the room) */
+      text-shadow: 0 var(--fpx) 0 rgba(43, 30, 48, 0.85), 0 0 calc(6 * var(--fpx)) rgba(43, 30, 48, 0.5);
       opacity: 0;
       transition: opacity 1.6s ease;
       pointer-events: none;
@@ -87,18 +100,22 @@
       border: 2px solid #c99486;
       box-shadow: 0 0 0 2px rgba(43, 36, 51, 0.94), 4px 6px 0 rgba(20, 14, 22, 0.35);
       color: #f7f0e8;
-      font: 400 12.5px/1.65 -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
-      letter-spacing: 0.01em;
+      font: 400 calc(12 * var(--fpx)) / 1.65 var(--pixel-font);
+      letter-spacing: 0;
+      /* (Korean broken between words, not inside them) */
+      word-break: keep-all;
+      overflow-wrap: anywhere;
       opacity: 0;
       transition: opacity 0.5s ease;
       pointer-events: none;
       z-index: 5;
     }
     #credits.on { opacity: 1; pointer-events: auto; }
-    #credits h2 { margin: 0 0 8px; font-size: 13px; font-weight: 600; color: #f6cf9b; letter-spacing: 0.04em; }
+    #credits h2 { margin: 0 0 8px; font-size: inherit; font-weight: 400; color: #f6cf9b; }
+    #credits b { font-weight: 400; color: #ffebc2; }
     #credits p { margin: 0 0 8px; }
     #credits a { color: #a3b4d4; text-decoration: none; border-bottom: 1px solid rgba(163, 180, 212, 0.4); }
-    #credits .small { color: #bdb2c0; font-size: 11.5px; margin: 10px 0 0; }
+    #credits .small { color: #bdb2c0; margin: 10px 0 0; }
     noscript, #fallback {
       position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
       font: 14px/1.6 -apple-system, "Apple SD Gothic Neo", sans-serif; color: var(--ink); text-align: center; padding: 24px;

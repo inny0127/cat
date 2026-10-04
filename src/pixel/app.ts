@@ -651,7 +651,9 @@ export class PixelApp {
         만든 이 <a href="https://sketchfab.com/guillaume.bolis.neko" target="_blank" rel="noopener">guillaume bolis</a> ·
         <a href="https://sketchfab.com/3d-models/3d-modelling-my-cat-fripouille-0ab14bf98e754f8d90fe1bf1c84ca66c" target="_blank" rel="noopener">원본</a><br>
         <a href="https://creativecommons.org/licenses/by/4.0/deed.ko" target="_blank" rel="noopener">CC BY 4.0</a> 라이선스로 공유된 모델이에요.</p>
-        <p>이 앱을 위해 뼈대를 새로 심고, 자세와 걸음, 입과 눈을 새로 만들고, 머리와 눈을 조금 크게 해서 픽셀아트로 다시 칠했어요(몸과 꼬리의 줄무늬는 새로 그렸어요). (원작자가 이 앱을 보증하는 것은 아니에요.)</p>
+        <p>이 앱을 위해 뼈대를 새로 심고, 자세와 걸음, 입과 눈을 새로 만들고, 머리와 눈을 조금 크게 해서 픽셀아트로 다시 칠했어요(몸과 꼬리, 머리 뒤의 줄무늬는 새로 그렸어요). (원작자가 이 앱을 보증하는 것은 아니에요.)</p>
+        <p>글자 <b>Galmuri</b> · 만든 이 <a href="https://github.com/quiple/galmuri" target="_blank" rel="noopener">이민서(quiple)</a><br>
+        <a href="./fonts/OFL.txt" target="_blank" rel="noopener">SIL 오픈 폰트 라이선스 1.1</a>로 공유된 글꼴에서 이 앱이 쓰는 글자만 추려 이름을 바꿔(Window Pixel) 썼어요.</p>
         <p class="small">방, 그림, 소리는 이 앱을 위해 만들었어요. 아무 곳이나 누르면 닫혀요.</p>`;
       el.addEventListener('pointerdown', (e) => { if ((e.target as HTMLElement).tagName !== 'A') this.showCredits(false); });
     }
