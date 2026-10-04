@@ -63,6 +63,30 @@ describe('up on the sill', () => {
     expect(wentAt).toBeGreaterThan(0);
   });
 
+  it('sat at the glass by the steaming tea: a sniff at the steam, a start back, a lick of the nose', () => {
+    const { c, m, spot } = sill();
+    const act = new Sill(spot);
+    act.phase = 'sit';
+    (act as unknown as { dur: number }).dur = 60;
+    (act as unknown as { sniffIn: number }).sniffIn = 0.5;
+    let tongue = 0, whisker = 0, squint = 0, sniffed = false;
+    for (let t = 0; t < 12; t += 0.02) {
+      act.update(0.02, c);
+      m.update(0.02);
+      const s = (act as unknown as { sniff: number }).sniff;
+      if (s >= 0) sniffed = true;
+      tongue = Math.max(tongue, m.pose.tongue);
+      whisker = Math.max(whisker, m.pose.whisker);
+      squint = Math.max(squint, m.pose.squint);
+    }
+    expect(sniffed).toBe(true);
+    expect(tongue).toBeGreaterThan(0.5);
+    expect(squint).toBeGreaterThan(0.5);
+    // (and done with, back to the window)
+    expect((act as unknown as { sniff: number }).sniff).toBe(-1);
+    expect(act.phase).toBe('sit');
+  });
+
   it('the pencil by its paws as well: one or the other, never both at once', () => {
     vi.spyOn(Math, 'random').mockReturnValue(0.1);
     const { c, m, spot, pushes } = sill(true);

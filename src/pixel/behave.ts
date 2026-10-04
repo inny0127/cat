@@ -2095,6 +2095,11 @@ export class Sill implements Act {
   /** the pencil (or the mug of tea) by its paws, turned to face the room: a step over to it, a
    *  look at it, a look at you, a pat at it (how many so far), and again, until it goes over;
    *  watched all the way down */
+  /** the tea by it steaming: a sniff at the steam now and then (how far into it; how long till the
+   *  next; whether it has started back from the heat yet) */
+  private sniff = -1;
+  private sniffIn = rand(6, 20);
+  private flinched = false;
   private knock = { what: 'pencil' as 'pencil' | 'mug', step: 'eye' as 'to' | 'eye' | 'you' | 'paw' | 'watch' | 'after', t: 0, len: 0, taps: 0, pushed: false };
   constructor(private readonly spot: SillSpot) {}
 
@@ -2179,8 +2184,39 @@ export class Sill implements Act {
       }
       case 'sit': {
         if (this.nap > 0.3 && !this.leaving) {
-          m.layer = null; m.lookAt(null); this.drop = null; c.drop(null);
+          m.layer = null; m.lookAt(null); this.drop = null; c.drop(null); this.sniff = -1;
           this.next('nap');
+          return true;
+        }
+        // the tea steaming beside it: now and then the nose put into the steam, whiskers forward;
+        // a start back from the heat, the eyes screwed up and the ears flicking, a lick of the nose
+        // and a shake of the head; then back to the window
+        const M = c.mug();
+        if (this.sniff < 0 && M && M.onSill && !this.drop && !this.leaving && this.t > 3 && Math.hypot(M.at.x - m.pos.x, M.at.z - m.pos.z) < 0.2
+          && (this.sniffIn -= dt) <= 0) {
+          this.sniff = 0;
+          this.sniffIn = rand(45, 120);
+          this.flinched = false;
+        }
+        if (this.sniff >= 0) {
+          this.sniff += dt;
+          const s = this.sniff;
+          m.setPosture('sit');
+          if (M) m.lookAt(M.at.clone().setY(M.at.y + 0.09), 1);
+          const lean = s < 1.25 ? ease(s / 0.7) : 1 - ease((s - 1.25) / 0.2);
+          const start = s >= 1.25 && s < 2.0 ? Math.sin(Math.PI * (s - 1.25) / 0.75) : 0;
+          const lick = s > 1.75 && s < 2.25 ? Math.max(0, Math.sin((s - 1.75) * 28)) : 0;
+          const shake = s > 2.25 && s < 2.75 ? Math.sin((s - 2.25) * 42) * (1 - (s - 2.25) / 0.5) : 0;
+          m.layer = {
+            pose: {
+              neckPitch: -0.2 * lean, headPitch: -0.1 * lean + 0.22 * start, whisker: 0.8 * lean - 0.9 * start, earFwd: 0.6 * lean - 0.5 * start,
+              squint: 0.75 * start, eyeOpen: 1 - 0.75 * start, jaw: 0.12 * lick, tongue: lick, tongueUp: 1, headRoll: 0.22 * shake,
+              tailLift: -1.35, tailSag: 1, tailCurve: 0.25,
+            },
+            w: Math.min(1, s / 0.3) * Math.min(1, (3.0 - s) / 0.3),
+          };
+          if (start > 0.8 && !this.flinched) { this.flinched = true; m.jolt(0.45); m.flickEar('both', 0.8); }
+          if (s > 3.0) { this.sniff = -1; m.layer = null; m.lookAt(null); }
           return true;
         }
         // sat looking out: the tail down over the edge, the head turning after what goes by; birds

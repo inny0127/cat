@@ -159,8 +159,10 @@ export class PixelAvatar implements Avatar {
   private still = { t: 0, sx: 0, sy: 0 };
   private lickAt: THREE.Vector3 | null = null;
   private lickRest = 15;
-  /** the tip of its tongue left out (how long yet), and how far out it is now */
+  /** the tip of its tongue left out (how long yet), and how far out it is now; and whether it
+   *  sleeps this nap with it out (decided as it goes deep: now and then) */
   private blepFor = 0;
+  private napBlep: boolean | null = null;
   /** after eating: a wash of the face before it goes */
   private washAfter: Act | null = null;
   private rubSide = 1;
@@ -236,7 +238,10 @@ export class PixelAvatar implements Avatar {
       this.blepFor = m.licking ? this.blepFor : Math.min(0, this.blepFor + dt);
       if (this.blepFor === 0) this.blepFor = 2.5 + Math.random() * 4;
     } else this.blepFor = Math.max(0, this.blepFor - dt);
-    const on = this.blepFor > 0 && !m.licking && this.alive && !m.hissNow;
+    // (asleep, deep: now and then a nap with the tip of the tongue out the whole while)
+    if (this.sleep < 0.3) this.napBlep = null;
+    else if (this.napBlep === null && this.sleep > 0.8) this.napBlep = Math.random() < 0.1;
+    const on = (this.blepFor > 0 || (!!this.napBlep && this.sleep > 0.6)) && !m.licking && this.alive && !m.hissNow;
     m.blep += ((on ? 1 : 0) - m.blep) * Math.min(1, dt * (on ? 3 : 8));
   }
 
