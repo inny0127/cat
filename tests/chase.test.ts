@@ -117,6 +117,24 @@ describe('the red dot of a laser pointer', () => {
     expect(seen.has('rear')).toBe(true);
   });
 
+  it('on its own tail: round and round after it, and then a lick at the spot', () => {
+    const { c, m, world } = room();
+    world.dot = { p: new THREE.Vector3(0, 0, -0.3), on: 'floor', n: new THREE.Vector3(0, 1, 0), self: 'rear', selfAt: new THREE.Vector3(0.03, 0.12, -0.2) };
+    const act = new Chase(c), seen = new Set<string>();
+    let turned = 0, last = m.yaw;
+    for (let t = 0; t < 3; t += 0.02) {
+      act.update(0.02, c);
+      m.update(0.02);
+      seen.add(act.phase);
+      turned += Math.abs(Math.atan2(Math.sin(m.yaw - last), Math.cos(m.yaw - last)));
+      last = m.yaw;
+      // (spun round, the dot is off it, on the floor)
+      if (act.phase === 'self') world.dot = { ...world.dot!, self: undefined };
+    }
+    expect(seen.has('self')).toBe(true);
+    expect(turned).toBeGreaterThan(Math.PI * 1.5);
+  });
+
   it('after long enough, it has had enough: down on its chest, only watching', () => {
     const { c, m, world } = room();
     world.dot = floorDot(0.1, 0.5);

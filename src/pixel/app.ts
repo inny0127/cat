@@ -534,6 +534,8 @@ export class PixelApp {
   private readonly laser = {
     held: false, id: -1, sx: 0, sy: 0, lift: 0, taking: -1, downOn: -1, x0: 0, y0: 0, idle: 0, used: 0,
     hit: null as { p: THREE.Vector3; n: THREE.Vector3; on: 'floor' | 'bed' | 'sill' | 'books' | 'up' | 'out' | 'cat'; mug?: boolean } | null,
+    /** on the cat itself: which part of it, and where */
+    self: null as 'rear' | 'front' | 'side' | 'head' | null, selfAt: new THREE.Vector3(),
   };
 
   /** the last quick tap with the laser pointer in hand (a second one soon after is a knock) */
@@ -591,20 +593,24 @@ export class PixelApp {
     return this.safeB;
   }
 
-  /** how far along a ray it first meets the cat's body (its capsules), or -1 */
-  private rayCat(ray: THREE.Ray) {
+  /** how far along a ray it first meets the cat's body (its capsules), or -1; and which capsule
+   *  that is (cat3d/cat.ts CAPS: 0 the hips .. 5 the head, 6-9 and 14-15 the forelegs and
+   *  forepaws, 10-13 and 16-17 the hind legs and feet, 18-19 the tail) */
+  private catPart = -1;
+  private rayCat(ray: THREE.Ray, slack = 1) {
     const caps = this.cat.shared.uCaps.value as THREE.Vector4[];
     const a = new THREE.Vector3(), b = new THREE.Vector3(), pr = new THREE.Vector3(), ps = new THREE.Vector3();
     let best = -1;
+    this.catPart = -1;
     for (let i = 0; i + 1 < caps.length; i += 2) {
-      const r = caps[i].w;
+      const r = caps[i].w * slack;
       if (r <= 0) continue;
       a.set(caps[i].x, caps[i].y, caps[i].z);
       b.set(caps[i + 1].x, caps[i + 1].y, caps[i + 1].z);
       const d2 = ray.distanceSqToSegment(a, b, pr, ps);
       if (d2 > r * r) continue;
       const t = ray.origin.distanceTo(pr) - Math.sqrt(r * r - d2);
-      if (best < 0 || t < best) best = t;
+      if (best < 0 || t < best) { best = t; this.catPart = i / 2; }
     }
     return best;
   }
@@ -643,13 +649,19 @@ export class PixelApp {
         this.laserNdc.set((sx / innerWidth) * 2 - 1, -(sy / innerHeight) * 2 + 1);
         L.hit = this.room.laserHit(this.laserNdc, cam);
         if (L.hit && L.hit.on !== 'out') dot = L.hit.p;
-        // (the cat in the way: the dot is on its coat, though as far as the cat knows it is where
-        // it was, behind; the dot is drawn where the finger points either way, so what matters is
-        // only the cat in front of the window, where there would be no dot: the capsules round its
-        // body are enough to tell)
-        else if (!this.avatar.hidden) {
-          const t = this.rayCat(this.room.laserRay.ray);
-          if (t > 0) dot = this.room.laserRay.ray.at(t, new THREE.Vector3());
+        // (the cat in the way: the dot is on its coat (the capsules round its body are enough to
+        // tell, a little fattened to the fur), and on which part of it: its own tail is a thing to
+        // be had too)
+        L.self = null;
+        if (!this.avatar.hidden) {
+          const ray = this.room.laserRay.ray;
+          const t = this.rayCat(ray, 1.35);
+          if (t > 0 && (!L.hit || L.hit.on === 'out' || t < ray.origin.distanceTo(L.hit.p))) {
+            if (!dot) dot = ray.at(t, new THREE.Vector3());
+            const i = this.catPart;
+            L.self = i === 0 || (i >= 10 && i <= 13) || i >= 16 ? 'rear' : (i >= 6 && i <= 9) || i === 14 || i === 15 ? 'front' : i >= 4 ? 'head' : 'side';
+            L.selfAt.copy(ray.at(t, L.selfAt));
+          }
         }
       }
       this.room.holdPointer(cam, dot, dt, this.safeBottom() / Math.max(1, innerHeight));
@@ -657,7 +669,9 @@ export class PixelApp {
     }
     this.stage.setLaser(dot);
     const h = L.hit;
-    this.avatar.laser = dot && h && h.on !== 'cat' && h.on !== 'out' ? { p: h.p, n: h.n, on: h.on, mug: h.mug } : null;
+    this.avatar.laser = dot && h && h.on !== 'cat' && h.on !== 'out'
+      ? { p: h.p, n: h.n, on: h.on, mug: h.mug, self: L.self ?? undefined, selfAt: L.self ? L.selfAt : undefined }
+      : dot && L.self ? { p: L.selfAt, n: new THREE.Vector3(0, 1, 0), on: 'floor', self: L.self, selfAt: L.selfAt } : null;
     if (dot && this.brain.mode !== 'sleep' && this.brain.mode !== 'doze') this.brain.toy(L.sx, L.sy - L.lift, dt);
     // (shone for a while at a cat fast asleep: that it can be woken)
     const asleep = this.brain.mode === 'sleep' || this.brain.mode === 'doze';

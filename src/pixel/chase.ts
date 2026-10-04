@@ -18,9 +18,13 @@ export interface LaserDot {
   n: THREE.Vector3;
   /** on the mug itself */
   mug?: boolean;
+  /** on the cat itself: which part (its rear and its tail, a forepaw, its side, its head), and
+   *  where (p is then the floor beyond it) */
+  self?: 'rear' | 'front' | 'side' | 'head';
+  selfAt?: THREE.Vector3;
 }
 
-type Phase = 'notice' | 'stalk' | 'run' | 'wiggle' | 'pounce' | 'hold' | 'rear' | 'leap' | 'search' | 'tired'
+type Phase = 'notice' | 'stalk' | 'run' | 'wiggle' | 'pounce' | 'hold' | 'rear' | 'leap' | 'search' | 'tired' | 'self'
   | 'gather' | 'up' | 'sill' | 'spring' | 'look' | 'down';
 
 /**
@@ -76,6 +80,9 @@ export class Chase implements Act {
   private onBooks = false;
   /** up on the sill, how long the dot has been off it */
   private offSill = 0;
+  /** the dot on its own body: which part of it, and a moment between goes after it there */
+  private part: NonNullable<LaserDot['self']> = 'rear';
+  private selfRest = 0;
   /** the last pat that knocked at the wall, and whether this leap has */
   private patK = -1;
   private patted = false;
@@ -215,7 +222,67 @@ export class Chase implements Act {
       m.layer = null;
       this.next('tired');
     }
+    // the dot on its own body: that has to be had too (not in the middle of a spring)
+    this.selfRest = Math.max(0, this.selfRest - dt);
+    if (L?.self && this.selfRest <= 0 && (this.phase === 'notice' || this.phase === 'stalk' || this.phase === 'run' || this.phase === 'wiggle' || this.phase === 'hold' || this.phase === 'search')) {
+      m.stop();
+      m.zoom = 0;
+      this.part = L.self;
+      const lx = L.selfAt ? (L.selfAt.x - m.pos.x) * Math.cos(m.yaw) - (L.selfAt.z - m.pos.z) * Math.sin(m.yaw) : 0;
+      this.side = Math.abs(lx) > 0.01 ? Math.sign(lx) : Math.random() < 0.5 ? 1 : -1;
+      this.next('self', this.part === 'rear' ? rand(1.3, 2.1) : rand(1.2, 1.8));
+      if (this.part === 'rear') c.sound('scrabble', 0.18);
+    }
     switch (this.phase) {
+      case 'self': {
+        // round after it on itself: on its rear or its tail, round and round after it, the head
+        // turned back to it and the body bent round, then sat to give the spot a lick; on a forepaw,
+        // a look down at the paw, the paw lifted and shaken, a pat at it with the other; on its
+        // side, a look round at it and a lick; on its head, where it cannot see it, a shake of
+        // the head and the ears flicking
+        const s = this.side, u = this.t / this.dur;
+        m.lookAt(null);
+        let pose: PoseLayer;
+        if (this.part === 'rear') {
+          const spin = u < 0.72;
+          if (spin) {
+            m.setPosture('stand');
+            m.yaw = wrapA(m.yaw + s * 7.5 * Math.min(1, this.t / 0.25) * dt);
+            pose = { ...keen, hipY: 0.17, neckYaw: s * 0.95, headYaw: s * 0.55, headRoll: -s * 0.2, lumbarYaw: s * 0.4, chestYaw: s * 0.3, tailSide: s * 1.2, tailCurl: s * 0.8, tailLift: 0.2 };
+          } else {
+            m.setPosture('sit');
+            const lick = Math.max(0, Math.sin(this.t * 9));
+            pose = { neckYaw: s * 1.05, headYaw: s * 0.7, neckPitch: -0.35, headPitch: -0.35 + 0.12 * lick, jaw: 0.12 * lick, eyeOpen: 0.4, squint: 0.3 };
+          }
+        } else if (this.part === 'front') {
+          m.setPosture('crouch');
+          const shake = Math.sin(this.t * 22) * Math.min(1, this.t / 0.3);
+          const pat = u > 0.55 ? Math.max(0, Math.sin((u - 0.55) / 0.45 * Math.PI * 2)) : 0;
+          const [lifted, other] = s > 0 ? ['LF', 'RF'] : ['RF', 'LF'];
+          pose = {
+            ...keen, hipY: 0.15, neckPitch: -0.65, headPitch: -0.3, neckYaw: s * 0.2,
+            [lifted]: { planted: 0, frame: 0, x: 0.04, y: 0.04 + 0.008 * shake, z: 0.13, flex: 0.5 },
+            [other]: { planted: 0, frame: 0, x: 0.03 - 0.02 * pat, y: 0.012 + 0.05 * pat, z: 0.14 + 0.02 * pat, flex: 0.3 * pat },
+          };
+        } else if (this.part === 'side') {
+          m.setPosture('sit');
+          const lick = u > 0.4 ? Math.max(0, Math.sin(this.t * 9)) : 0;
+          pose = { ...keen, neckYaw: s * 1.0, headYaw: s * 0.6, neckPitch: -0.25, headPitch: -0.25 + 0.1 * lick, jaw: 0.1 * lick };
+        } else {
+          m.setPosture('sit');
+          const sh = Math.sin(this.t * 18) * Math.max(0, 1 - Math.abs(u - 0.4) / 0.25);
+          pose = { earFwd: -0.2, earOut: 0.4, pupil: 0.8, headRoll: 0.35 * sh, headYaw: 0.15 * sh, eyeOpen: 0.7 };
+          if (Math.floor(this.t * 3) !== Math.floor((this.t - dt) * 3)) m.flickEar(Math.random() < 0.5 ? 'L' : 'R', 0.8);
+        }
+        m.layer = { pose, w: Math.min(1, this.t / 0.15) * Math.min(1, (this.dur - this.t) / 0.2 + 0.001) };
+        if (this.t >= this.dur) {
+          m.layer = null;
+          this.selfRest = rand(0.6, 1.4);
+          if (L) this.decide(c, L);
+          else { this.asked = false; this.next('search'); }
+        }
+        return true;
+      }
       case 'notice': {
         // stock still, the head on it, the pupils going wide; up off the floor onto its feet, low
         m.stop();
