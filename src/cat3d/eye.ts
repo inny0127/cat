@@ -49,6 +49,7 @@ uniform float uPupil;      // 0 slit .. 1 round
 uniform float uShine;      // 1 bright, wet eyes .. 0 dull (an ill cat)
 uniform float uFlat;       // pixel art: a flat iris and a pupil wide enough to survive the low resolution
 uniform float uGlint;      // pixel art: half the size of the highlight (eyeball radii)
+uniform float uTapetum;    // pixel art: how dark the room is round it, for the shine of its eyes
 uniform vec3 uIrisA;       // round the pupil
 uniform vec3 uIrisB;       // the body of the iris
 uniform vec3 uIrisC;       // toward the rim
@@ -209,6 +210,10 @@ void main() {
     vec2 gq2 = abs(ip - vec2(0.2, -0.2));
     float glint = max(step(max(gq.x, gq.y), 0.12) * step(0.3, uShine), step(max(gq2.x, gq2.y), 0.05) * step(0.75, uShine));
     vec3 c = mix(iris, vec3(0.004), pupil);
+    // in a dark room, what little light there is comes back out through the pupil off the mirror
+    // at the back of a cat's eye: the pupils shine a soft green-gold (and glow a little)
+    bool shine = pupil > 0.5 && uTapetum > 0.3 && glint < 0.5;
+    if (shine) c = mix(vec3(0.3, 0.42, 0.16), vec3(0.8, 0.95, 0.46), uTapetum);
     c = mix(c, vec3(1.0), glint);
     if (lidIn < rim) {
       // the lids are coat: its material where it maps onto them (or dark skin), lit as the coat is;
@@ -225,8 +230,9 @@ void main() {
       }
       return;
     }
-    // alpha 0.75 tells the pixel pass to use the eyes' palette
-    gl_FragColor = vec4(c, 0.75);
+    // alpha 0.75 tells the pixel pass to use the eyes' palette (the shine: 0.17, a small light,
+    // shown as it is with a little glow round it)
+    gl_FragColor = vec4(c, shine ? 0.17 : 0.75);
     return;
   }
 
@@ -276,6 +282,7 @@ export function makeEye(radius: number, side: 1 | -1, lights: EyeLights): CatEye
       uShine: { value: 1 },
       uFlat: { value: 0 },
       uGlint: { value: 0.12 },
+      uTapetum: { value: 0 },
       // amber, sampled from a photograph of a ginger tabby's eye
       // golden amber, between the photographs' copper and hazel
       // olive gold, as in the photographs of ginger tabbies in daylight

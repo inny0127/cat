@@ -272,6 +272,11 @@ export class Cat3D {
     this.whiskers.setPixelArt(this.shared.uSolid.value > 0.5, light, lamp);
   }
 
+  /** how dark it is round the cat (0 .. 1): in the dark its eyes shine (pixel art) */
+  setEyeShine(dark: number) {
+    for (const e of this.eyes) e.eyeMat.uniforms.uTapetum.value = dark;
+  }
+
   /** the camera's pixel size, for the whiskers */
   setPixel(px: number, eye?: THREE.Vector3) {
     this.whiskers.setPixel(px);

@@ -578,6 +578,8 @@ export class PixelApp {
     // as scratches across the face
     this.cat.setWhiskerLight(0.62 - 0.2 * dark, dl.lamp > 0.5 ? 0.8 * dark : 0);
     this.cat.whiskers.mesh.visible = this.brain.mode !== 'sleep' && this.cat.headUp() > 0.55;
+    // in the small hours, the lamp off, its open eyes shine in the dark
+    this.cat.setEyeShine(dl.lamp > 0.5 ? 0 : dark);
     this.audio.setRain(rain);
     // a bird outside: the cat's ear goes to it, and if it is awake, a glance at the window
     if (this.audio.setOutside(dt, { day: 1 - dark, hour, month: clock.getMonth(), rain })) this.avatar.hear(this.room.windowMiddle);
