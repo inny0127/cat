@@ -461,6 +461,20 @@ export function yawn(sr: number) {
   return normalize(fade(out, sr, 0.02, 0.08), 0.6);
 }
 
+/** a sigh: a soft, slow breath out through the nose, low and short of a sound */
+export function sigh(sr: number) {
+  const dur = rnd(0.7, 0.95), n = Math.floor(dur * sr);
+  const out = new Float32Array(n);
+  const f = new Biquad(sr, 'bp', rnd(550, 750), 1.6);
+  for (let i = 0; i < n; i++) {
+    const x = i / n;
+    const e = Math.min(1, x / 0.15) * (1 - x) ** 1.6;
+    out[i] = f.run(noise()) * e;
+  }
+  filter(out, sr, 'lp', 1400, 0.7);
+  return normalize(fade(out, sr, 0.02, 0.1), 0.4);
+}
+
 /** a cat's sneeze: a faint quick breath in, then a tiny sharp "tch", a burst of breath snapped off */
 export function sneeze(sr: number) {
   const n = Math.floor(0.32 * sr);

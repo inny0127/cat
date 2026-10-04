@@ -708,7 +708,11 @@ export class PixelAvatar implements Avatar {
   }
 
   sigh() {
-    this.cat.motor.slowBlink();
+    // asleep, a sigh is a breath, deep and slow, and just to be heard; awake, a slow blink
+    if (this.sleep > 0.5) {
+      this.cat.sigh();
+      setTimeout(() => this.outside?.sound('sigh', 0.07), 1400);
+    } else this.cat.motor.slowBlink();
   }
 
   hiss() {

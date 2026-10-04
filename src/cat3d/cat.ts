@@ -184,6 +184,12 @@ export class Cat3D {
     head.add(this.whiskers.mesh);
   }
 
+  /** a sigh: the next breath slow and deep */
+  private sighT = -1;
+  sigh() {
+    this.sighT = 0;
+  }
+
   /** one eye opened a little in its sleep (how far, and which: 0 the left, 1 the right) */
   peek = 0;
   peekEye = 0;
@@ -402,8 +408,11 @@ export class Cat3D {
       const k = this.corrPoses.indexOf(name);
       if (k >= 0) cw[k] += wgt;
     }
-    this.breathT += dt * (0.55 + 0.25 * (1 - p.breath)) * Math.max(0.3, motor.feel.breathRate);
-    this.shared.uBreath.value = 0.0022 * p.breath * Math.sin(this.breathT * Math.PI * 2);
+    // (a sigh: one breath slower and deeper than the rest, in, and a long way out)
+    const sg = this.sighT >= 0 ? Math.sin(Math.PI * Math.min(1, this.sighT / 3.2)) : 0;
+    if (this.sighT >= 0 && (this.sighT += dt) > 3.2) this.sighT = -1;
+    this.breathT += dt * (0.55 + 0.25 * (1 - p.breath)) * Math.max(0.3, motor.feel.breathRate) * (1 - 0.55 * sg);
+    this.shared.uBreath.value = 0.0022 * p.breath * (1 + 1.6 * sg) * Math.sin(this.breathT * Math.PI * 2);
     this.shared.uPuff.value = p.puff;
     if (this.skin) {
       this.skin.uniforms.uJawOpen.value = p.jaw;
