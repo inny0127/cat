@@ -103,6 +103,8 @@ uniform vec3 uLaser;     // the red dot of a laser pointer: where (art pixels), 
 uniform vec3 uStrA;      // a string (the feather wand's): from here (art pixels, view depth) ...
 uniform vec3 uStrB;      // ... to here
 uniform vec2 uStrSag;    // how far it sags at its middle (art pixels; and whether there is one)
+uniform vec4 uPrints[4]; // paw prints on the glass: where (art pixels), a paw's width there (art
+                         // pixels), how fresh (1 .. 0: none)
 uniform float uTime;
 uniform vec3 uTintSun;   // the colour of the hour: on what the sun lights,
 uniform vec3 uTintShade; // ... on everything else,
@@ -441,6 +443,24 @@ void main() {
     if (k > 0.0) col = mix(col, 1.0 - (1.0 - col) * (1.0 - red), k * uLaser.z);
     glow = max(glow, g * uLaser.z);
   }
+  // the prints a paw left on the glass, over everything (they are on the glass): the pad and the
+  // four toes in a faint pale smear, going as they dry in a dissolve of checks
+  float smear = 0.0;
+  for (int i = 0; i < 4; i++) {
+    if (uPrints[i].w <= 0.0) continue;
+    vec2 q = (vec2(p) + 0.5 - uPrints[i].xy) / max(uPrints[i].z, 6.0);
+    if (abs(q.x) > 0.7 || abs(q.y) > 0.7) continue;
+    vec2 pd = (q - vec2(0.0, -0.14)) / vec2(0.36, 0.27);
+    // (the pad's bottom edge in three lobes, as a cat's is)
+    bool on = dot(pd, pd) < 1.0 && !(pd.y < -0.55 && abs(abs(pd.x) - 0.33) < 0.1);
+    for (int k = 0; k < 4; k++) {
+      vec2 tc = vec2((float(k) - 1.5) * 0.2, (k == 1 || k == 2) ? 0.33 : 0.21);
+      on = on || length((q - tc) / vec2(0.09, 0.11)) < 1.0;
+    }
+    if (on && min(1.0, uPrints[i].w * 2.0) > bayer(p)) smear = 1.0;
+  }
+  // (a cool haze: lighter over the dark, a shade greyer over the light)
+  col = mix(col, vec3(0.84, 0.88, 0.96), 0.27 * smear);
   gl_FragColor = vec4(col, glow);
 }`;
 
@@ -583,6 +603,7 @@ export class Stage {
         uNotes: { value: Array.from({ length: 4 }, () => new THREE.Vector3()) },
         uBug: { value: new THREE.Vector4() }, uBugCol: { value: new THREE.Vector3(1, 1, 1) },
         uLaser: { value: new THREE.Vector3() },
+        uPrints: { value: Array.from({ length: 4 }, () => new THREE.Vector4()) },
         uStrA: { value: new THREE.Vector3() }, uStrB: { value: new THREE.Vector3() }, uStrSag: { value: new THREE.Vector2() },
         uTime: { value: 0 },
         uCatDull: { value: 0 },
@@ -779,6 +800,21 @@ export class Stage {
     if (!at || bright <= 0) { u.set(0, 0, 0); return; }
     const a = this.toArt(at, new THREE.Vector2());
     u.set(a.x, a.y, bright);
+  }
+
+  /** paw prints on the glass: each where it is (a world point on the glass) and how fresh (1 .. 0);
+   *  a paw is `paw` metres across */
+  setPrints(prints: readonly { at: THREE.Vector3; fresh: number }[], paw = 0.034) {
+    if (!this.pixel) return;
+    const u = this.pixel.mat.uniforms.uPrints.value as THREE.Vector4[];
+    for (let i = 0; i < u.length; i++) {
+      const P = prints[i];
+      if (!P || P.fresh <= 0) { u[i].set(0, 0, 0, 0); continue; }
+      const a = this.toArt(P.at, new THREE.Vector2());
+      const z = -P.at.clone().applyMatrix4(this.camera.matrixWorldInverse).z;
+      const px = (2 * Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2) * z) / this.pixelRows();
+      u[i].set(a.x, a.y, paw / px, P.fresh);
+    }
   }
 
   /** a string from one world point to another, sagging so far at its middle (metres; null: none) */

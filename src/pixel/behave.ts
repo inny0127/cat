@@ -893,6 +893,219 @@ export class Beg implements Act {
   }
 }
 
+/** a finger on the glass as the cat sees it: where on the glass in front of it (in the room), and
+ *  how long it has been still (seconds) */
+export interface GlassFinger {
+  at: THREE.Vector3;
+  still: number;
+}
+
+type PawSide = 'LF' | 'RF';
+
+/** a go at the finger on the glass: how it reaches (sat; reared up on its haunches; stood up on its
+ *  hind legs, both forepaws to the glass), how long it takes, and when a paw lands on the glass */
+interface Bout {
+  kind: 'sit' | 'rear' | 'up';
+  end: number;
+  /** the paw it reaches with (stood up: the one at the finger) */
+  paw: PawSide;
+  /** when a paw meets the glass, and which */
+  beats: { at: number; paw: PawSide }[];
+}
+
+/**
+ * A finger moving over the glass low down in the room: something to be had. Up to the glass under
+ * it, sat facing it with the head going after it, ears pricked and eyes wide; then at it. Low down,
+ * a forepaw put out to the glass where the finger is, the wrist bent back so the pads meet it flat
+ * (to you), held a moment and taken back; a little higher, the same up on its haunches; higher
+ * still, up on its hind legs, both forepaws on the glass, and a pat or two at the finger with one
+ * and then the other as it goes. Now and then two pats quick together; after the finger along the
+ * glass when it goes out of reach. Each pat lands on the glass (`landed`: which paw, for the app to
+ * leave its print there, and make it felt under the finger and heard). The finger gone, it is
+ * looked for a moment; after a few goes the game is over.
+ */
+export class PawGlass implements Act {
+  readonly name = 'paw';
+  phase: 'come' | 'watch' | 'pat' | 'look' = 'come';
+  private t = 0;
+  private goes = 0;
+  private wait = 0.5 + Math.random() * 0.5;
+  private readonly most = 3 + Math.floor(Math.random() * 3);
+  private bout: Bout | null = null;
+  /** where on the glass its paws go (its own frame: out from its middle, up, ahead), after the
+   *  finger as it moves */
+  private readonly aim = new THREE.Vector3();
+  private going = false;
+  /** where the finger was when it last came after it */
+  private readonly cameFor = new THREE.Vector3(1e3, 0, 0);
+  /** a paw met the glass this frame: which (null: none) */
+  landed: PawSide | null = null;
+  constructor(private readonly finger: () => GlassFinger | null) {}
+  get ownGaze() {
+    return true;
+  }
+  /** where to sit to reach the finger on the glass: a forearm's reach back from it and a little to
+   *  the side it is on (a paw put out to one side, not straight ahead in front of its own white
+   *  chest) */
+  private spot(c: Ctx, f: GlassFinger) {
+    const side = c.m.pos.x < f.at.x ? -1 : 1;
+    return c.keepClear(new THREE.Vector3(f.at.x + side * 0.06, 0, f.at.z - 0.2), 0.08);
+  }
+  /** the finger in its own frame: how far across (to its left), up and ahead */
+  private local(f: GlassFinger, m: Ctx['m'], out: THREE.Vector3) {
+    const dx = f.at.x - m.pos.x, dz = f.at.z - m.pos.z, cy = Math.cos(m.yaw), sy = Math.sin(m.yaw);
+    return out.set(dx * cy - dz * sy, f.at.y, dx * sy + dz * cy);
+  }
+  private readonly fl = new THREE.Vector3();
+  update(dt: number, c: Ctx) {
+    const m = c.m;
+    this.t += dt;
+    this.landed = null;
+    const f = this.finger();
+    const keen: PoseLayer = { earFwd: 0.85, pupil: 0.9, eyeOpen: 1, whisker: 0.8, tailCurl: 0.5 * Math.sin(this.t * 7) };
+    if (this.phase === 'come') {
+      if (!f) return false;
+      if (!this.going) {
+        this.going = true;
+        this.cameFor.copy(f.at);
+        const to = this.spot(c, f);
+        // (near enough already: no shuffle across for the sake of it, only squared up to the glass)
+        if (Math.hypot(to.x - m.pos.x, to.z - m.pos.z) < 0.1) {
+          if (Math.abs(wrapA(m.yaw)) > 0.35) m.walkTo(m.pos.clone(), 0.15, 0, () => { this.phase = 'watch'; this.t = 0; });
+          else { this.phase = 'watch'; this.t = 0; }
+        } else {
+          m.setPosture('stand');
+          m.walkTo(to, 0.4, 0, () => { this.phase = 'watch'; this.t = 0; });
+        }
+      }
+      m.lookAt(f.at, 1);
+      return this.t < 8;
+    }
+    if (!f && this.phase !== 'look' && this.phase !== 'pat') { this.phase = 'look'; this.t = 0; m.layer = null; }
+    m.setPosture('sit');
+    if (this.phase === 'look') {
+      // (where did it go: a look at where it was, and away)
+      m.layer = { pose: { earFwd: 0.5, eyeOpen: 1 }, w: 1 - ease((this.t - 0.8) / 0.6) };
+      if (this.t > 0.9) m.lookAt(null);
+      return this.t < 1.6;
+    }
+    if (f) m.lookAt(f.at, 1);
+    const L = f ? this.local(f, m, this.fl) : null;
+    if (this.phase === 'watch') {
+      m.layer = { pose: keen, w: ease(this.t / 0.3) };
+      if (!L) return true;
+      // still a good while (after a pat or two at it, to see if it would go): no game in it
+      if (f!.still > 3.5) { this.phase = 'look'; this.t = 0.6; return true; }
+      // gone along the glass out of a paw's reach (and not where it was the last time it came
+      // after it, as far as it could): after it
+      if (Math.abs(L.x) > 0.13 && this.t > 0.4 && Math.abs(f!.at.x - this.cameFor.x) > 0.1) {
+        this.phase = 'come'; this.going = false; this.t = 0; m.layer = null;
+        return true;
+      }
+      if (this.t > this.wait) {
+        this.phase = 'pat';
+        this.t = 0;
+        this.bout = this.plan(L);
+        this.aimAt(L, 1);
+      }
+      return true;
+    }
+    // at it
+    const B = this.bout!;
+    if (L) this.aimAt(L, 1 - Math.exp(-dt * 5));
+    const u = this.t;
+    for (const b of B.beats) if (u >= b.at && u - dt < b.at) this.landed = b.paw;
+    m.layer = { pose: { ...keen, ...this.reach(B, u) }, w: this.weight(B, u) };
+    if (u >= B.end) {
+      this.goes++;
+      if (this.goes >= this.most || !f) {
+        if (!f) { this.phase = 'look'; this.t = 0; m.layer = null; return true; }
+        return false;
+      }
+      this.phase = 'watch';
+      this.t = 0;
+      this.wait = 0.45 + Math.random() * 1.1;
+    }
+    return true;
+  }
+  /** a go at it: how it reaches for a finger so high, and its beats */
+  private plan(L: THREE.Vector3): Bout {
+    const near: PawSide = Math.abs(L.x) < 0.02 ? (Math.random() < 0.5 ? 'LF' : 'RF') : L.x > 0 ? 'LF' : 'RF';
+    const other: PawSide = near === 'LF' ? 'RF' : 'LF';
+    if (L.y >= 0.22) {
+      // up on its hind legs (0.45 s), both paws to the glass, a pat or two, and down (from as low
+      // as its chin: sat, a paw put up there is lost against its own white chest)
+      const pats = 1 + Math.floor(Math.random() * 3);
+      const beats = [{ at: 0.45, paw: near }, { at: 0.52, paw: other }];
+      let at = 0.52;
+      for (let i = 0; i < pats; i++) {
+        at += 0.4 + Math.random() * 0.35;
+        beats.push({ at, paw: i % 2 ? other : near });
+      }
+      return { kind: 'up', paw: near, beats, end: at + 0.45 + 0.55 };
+    }
+    const twice = Math.random() < 0.35;
+    return { kind: L.y >= 0.15 ? 'rear' : 'sit', paw: near, beats: twice ? [{ at: 0.32, paw: near }, { at: 0.6, paw: near }] : [{ at: 0.32, paw: near }], end: twice ? 1.05 : 0.85 };
+  }
+  /** the paws' mark on the glass after the finger (rate: how far there this frame) */
+  private aimAt(L: THREE.Vector3, rate: number) {
+    const B = this.bout!;
+    const lo = B.kind === 'up' ? 0.26 : B.kind === 'rear' ? 0.15 : 0.05;
+    const hi = B.kind === 'up' ? 0.44 : B.kind === 'rear' ? 0.24 : 0.15;
+    const x = Math.min(0.09, Math.max(0.035, Math.abs(L.x))), y = Math.min(hi, Math.max(lo, L.y));
+    const z = B.kind === 'up' ? 0.17 : Math.min(0.22, Math.max(0.13, L.z));
+    this.aim.x += (x - this.aim.x) * rate;
+    this.aim.y += (y - this.aim.y) * rate;
+    this.aim.z += (z - this.aim.z) * rate;
+  }
+  /** how far into the reach the body is (the layer's weight) */
+  private weight(B: Bout, u: number) {
+    if (B.kind === 'up') return u < 0.45 ? ease(u / 0.45) : 1 - ease((u - (B.end - 0.55)) / 0.55);
+    const last = B.beats[B.beats.length - 1].at;
+    if (u < 0.32) return ease(u / 0.32);
+    // (two quick together: drawn back a little between)
+    if (B.beats.length > 1 && u < last) return u < 0.44 ? 1 - 0.35 * ease((u - 0.32) / 0.12) : 0.65 + 0.35 * ease((u - 0.44) / (last - 0.44));
+    return u < last + 0.14 ? 1 : 1 - ease((u - last - 0.14) / (B.end - last - 0.14));
+  }
+  /** the reach itself at full weight: the body, and the paw (or paws) on the glass */
+  private reach(B: Bout, u: number): PoseLayer {
+    const a = this.aim;
+    if (B.kind !== 'up') {
+      const hi = B.kind === 'rear' ? 1 : 0;
+      // (up over it and down on to it: lifted high and drawn back a little on the way, then out and
+      // down to the glass; the wrist bending back as it goes, so the pads meet the glass flat;
+      // sliding down it a little while held there)
+      const s = Math.min(1, u / 0.32), arc = Math.sin(Math.PI * s);
+      const slide = u > 0.32 ? 0.012 * Math.min(1, (u - 0.32) / 0.4) : 0;
+      const foot = { planted: 0, frame: 0, x: a.x, y: a.y + 0.12 * arc - slide, z: a.z - 0.05 * arc, flex: 0.35 - 1.35 * ease(u / 0.3) };
+      return { chestPitch: -1.02 - 0.15 * hi, hipY: 0.058 + 0.022 * hi, neckPitch: 0.06 + 0.08 * hi, [B.paw]: foot };
+    }
+    // stood up: each paw on the glass, drawn back off it and put to it again at its beats (the
+    // first beats are the paws going up to it)
+    const paw = (side: PawSide, x: number, y: number) => {
+      let off = 0;
+      for (const b of B.beats.slice(2)) {
+        if (b.paw !== side) continue;
+        const s = (u - (b.at - 0.24)) / 0.24;
+        if (s > 0 && s < 1) off = Math.max(off, Math.sin(Math.PI * s));
+      }
+      return { planted: 0, frame: 0, x, y: y - 0.03 * off, z: a.z - 0.06 * off, flex: -1 + 0.6 * off };
+    };
+    const other: PawSide = B.paw === 'LF' ? 'RF' : 'LF';
+    // (the tail out behind along the floor, curving off to one side: with the hips tipped up, a
+    // sitting cat's tail would come round between its legs)
+    return {
+      hipY: 0.13, hipZ: -0.09, hipPitch: 1.25, lumbarPitch: 0.3, chestPitch: -1.35,
+      tailLift: 0.6, tailSide: B.paw === 'LF' ? -0.9 : 0.9, tailCurve: 1, tailSag: 1,
+      [B.paw]: paw(B.paw, a.x, a.y), [other]: paw(other, 0.045, a.y - 0.05),
+    };
+  }
+  stop(c: Ctx) {
+    c.m.layer = null;
+    c.m.lookAt(null);
+  }
+}
+
 export class Gift implements Act {
   readonly name = 'gift';
   phase: 'go' | 'pounce' | 'take' | 'bring' | 'drop' | 'show' = 'go';

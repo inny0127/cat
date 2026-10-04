@@ -368,7 +368,8 @@ export class Cat3D {
     for (const l of LEGS) {
       const F = stepper.feet[l];
       this.targ[l].copy(F.pos).applyMatrix4(this.inv);
-      this.flex[l] = F.stepping ? F.flex : Math.max(p[l].flex, F.flex);
+      // (a paw held up off the floor may be bent back, its pads turned to what it reaches for)
+      this.flex[l] = F.stepping ? F.flex : p[l].flex < 0 ? p[l].flex * (1 - p[l].planted) : Math.max(p[l].flex, F.flex);
       this.ground[l] = p[l].planted;
       // legs on the floor, and those coming down to it, must reach their paws
       this.reachW[l] = this.planted[l] ? (F.stepping ? Math.max(0, (F.s - 0.6) / 0.4) : 1) : 0;

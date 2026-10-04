@@ -45,6 +45,23 @@ export class Haptic {
     }
   }
 
+  /** a tap from the cat's side of the glass, felt as soon as the platform lets it be: at once
+   *  where it can be, and on iOS Safari (whose tick only comes from inside a touch) at the finger's
+   *  next move */
+  private pending: 'light' | 'medium' | 'heavy' | null = null;
+  private pendingAt = 0;
+  tapSoon(kind: 'light' | 'medium' | 'heavy' = 'light') {
+    if (this.native || this.webVibrate || !this.ios) this.tap(kind);
+    else { this.pending = kind; this.pendingAt = performance.now(); }
+  }
+  /** from inside a touch: a tap that was waiting for one (not long: later, it would be felt for
+   *  nothing) */
+  flush() {
+    const k = this.pending;
+    this.pending = null;
+    if (k && performance.now() - this.pendingAt < 400) this.tap(k);
+  }
+
   /** level 0..1 while a finger rests on a purring cat */
   purr(level: number) {
     this.level = level;

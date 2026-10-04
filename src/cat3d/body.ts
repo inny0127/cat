@@ -294,8 +294,8 @@ export class Body {
     kin.setWorld(L.b[2], aim(L.restDir[2], L.restSide, M, side, this.t.q1));
     kin.fk(L.b[3]);
     // paw: flat along the floor; the toes hang a little as the wrist folds, and lift as they
-    // reach to land
-    const paw = this.pawDir(girdleQ, ground, flex > 0 ? flex * 0.45 : flex * 0.6, side, d);
+    // reach to land (held up off the floor, bent back: the pads turned to what it reaches for)
+    const paw = this.pawDir(girdleQ, ground, flex > 0 ? flex * 0.45 : flex * 0.6 * (1 - ground), side, d, true);
     kin.setWorld(L.b[3], aim(L.restDir[3], L.restSide, paw, side, this.t.q1));
     this.reached[L.leg].copy(kin.wp[L.b[3]]);
   }
@@ -343,14 +343,14 @@ export class Body {
   }
 
   /** a paw's forward direction: along the floor when standing, with the body otherwise; curled by `curl` */
-  private pawDir(girdleQ: THREE.Quaternion, ground: number, curl: number, side: THREE.Vector3, out: THREE.Vector3) {
+  private pawDir(girdleQ: THREE.Quaternion, ground: number, curl: number, side: THREE.Vector3, out: THREE.Vector3, back = false) {
     // heading on the floor: the girdle's forward with pitch and roll removed
     const g = this.t.a.set(0, 0, 1).applyQuaternion(girdleQ);
     const floor = new THREE.Vector3(g.x, 0, g.z);
     if (floor.lengthSq() < 1e-6) floor.set(0, 0, 1);
     floor.normalize();
     out.copy(floor).lerp(g, 1 - ground).normalize();
-    if (curl > 0) out.applyAxisAngle(side, curl);
+    if (curl > 0 || back) out.applyAxisAngle(side, curl);
     return out;
   }
 

@@ -4,7 +4,7 @@ import { POSES, SIDE_TURN, type Leg, type PoseLayer, type PoseName } from '../ca
 import { NEUTRAL, type Mood } from '../cat3d/mood';
 import type { Avatar } from '../sim/avatar';
 import type { EarMood, TailMood } from '../rig/animator';
-import { chooseAct, groomChest, groomFlank, knead, restingPose, sneeze, toBed, toWindow, wander, warmUp, washFace, yawn, type Act, type Ctx, sunbathe, Play, Sill, Hunt, Box, Zoomies, Walk, Stare, Rub, scratchEar, wakeUp, stretchSideOn, Greet, Gift, Snub, Beg, type SillSpot } from './behave';
+import { chooseAct, groomChest, groomFlank, knead, restingPose, sneeze, toBed, toWindow, wander, warmUp, washFace, yawn, type Act, type Ctx, sunbathe, Play, Sill, Hunt, Box, Zoomies, Walk, Stare, Rub, scratchEar, wakeUp, stretchSideOn, Greet, Gift, Snub, Beg, PawGlass, type GlassFinger, type SillSpot } from './behave';
 import { Chase, Startle, type LaserDot } from './chase';
 import { Tease, type Lure } from './tease';
 
@@ -138,6 +138,11 @@ export class PixelAvatar implements Avatar {
   } | null = null;
   /** after a hunt, a while before the next */
   private huntRest = 0;
+  /** a finger moving on the glass: where (GlassFinger), when it was last seen and since when it
+   *  has been there; and how long before another game with it */
+  private glassFinger: (GlassFinger & { last: number; since: number; moved: number; from: THREE.Vector3 }) | null = null;
+  private clock = 0;
+  private pawRest = 0;
   /** fingers on the cat now (screen points, set by the app), and what is under one: a bone of
    *  the body and the point on it */
   hands: { sx: number; sy: number }[] = [];
@@ -253,6 +258,30 @@ export class PixelAvatar implements Avatar {
     this.stopAct();
     this.act = new Beg((what === 'food' ? this.spots.food : this.spots.water).clone(), urgent, empty);
     return true;
+  }
+
+  /** a finger on the glass, where the cat sees it (GlassFinger): told each frame it is there, and
+   *  as it moves */
+  fingerOnGlass(at: THREE.Vector3) {
+    const F = this.glassFinger;
+    if (!F || this.clock - F.last > 0.5) this.glassFinger = { at: at.clone(), still: 0, last: this.clock, since: this.clock, moved: this.clock, from: at.clone() };
+    else {
+      F.at.copy(at);
+      F.last = this.clock;
+      // (moved: more than a finger's tremble from where it was last still)
+      if (F.from.distanceTo(at) > 0.01) { F.moved = this.clock; F.from.copy(at); }
+    }
+  }
+  /** a paw patted at the glass this frame: which (null: none) */
+  get pawLanded() {
+    return this.act instanceof PawGlass ? this.act.landed : null;
+  }
+  /** the finger on the glass now (null: gone) */
+  private fingerNow(): GlassFinger | null {
+    const F = this.glassFinger;
+    if (!F || this.clock - F.last > 0.25) return null;
+    F.still = this.clock - F.moved;
+    return F;
   }
 
   /** where its mouth is (between the lips, under the nose), in the room */
@@ -680,6 +709,14 @@ export class PixelAvatar implements Avatar {
         return;
       }
     }
+    // a finger moving on the glass a while: a cat in the mood comes and pats at it
+    const F = this.fingerNow();
+    if (F && F.still < 0.5 && this.clock - this.glassFinger!.since > 1 && this.pawRest <= 0 && this.mood.sleepy < 0.6
+      && (this.mood.arousal > 0.2 || this.mood.trust > 0.3)) {
+      this.pawRest = 20;
+      this.act = new PawGlass(() => this.fingerNow());
+      return;
+    }
     // a moth or a fly about: nothing else matters for a while
     const bug = c.bug();
     if (bug && this.huntRest <= 0 && this.mood.sleepy < 0.7 && Math.hypot(bug.p.x - m.pos.x, bug.p.z - m.pos.z) < 2.2) {
@@ -745,6 +782,8 @@ export class PixelAvatar implements Avatar {
     this.leanIntoHand(dt);
     this.playRest = Math.max(0, this.playRest - dt);
     this.huntRest = Math.max(0, this.huntRest - dt);
+    this.pawRest = Math.max(0, this.pawRest - dt);
+    this.clock += dt;
     // the red dot of a laser pointer: a moment's stare, and it is after it
     this.chaseRest = Math.max(0, this.chaseRest - dt);
     if (this.laser && !(this.act instanceof Chase)) {

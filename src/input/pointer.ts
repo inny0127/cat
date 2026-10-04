@@ -216,6 +216,17 @@ export class PointerInput {
     }
   }
 
+  /** fingers on the glass now (not on the cat, nor holding a toy, nor pouring): where on the
+   *  screen */
+  onGlass(): { sx: number; sy: number }[] {
+    const out: { sx: number; sy: number }[] = [];
+    for (const [id, c] of this.contacts) {
+      const g = this.glass.get(id);
+      if (!c.startedOnCat && g && !g.toy && !g.pouring) out.push({ sx: c.sx, sy: c.sy });
+    }
+    return out;
+  }
+
   /** contacts currently resting on the cat */
   onCat(): Contact[] {
     const out: Contact[] = [];

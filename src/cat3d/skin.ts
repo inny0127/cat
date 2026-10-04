@@ -16,8 +16,10 @@ varying vec2 vUv;
 varying vec3 vN;
 varying vec3 vWorld;
 varying float vAO;
-// where this bit of coat is on the cat standing at rest (the stripes are laid out by it)
+// where this bit of coat is on the cat standing at rest (the stripes are laid out by it), and which
+// way it faces there (the soles of the paws face down)
 varying vec3 vRest;
+varying vec3 vRestN;
 // 0 the coat; 1 the inside of the mouth (aux: how deep in from the lips, the tongue's side);
 // 2 a tooth (aux: its root)
 attribute float reg;
@@ -74,6 +76,7 @@ void main() {
   vWorld = wp.xyz;
   vUv = uv;
   vRest = position;
+  vRestN = normal;
   vAO = capsuleAO(wp.xyz, vN);
   gl_Position = projectionMatrix * viewMatrix * wp;
 }`;
@@ -107,6 +110,7 @@ varying vec3 vN;
 varying vec3 vWorld;
 varying float vAO;
 varying vec3 vRest;
+varying vec3 vRestN;
 ${LIGHT_GLSL}
 // a ginger tabby's stripes on the body and the tail, laid out as a pixel artist would draw them: a
 // dark line along the spine, bands down the flanks from it a few centimetres apart, leaning back a
@@ -157,12 +161,28 @@ int tabby(int cls, vec3 P) {
   if (!band) return cls == ${PIX.stripe} ? ${PIX.ginger} : cls;
   return cls == ${PIX.cream} ? ${PIX.ginger} : ${PIX.stripe};
 }
+// the pads under the paws, seen when a paw is held up (to the glass, to be washed, in the air
+// asleep on its back): on each sole a pink pad, a little wider than long, and four toe beans in an
+// arc in front of it, the middle two the furthest forward
+int pads(int cls, vec3 P, vec3 N) {
+  if (P.y > 0.012 || N.y > -0.45 || vReg > 0.5) return cls;
+  bool front = P.z > 0.0;
+  vec2 q = vec2(abs(P.x) - (front ? 0.0234 : 0.0208), P.z - (front ? 0.0945 : -0.164));
+  vec2 m = (q - vec2(0.0, -0.0065)) / vec2(0.0098, 0.0078);
+  if (dot(m, m) < 1.0) return ${PIX.pink};
+  for (int i = 0; i < 4; i++) {
+    float fi = float(i);
+    vec2 c = vec2((fi - 1.5) * 0.0068, (i == 1 || i == 2) ? 0.0135 : 0.0095);
+    if (length(q - c) < 0.0034) return ${PIX.pink};
+  }
+  return cls;
+}
 void main() {
   if (uSolid > 0.5) {
     // pixel art: which material, and how much light, for the pixel pass to paint from its ramps
     vec3 Np = normalize(vN) * (gl_FrontFacing ? 1.0 : -1.0);
     int cls = vReg > 1.5 ? ${PIX.teeth} : vReg > 0.5 ? (vAux.y > 0.5 ? ${PIX.tongue} : ${PIX.mouth})
-      : !gl_FrontFacing ? ${PIX.mouth} : tabby(pixClass(texture2D(uPixMap, vUv).rgb), vRest);
+      : !gl_FrontFacing ? ${PIX.mouth} : pads(tabby(pixClass(texture2D(uPixMap, vUv).rgb), vRest), vRest, vRestN);
     float shp = keyShadow(vWorld, Np);
     vec3 Vp = normalize(cameraPosition - vWorld);
     float rim = pow(1.0 - max(dot(Np, Vp), 0.0), 2.5) * max(dot(Np, uRimDir), 0.0) * shp;

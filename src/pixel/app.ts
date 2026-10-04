@@ -217,11 +217,14 @@ export class PixelApp {
       glassKnock: (x, y) => { this.gestureEnd(); this.brain.knock(x, y); },
       pourStart: () => this.brain.pourStart(),
       pourEnd: () => { this.gestureEnd(); this.brain.pourEnd(); },
-      shake: (k) => this.brain.kibble(k),
+      // (a finger scrubbing the glass to shake the kibble is not one to play with)
+      shake: (k) => { this.glassQuiet = 2; this.brain.kibble(k); },
       scoop: () => { this.gestureEnd(); this.brain.scoop(); },
       longHold: (_x, _y, onCat) => this.longHold(onCat),
       hover: (x, y) => {
+        this.haptic.flush();
         this.brain.hover(x, y);
+        this.fingerOnGlass(x, y);
         if (this.laser.held) return;
         // (with a mouse: the ball of wool, and the laser pointer, can be taken hold of)
         const over = this.hitThing(this.room.yarnBall, x, y, 14) || (this.room.pointer.visible && this.hitThing(this.room.pointer, x, y, 14));
@@ -667,6 +670,24 @@ export class PixelApp {
     return Math.max(-1, Math.min(1, p.x)) * 0.6;
   }
 
+  /** a finger (or the pointer) over the glass: where the cat sees it, on the glass just beyond
+   *  where it would sit facing you, if that is low enough down for a cat to reach (stood up on its
+   *  hind legs; higher, it only watches it go) */
+  private readonly glassAt = new THREE.Vector3();
+  private glassQuiet = 0;
+  private fingerOnGlass(sx: number, sy: number) {
+    if (!this.room || this.avatar.hidden || this.glassQuiet > 0) return;
+    const ray = this.floorRay;
+    ray.setFromCamera(new THREE.Vector2((sx / innerWidth) * 2 - 1, -(sy / innerHeight) * 2 + 1), this.stage.camera);
+    const o = ray.ray.origin, d = ray.ray.direction, z = this.room.spots.bed.z + 0.45;
+    if (Math.abs(d.z) < 1e-4) return;
+    const t = (z - o.z) / d.z;
+    if (t <= 0) return;
+    const at = this.glassAt.set(o.x + d.x * t, o.y + d.y * t, z);
+    if (at.y < 0.02 || at.y > 0.46) return;
+    this.avatar.fingerOnGlass(at);
+  }
+
   /** is a thing in the room under a screen point (or near it: a finger is wider than it) */
   private hitThing(o: THREE.Object3D, sx: number, sy: number, near: number) {
     const ray = new THREE.Raycaster();
@@ -853,6 +874,8 @@ export class PixelApp {
    *  point on the floor under it */
   private toyFinger: { x: number; y: number; off: THREE.Vector3 } | null = null;
   private toyWasPinned = false;
+  /** the prints of a paw on the glass, drying (fresh 1 .. 0) */
+  private prints: { at: THREE.Vector3; age: number; fresh: number }[] = [];
   private readonly bugLight = new THREE.Vector3();
 
   /** a paw walking into the ball of wool sends it rolling on a little, the way the cat is going
@@ -1082,8 +1105,30 @@ export class PixelApp {
     const mp = this.cat.motor.pos, win = this.room.windowMiddle;
     this.room.visitorOk = this.avatar.hidden || !(mp.z < win.z + 0.36 && Math.abs(mp.x - win.x) < 0.5);
     this.avatar.visitor = this.avatar.hidden ? null : this.room.visitorAt();
+    // (a finger resting on the glass is there for the cat, moving or not)
+    this.glassQuiet = Math.max(0, this.glassQuiet - dt);
+    const resting = this.input.onGlass();
+    if (resting.length) this.fingerOnGlass(resting[0].sx, resting[0].sy);
     this.avatar.update(dt);
+    const landed = this.avatar.pawLanded;
     this.cat.update(dt);
+    // (a paw patted at the glass where your finger is: felt under it, heard, softly, and its print
+    // left on the glass where the paw is, to dry)
+    if (landed) {
+      this.haptic.tapSoon('light');
+      this.audio.play('thump', { gain: 0.2, pan: this.catPan() });
+      this.cat.group.updateMatrixWorld();
+      this.prints.push({ at: this.cat.body.reached[landed].clone().applyMatrix4(this.cat.group.matrixWorld), age: 0, fresh: 1 });
+      if (this.prints.length > 4) this.prints.shift();
+    }
+    if (this.prints.length) {
+      for (const P of this.prints) {
+        P.age += dt;
+        P.fresh = P.age < 2.5 ? 1 : 1 - (P.age - 2.5) / 5;
+      }
+      this.prints = this.prints.filter((P) => P.fresh > 0);
+      this.stage.setPrints(this.prints);
+    }
     this.brushYarn(dt);
     // the weather: now and then a few hours of rain (or as asked, ?rain=1)
     const rain = this.rainOverride !== null ? +this.rainOverride : rainAt(clock);
