@@ -110,7 +110,9 @@ export interface Ctx {
   /** its toy mouse, if there is one (where, whether it is lying still, in its mouth, or in the
    *  air), taken up in the mouth (where the mouth is now, which way it faces) or let fall (null);
    *  and where its mouth is */
-  mouse: () => { p: THREE.Vector3; state: 'floor' | 'mouth' | 'air'; moving: boolean } | null;
+  mouse: () => { p: THREE.Vector3; state: 'floor' | 'mouth' | 'air'; moving: boolean; under?: boolean } | null;
+  /** the toy mouse hooked out from under the radiator by a paw, skidding out toward a point */
+  hookMouse: (toward: THREE.Vector3) => void;
   carry: (at: THREE.Vector3 | null, yaw?: number) => void;
   mouthAt: () => THREE.Vector3;
   /** a finger on the glass, if there is one (GlassFinger) */
@@ -1769,6 +1771,131 @@ export class TailChase implements Act {
   }
 }
 
+/**
+ * The toy mouse gone in under the radiator: over to it, down low with the head to the floor for a
+ * look in under (the rump up, the tail going); then down on its chest and a forepaw in after it,
+ * feeling about, a scrabble of claws on the boards; a look again; and again. Now and then the paw
+ * hooks it and out it skids (after it at once, and it is brought to you); or, beaten, it sits up,
+ * looks at the radiator and then at you, and asks: a meow, the eyes going from you to the
+ * radiator and back, waiting for a hand (a tap there gets it out, and it is after it).
+ */
+export class Fish implements Act {
+  readonly name = 'fish';
+  phase: 'go' | 'peer' | 'reach' | 'ask' | 'after' = 'go';
+  private t = 0;
+  private set = false;
+  private reaches = 0;
+  private readonly most = 2 + Math.floor(Math.random() * 2);
+  /** which forepaw goes in after it */
+  private paw: PawSide = Math.random() < 0.5 ? 'LF' : 'RF';
+  /** out from under it now (a paw got it, or a hand): after it, as for a thrown one (the avatar
+   *  sends it, a Gift) */
+  out = false;
+  /** how likely a reach is to hook it (set beforehand to have it so) */
+  luck = 0.35;
+  /** asking: round to you yet */
+  private turning = false;
+  private turned = false;
+  get ownGaze() {
+    return true;
+  }
+  update(dt: number, c: Ctx) {
+    const m = c.m, M = c.mouse();
+    if (!M) return false;
+    this.t += dt;
+    // out of there (a paw, or a hand), and moving: after it
+    if (!M.under) {
+      m.layer = null;
+      this.out = true;
+      return false;
+    }
+    // (in front of it, facing the wall: a forearm's length and a bit back from the gap)
+    const stand = new THREE.Vector3(M.p.x, 0, M.p.z + 0.27);
+    if (this.phase === 'go') {
+      if (!this.set) {
+        this.set = true;
+        m.setPosture('stand');
+        m.walkTo(c.keepClear(stand.clone(), 0.06), 0.4, Math.PI, () => { this.phase = 'peer'; this.t = 0; });
+      }
+      m.lookAt(M.p, 1);
+      return this.t < 15;
+    }
+    if (this.phase === 'peer') {
+      // the head right down to the boards and on one side, to see in under it; the rump up and
+      // the tail swishing
+      m.setPosture('crouch');
+      m.lookAt(null);
+      const k = hump(this.t, 1.6, 0.35), side = this.paw === 'LF' ? 1 : -1;
+      m.layer = {
+        pose: {
+          hipY: 0.17, neckPitch: -1.0, headPitch: -0.35, headRoll: side * 0.45, earFwd: 0.9, pupil: 0.95, eyeOpen: 1, whisker: 0.8,
+          tailLift: 0.5, tailCurl: 0.9 * Math.sin(this.t * 7),
+        },
+        w: k,
+      };
+      if (this.t > 1.6) { this.phase = 'reach'; this.t = 0; }
+      return true;
+    }
+    if (this.phase === 'reach') {
+      // down on its chest, a forepaw in under after it, feeling about this way and that, the
+      // claws scrabbling on the boards; the cheek down to the floor beside it
+      m.setPosture('sphinx');
+      m.lookAt(null);
+      const u = this.t, k = hump(u, 2.4, 0.4);
+      const sweep = Math.sin(u * 9), dig = Math.max(0, Math.sin(u * 4.5));
+      if (Math.floor(u * 3) !== Math.floor((u - dt) * 3) && u > 0.4 && u < 2.1) c.sound('scrabble', 0.05);
+      const side = this.paw === 'LF' ? 1 : -1;
+      m.layer = {
+        pose: {
+          [this.paw]: { planted: 0, frame: 0, x: 0.02 + 0.035 * sweep * side, y: 0.012 + 0.006 * dig, z: 0.25 + 0.03 * dig, flex: 0.2 + 0.4 * dig },
+          neckPitch: -0.3, headPitch: -0.2, headRoll: side * 0.35, chestRoll: -side * 0.12, earFwd: 0.7, whisker: 0.9, pupil: 1,
+          tailLift: 0.1, tailCurl: 1.1 * Math.sin(u * 8),
+        },
+        w: k,
+      };
+      if (u > 2.4) {
+        this.reaches++;
+        this.paw = Math.random() < 0.7 ? this.paw : this.paw === 'LF' ? 'RF' : 'LF';
+        if (Math.random() < this.luck) {
+          // got it: out it skids, toward it, and it is after it
+          c.hookMouse(m.pos.clone());
+          c.sound('pencil', 0.05);
+          return true;
+        }
+        this.t = 0;
+        this.phase = this.reaches >= this.most ? 'ask' : 'peer';
+      }
+      return true;
+    }
+    if (this.phase === 'ask') {
+      // beaten: up, a last look in at it, round to you and sat down, and a word: get it out. The
+      // eyes on you, and on the radiator, and on you again
+      m.layer = null;
+      const at = this.t;
+      if (!this.turned) {
+        const v = c.viewer(), face = Math.atan2(v.x - m.pos.x, v.z - m.pos.z) + (M.p.x > m.pos.x ? 0.35 : -0.35);
+        if (at < 0.8) { m.setPosture('stand'); m.lookAt(M.p, 1); return true; }
+        m.lookAt(null);
+        if (!this.turning) { this.turning = true; m.walkTo(m.pos.clone(), 0.12, face, () => { this.turned = true; this.t = 0; }); }
+        return at < 6 || ((this.turned = true), true);
+      }
+      m.setPosture('sit');
+      m.lookAt((at > 3.2 && at < 4.3) || (at > 7.5 && at < 8.3) ? M.p : c.viewer(), 1);
+      if (at > 0.9 && at - dt <= 0.9) c.say(Math.random() < 0.6 ? 'meow' : 'meowPlead');
+      if (at > 5.2 && at - dt <= 5.2 && Math.random() < 0.6) c.say('meowSoft');
+      if (at > 10) { this.phase = 'after'; this.t = 0; }
+      return true;
+    }
+    // no one came: a last look at it, and it gives it up
+    m.lookAt(this.t < 1 ? M.p : null, 1);
+    return this.t < 1.4;
+  }
+  stop(c: Ctx) {
+    c.m.layer = null;
+    c.m.lookAt(null);
+  }
+}
+
 export class Gift implements Act {
   readonly name = 'gift';
   phase: 'go' | 'pounce' | 'take' | 'bring' | 'drop' | 'show' = 'go';
@@ -1788,6 +1915,8 @@ export class Gift implements Act {
     const toward = (p: THREE.Vector3) => Math.atan2(p.x - m.pos.x, p.z - m.pos.z);
     if (this.phase === 'go') {
       if (M.state === 'mouth') return false;
+      // (gone in under the radiator: that is another matter, Fish)
+      if (M.under) return false;
       // (thrown: after it the moment it is down)
       if (M.state === 'air') { m.setPosture('crouch'); m.lookAt(M.p, 1); return this.t < 4; }
       const d = Math.hypot(M.p.x - m.pos.x, M.p.z - m.pos.z);
@@ -3183,7 +3312,9 @@ export function chooseAct(c: Ctx, atHome: boolean, posture: PoseName): Act | nul
     if (atHome && lure && !lure.held && lure.p.y < 0.05) opts.push([0.3 * (0.4 + m.arousal) * (1 - m.sleepy), () => new Tease(true)]);
     // fond of you, now and then it brings you its toy mouse (lying somewhere off from the glass)
     const toy = c.mouse();
-    if (atHome && toy && toy.state === 'floor' && Math.hypot(toy.p.x - c.window.x, toy.p.z - c.window.z) > 0.3) {
+    // (the toy mouse in under the radiator: a go at getting it out)
+    if (atHome && toy?.under) opts.push([0.5 * (0.5 + m.arousal) * (1 - m.sleepy), () => new Fish()]);
+    else if (atHome && toy && toy.state === 'floor' && Math.hypot(toy.p.x - c.window.x, toy.p.z - c.window.z) > 0.3) {
       opts.push([0.45 * Math.max(0, (m.trust - 0.35) / 0.65) * (0.5 + m.arousal) * (1 - m.sleepy), () => new Gift()]);
     }
     // in the mood for a game and fond of you, now and then it comes and asks you for one at the

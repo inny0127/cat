@@ -12,7 +12,7 @@ await page.goto((process.env.REEL_BASE ?? 'http://localhost:5173/') + 'index.htm
 await page.waitForFunction(() => window.__pcat, null, { timeout: 180000 });
 const report = await page.evaluate(async (minutes) => {
   const app = window.__pcat;
-  const acts = ['wander', 'sun', 'warm', 'play', 'sill', 'box', 'wash', 'zoomies', 'stare', 'sneeze', 'rub', 'scratch', 'window', 'groom', 'yawn', 'stretch', 'bed', 'greet', 'gift', 'ask', 'tail', 'by you', 'claw', 'top'];
+  const acts = ['wander', 'sun', 'warm', 'play', 'sill', 'box', 'wash', 'zoomies', 'stare', 'sneeze', 'rub', 'scratch', 'window', 'groom', 'yawn', 'stretch', 'bed', 'greet', 'gift', 'ask', 'tail', 'by you', 'claw', 'top', 'fish'];
   const issues = [];
   let t = 1, seen = {}, drag = null, drags = 0, errands = 0, laser = null, wand = null, laserUses = 0, wandUses = 0, returns = 0, tosses = 0, glass = null, glasses = 0;
   // a cat that wants to go somewhere and does not move
@@ -94,7 +94,7 @@ const report = await page.evaluate(async (minutes) => {
         const [x, y] = scr(app.room.pointerHome);
         app.input.down({ ...ev(x, y, t), pointerId: 13 });
         app.input.up({ ...ev(x, y, t + 0.05), pointerId: 13 }, false);
-        if (app.laser.held) issues.push(`the laser pointer not put back at ${i}`);
+        if (app.laser.held) issues.push(`the laser pointer not put back at ${i} (cat under the finger: ${app.input.h.hitCat(x, y, false)}; ${app.avatar.doing})`);
         laser = null;
       }
     }
@@ -103,7 +103,7 @@ const report = await page.evaluate(async (minutes) => {
       const [x, y] = scr(app.room.lureAt());
       app.input.down({ ...ev(x, y, t), pointerId: 14 });
       wand = { x, y, until: i + 120 + Math.floor(Math.random() * 240), vx: 0, vy: 0, took: !!app.wandFinger };
-      if (!wand.took) issues.push(`the wand not taken up at ${i} (${x.toFixed(0)},${y.toFixed(0)})`);
+      if (!wand.took) issues.push(`the wand not taken up at ${i} (${x.toFixed(0)},${y.toFixed(0)}; cat under the finger: ${app.input.h.hitCat(x, y, false)}; ${app.avatar.doing})`);
       wandUses++;
     } else if (wand) {
       wand.vx += (Math.random() - 0.5) * 160; wand.vy += (Math.random() - 0.5) * 160;

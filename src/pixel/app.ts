@@ -102,6 +102,7 @@ export class PixelApp {
       batLure: (v) => this.room.batLure(v),
       mouse: () => this.room.mouse,
       carry: (at, yaw) => this.room.carryMouse(at, yaw),
+      hookMouse: (toward) => this.room.hookMouse(toward),
       pinLure: (sec, at) => {
         this.room.pinLure(sec, at);
         // (a hand on the wand feels the paws have them)
@@ -110,6 +111,11 @@ export class PixelApp {
     };
     // the monstera knocked: its leaves rustle
     this.room.onRustle = (k) => this.audio.play('rustle', { gain: 0.08 + 0.18 * Math.min(1, k), pan: 0.5 });
+    // the toy mouse skids in under the radiator: a little knock against its foot, and the cat hears
+    this.room.onMouseUnder = () => {
+      this.audio.play('pencil', { gain: 0.05, rate: 0.6, pan: Math.max(-0.8, Math.min(0.8, this.room.mouse.p.clone().project(this.stage.camera).x * 0.8)) });
+      this.avatar.hear(this.room.mouse.p.clone());
+    };
     // the toy mouse coming down on the floor: a soft pat of felt
     this.room.onMouseLand = (k) => {
       if (k < 0.05) return;
@@ -203,13 +209,19 @@ export class PixelApp {
           this.haptic.tap?.();
           return;
         }
-        // the toy mouse: tapped, thrown into the room (somewhere on the floor beyond, in an arc),
-        // and the cat may go after it
+        // the toy mouse in under the radiator: a tap on it there (the radiator over it is seen to
+        // further on, after the things on the sill) and a hand reaches in and flicks it out into
+        // the room, and the cat is after it
         const M = this.room.mouse;
+        if (M.under && this.hitThing(M.obj, x, y, 40)) { this.freeMouse(); return; }
+        // the toy mouse: tapped, thrown into the room (somewhere on the floor beyond, in an arc),
+        // and the cat may go after it (now and then too hard, at the radiator, in under which it
+        // skids)
         if (M.state === 'floor' && this.hitThing(M.obj, x, y, 24)) {
-          const to = this.room.keepClear(new THREE.Vector3(-0.45 + 1.0 * Math.random(), 0, this.room.spots.bed.z - 0.35 - 0.25 * Math.random()), 0.06);
+          const wild = Math.random() < 0.15;
+          const to = wild ? this.room.radiatorAim() : this.room.keepClear(new THREE.Vector3(-0.45 + 1.0 * Math.random(), 0, this.room.spots.bed.z - 0.35 - 0.25 * Math.random()), 0.06);
           const d = Math.hypot(to.x - M.p.x, to.z - M.p.z);
-          this.room.tossMouse(to.clone().sub(M.p), Math.min(2.6, d / 0.34));
+          this.room.tossMouse(to.clone().sub(M.p), Math.min(2.6, d / 0.34) * (wild ? 1.15 : 1));
           this.audio.play('pencil', { gain: 0.04, rate: 0.7 });
           this.haptic.tap?.();
           this.avatar.fetchNow();
@@ -240,6 +252,9 @@ export class PixelApp {
           this.haptic.tap?.();
           return;
         }
+        // the toy mouse in under the radiator: a tap on the radiator over it, and a hand reaches
+        // in for it
+        if (this.room.mouse.under && this.onRadiator(x, y)) { this.freeMouse(); return; }
         // (up on the sill seeing to the mug or the pencil: caught at it)
         if (this.avatar.caught()) return;
         this.brain.glassTap(x, y);
@@ -745,6 +760,23 @@ export class PixelApp {
     const at = this.glassAt.set(o.x + d.x * t, o.y + d.y * t, z);
     if (at.y < 0.02 || at.y > 0.46) return;
     this.avatar.fingerOnGlass(at);
+  }
+
+  /** the toy mouse got out from under the radiator by a hand reaching in, flicked out into the
+   *  room for the cat to go after */
+  private freeMouse() {
+    const M = this.room.mouse;
+    this.room.hookMouse(new THREE.Vector3(M.p.x + (Math.random() - 0.5) * 0.4, 0, this.room.spots.bed.z));
+    this.audio.play('pencil', { gain: 0.05, rate: 0.7 });
+    this.haptic.tap?.();
+    this.avatar.fetchNow();
+  }
+
+  /** is a screen point on the radiator (its front, or the gap under it) */
+  private onRadiator(sx: number, sy: number) {
+    const ray = this.floorRay;
+    ray.setFromCamera(new THREE.Vector2((sx / innerWidth) * 2 - 1, -(sy / innerHeight) * 2 + 1), this.stage.camera);
+    return this.room.radiatorAt(ray.ray);
   }
 
   /** is a thing in the room under a screen point (or near it: a finger is wider than it) */

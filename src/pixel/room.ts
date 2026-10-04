@@ -1238,6 +1238,7 @@ export class Room {
     // under the window, an old column radiator painted cream: its fins, the pipes along its top
     // and foot, its legs, and the pipe and valve at its end
     const radW = 0.46, radB = 0.07, radH = 0.19, radZ = wallZ + 0.055;
+    Object.assign(this.radiator, { x: bx, z: radZ, half: radW / 2, front: radZ + 0.024 });
     const radMat = this.mat('enamel', { tone: 0.06, pattern: 9 });
     const nFin = 13;
     // (each section a round-topped column, so the light runs across it: lit on the lamp's side,
@@ -1986,14 +1987,56 @@ export class Room {
    *  fall), then down, skidding to a stop; how it is moving and turning */
   private readonly toyMouse = {
     group: new THREE.Group() as THREE.Object3D, state: 'floor' as 'floor' | 'mouth' | 'air', v: new THREE.Vector3(), spin: 0,
+    /** skidded in under the radiator, out of reach of anything but a paw */
+    under: false,
   };
+  /** the radiator: the middle of it, how far it runs either way, its front (the gap under it is
+   *  where a skidding toy goes) */
+  private readonly radiator = { x: 0, z: 0, half: 0, front: 0 };
+  /** the toy mouse went in under the radiator */
+  onMouseUnder: (() => void) | null = null;
   /** the toy mouse came down on the floor (how hard, 0 .. 1) */
   onMouseLand: ((k: number) => void) | null = null;
 
   /** where the toy mouse is, what it is doing, and whether it is still moving */
   get mouse() {
     const M = this.toyMouse;
-    return { p: M.group.position, state: M.state, moving: M.state === 'air' || Math.hypot(M.v.x, M.v.z) > 0.02, obj: M.group };
+    return { p: M.group.position, state: M.state, moving: M.state === 'air' || Math.hypot(M.v.x, M.v.z) > 0.02, obj: M.group, under: M.under };
+  }
+
+  /** the toy mouse out from under the radiator, skidding out toward a point (a paw hooked it, or
+   *  a hand) */
+  hookMouse(toward: THREE.Vector3) {
+    const M = this.toyMouse, p = M.group.position, R = this.radiator;
+    if (!M.under) return;
+    M.under = false;
+    M.state = 'floor';
+    p.z = R.front + 0.035;
+    const dx = toward.x - p.x, dz = Math.max(0.05, toward.z - p.z), d = Math.hypot(dx, dz) || 1;
+    const sp = 0.6 + 0.3 * Math.random();
+    M.v.set((dx / d) * sp, 0, (dz / d) * sp);
+    M.spin = (Math.random() < 0.5 ? -1 : 1) * (4 + 4 * Math.random());
+  }
+
+  /** a throw at the radiator that skids in under it: where to aim (on the floor in front of it) */
+  radiatorAim() {
+    const R = this.radiator;
+    return new THREE.Vector3(R.x + (Math.random() - 0.5) * 2 * (R.half - 0.08), 0, R.front + 0.03);
+  }
+
+  /** does a ray (a finger through the glass) meet the radiator: its front, from the floor to its
+   *  top (the gap under it included), a finger's width either side */
+  radiatorAt(ray: THREE.Ray) {
+    const R = this.radiator, o = ray.origin, d = ray.direction;
+    if (R.half <= 0 || Math.abs(d.z) < 1e-4) return false;
+    const t = (R.front - o.z) / d.z;
+    if (t <= 0) return false;
+    const x = o.x + d.x * t, y = o.y + d.y * t;
+    if (!(Math.abs(x - R.x) < R.half + 0.03 && y > -0.01 && y < 0.29)) return false;
+    // (not if the sill is in the way first, over it, and the things on it: seen from above, a
+    // finger on the sill's front is a finger on the sill)
+    const w = this.win, te = (w.z + 0.28 - o.z) / d.z;
+    return te <= 0 || o.y + d.y * te < w.b - 0.03;
   }
 
   /** the toy mouse in a cat's mouth (where the mouth is, which way the cat faces: it is carried
@@ -2002,6 +2045,7 @@ export class Room {
     const M = this.toyMouse, g = M.group;
     if (at) {
       M.state = 'mouth';
+      M.under = false;
       M.v.set(0, 0, 0);
       g.position.set(at.x, at.y - 0.016, at.z);
       g.rotation.set(0.25, yaw + Math.PI / 2, 0.15);
@@ -2020,6 +2064,7 @@ export class Room {
     const M = this.toyMouse;
     const d = Math.hypot(dir.x, dir.z) || 1;
     M.state = 'air';
+    M.under = false;
     M.v.set((dir.x / d) * speed, 1.5 + 0.4 * Math.random(), (dir.z / d) * speed);
     M.spin = (Math.random() < 0.5 ? -1 : 1) * (5 + 6 * Math.random());
     if (M.group.position.y < 0.002) M.group.position.y = 0.002;
@@ -2053,8 +2098,19 @@ export class Room {
           g.rotation.z = 0;
         }
         this.onMouseLand?.(hard);
+        // (come down right at the foot of the radiator, going its way: in under it)
+        const R = this.radiator;
+        if (M.state === 'floor' && R.half > 0 && Math.abs(p.x - R.x) < R.half - 0.03 && p.z < R.front + 0.03 && v.z < -0.05) {
+          M.under = true;
+          p.z = R.z + 0.004;
+          v.set(0, 0, 0);
+          M.spin = 0;
+          this.onMouseUnder?.();
+          return;
+        }
       }
     } else {
+      if (M.under) return;
       const sp = Math.hypot(v.x, v.z);
       if (sp < 1e-4) return;
       const ns = Math.max(0, sp - 2.2 * dt);
@@ -2064,6 +2120,16 @@ export class Room {
       p.z += v.z * dt;
       g.rotation.y += M.spin * dt * (ns / Math.max(sp, 1e-4));
       M.spin *= 1 - Math.min(1, dt * 3);
+      // skidding at the radiator along the boards: in under it it goes, and there it stays
+      const R = this.radiator;
+      if (R.half > 0 && Math.abs(p.x - R.x) < R.half - 0.03 && p.z < R.front + 0.03 && v.z < -0.12) {
+        M.under = true;
+        p.z = R.z + 0.004;
+        v.set(0, 0, 0);
+        M.spin = 0;
+        this.onMouseUnder?.();
+        return;
+      }
     }
     // (off the bed and the things on the floor, and in from the room's ends)
     const S = this.spots, R = 0.03;
@@ -2082,6 +2148,19 @@ export class Room {
     }
     const B = this.yarnBounds;
     if (p.x < B.minX || p.x > B.maxX) { p.x = Math.max(B.minX, Math.min(B.maxX, p.x)); v.x *= -0.4; }
+    // (at the radiator low down, below its foot: in under it, not off it)
+    const Rd = this.radiator;
+    if (p.z < B.minZ && v.z < 0 && p.y < 0.06 && Rd.half > 0 && Math.abs(p.x - Rd.x) < Rd.half - 0.03) {
+      M.state = 'floor';
+      M.under = true;
+      p.set(p.x, 0, Rd.z + 0.004);
+      v.set(0, 0, 0);
+      M.spin = 0;
+      g.rotation.x = 0;
+      g.rotation.z = 0;
+      this.onMouseUnder?.();
+      return;
+    }
     if (p.z < B.minZ || p.z > B.maxZ) { p.z = Math.max(B.minZ, Math.min(B.maxZ, p.z)); v.z *= -0.4; }
   }
 
