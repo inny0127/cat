@@ -58,6 +58,8 @@ export class PixelAvatar implements Avatar {
   spots: { food: THREE.Vector3; water: THREE.Vector3; litter: THREE.Vector3; sniff?: { to: THREE.Vector3; face: number }[]; posts?: THREE.Vector3[] } | null = null;
   /** a place in the sun on the floor, if there is one now */
   sunSpot: (() => THREE.Vector3 | null) | null = null;
+  /** is a circle on the floor clear of the room's things */
+  floorClear: ((p: THREE.Vector3, r: number) => boolean) | null = null;
   /** is a point on the floor in the sun */
   sunlitAt: ((p: THREE.Vector3) => boolean) | null = null;
   /** by the radiator, while the heating is on */
@@ -235,6 +237,7 @@ export class PixelAvatar implements Avatar {
       posts: () => this.spots?.posts ?? [],
       visitor: () => this.visitor,
       sun: () => this.sunSpot?.() ?? null,
+      clear: (p, r) => this.floorClear?.(p, r) ?? true,
       sunlit: (p) => this.sunlitAt?.(p) ?? false,
       warm: () => this.warmSpot?.() ?? null,
       lieAt: (p, at, face) => this.lieAt(p, at, face),

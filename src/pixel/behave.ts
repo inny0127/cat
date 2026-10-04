@@ -32,6 +32,8 @@ export interface Ctx {
   /** a place on the floor in the sun, if the sun is in; and whether a point is in it */
   sun: () => THREE.Vector3 | null;
   sunlit: (p: THREE.Vector3) => boolean;
+  /** is a circle on the floor clear of the bed, the bowls and the room's things */
+  clear: (p: THREE.Vector3, r: number) => boolean;
   /** a warm place by the radiator, if the heating is on, and which way to lie along it */
   warm: () => { at: THREE.Vector3; face: number } | null;
   /** where to stand, and which way to face, to lie down in a posture with the middle of the body
@@ -613,17 +615,38 @@ export const sunbathe = (c: Ctx) => {
   const spot = c.sun();
   if (!spot) return null;
   const bed = c.bed('loaf');
-  const posture = pick<PoseName>(['side', 'side', 'loaf', 'sphinx']);
-  const face = rand(-0.7, 0.7);
+  // side on to you as it lies (as in its bed), flat out on its side or on its chest; and turned so
+  // that, flat out, its head one way and its tail the other, it is clear of the room's things (not
+  // its nose in the books with the mug on them)
+  const options = (at: THREE.Vector3) => {
+    const out: [PoseName, number][] = [];
+    for (const posture of ['side', 'loaf', 'sphinx'] as PoseName[]) {
+      const half = posture === 'side' ? 0.25 : 0.14;
+      for (const a of posture === 'side' ? [1.25, 1.55, 1.85] : [0.6, 0.9, 1.2]) for (const face of [a, -a]) {
+        const end = (d: number) => new THREE.Vector3(at.x + Math.sin(face) * d, 0, at.z + Math.cos(face) * d);
+        if (c.clear(end(half), 0.06) && c.clear(end(-half), 0.06)) out.push([posture, face]);
+      }
+    }
+    return out;
+  };
+  const ok = options(spot);
+  if (!ok.length) return null;
+  // (flat out on its side more often than not, where there is room to)
+  const flat = ok.filter(([p]) => p === 'side');
+  const [posture, face] = flat.length && Math.random() < 0.6 ? pick(flat) : pick(ok);
   const place = c.lieAt(posture, spot, face);
-  // (as the sun moves round and the patch goes off it, it gets up and lies down in it again)
+  // (as the sun moves round and the patch goes off it, it gets up and lies down in it again, the
+  // same way if it fits there)
   let mid = spot.clone();
   const follow = () => {
     if (c.sunlit(mid)) return undefined;
     const s = c.sun();
     if (!s) return null;
+    const there = options(s).filter(([p]) => p === posture);
+    if (!there.length) return null;
     mid = s.clone();
-    return c.lieAt(posture, s, face);
+    const f = there.find(([, f]) => f === face)?.[1] ?? there[0][1];
+    return c.lieAt(posture, s, f);
   };
   return new Walk('sun', [
     { to: place.to, face: place.yaw, stay: rand(60, 160), posture, nap: true, follow },

@@ -1882,6 +1882,13 @@ export class Room {
     return x > l + 0.03 && x < r - 0.03 && y > b + 0.03 && y < t - 0.03;
   }
 
+  /** is a circle on the floor clear of the bed, the bowls, the litter tray and the room's things */
+  floorClear(p: THREE.Vector3, r: number) {
+    const S = this.spots;
+    const things: [THREE.Vector3, number][] = [[S.bed, 0.21], [S.food, 0.07], [S.water, 0.07], [S.litter, 0.19], ...this.things.filter(([, rr]) => rr > 0)];
+    return !things.some(([c, rr]) => Math.hypot(p.x - c.x, p.z - c.z) < rr + r);
+  }
+
   /** a warm place on the floor in the sun, clear of the bed and the room's things, if the sun is
    *  in: points of the window's opening carried along the light down to the floor */
   sunSpot(): THREE.Vector3 | null {

@@ -72,6 +72,7 @@ export class PixelApp {
     this.avatar.feel = (sx, sy) => this.senses.hitNear(sx, sy);
     this.cat.groundAt = (x, z) => this.room.groundAt(x, z);
     this.avatar.sunSpot = () => this.room.sunSpot();
+    this.avatar.floorClear = (p, r) => this.room.floorClear(p, r);
     this.avatar.sunlitAt = (p) => this.room.sunlit(p);
     this.avatar.warmSpot = () => this.room.warmSpot();
     this.avatar.toys = {
