@@ -68,6 +68,12 @@ export interface Ctx {
   scareBug: (from: THREE.Vector3) => void;
   /** one raindrop running down the glass, at a point on it (null: none) */
   drop: (p: THREE.Vector3 | null) => void;
+  /** the pencil (its middle, and whether it is still lying on the sill), if there is one; a paw
+   *  pushing it along the sill (metres toward the room, and sideways) */
+  pencil: () => { at: THREE.Vector3; onSill: boolean } | null;
+  pushPencil: (dz: number, dx: number) => void;
+  /** where you are, to look at */
+  viewer: () => THREE.Vector3;
   /** up on something this high (null: on the floor), and held in the air at a height (a jump) */
   perch: (h: number | null) => void;
   hold: (lift: number | null) => void;
@@ -1237,7 +1243,7 @@ export class Box implements Act {
  */
 export class Sill implements Act {
   readonly name = 'sill';
-  phase: 'go' | 'gather' | 'up' | 'settle' | 'sit' | 'nap' | 'about' | 'look' | 'down' | 'done' = 'go';
+  phase: 'go' | 'gather' | 'up' | 'settle' | 'sit' | 'nap' | 'about' | 'knock' | 'look' | 'down' | 'done' = 'go';
   /** how deep asleep the cat is (set by the avatar): asleep up here, it dozes on the sill */
   nap = 0;
 
@@ -1255,6 +1261,9 @@ export class Sill implements Act {
   /** snow going by: one flake after another followed down with the head (how far after this one,
    *  how long it takes to fall from sight, which way it is) */
   private flake = { t: 0, len: 1.8, yaw: 0 };
+  /** the pencil by its paws, turned to face the room: a look at it, a look at you, a pat at it
+   *  (how many so far), and again, until it goes over; watched all the way down */
+  private knock = { step: 'eye' as 'eye' | 'you' | 'paw' | 'watch' | 'after', t: 0, len: 0, taps: 0, pushed: false };
   constructor(private readonly spot: SillSpot) {}
 
   /** asked down: it comes down as soon as it can, and stops there */
@@ -1411,10 +1420,77 @@ export class Sill implements Act {
         return true;
       }
       case 'about':
-        // round on the sill to face the room
+        // round on the sill to face the room (and now and then, the pencil there by its paws...)
         m.setPosture('stand');
-        if (!m.goal) m.walkTo(m.pos.clone(), 0.12, 0, () => this.next('look', 0.6));
+        if (!m.goal) m.walkTo(m.pos.clone(), 0.12, 0, () => {
+          const P = c.pencil();
+          const near = P && P.onSill && Math.abs(P.at.x - m.pos.x) < 0.15 && P.at.z - m.pos.z > 0.02 && P.at.z - m.pos.z < 0.2;
+          if (near && !this.leaving && this.nap < 0.3 && Math.random() < 0.4) {
+            Object.assign(this.knock, { step: 'eye', t: 0, len: rand(1.2, 2), taps: 0, pushed: false });
+            this.next('knock');
+          } else this.next('look', 0.6);
+        });
         return true;
+      case 'knock': {
+        // sat facing the room, the pencil by its front paws: a long look at it, a look at you, a pat
+        // at it, a look at you... and the last pat sends it over the edge; its eyes follow it all
+        // the way down, then come back to you to see what you make of it
+        m.setPosture('sit');
+        const K = this.knock;
+        K.t += dt;
+        const P = c.pencil();
+        const go = (step: typeof K.step, len: number) => { K.step = step; K.t = 0; K.len = len; };
+        let paw: Record<string, unknown> = {};
+        if (!P) { m.layer = null; m.lookAt(null); this.next('look', 0.6); return true; }
+        if (K.step === 'eye') {
+          m.lookAt(P.at, 1);
+          if (K.t > K.len) go('you', rand(0.8, 1.5));
+        } else if (K.step === 'you') {
+          m.lookAt(c.viewer(), 1);
+          if (K.t > K.len) go(P.onSill ? 'paw' : 'after', P.onSill ? 0.62 : rand(1.2, 1.8));
+        } else if (K.step === 'paw') {
+          m.lookAt(P.at, 1);
+          const dx = P.at.x - m.pos.x, dz = P.at.z - m.pos.z;
+          const lx = dx * Math.cos(m.yaw) - dz * Math.sin(m.yaw), lz = dx * Math.sin(m.yaw) + dz * Math.cos(m.yaw);
+          const u = Math.min(1, K.t / K.len), ax = Math.max(0.03, Math.abs(lx));
+          // up and over to behind it, down, a shove forward, and back
+          const reach = u < 0.45 ? ease(u / 0.45) : u < 0.65 ? 1 : 1 - ease((u - 0.65) / 0.35);
+          const shove = u < 0.45 ? 0 : u < 0.65 ? (u - 0.45) / 0.2 : 1;
+          const R = { x: 0.036, z: 0.068 };
+          paw = {
+            [lx > 0 ? 'LF' : 'RF']: {
+              planted: 0, frame: 0,
+              x: R.x + (ax - R.x) * reach, z: R.z + (lz - 0.024 + 0.035 * shove * reach - R.z) * reach,
+              y: 0.012 + 0.045 * Math.sin(Math.PI * Math.min(1, u / 0.45)) * (u < 0.45 ? 1 : 0), flex: u < 0.45 ? 0.35 * reach : 0,
+            },
+          };
+          if (!K.pushed && u > 0.55) {
+            K.pushed = true;
+            K.taps++;
+            // (a pat or two first; then over it goes, a little off to the side, past the end of the
+            // bed, where it lies in sight)
+            const last = K.taps >= 3 || (K.taps >= 2 && Math.random() < 0.6);
+            c.pushPencil(last ? 0.07 : 0.022, (last ? 0.03 : 0.006) * Math.sign(lx || 1));
+          }
+          if (u >= 1) {
+            K.pushed = false;
+            const p2 = c.pencil();
+            if (p2 && !p2.onSill) go('watch', rand(1.2, 1.6));
+            else go(Math.random() < 0.6 ? 'you' : 'eye', rand(0.7, 1.3));
+          }
+        } else if (K.step === 'watch') {
+          m.lookAt(P.at, 1);
+          if (K.t > K.len) go('after', rand(1.4, 2.2));
+        } else {
+          m.lookAt(c.viewer(), 1);
+          if (K.t > K.len) { m.layer = null; m.lookAt(null); this.next('look', 0.6); return true; }
+        }
+        m.layer = {
+          pose: { earFwd: 0.8, pupil: 0.8, whisker: 0.5, tailCurl: 0.5 * Math.sin(this.t * 2.2), ...paw },
+          w: Math.min(1, this.t / 0.5),
+        };
+        return true;
+      }
       case 'look':
         // a look down at where it will land, gathering
         m.setPosture('crouch');

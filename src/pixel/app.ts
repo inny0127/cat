@@ -88,6 +88,14 @@ export class PixelApp {
       bug: () => this.room.bugAt(),
       scareBug: (from) => this.room.scareBug(from),
       drop: (p) => this.room.setDrop(p),
+      pencil: () => this.room.pencilWhere(),
+      pushPencil: (dz, dx) => this.room.pushPencil(dz, dx),
+    };
+    // the pencil off the sill: a clack on the boards, quieter at each bounce; put back, a tap
+    this.room.onPencil = (what, k) => {
+      const p = this.room.pencil.getWorldPosition(new THREE.Vector3()).project(this.stage.camera);
+      this.audio.play(what === 'hit' ? 'pencil' : 'step', { gain: what === 'hit' ? 0.12 + 0.5 * k : 0.3, rate: what === 'hit' ? 1 : 1.7, pan: Math.max(-0.8, Math.min(0.8, p.x * 0.8)) });
+      if (what === 'hit' && k > 0.3) this.avatar.hear(this.room.pencil.getWorldPosition(new THREE.Vector3()));
     };
     // thunder after a flash of lightning: heard through the glass, the louder the nearer; the cat
     // starts at it and looks to the window, and a near clap may send it to cover
@@ -131,6 +139,12 @@ export class PixelApp {
         this.gestureEnd();
         if (this.creditsOpen) { this.showCredits(false); return; }
         if (this.hitPrint(x, y)) { this.showCredits(true); return; }
+        // the pencil the cat pushed off the sill: tapped, it goes back up
+        if (this.room.pencilDown && this.hitThing(this.room.pencil, x, y, 22)) {
+          this.room.putPencilBack();
+          this.haptic.tap?.();
+          return;
+        }
         if (this.hitThing(this.room.radio, x, y, 24)) {
           this.audio.music(!this.audio.musicOn);
           this.avatar.hear(this.room.radio.getWorldPosition(new THREE.Vector3()));

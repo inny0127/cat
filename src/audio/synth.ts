@@ -400,6 +400,19 @@ export function thump(sr: number) {
   return fade(normalize(out, 0.6), sr, 0.001, 0.03);
 }
 
+/** a pencil landing on floorboards: a hard little wooden clack, and its rattle as it settles */
+export function pencil(sr: number) {
+  const out = new Float32Array(Math.floor(0.16 * sr));
+  // the wood and the boards: a bright knock with a short body to it
+  ping(out, sr, 0, rnd(1650, 2100), 0.5, 0.006);
+  ping(out, sr, 0, rnd(820, 980), 0.35, 0.009);
+  clicks(out, sr, 0, 3, 0.004, 2500, 6000, 0.6, 0.0015);
+  // (a hexagon does not lie still at once: a quick rattle of its sides on the wood)
+  clicks(out, sr, 0.035, 3, 0.05, 1800, 4200, 0.18, 0.0012);
+  filter(out, sr, 'hp', 300, 0.7);
+  return fade(normalize(out, 0.7), sr, 0.0005, 0.03);
+}
+
 /** a padded step on the floor */
 export function step(sr: number) {
   const out = new Float32Array(Math.floor(0.09 * sr));

@@ -921,6 +921,28 @@ export class Room {
     const jar = this.mat('bookMustard', { tone: 0.1 });
     add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.06, 14), jar)), winR - 0.12, winB + 0.03, wallZ + 0.02);
     this.candle(jar, new THREE.Vector3(winR - 0.12, winB + 0.068, wallZ + 0.02));
+    // a yellow pencil left lying on the sill, near its edge (a cat will see to that)
+    {
+      const pen = new THREE.Group();
+      const r = 0.0045, len = 0.15;
+      const along = (m: THREE.Mesh, x: number) => { m.rotation.z = Math.PI / 2; m.position.x = x; pen.add(m); return m; };
+      along(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(r, r, len - 0.03, 6), this.mat('bookMustard', { tone: 0.12 }))), 0);
+      along(new THREE.Mesh(new THREE.CylinderGeometry(r * 1.05, r * 1.05, 0.008, 8), this.mat('metal', { tone: 0.25 })), -(len - 0.03) / 2 - 0.004);
+      along(new THREE.Mesh(new THREE.CylinderGeometry(r * 0.95, r * 0.95, 0.01, 8), this.mat('redBowl', { tone: 0.3 })), -(len - 0.03) / 2 - 0.013);
+      // the sharpened end: bare wood, then the lead
+      const wood = along(new THREE.Mesh(new THREE.ConeGeometry(r, 0.016, 6), this.mat('cardboard', { tone: 0.15 })), (len - 0.03) / 2 + 0.008);
+      wood.rotation.z = -Math.PI / 2;
+      const lead = along(new THREE.Mesh(new THREE.ConeGeometry(r * 0.35, 0.006, 6), this.mat('ink')), (len - 0.03) / 2 + 0.0135);
+      lead.rotation.z = -Math.PI / 2;
+      pen.position.set((winL + winR) / 2 + 0.12, winB + r, wallZ + 0.17);
+      pen.rotation.y = 0.12;
+      this.group.add(pen);
+      this.pencil = pen;
+      this.pen.home.copy(pen.position);
+      this.pen.homeYaw = pen.rotation.y;
+      this.pen.r = r;
+      this.pen.edge = wallZ + 0.255;
+    }
 
     // October (to early November): a little pumpkin at the end of the sill
     {
@@ -1683,6 +1705,96 @@ export class Room {
     return this.notes.map((n) => ({ p: n.p, b: Math.min(1, n.t / 0.4, (3.2 - n.t) / 1.0) }));
   }
 
+  /** the pencil on the sill (a cat pushes it off; tapped on the floor, it goes back) */
+  pencil: THREE.Object3D = new THREE.Group();
+  /** what the pencil is doing: lying on the sill, falling, or lying on the floor; how it moves */
+  private readonly pen = {
+    state: 'sill' as 'sill' | 'fall' | 'floor', home: new THREE.Vector3(), homeYaw: 0, r: 0.0045, edge: 0,
+    vel: new THREE.Vector3(), axis: new THREE.Vector3(1, 0, 0), spin: 0, roll: 0, bounces: 0,
+  };
+  /** a sound for the pencil: hitting the floor (how hard), or put back on the sill */
+  onPencil: ((what: 'hit' | 'back', strength: number) => void) | null = null;
+
+  /** where the pencil is (its middle), and whether it is still lying on the sill */
+  pencilWhere() {
+    return { at: this.pencil.position.clone(), onSill: this.pen.state === 'sill' };
+  }
+
+  /** is the pencil down on the floor */
+  get pencilDown() {
+    return this.pen.state === 'floor';
+  }
+
+  /** a paw pushes the pencil along the sill toward the room; over the edge, off it goes */
+  pushPencil(dz: number, dx = 0) {
+    const P = this.pen;
+    if (P.state !== 'sill') return;
+    this.pencil.position.z += dz;
+    this.pencil.position.x += dx;
+    this.pencil.rotation.y += (Math.random() - 0.5) * 0.15;
+    if (this.pencil.position.z < P.edge) return;
+    // off the edge: over it and down, turning end over end (nearly straight down: it is a narrow
+    // strip of floor between the radiator and the bed)
+    P.state = 'fall';
+    P.vel.set(dx * 4 + (Math.random() - 0.5) * 0.06, 0.1, 0.03 + Math.random() * 0.04);
+    P.axis.set(Math.cos(this.pencil.rotation.y), 0, -Math.sin(this.pencil.rotation.y)).cross(new THREE.Vector3(0, 1, 0)).normalize();
+    P.spin = (Math.random() < 0.5 ? -1 : 1) * (7 + Math.random() * 5);
+    P.bounces = 0;
+  }
+
+  /** the pencil back on the sill where it was */
+  putPencilBack() {
+    const P = this.pen;
+    if (P.state === 'sill') return;
+    P.state = 'sill';
+    this.pencil.position.copy(P.home);
+    this.pencil.rotation.set(0, P.homeYaw, 0);
+    this.onPencil?.('back', 1);
+  }
+
+  /** the pencil falling: down off the sill, a bounce or two on the boards with a click each time,
+   *  then it lies flat and rolls a little way on its six sides */
+  private movePencil(dt: number) {
+    const P = this.pen, pen = this.pencil;
+    if (P.state === 'fall') {
+      P.vel.y -= 9.8 * dt;
+      pen.position.addScaledVector(P.vel, dt);
+      pen.rotateOnWorldAxis(P.axis, P.spin * dt);
+      if (pen.position.y <= P.r && P.vel.y < 0) {
+        const hit = -P.vel.y;
+        pen.position.y = P.r;
+        this.onPencil?.('hit', Math.min(1, hit / 2.6));
+        if (hit > 0.55 && P.bounces < 2) {
+          P.bounces++;
+          P.vel.y = hit * 0.3;
+          P.vel.x *= 0.5;
+          P.vel.z *= 0.5;
+          P.spin *= 0.45;
+        } else {
+          // down: flat on the floor along the way it lay, rolling on a little
+          const a = new THREE.Vector3(1, 0, 0).applyQuaternion(pen.quaternion);
+          pen.rotation.set(0, Math.atan2(-a.z, a.x), 0);
+          P.state = 'floor';
+          P.roll = 0.03 + Math.hypot(P.vel.x, P.vel.z) * 0.4;
+        }
+      }
+    } else if (P.state === 'floor' && P.roll > 0.002) {
+      // (rolling square to its length, slowing quickly on its flat sides)
+      const yaw = pen.rotation.y;
+      const side = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw));
+      const step = P.roll * dt;
+      pen.position.addScaledVector(side, step);
+      pen.rotateOnAxis(new THREE.Vector3(1, 0, 0), step / P.r);
+      P.roll = Math.max(0, P.roll - dt * 0.45);
+      // (well short of the bed: behind its rim, it would be out of sight)
+      const bed = this.spots.bed;
+      if (Math.hypot(pen.position.x - bed.x, pen.position.z - bed.z) < 0.32) {
+        pen.position.addScaledVector(side, -step);
+        P.roll = 0;
+      }
+    }
+  }
+
   /** the little print on the sill (tapping it shows the credits) */
   print: THREE.Object3D = new THREE.Group();
   /** where the mug's steam rises from */
@@ -2173,6 +2285,7 @@ export class Room {
     su.uRainbow.value = this.rainbowOverride ?? Math.max(0, Math.min(1, before * 1.5 - rain * 3)) * sunny * (se.snowing ? 0 : 1);
     su.uSnowLie.value = se.winter;
     this.time += dt;
+    this.movePencil(dt);
     this.timeU.value = this.time;
     const flash = this.lightning(dt, this.stormOverride ?? stormAt(date, rain));
     su.uFlash.value = flash;

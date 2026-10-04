@@ -106,6 +106,8 @@ export class PixelAvatar implements Avatar {
     bug?: () => { p: THREE.Vector3; resting: boolean } | null; scareBug?: (from: THREE.Vector3) => void;
     /** one raindrop running down the glass (the one the cat is after), or none */
     drop?: (p: THREE.Vector3 | null) => void;
+    /** the pencil (its middle, and whether it is still on the sill), and a paw pushing it along */
+    pencil?: () => { at: THREE.Vector3; onSill: boolean }; pushPencil?: (dz: number, dx: number) => void;
   } | null = null;
   /** after a hunt, a while before the next */
   private huntRest = 0;
@@ -254,6 +256,9 @@ export class PixelAvatar implements Avatar {
       bug: () => this.outside?.bug?.() ?? null,
       scareBug: (from) => this.outside?.scareBug?.(from),
       drop: (p) => this.outside?.drop?.(p),
+      pencil: () => this.outside?.pencil?.() ?? null,
+      pushPencil: (dz, dx) => this.outside?.pushPencil?.(dz, dx),
+      viewer: () => this.viewer(),
       perch: (h) => { this.cat.perch = h; },
       hold: (y) => { this.cat.liftHold = y; },
     };
