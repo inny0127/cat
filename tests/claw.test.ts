@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import * as THREE from 'three';
 import { Motor } from '../src/cat3d/motor';
 import { NEUTRAL } from '../src/cat3d/mood';
-import { Claw, type Ctx } from '../src/pixel/behave';
+import { Claw, Top, type Ctx } from '../src/pixel/behave';
 import { rugScratch, sisal } from '../src/audio/synth';
 
 afterEach(() => { vi.restoreAllMocks(); });
@@ -71,5 +71,64 @@ describe('the scratching post', () => {
       b += zc(rugScratch(22050));
     }
     expect(a).toBeLessThan(b);
+  });
+});
+
+describe('up on top of the post', () => {
+  const post = { at: new THREE.Vector3(-0.82, 0, -0.37), r: 0.042, top: 0.622, topR: 0.14 };
+  const run = (leaveAt: number | null, seed0: number) => {
+    let seed = seed0;
+    vi.spyOn(Math, 'random').mockImplementation(() => (seed = (seed * 16807) % 2147483647) / 2147483647);
+    const m = new Motor();
+    m.snap('stand');
+    m.pos.set(post.at.x + 0.6, 0, post.at.z + 0.15);
+    m.yaw = -Math.PI / 2;
+    let perch: number | null = null, hold: number | null = null, maxLift = 0, bumps = 0;
+    const c = {
+      m, mood: { ...NEUTRAL }, night: 0, viewer: () => new THREE.Vector3(0, 1.2, 3),
+      sound: () => {}, bump: () => { bumps++; },
+      perch: (h: number | null) => { perch = h; }, hold: (y: number | null) => { hold = y; },
+    } as unknown as Ctx;
+    const act = new Top(post), phases: string[] = [];
+    let going = true, t = 0, upFor = 0;
+    for (; t < 400 && going; t += 1 / 30) {
+      going = act.update(1 / 30, c);
+      m.update(1 / 30);
+      if (phases[phases.length - 1] !== act.phase) phases.push(act.phase);
+      maxLift = Math.max(maxLift, hold ?? perch ?? 0);
+      if (act.phase === 'sit') {
+        upFor += 1 / 30;
+        // lying up there on the top, over the post
+        expect(perch).toBeCloseTo(post.top, 5);
+        expect(Math.hypot(m.pos.x - post.at.x, m.pos.z - post.at.z)).toBeLessThan(0.02);
+        if (leaveAt !== null && upFor > leaveAt) act.leave();
+      }
+    }
+    vi.restoreAllMocks();
+    return { going, phases, perch, hold, maxLift, bumps, upFor, m, t };
+  };
+
+  it('a spring up, a loaf on top a good while, and down again on the room side', () => {
+    for (const seed of [5, 777]) {
+      const r = run(null, seed);
+      expect(r.going).toBe(false);
+      expect(r.phases).toEqual(['go', 'gather', 'up', 'settle', 'sit', 'turn', 'look', 'down', 'done']);
+      expect(r.upFor).toBeGreaterThan(30);
+      // (up above the top in the jump, and back on the floor after)
+      expect(r.maxLift).toBeGreaterThan(post.top);
+      expect(r.perch).toBeNull();
+      expect(r.hold).toBeNull();
+      expect(r.m.pos.x).toBeGreaterThan(post.at.x + 0.25);
+      // the post rocked as it landed and as it went
+      expect(r.bumps).toBe(2);
+    }
+  });
+
+  it('asked down, it is down soon', () => {
+    const r = run(2, 99);
+    expect(r.going).toBe(false);
+    expect(r.upFor).toBeLessThan(2.5);
+    expect(r.phases.slice(-4)).toEqual(['turn', 'look', 'down', 'done']);
+    expect(r.perch).toBeNull();
   });
 });

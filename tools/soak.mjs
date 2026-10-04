@@ -12,7 +12,7 @@ await page.goto((process.env.REEL_BASE ?? 'http://localhost:5173/') + 'index.htm
 await page.waitForFunction(() => window.__pcat, null, { timeout: 180000 });
 const report = await page.evaluate(async (minutes) => {
   const app = window.__pcat;
-  const acts = ['wander', 'sun', 'warm', 'play', 'sill', 'box', 'wash', 'zoomies', 'stare', 'sneeze', 'rub', 'scratch', 'window', 'groom', 'yawn', 'stretch', 'bed', 'greet', 'gift', 'ask', 'tail', 'by you'];
+  const acts = ['wander', 'sun', 'warm', 'play', 'sill', 'box', 'wash', 'zoomies', 'stare', 'sneeze', 'rub', 'scratch', 'window', 'groom', 'yawn', 'stretch', 'bed', 'greet', 'gift', 'ask', 'tail', 'by you', 'claw', 'top'];
   const issues = [];
   let t = 1, seen = {}, drag = null, drags = 0, errands = 0, laser = null, wand = null, laserUses = 0, wandUses = 0, returns = 0, tosses = 0, glass = null, glasses = 0;
   // a cat that wants to go somewhere and does not move
@@ -124,8 +124,8 @@ const report = await page.evaluate(async (minutes) => {
     const d = app.avatar.doing;
     if (d) seen[d] = (seen[d] || 0) + 1;
     if (![m.pos.x, m.pos.z, m.yaw].every(Number.isFinite)) { issues.push(`NaN at ${i}`); break; }
-    if (c.perch !== null && !(app.avatar.act && (app.avatar.act.name === 'sill' || app.avatar.act.name === 'chase'))) issues.push(`perched without the sill act at ${i}`);
-    if (c.liftHold !== null && !(app.avatar.act && ['sill', 'box', 'chase', 'tease', 'startle'].includes(app.avatar.act.name))) issues.push(`held in the air without the sill or box act at ${i}`);
+    if (c.perch !== null && !(app.avatar.act && ['sill', 'chase', 'top'].includes(app.avatar.act.name))) issues.push(`perched without the sill act at ${i}`);
+    if (c.liftHold !== null && !(app.avatar.act && ['sill', 'box', 'chase', 'tease', 'startle', 'top'].includes(app.avatar.act.name))) issues.push(`held in the air without the sill or box act at ${i}`);
     if (app.room.mouse.state === 'mouth' && app.avatar.doing !== 'gift') issues.push(`the toy mouse left in a mouth at ${i}`);
     const mp = app.room.mouse.p;
     if (!Number.isFinite(mp.x + mp.y + mp.z) || mp.y < -0.01 || mp.y > 2) issues.push(`the toy mouse lost (${mp.x.toFixed(2)}, ${mp.y.toFixed(2)}, ${mp.z.toFixed(2)}) at ${i}`);

@@ -29,8 +29,9 @@ export interface Ctx {
   sniff: () => { to: THREE.Vector3; face: number }[];
   /** upright things to rub a cheek on (where they stand on the floor) */
   posts: () => THREE.Vector3[];
-  /** the scratching post, if there is one: where it stands on the floor, how thick its post is */
-  scratcher: () => { at: THREE.Vector3; r: number } | null;
+  /** the scratching post, if there is one: where it stands on the floor, how thick its post is,
+   *  and how high its top is */
+  scratcher: () => ScratchPost | null;
   /** a bird come down on the ledge outside the window, if there is one (where, on the glass) */
   visitor: () => THREE.Vector3 | null;
   /** a place on the floor in the sun, if the sun is in; and whether a point is in it */
@@ -117,6 +118,23 @@ export interface Ctx {
   /** its breath on the glass, from its nose at a point: a little mist there */
   breathe: (at: THREE.Vector3) => void;
 }
+
+export interface ScratchPost {
+  at: THREE.Vector3;
+  r: number;
+  /** the top: how high it is, and how far across */
+  top: number;
+  topR: number;
+}
+
+/** an act that has the cat up on something (the sill, the box, the top of the scratching post;
+ *  after the red dot up the wall): it is never simply dropped but asked down, and carries on until
+ *  it is (up: up there, or in the air on the way up or down) */
+export interface Perching extends Act {
+  readonly up: boolean;
+  leave(): void;
+}
+export const isPerching = (a: Act | null): a is Perching => !!a && typeof (a as Perching).leave === 'function' && 'up' in a;
 
 export interface SillSpot {
   launch: THREE.Vector3; seat: THREE.Vector3; land: THREE.Vector3; height: number;
@@ -1353,7 +1371,7 @@ export class Claw implements Act {
   static readonly DROP = 0.09;
   /** drags a second (each paw drags once in a cycle) */
   static readonly RATE = 1.5;
-  constructor(private readonly post: { at: THREE.Vector3; r: number }) {}
+  constructor(private readonly post: ScratchPost) {}
   get ownGaze() {
     return true;
   }
@@ -1470,6 +1488,190 @@ export class Claw implements Act {
   stop(c: Ctx) {
     c.m.layer = null;
     c.m.lookAt(null);
+  }
+}
+
+/**
+ * Up on top of the scratching post: over to it, down on its haunches with a long look up, a
+ * spring, and it is up there (the post rocking under it as it lands); round on the top to look out
+ * over the room, and down into a loaf, the tail hanging over the edge and the tip of it ticking,
+ * the head going after whatever moves down below; dozing up there if sleep comes, the head sinking.
+ * Then up, round, a look down, and down it jumps. Asked down early (to eat, to sleep in its bed,
+ * for a game), it comes down as soon as it can.
+ */
+export class Top implements Act {
+  readonly name = 'top';
+  phase: 'go' | 'gather' | 'up' | 'settle' | 'sit' | 'turn' | 'look' | 'down' | 'done' = 'go';
+  /** how deep asleep the cat is (set by the avatar): asleep up here, it dozes */
+  nap = 0;
+  private t = 0;
+  private dur = 0;
+  private leaving = false;
+  private readonly from = new THREE.Vector3();
+  private look = Math.random() * 10;
+  /** which way it lies up there: out over the room toward you, a little round toward the room */
+  private readonly faceUp = rand(0.15, 0.6);
+  private going = false;
+  constructor(private readonly post: ScratchPost) {}
+
+  /** asked down: down as soon as it can be */
+  leave() {
+    this.leaving = true;
+  }
+  /** up there, or on the way up or down */
+  get up() {
+    return this.phase !== 'go' && this.phase !== 'gather' && this.phase !== 'done';
+  }
+  get ownGaze() {
+    return true;
+  }
+  /** where it springs from, and where it lands coming down: off the post's side toward the room */
+  private launch() {
+    return new THREE.Vector3(this.post.at.x + 0.3, 0, this.post.at.z + 0.03);
+  }
+  private land() {
+    return new THREE.Vector3(this.post.at.x + 0.36, 0, this.post.at.z + 0.1);
+  }
+  private next(phase: Top['phase'], dur = 0) {
+    this.phase = phase;
+    this.t = 0;
+    this.dur = dur;
+  }
+  update(dt: number, c: Ctx) {
+    const m = c.m, P = this.post, H = P.top;
+    const seat = new THREE.Vector3(P.at.x, 0, P.at.z);
+    this.t += dt;
+    switch (this.phase) {
+      case 'go':
+        if (this.leaving) return false;
+        m.layer = null;
+        // (straight there, whatever it was walking to before)
+        if (!this.going) {
+          this.going = true;
+          m.walkTo(this.launch(), 0.28, -Math.PI / 2, () => this.next('gather', rand(0.8, 1.3)));
+        }
+        m.lookAt(new THREE.Vector3(P.at.x, H, P.at.z), 0.6);
+        return this.t < 15;
+      case 'gather': {
+        // down on its haunches, the eyes on the top of the post, the hind paws shifting under it
+        if (this.leaving) { m.layer = null; return false; }
+        m.setPosture('crouch');
+        m.lookAt(new THREE.Vector3(P.at.x, H, P.at.z), 1);
+        const sh = Math.sin(this.t * 14);
+        m.layer = {
+          pose: { neckPitch: 0.7, headPitch: 0.1, earFwd: 0.9, pupil: 0.8, eyeOpen: 1, hipY: 0.13, LH: { y: 0.013 + 0.008 * Math.max(0, sh) }, RH: { y: 0.013 + 0.008 * Math.max(0, -sh) }, tailLift: -0.2, tailCurl: 0.6 * Math.sin(this.t * 6) },
+          w: Math.min(1, this.t / 0.3),
+        };
+        if (this.t > this.dur) {
+          this.from.copy(m.pos);
+          c.hold(0);
+          m.lookAt(null);
+          this.next('up', 0.5);
+        }
+        return true;
+      }
+      case 'up': {
+        // the spring: up in an arc, the forelegs reaching up for the top, the hind legs driving and
+        // then tucked up after
+        const u = Math.min(1, this.t / this.dur);
+        m.pos.lerpVectors(this.from, seat, smooth(u));
+        m.yaw = -Math.PI / 2;
+        c.hold(H * smooth(Math.min(1, u * 1.15)) + 0.1 * Math.sin(Math.PI * u));
+        const fy = 0.012 + 0.12 * Math.sin(Math.PI * Math.min(1, u / 0.75));
+        const fore = { planted: 0, frame: 0, x: 0.035, y: fy, z: 0.11 + 0.1 * Math.sin(Math.PI * Math.min(1, u * 1.25)), flex: 0.3 * Math.sin(Math.PI * u) };
+        const hind = { planted: 0, frame: 0, x: 0.04, y: 0.013 + 0.06 * Math.sin(Math.PI * u), z: -0.16 - 0.08 * (1 - u) * Math.sin(Math.PI * Math.min(1, u * 2)) };
+        // (the body reared up steep off the floor, coming round level as the forepaws reach the top
+        // and the hind legs are drawn up after)
+        const rear = 1 - smooth(Math.min(1, u * 1.25));
+        m.layer = { pose: { hipY: 0.2, hipPitch: 0.95 * rear, chestPitch: 0.35 * Math.sin(Math.PI * Math.min(1, u * 1.3)), neckPitch: 0.25 - 0.3 * rear, earFwd: 0.6, LF: fore, RF: fore, LH: hind, RH: hind, tailLift: 0.4 - 0.6 * rear }, w: 1 };
+        if (u >= 1) {
+          c.perch(H);
+          c.hold(null);
+          m.layer = null;
+          c.sound('thump', 0.24);
+          c.bump(new THREE.Vector3(P.at.x + P.topR, H, P.at.z), 0.9);
+          this.next('settle', 0.4);
+        }
+        return true;
+      }
+      case 'settle':
+        // round on the top to look out over the room
+        m.setPosture('stand');
+        m.lookAt(null);
+        if (Math.abs(wrapA(this.faceUp - m.yaw)) > 0.12) { if (!m.goal) m.walkTo(m.pos.clone(), 0.08, this.faceUp); this.t = 0; return true; }
+        if (this.t > this.dur) this.next('sit', this.leaving ? 0.8 : c.night > 0.5 ? rand(70, 160) : rand(35, 90));
+        return true;
+      case 'sit': {
+        // a loaf up there, the tail down over the edge, the tip of it ticking now and then; looking
+        // about over the room, or down at it; dozing if sleep comes, the head sinking
+        m.setPosture('loaf');
+        this.look += dt;
+        const deep = Math.min(1, Math.max(0, (this.nap - 0.3) / 0.5));
+        const glance = (1 - deep) * (0.45 * Math.sin(this.look * 0.37) + 0.2 * Math.sin(this.look * 1.13));
+        const down = (1 - deep) * Math.max(0, Math.sin(this.look * 0.21 + 1)) * 0.35;
+        const tick = Math.max(0, Math.sin(this.look * 0.6)) ** 6;
+        m.lookAt(null);
+        m.layer = {
+          pose: {
+            neckYaw: glance, headYaw: 0.5 * glance, neckPitch: -0.5 * deep - down, headPitch: -0.22 * deep - 0.3 * down, earFwd: 0.45 * (1 - deep),
+            // (the tail out to the side over the edge, where it hangs down in sight of you)
+            tailLift: -1.1, tailSide: -1.35, tailSag: 1, tailCurve: 0.1, tailCurl: 0.9 * tick * Math.sin(this.look * 9) * (1 - 0.7 * deep),
+          },
+          w: Math.min(1, this.t / 1.2),
+        };
+        if ((this.t > this.dur && this.nap <= 0.3) || this.leaving) { m.layer = null; this.next('turn', 0.4); }
+        return true;
+      }
+      case 'turn': {
+        // up, round to the way down
+        m.setPosture('stand');
+        const L = this.land(), out = Math.atan2(L.x - m.pos.x, L.z - m.pos.z);
+        if (Math.abs(wrapA(out - m.yaw)) > 0.15) { if (!m.goal) m.walkTo(m.pos.clone(), 0.08, out); this.t = 0; return true; }
+        // (asked down, for the red dot or its bowl, no long look first)
+        if (this.t > this.dur) this.next('look', this.leaving ? 0.3 : rand(0.5, 0.9));
+        return true;
+      }
+      case 'look':
+        // a look down at where it will land, gathering
+        m.setPosture('crouch');
+        m.layer = { pose: { neckPitch: -0.75, headPitch: -0.25, earFwd: 0.7, hipY: 0.14 }, w: Math.min(1, this.t / 0.3) };
+        if (this.t > this.dur) {
+          this.from.copy(m.pos);
+          c.perch(null);
+          c.hold(H);
+          this.next('down', 0.48);
+        }
+        return true;
+      case 'down': {
+        // out and down: forelegs reaching down to land, the hind legs following
+        const u = Math.min(1, this.t / this.dur), L = this.land();
+        m.pos.lerpVectors(this.from, L, smooth(u));
+        m.yaw = Math.atan2(L.x - this.from.x, L.z - this.from.z);
+        c.hold(H * (1 - smooth(Math.min(1, u * 1.1))) + 0.05 * Math.sin(Math.PI * u));
+        const fore = { planted: 0, frame: 0, x: 0.035, y: 0.012 - 0.03 * Math.sin(Math.PI * Math.min(1, u * 1.3)), z: 0.13 + 0.08 * Math.sin(Math.PI * u), flex: 0.25 };
+        const hind = { planted: 0, frame: 0, x: 0.04, y: 0.013 + 0.04 * Math.sin(Math.PI * u), z: -0.17 };
+        // (nose down off the top, coming level again as the forepaws meet the floor)
+        m.layer = { pose: { hipY: 0.2, hipPitch: -0.55 * Math.sin(Math.PI * Math.min(1, u * 1.1)), chestPitch: -0.35 * Math.sin(Math.PI * u), neckPitch: -0.2, LF: fore, RF: fore, LH: hind, RH: hind, tailLift: 0.5 }, w: 1 };
+        if (this.t > 0.05 && this.t - dt <= 0.05) c.bump(new THREE.Vector3(P.at.x + P.topR, H, P.at.z), 0.6);
+        if (u >= 1) {
+          c.hold(null);
+          m.layer = null;
+          m.setPosture('stand');
+          c.sound('thump', 0.36);
+          this.next('done');
+        }
+        return true;
+      }
+      case 'done':
+        return false;
+    }
+    return true;
+  }
+  stop(c: Ctx) {
+    c.m.layer = null;
+    c.m.lookAt(null);
+    c.hold(null);
+    c.perch(null);
   }
 }
 
@@ -2925,6 +3127,8 @@ export function chooseAct(c: Ctx, atHome: boolean, posture: PoseName): Act | nul
     // ... and its claws, on the scratching post
     const post = c.scratcher();
     if (atHome && post) opts.push([0.4 * (0.4 + m.arousal) * (1 - 0.7 * m.sleepy), () => new Claw(post)]);
+    // ... and up on top of it for a while, to look down on the room (or doze up there)
+    if (atHome && post && c.mode === 'rest') opts.push([0.35 * (0.6 + 0.6 * m.trust) * (1 + 0.6 * c.night) * (1 - 0.5 * m.sleepy), () => new Top(post)]);
     if (atHome && c.mode === 'rest') opts.push([0.7 + 0.8 * m.sleepy, () => sunbathe(c)]);
     if (atHome && c.mode === 'rest' && c.warm()) opts.push([0.8 + 0.8 * m.sleepy, () => warmUp(c)]);
     // very fond of you and drowsy: a nap as near you as it can get

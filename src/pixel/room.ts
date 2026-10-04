@@ -903,8 +903,9 @@ export interface Spots {
   sniff: { to: THREE.Vector3; face: number }[];
   /** upright things to rub a cheek on: the lamp's pole */
   posts: THREE.Vector3[];
-  /** the scratching post: where it stands on the floor, and how thick its post is */
-  scratcher?: { at: THREE.Vector3; r: number };
+  /** the scratching post: where it stands on the floor, how thick its post is, and how high and
+   *  how far across its top is */
+  scratcher?: { at: THREE.Vector3; r: number; top: number; topR: number };
 }
 
 export class Room {
@@ -1471,7 +1472,9 @@ export class Room {
       foot.position.y = 0.015;
       const rope = shadowy(new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, 18, 1, true), this.mat('cardboard', { pattern: 11 })));
       rope.position.y = 0.03 + h / 2;
-      const top = shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.125, 0.032, 28), plush));
+      // (wide enough for a cat to lie on, if not all of it)
+      const topR = 0.14;
+      const top = shadowy(new THREE.Mesh(new THREE.CylinderGeometry(topR, topR + 0.005, 0.032, 28), plush));
       top.position.y = 0.03 + h + 0.016;
       post.add(foot, rope, top);
       // (the pompom hangs from under the top on the side toward you, away from the room's middle,
@@ -1488,7 +1491,7 @@ export class Room {
       this.group.add(post);
       P.group = post;
       P.pom = pom;
-      S.scratcher = { at: P.at, r };
+      S.scratcher = { at: P.at, r, top: 0.03 + h + 0.032, topR };
     }
 
     // the lamp: a bronze stand, a linen shade
