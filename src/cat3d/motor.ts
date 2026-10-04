@@ -305,6 +305,8 @@ export class Motor {
   lickLanded = false;
   /** the tip of the tongue left out between the lips, forgotten there (0 .. 1): a blep */
   blep = 0;
+  /** the beat of music it is keeping time with, its tail tip flicking to it (0 .. 1 at each beat) */
+  beat = 0;
 
   /** asleep and dreaming: a forepaw twitches, the whiskers quiver */
   dreamTwitch() {
@@ -543,6 +545,8 @@ export class Motor {
         p.eyeOpen = Math.min(p.eyeOpen, 0.5);
       }
     }
+    // keeping time: the tip of the tail flicked to each beat
+    if (this.beat > 0.01) p.tailCurl += 0.55 * this.beat * (1 - 0.5 * clamp(p.tailSag));
     // a blep: the tip of the tongue just showing
     if (this.blep > 0.01) {
       p.tongue = Math.max(p.tongue, 0.38 * this.blep);

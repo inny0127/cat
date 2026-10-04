@@ -101,6 +101,11 @@ export class CatAudio {
     return !!this.lofi?.playing;
   }
 
+  /** the radio's beat now (1 as it falls, dying away; 0 off) */
+  beat() {
+    return this.lofi?.pulse() ?? 0;
+  }
+
   /** night: the radio slower and softer */
   setNight(n: number) {
     this.lofi?.setNight(n);

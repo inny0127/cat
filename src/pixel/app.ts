@@ -1152,8 +1152,11 @@ export class PixelApp {
     this.glassQuiet = Math.max(0, this.glassQuiet - dt);
     const resting = this.input.onGlass();
     if (resting.length) this.fingerOnGlass(resting[0].sx, resting[0].sy);
+    this.avatar.music = this.audio.musicPlaying;
     this.avatar.update(dt);
     const landed = this.avatar.pawLanded;
+    // (keeping time with the radio, when it is in the mood)
+    this.cat.motor.beat = this.avatar.groove > 0.01 ? this.avatar.groove * this.audio.beat() : 0;
     this.cat.update(dt);
     // (its tongue on your finger: each lick felt, a little rasp, and heard, hardly)
     if (this.cat.motor.lickLanded) {

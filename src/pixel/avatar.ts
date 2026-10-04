@@ -163,6 +163,12 @@ export class PixelAvatar implements Avatar {
    *  sleeps this nap with it out (decided as it goes deep: now and then) */
   private blepFor = 0;
   private napBlep: boolean | null = null;
+  /** the radio playing (set by the app); keeping time with it now and then, the tail tip to the
+   *  beat: how far into it (0 .. 1, read by the app), how long it goes on yet, how long till next */
+  music = false;
+  groove = 0;
+  private grooveFor = 0;
+  private grooveIn = 15 + Math.random() * 30;
   /** after eating: a wash of the face before it goes */
   private washAfter: Act | null = null;
   private rubSide = 1;
@@ -243,6 +249,20 @@ export class PixelAvatar implements Avatar {
     else if (this.napBlep === null && this.sleep > 0.8) this.napBlep = Math.random() < 0.1;
     const on = (this.blepFor > 0 || (!!this.napBlep && this.sleep > 0.6)) && !m.licking && this.alive && !m.hissNow;
     m.blep += ((on ? 1 : 0) - m.blep) * Math.min(1, dt * (on ? 3 : 8));
+  }
+
+  /** the radio on, awake and at its ease, lying or sat where it is: now and then, for a few bars,
+   *  the tip of its tail flicks in time with the beat; then it forgets to */
+  private keepTime(dt: number) {
+    const m = this.cat.motor;
+    const easy = this.music && this.alive && !this.isHidden && this.sleep < 0.2 && (this.mode === 'rest' || this.mode === 'enjoy')
+      && (!this.act || this.act.name === 'knead') && !this.errand && !this.trip && m.speed < 0.05 && !m.goal
+      && (m.targetPosture === 'loaf' || m.targetPosture === 'sit' || m.targetPosture === 'sphinx');
+    if (this.grooveFor > 0) {
+      this.grooveFor = easy ? Math.max(0, this.grooveFor - dt) : 0;
+      if (this.grooveFor === 0) this.grooveIn = 30 + Math.random() * 60;
+    } else if (easy && (this.grooveIn -= dt) <= 0) this.grooveFor = 6 + Math.random() * 10;
+    this.groove += ((this.grooveFor > 0 ? 1 : 0) - this.groove) * Math.min(1, dt * 1.5);
   }
 
   /** after a wash (and, by the app, a lick of the nose), now and then a blep */
@@ -893,6 +913,7 @@ export class PixelAvatar implements Avatar {
     this.leanIntoHand(dt);
     this.lickHand(dt);
     this.blepNow(dt);
+    this.keepTime(dt);
     this.playRest = Math.max(0, this.playRest - dt);
     this.huntRest = Math.max(0, this.huntRest - dt);
     this.pawRest = Math.max(0, this.pawRest - dt);

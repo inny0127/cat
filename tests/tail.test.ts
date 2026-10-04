@@ -35,3 +35,19 @@ describe('after its own tail', () => {
     }
   });
 });
+
+describe('keeping time', () => {
+  it('the tip of the tail flicks to a beat and settles between', () => {
+    const m = new Motor();
+    m.snap('loaf');
+    for (let i = 0; i < 40; i++) m.update(0.02);
+    const rest = m.pose.tailCurl;
+    m.beat = 1;
+    m.update(0.02);
+    const on = m.pose.tailCurl;
+    m.beat = 0;
+    m.update(0.02);
+    expect(on - rest).toBeGreaterThan(0.2);
+    expect(Math.abs(m.pose.tailCurl - rest)).toBeLessThan(0.05);
+  });
+});

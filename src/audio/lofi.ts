@@ -51,6 +51,9 @@ export class Lofi {
   private motif: { at: number; deg: number; len: number }[] = [];
   private night = 0;
   playing = false;
+  /** when its beats fall (the audio clock, a little ahead of now as they are scheduled), and how
+   *  hard each is (a kick on it, a snare, or only the hats) */
+  private beats: { at: number; k: number }[] = [];
 
   constructor(private readonly ctx: AudioContext, dest: AudioNode) {
     const c = ctx;
@@ -183,6 +186,16 @@ export class Lofi {
     }
   }
 
+  /** the beat now: 1 as it falls, dying away over the next fifth of a second or so, times how hard
+   *  it is (0 between beats, and while it is not playing) */
+  pulse() {
+    if (!this.playing) return 0;
+    const now = this.ctx.currentTime;
+    let last: { at: number; k: number } | null = null;
+    for (const b of this.beats) if (b.at <= now) last = b;
+    return last ? last.k * Math.exp(-(now - last.at) / 0.11) : 0;
+  }
+
   /** night: slower, softer */
   setNight(n: number) {
     this.night = n;
@@ -242,6 +255,11 @@ export class Lofi {
           this.ep(t + n.at * s16 + hum(), note + KEY, 0.42 * soft, n.len * s16, true);
         }
       }
+    }
+    // (the beats, for whatever keeps time with them)
+    if (step % 4 === 0) {
+      this.beats.push({ at: t, k: drumsIn ? (KICKS[(bar >> 1) % KICKS.length][step] || SNARE[step] ? 1 : 0.6) : 0.35 });
+      if (this.beats.length > 8) this.beats.shift();
     }
     if (drumsIn) {
       const k = KICKS[(bar >> 1) % KICKS.length][step];
