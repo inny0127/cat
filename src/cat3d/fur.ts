@@ -743,6 +743,8 @@ export function makeFurMaterials(opts: FurOptions, an: Anatomy, corr: Corrective
     uSolid: { value: 0 },
     uBreath: { value: 0 },
     uPuff: { value: 0 },
+    uRipple: { value: 0 },
+    uRippleAt: { value: 0 },
     uLids: { value: new THREE.Vector4(0.62, -0.5, 0.62, -0.5) },
     uEyeCL: { value: new THREE.Vector3() },
     uEyeCR: { value: new THREE.Vector3() },

@@ -272,6 +272,11 @@ export class Cat3D {
     this.whiskers.setPixelArt(this.shared.uSolid.value > 0.5, light, lamp);
   }
 
+  /** how much the skin of its back twitches (0 .. 1: under a hand it has had about enough of) */
+  ripple = 0;
+  private rippleAt = -1;
+  private rippleIn = 0;
+
   /** how dark it is round the cat (0 .. 1): in the dark its eyes shine (pixel art) */
   setEyeShine(dark: number) {
     for (const e of this.eyes) e.eyeMat.uniforms.uTapetum.value = dark;
@@ -420,6 +425,15 @@ export class Cat3D {
     this.breathT += dt * (0.55 + 0.25 * (1 - p.breath)) * Math.max(0.3, motor.feel.breathRate) * (1 - 0.55 * sg);
     this.shared.uBreath.value = 0.0022 * p.breath * (1 + 1.6 * sg) * Math.sin(this.breathT * Math.PI * 2);
     this.shared.uPuff.value = p.puff;
+    // the skin of its back twitching, overstimulated: a wave back along it every second or so
+    // while it lasts, quick, a few millimetres high
+    if (this.rippleAt < 0 && this.ripple > 0.05 && (this.rippleIn -= dt) <= 0) {
+      this.rippleAt = 0;
+      this.rippleIn = 0.4 + Math.random() * (1.2 - 0.6 * this.ripple);
+    }
+    if (this.rippleAt >= 0 && (this.rippleAt += dt / 0.32) > 1.3) this.rippleAt = -1;
+    this.shared.uRipple.value = this.rippleAt >= 0 ? 0.0065 * Math.min(1, 0.4 + this.ripple) : 0;
+    this.shared.uRippleAt.value = Math.max(0, this.rippleAt);
     if (this.skin) {
       this.skin.uniforms.uJawOpen.value = p.jaw;
       this.skin.uniforms.uSnarl.value = Math.max(motor.feel.snarl, motor.hissNow);

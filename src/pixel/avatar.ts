@@ -23,7 +23,8 @@ export interface Spot {
  * eyes on the finger) and does a few things now (blink, flick an ear, leave); this picks the
  * posture, where to look and how to come and go. The face, ears, tail, fur and breath follow the
  * cat's feelings, which the app hands the motor from the brain (cat3d/mood.ts), so the 2D-only
- * intentions here (eye targets, ear and tail moods, fur ripple, puff) are kept but not drawn.
+ * intentions here (eye targets, ear and tail moods, puff) are kept but not drawn (the fur's ripple
+ * is: the skin of its back twitching).
  */
 export class PixelAvatar implements Avatar {
   sleep = 1;
@@ -492,6 +493,8 @@ export class PixelAvatar implements Avatar {
 
   update(dt: number) {
     const m = this.cat.motor;
+    // (the skin of its back twitching under a hand it has had about enough of)
+    this.cat.ripple = this.alive ? this.rippleTarget : 0;
     if (this.fading) {
       this.fading.t += dt;
       if (this.fading.t >= this.fading.dur) {

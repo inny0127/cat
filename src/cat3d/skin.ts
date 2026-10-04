@@ -28,6 +28,8 @@ uniform float uPuff;
 uniform float uBonePuff[NBONES];
 uniform float uBoneRib[NBONES];
 uniform float uBreath;    // the ribcage's swell, metres
+uniform float uRipple;    // a twitch running back along the skin of the back: how high (metres)
+uniform float uRippleAt;  // ... and how far back it has got (0 the shoulders .. 1 the hips)
 uniform float uJawOpen;
 uniform float uSnarl;
 ${AO_GLSL}
@@ -57,6 +59,14 @@ void main() {
     float rib = 0.0;
     for (int i = 0; i < 4; i++) rib += skinWeight[i] * uBoneRib[int(skinIndex[i])];
     transformed += normal * uBreath * 1.8 * rib;
+    // the skin of the back twitching under a hand it has had about enough of: a ripple running
+    // back from the shoulders to the hips (the back only, where the coat at rest faces up)
+    if (uRipple > 0.0) {
+      float along = (0.07 - position.z) / 0.24;
+      float onBack = smoothstep(0.2, 0.6, normal.y) * step(-0.17, position.z) * step(position.z, 0.07) * step(0.17, position.y);
+      float d = (along - uRippleAt) / 0.11;
+      transformed += normal * uRipple * onBack * exp(-d * d);
+    }
   }
   #include <skinning_vertex>
   vec4 wp = modelMatrix * vec4(transformed, 1.0);
