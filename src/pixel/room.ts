@@ -3228,7 +3228,8 @@ export class Room {
   private lampOn = 1;
   /** the lamp's shade, to tap */
   lampShade: THREE.Object3D = new THREE.Group();
-  private lampLitNow = false;
+  /** is the lamp lit now */
+  lampLitNow = false;
 
   /** a tap on the lamp: switched the other way (true: now on) */
   switchLamp() {

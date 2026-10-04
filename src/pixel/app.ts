@@ -1278,6 +1278,7 @@ export class PixelApp {
 
   private radioHintIn = 25;
   private mistHintIn = 8;
+  private lampHintIn = 40;
 
   private hints(dt: number, touching: boolean) {
     const s = this.state;
@@ -1312,6 +1313,12 @@ export class PixelApp {
     if (this.audio.musicPlaying && !s.hints.radio && !touching && (this.radioHintIn -= dt) < 0) {
       s.hints.radio = 1;
       this.hintUi.show('창가의 라디오를 톡 누르면 음악을 끄고 켤 수 있어요', 5000);
+      return;
+    }
+    // at night, once the radio's hint has been and a while has gone by: that the lamp switches
+    if (this.room.lampLitNow && Room.dark(this.clock().getHours() + this.clock().getMinutes() / 60) > 0.8 && s.hints.radio && !s.hints.lamp && !touching && !this.input.touching && (this.lampHintIn -= dt) < 0) {
+      s.hints.lamp = 1;
+      this.hintUi.show('스탠드를 톡 누르면 불을 끄고 켤 수 있어요', 5000);
       return;
     }
     if (touching || this.input.touching) {
