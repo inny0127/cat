@@ -53,6 +53,8 @@ export interface Ctx {
   sound: (name: string, gain: number) => void;
   /** how hard it is raining (0 .. 1): a grey day is for watching it from the sill */
   rain: number;
+  /** what is falling is snow */
+  snow: boolean;
   /** how dark it is outside (0 day .. 1 night): the lit town is for watching too */
   night: number;
   /** birds going by outside the window (where, on the glass), if any; a chirp at them */
@@ -351,7 +353,7 @@ export class Rub implements Act {
       this.set = true;
       // (now and then a little trill to it, the mouth with it)
       if (this.trill) { this.trill = false; c.sound('trill', 0.2); c.m.vocalize('trill', 0.29); }
-      m.walkTo(this.at(0.42), 0.11, face, () => {
+      m.walkTo(this.at(0.37), 0.11, face, () => {
         m.layer = null;
         this.set = false;
         if (--this.passes > 0) {
@@ -367,7 +369,9 @@ export class Rub implements Act {
     // the pole on the cat's left (+1) or its right (-1)
     const side = this.dir > 0 ? -1 : 1;
     const bell = (x: number, a: number, b: number) => ease((x - a + 0.12) / 0.12) * (1 - ease((x - b) / 0.14));
-    const k = bell(cheek, -0.03, 0.1), kf = bell(flank, -0.06, 0.08), kt = bell(tail, -0.02, 0.1);
+    // (the tail's sweep over before the pass ends, so that it does not jump back when it does: the
+    // pass is no longer than the view can follow out at that side of the room)
+    const k = bell(cheek, -0.03, 0.1), kf = bell(flank, -0.06, 0.08), kt = bell(tail, -0.02, 0.02);
     m.layer = {
       pose: {
         neckYaw: side * 0.65 * k, headYaw: side * 0.35 * k, headRoll: -side * 0.4 * k, neckPitch: -0.12 * k,
@@ -856,7 +860,8 @@ export class Zoomies implements Act {
     // front right (clear of the books), ... (when the box is out on the left, the right only)
     const box = c.box() !== null;
     const F = () => at(box ? rand(0.04, 0.12) : rand(-0.1, 0.1), rand(0.44, 0.5));
-    const L = () => at(-0.42, rand(0.12, 0.24));
+    // (not so far out to the left that it runs out of the picture before the view can follow)
+    const L = () => at(-0.36, rand(0.14, 0.24));
     const R = () => at(rand(0.14, 0.22), rand(0.5, 0.56));
     const n = 3 + Math.floor(Math.random() * 3);
     const cycle = box ? [F, R] : Math.random() < 0.5 ? [F, L, R, L] : [L, F, R, F];
@@ -864,7 +869,8 @@ export class Zoomies implements Act {
     // (and it ends in the middle, just in front of the bed, where it sits down facing you, coming
     // to it from one side, so that the skid does not carry it out toward you)
     if (this.route[this.route.length - 1].z > h.z + 0.4) this.route.push(box ? R() : pick([L, R])());
-    this.route.push(at(box ? rand(0.04, 0.12) : rand(-0.08, 0.08), rand(0.3, 0.34)));
+    // (not so near you that its head would go off the bottom of the picture)
+    this.route.push(at(box ? rand(0.04, 0.12) : rand(-0.08, 0.08), rand(0.24, 0.28)));
     // (not off to a point it is all but standing on)
     while (this.route.length > 2 && this.route[0].distanceTo(c.m.pos.clone().setY(0)) < 0.25) this.route.shift();
   }
@@ -1177,6 +1183,9 @@ export class Sill implements Act {
   private drop: { p: THREE.Vector3; t: number; pats: number; patT: number; next: number; side: number } | null = null;
   private dropIn = rand(2, 6);
   private readonly gaze = new THREE.Vector3();
+  /** snow going by: one flake after another followed down with the head (how far after this one,
+   *  how long it takes to fall from sight, which way it is) */
+  private flake = { t: 0, len: 1.8, yaw: 0 };
   constructor(private readonly spot: SillSpot) {}
 
   /** asked down: it comes down as soon as it can, and stops there */
@@ -1277,6 +1286,20 @@ export class Sill implements Act {
           if ((this.chirpIn -= dt) <= 0) { c.chirp(); this.chirpIn = rand(1.5, 3.5); }
         } else m.lookAt(null);
         const chatter = birds ? 0.1 + 0.09 * Math.max(0, Math.sin(this.watch * Math.PI * 2 * 11)) : 0;
+        // snow coming down past the glass: the head goes up to a flake, follows it down, and up
+        // again to the next, this way and that
+        let fall = 0;
+        const snowing = c.snow && !birds && !this.drop;
+        if (snowing) {
+          const F = this.flake;
+          if ((F.t += dt) > F.len) {
+            F.t = 0;
+            F.len = rand(1.3, 2.6);
+            F.yaw = rand(-0.55, 0.55);
+          }
+          const u = F.t / F.len;
+          fall = u < 0.15 ? -0.28 + 0.6 * ease(u / 0.15) : 0.32 - 0.62 * ease((u - 0.15) / 0.85);
+        }
         // rain on the glass: now and then a drop runs down it right in front, stopping and going,
         // watched all the way down and patted at through the glass
         let patPaw: Record<string, unknown> = {};
@@ -1306,8 +1329,9 @@ export class Sill implements Act {
         c.drop(this.drop?.p ?? null);
         m.layer = {
           pose: {
-            neckYaw: D ? 0 : look, headYaw: D ? 0 : 0.4 * look, neckPitch: 0.1, headPitch: -0.05 + 0.05 * Math.sin(this.watch * 0.5),
-            earFwd: birds || D ? 1 : 0.6, pupil: birds || D ? 0.95 : 0.6, whisker: birds || D ? 1 : 0, jaw: chatter,
+            neckYaw: D ? 0 : snowing ? 0.7 * this.flake.yaw + 0.3 * look : look, headYaw: D ? 0 : snowing ? 0.4 * this.flake.yaw : 0.4 * look,
+            neckPitch: 0.1 + 0.4 * fall, headPitch: -0.05 + 0.05 * Math.sin(this.watch * 0.5) + 0.6 * fall,
+            earFwd: birds || D || snowing ? 1 : 0.6, pupil: birds || D ? 0.95 : snowing ? 0.85 : 0.6, whisker: birds || D ? 1 : snowing ? 0.5 : 0, jaw: chatter,
             tailLift: -1.35, tailSide: 0.1, tailCurve: 0.25, tailCurl: (birds || D ? 0.8 : 0.35) * Math.sin(this.watch * (birds ? 3 : 0.8)), tailSag: 1,
             ...patPaw,
           },

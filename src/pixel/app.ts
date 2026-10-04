@@ -295,10 +295,13 @@ export class PixelApp {
     // the room view follows as the cat goes off toward an edge, a little ahead of it the way it is
     // walking (not when it is tearing about: it lags behind then, rather than swinging to and fro),
     // never past the room's ends
-    const lead = want.x + m.vel.x * 0.7 * (1 - m.zoom);
+    // (and a little toward where its head is: rubbing along the lamp, its face was off the side
+    // while the middle of it was still in view)
+    const lead = want.x + 0.08 * Math.sin(m.yaw) + m.vel.x * 0.7 * (1 - m.zoom);
     const off = lead - this.panX, dead = 0.07;
-    const goal = Math.max(-0.3, Math.min(0.46, off > dead ? lead - dead : off < -dead ? lead + dead : this.panX));
-    this.panX += (goal - this.panX) * (1 - Math.exp(-dt * 1.8));
+    const goal = Math.max(-0.5, Math.min(0.6, off > dead ? lead - dead : off < -dead ? lead + dead : this.panX));
+    // (a little quicker after it when it is tearing about, so that it is not lost off the side)
+    this.panX += (goal - this.panX) * (1 - Math.exp(-dt * (1.8 + 1.2 * m.zoom)));
     const rate = this.focusT > this.focus ? 1.6 : 0.8;
     this.focus += Math.max(-rate * dt, Math.min(rate * dt, this.focusT - this.focus));
     this.placeCamera();
@@ -579,6 +582,7 @@ export class PixelApp {
     // a bird outside: the cat's ear goes to it, and if it is awake, a glance at the window
     if (this.audio.setOutside(dt, { day: 1 - dark, hour, month: clock.getMonth(), rain })) this.avatar.hear(this.room.windowMiddle);
     this.avatar.rain = rain;
+    this.avatar.snow = this.room.snowing;
     this.avatar.night = dark;
     // (the moon's light is never strong enough to hide from)
     this.avatar.glare = dark > 0.5 ? 0 : dl.sun;

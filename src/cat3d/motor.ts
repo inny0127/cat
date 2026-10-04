@@ -274,6 +274,8 @@ export class Motor {
     this.dreamPaw = Math.random() < 0.5 ? 'LF' : 'RF';
     this.dreamW.kick(0.8 + Math.random() * 0.6);
     if (Math.random() < 0.5) this.flickEar(Math.random() < 0.5 ? 'L' : 'R', 0.6);
+    // (and the tip of the tail, as if it had a life of its own)
+    if (Math.random() < 0.4) this.flickTail(0.45 + 0.3 * Math.random());
   }
 
   /** startle: the head jerks up */

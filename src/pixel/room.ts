@@ -1658,6 +1658,8 @@ export class Room {
   private hourHand: THREE.Mesh | null = null;
   private minHand: THREE.Mesh | null = null;
 
+  /** snow falling past the window now */
+  snowing = false;
   /** the radio on the sill (tapping it switches the music on and off), and its dial */
   radio: THREE.Object3D = new THREE.Group();
   private dial!: THREE.ShaderMaterial;
@@ -1893,8 +1895,11 @@ export class Room {
     const things: [THREE.Vector3, number][] = [[S.bed, 0.21], [S.food, 0.07], [S.water, 0.07], [S.litter, 0.19], ...this.things.filter(([, r]) => r > 0)];
     const clear = things.map(([c, rr]): [THREE.Vector3, number] => [c, rr + 0.19]);
     const ok: THREE.Vector3[] = [];
+    // (well inside the opening: a spot the sun only just reaches is one it is about to leave, and
+    // one sunlit() would not count as in the sun, so that the cat would be up again at once)
+    const m = 0.06;
     for (let i = 0; i < 12; i++) for (let j = 0; j < 12; j++) {
-      const w = new THREE.Vector3(l + (r - l) * (i + 0.5) / 12, b + (t - b) * (j + 0.5) / 12, z);
+      const w = new THREE.Vector3(l + m + (r - l - 2 * m) * (i + 0.5) / 12, b + m + (t - b - 2 * m) * (j + 0.5) / 12, z);
       const f = w.clone().addScaledVector(K, -w.y / K.y);
       f.y = 0;
       if (f.x < -0.62 || f.x > 0.62 || f.z < z + 0.3 || f.z > S.bed.z + 0.3) continue;
@@ -2153,6 +2158,7 @@ export class Room {
     (su.uLeafC.value as THREE.Vector3).set(...se.leafC);
     (su.uLeafs.value as THREE.Vector2).set(se.full, se.other);
     su.uSnowing.value = se.snowing ? 1 : 0;
+    this.snowing = se.snowing && rain > 0.15;
     (su.uFall.value as THREE.Vector2).set(se.falling * (1 - rain), se.petals ? 1 : 0);
     // a rainbow for a while after rain stops by day (not in winter's snow)
     const before = rainAt(new Date(date.getTime() - 30 * 60e3));
