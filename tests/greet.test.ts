@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
 import { Motor } from '../src/cat3d/motor';
 import { NEUTRAL } from '../src/cat3d/mood';
-import { Greet, type Ctx } from '../src/pixel/behave';
+import { Gift, Greet, type Ctx } from '../src/pixel/behave';
 
 /** a cat (its motor) lying in its bed, with only what a hello needs of a room */
 function room() {
@@ -54,5 +54,60 @@ describe('a hello when you come back', () => {
       if (seen.has('bump')) bumped++;
     }
     expect(bumped).toBeGreaterThan(2);
+  });
+});
+
+describe('a present', () => {
+  /** a room with a toy mouse in it, which a mouth can carry and let fall */
+  function withMouse(at: THREE.Vector3) {
+    const r = room();
+    const mouse = { p: at.clone(), state: 'floor' as 'floor' | 'mouth' | 'air', moving: false };
+    const said: string[] = [];
+    Object.assign(r.c, {
+      mouse: () => mouse,
+      carry: (p: THREE.Vector3 | null) => {
+        if (p) { mouse.state = 'mouth'; mouse.p.copy(p); }
+        else if (mouse.state === 'mouth') { mouse.state = 'floor'; mouse.p.y = 0; }
+      },
+      mouthAt: () => r.m.pos.clone().add(new THREE.Vector3(Math.sin(r.m.yaw) * 0.15, 0.1, Math.cos(r.m.yaw) * 0.15)),
+      keepClear: (p: THREE.Vector3) => p,
+      say: (k: string) => said.push(k),
+    });
+    return { ...r, mouse, said };
+  }
+
+  it('to the toy mouse, up in its mouth, to the glass, let fall there, and a word to you', () => {
+    const { c, m, mouse, said } = withMouse(new THREE.Vector3(-0.4, 0, -0.3));
+    m.snap('stand');
+    const act = new Gift(), seen = new Set<string>();
+    let carried = false, going = true;
+    for (let t = 0; t < 40 && going; t += 0.02) {
+      going = act.update(0.02, c);
+      m.update(0.02);
+      seen.add(act.phase);
+      if (mouse.state === 'mouth') carried = true;
+    }
+    expect([...seen]).toEqual(expect.arrayContaining(['go', 'take', 'bring', 'drop', 'show']));
+    expect(carried).toBe(true);
+    // (let fall by the glass, not where it lay)
+    expect(mouse.state).toBe('floor');
+    expect(Math.hypot(mouse.p.x - c.window.x, mouse.p.z - c.window.z)).toBeLessThan(0.25);
+    expect(said.length).toBeGreaterThan(0);
+    expect(going).toBe(false);
+  });
+
+  it('thrown: after it at a run, and a pounce on it where it came down', () => {
+    const { c, m } = withMouse(new THREE.Vector3(0.5, 0, -0.5));
+    m.snap('stand');
+    const act = new Gift(true), seen = new Set<string>();
+    let fastest = 0;
+    for (let t = 0; t < 8; t += 0.02) {
+      act.update(0.02, c);
+      m.update(0.02);
+      seen.add(act.phase);
+      fastest = Math.max(fastest, m.speed);
+    }
+    expect(seen.has('pounce')).toBe(true);
+    expect(fastest).toBeGreaterThan(0.45);
   });
 });

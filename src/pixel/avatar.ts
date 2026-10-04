@@ -4,7 +4,7 @@ import { POSES, SIDE_TURN, type Leg, type PoseLayer, type PoseName } from '../ca
 import { NEUTRAL, type Mood } from '../cat3d/mood';
 import type { Avatar } from '../sim/avatar';
 import type { EarMood, TailMood } from '../rig/animator';
-import { chooseAct, groomChest, groomFlank, knead, restingPose, sneeze, toBed, toWindow, wander, warmUp, washFace, yawn, type Act, type Ctx, sunbathe, Play, Sill, Hunt, Box, Zoomies, Walk, Stare, Rub, scratchEar, wakeUp, stretchSideOn, Greet, type SillSpot } from './behave';
+import { chooseAct, groomChest, groomFlank, knead, restingPose, sneeze, toBed, toWindow, wander, warmUp, washFace, yawn, type Act, type Ctx, sunbathe, Play, Sill, Hunt, Box, Zoomies, Walk, Stare, Rub, scratchEar, wakeUp, stretchSideOn, Greet, Gift, type SillSpot } from './behave';
 import { Chase, Startle, type LaserDot } from './chase';
 import { Tease, type Lure } from './tease';
 
@@ -94,6 +94,8 @@ export class PixelAvatar implements Avatar {
     bump: (at: THREE.Vector3, k: number) => void;
     batLure: (v: THREE.Vector3) => void;
     pinLure: (sec: number, at: THREE.Vector3) => void;
+    mouse: () => { p: THREE.Vector3; state: 'floor' | 'mouth' | 'air'; moving: boolean } | null;
+    carry: (at: THREE.Vector3 | null, yaw?: number) => void;
   } | null = null;
   /** the feathers of the wand (set by the app): dangled by a hand, a moment's watching and it has
    *  to have them; after a long game, a while before it will play again */
@@ -234,6 +236,29 @@ export class PixelAvatar implements Avatar {
     this.act = new Greet(glad);
   }
 
+  /** where its mouth is (between the lips, under the nose), in the room */
+  private readonly mouthW = new THREE.Vector3();
+  mouthAt() {
+    const head = this.cat.byName.get('head');
+    if (!head) return this.mouthW.copy(this.cat.motor.pos).setY(0.15);
+    head.updateWorldMatrix(true, false);
+    return this.mouthW.set(0, -0.016, 0.05).applyMatrix4(head.matrixWorld);
+  }
+
+  /** its toy mouse thrown (where it is going): awake, its own master, and fond enough of you, it is
+   *  after it (and now and then brings it back to you); else its eyes go after it */
+  fetchNow() {
+    const M = this.ground?.mouse();
+    if (!M || !this.alive || this.isHidden || this.sleep > 0.3 || this.errand || this.trip || this.perched) return false;
+    if (this.mode !== 'rest' && this.mode !== 'alert') return false;
+    if (this.act instanceof Chase || this.act instanceof Tease || this.act instanceof Startle || this.act instanceof Gift || this.mood.sleepy > 0.6) return false;
+    this.perk(M.p, 0.2);
+    if (Math.random() > 0.35 + 0.6 * Math.max(0, this.mood.trust)) return false;
+    this.stopAct();
+    this.act = new Gift(true);
+    return true;
+  }
+
   /** the hands gone, it puts its coat to rights where they were: a paw licked and drawn over the
    *  face, a lick or two down the chest, or at the flank (not up on something, nor busy with
    *  something of its own) */
@@ -355,6 +380,9 @@ export class PixelAvatar implements Avatar {
       perch: (h) => { this.cat.perch = h; },
       hold: (y) => { this.cat.liftHold = y; },
       blink: (slow) => this.doBlink(slow),
+      mouse: () => this.ground?.mouse() ?? null,
+      carry: (at, yaw) => this.ground?.carry(at, yaw),
+      mouthAt: () => this.mouthAt(),
     };
   }
 
@@ -438,8 +466,13 @@ export class PixelAvatar implements Avatar {
     return this.act?.name ?? null;
   }
 
+  /** a present just laid at your feet (the toy mouse, the cat sat by it looking at you) */
+  get presenting() {
+    return this.act instanceof Gift && this.act.phase === 'show';
+  }
+
   /** start one of its acts now (for the lab and tests) */
-  startAct(name: 'yawn' | 'groom' | 'groom chest' | 'wash' | 'stretch' | 'window' | 'wander' | 'knead' | 'bed' | 'sun' | 'play' | 'sill' | 'box' | 'zoomies' | 'warm' | 'sneeze' | 'stare' | 'rub' | 'scratch' | 'greet') {
+  startAct(name: 'yawn' | 'groom' | 'groom chest' | 'wash' | 'stretch' | 'window' | 'wander' | 'knead' | 'bed' | 'sun' | 'play' | 'sill' | 'box' | 'zoomies' | 'warm' | 'sneeze' | 'stare' | 'rub' | 'scratch' | 'greet' | 'gift') {
     // (not on its way somewhere, to the bowls or out of the room: the walk there is its business)
     if (this.perched || this.trip) return;
     this.stopAct();
@@ -449,7 +482,7 @@ export class PixelAvatar implements Avatar {
         : name === 'knead' ? knead() : name === 'sun' ? sunbathe(c) : name === 'play' ? new Play()
           : name === 'sill' && this.sillSpot ? new Sill(this.sillSpot())
             : name === 'box' && this.boxSpot?.() ? new Box(this.boxSpot()!) : name === 'zoomies' ? new Zoomies(c) : name === 'warm' ? warmUp(c) ?? toBed(c, 'loaf') : name === 'sneeze' ? sneeze(c) : name === 'stare' ? new Stare(c)
-              : name === 'rub' && c.posts().length ? new Rub(c, c.posts()[0]) : name === 'scratch' ? scratchEar() : name === 'greet' ? new Greet(0.9) : toBed(c, 'loaf');
+              : name === 'rub' && c.posts().length ? new Rub(c, c.posts()[0]) : name === 'scratch' ? scratchEar() : name === 'greet' ? new Greet(0.9) : name === 'gift' ? new Gift() : toBed(c, 'loaf');
   }
 
   /** the red dot of a laser pointer: awake and its own master, it drops what it was doing and is
@@ -726,7 +759,7 @@ export class PixelAvatar implements Avatar {
     }
     // eyes on the finger, or on you (through the window); asleep, dead or busy, nowhere (up on
     // the sill it looks where it likes: out of the window)
-    const busy = this.errand || (this.act && this.act.name !== 'window' && this.act.name !== 'knead' && this.act.name !== 'greet');
+    const busy = this.errand || (this.act && this.act.name !== 'window' && this.act.name !== 'knead' && this.act.name !== 'greet' && this.act.name !== 'gift');
     let tilt = 0;
     if ((this.act instanceof Sill || this.act instanceof Play || this.act instanceof Hunt || this.act instanceof Box || this.act instanceof Zoomies || this.act instanceof Stare || this.act?.ownGaze) && this.mode !== 'enjoy') { /* the act decides */ }
     else if (!this.alive || this.sleep > 0.5 || busy) m.lookAt(null);

@@ -1515,6 +1515,33 @@ export class Room {
     this.yarn = { mesh: yarn, v: new THREE.Vector3(), tail: new THREE.Vector3(yx + 0.12, 0.003, yz + 0.22), strand, rebuild: 0, hold: null, pinned: 0, pinAt: null, occ: -1 };
     this.windStrand();
 
+    // a toy mouse of grey felt, nose (+z) and pink ears and a string tail, on the rug before the
+    // bed on the other side from the wool
+    {
+      const g = new THREE.Group();
+      const body = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 8), this.mat('paint', { tone: -0.1 }));
+      body.scale.set(0.019, 0.0155, 0.032);
+      body.position.set(0, 0.0155, 0);
+      g.add(body);
+      const nose = new THREE.Mesh(new THREE.SphereGeometry(0.005, 6, 4), this.mat('pink', { tone: 0.1 }));
+      nose.position.set(0, 0.014, 0.032);
+      g.add(nose);
+      for (const sd of [-1, 1]) {
+        const ear = new THREE.Mesh(new THREE.SphereGeometry(1, 8, 6), this.mat('pink', { tone: 0.02 }));
+        ear.scale.set(0.009, 0.009, 0.0024);
+        ear.position.set(sd * 0.011, 0.029, 0.013);
+        ear.rotation.y = sd * 0.5;
+        g.add(ear);
+      }
+      const V3 = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+      const tail = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([V3(0, 0.011, -0.03), V3(0.014, 0.005, -0.052), V3(-0.007, 0.002, -0.075), V3(0.012, 0.002, -0.098)]), 12, 0.0018, 4), this.mat('brown', { tone: -0.05 }));
+      g.add(tail);
+      g.traverse((o) => { if ((o as THREE.Mesh).isMesh) shadowy(o as THREE.Mesh); });
+      add(g, bx - 0.27, 0, bz + 0.27);
+      g.rotation.y = 2.2;
+      this.toyMouse.group = g;
+    }
+
     // the bed: a soft teal rim round an oatmeal fleece cushion
     const cushion = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.03, 32), this.mat('fleece', { pattern: 4 }));
     cushion.receiveShadow = true;
@@ -1724,6 +1751,109 @@ export class Room {
     if (x < 0 || x > px.x) return null;
     const { l, r, b, t, z } = this.win;
     return new THREE.Vector3(l + (x / px.x) * (r - l), b + (y / px.y) * (t - b), z - 0.06);
+  }
+
+  /** the toy mouse: lying where it was left, in the cat's mouth, or in the air (thrown, or let
+   *  fall), then down, skidding to a stop; how it is moving and turning */
+  private readonly toyMouse = {
+    group: new THREE.Group() as THREE.Object3D, state: 'floor' as 'floor' | 'mouth' | 'air', v: new THREE.Vector3(), spin: 0,
+  };
+  /** the toy mouse came down on the floor (how hard, 0 .. 1) */
+  onMouseLand: ((k: number) => void) | null = null;
+
+  /** where the toy mouse is, what it is doing, and whether it is still moving */
+  get mouse() {
+    const M = this.toyMouse;
+    return { p: M.group.position, state: M.state, moving: M.state === 'air' || Math.hypot(M.v.x, M.v.z) > 0.02, obj: M.group };
+  }
+
+  /** the toy mouse in a cat's mouth (where the mouth is, which way the cat faces: it is carried
+   *  crosswise, by the middle, its tail hanging), or let fall from it (null) */
+  carryMouse(at: THREE.Vector3 | null, yaw = 0) {
+    const M = this.toyMouse, g = M.group;
+    if (at) {
+      M.state = 'mouth';
+      M.v.set(0, 0, 0);
+      g.position.set(at.x, at.y - 0.016, at.z);
+      g.rotation.set(0.25, yaw + Math.PI / 2, 0.15);
+      return;
+    }
+    if (M.state === 'mouth') {
+      M.state = 'air';
+      // (let go with the head coming down: it drops a little forward of the mouth)
+      M.v.set(Math.sin(yaw) * 0.15, 0, Math.cos(yaw) * 0.15);
+      M.spin = (Math.random() - 0.5) * 3;
+    }
+  }
+
+  /** the toy mouse thrown a way (on the floor, m/s), in an arc */
+  tossMouse(dir: THREE.Vector3, speed: number) {
+    const M = this.toyMouse;
+    const d = Math.hypot(dir.x, dir.z) || 1;
+    M.state = 'air';
+    M.v.set((dir.x / d) * speed, 1.5 + 0.4 * Math.random(), (dir.z / d) * speed);
+    M.spin = (Math.random() < 0.5 ? -1 : 1) * (5 + 6 * Math.random());
+    if (M.group.position.y < 0.002) M.group.position.y = 0.002;
+  }
+
+  /** the toy mouse flies, falls, comes down with a bounce, skids, and lies still; it glances off
+   *  the bed and the things on the floor and the room's ends as the wool does */
+  private moveMouse(dt: number) {
+    const M = this.toyMouse, g = M.group, p = g.position, v = M.v;
+    if (M.state === 'mouth') return;
+    if (M.state === 'air') {
+      v.y -= 9.8 * dt;
+      p.addScaledVector(v, dt);
+      g.rotation.y += M.spin * dt;
+      g.rotation.x *= 1 - Math.min(1, dt * 4);
+      g.rotation.z *= 1 - Math.min(1, dt * 4);
+      if (p.y <= 0) {
+        p.y = 0;
+        const hard = Math.min(1, -v.y / 3);
+        if (-v.y > 0.9) {
+          v.y = -0.28 * v.y;
+          v.x *= 0.55;
+          v.z *= 0.55;
+          M.spin *= 0.5;
+        } else {
+          M.state = 'floor';
+          v.y = 0;
+          v.x *= 0.6;
+          v.z *= 0.6;
+          g.rotation.x = 0;
+          g.rotation.z = 0;
+        }
+        this.onMouseLand?.(hard);
+      }
+    } else {
+      const sp = Math.hypot(v.x, v.z);
+      if (sp < 1e-4) return;
+      const ns = Math.max(0, sp - 2.2 * dt);
+      v.x *= ns / sp;
+      v.z *= ns / sp;
+      p.x += v.x * dt;
+      p.z += v.z * dt;
+      g.rotation.y += M.spin * dt * (ns / Math.max(sp, 1e-4));
+      M.spin *= 1 - Math.min(1, dt * 3);
+    }
+    // (off the bed and the things on the floor, and in from the room's ends)
+    const S = this.spots, R = 0.03;
+    const round: [THREE.Vector3, number][] = [[S.bed, 0.2], [S.food, 0.07], [S.water, 0.07], [S.litter, 0.19], ...this.things.filter(([c, r]) => r > 0 && c.distanceTo(this.yarnHome) > 0.01)];
+    if (p.y < 0.06) {
+      for (const [c, r] of round) {
+        const dx = p.x - c.x, dz = p.z - c.z, d = Math.hypot(dx, dz), min = r + R;
+        if (d < min && d > 1e-5) {
+          const nx = dx / d, nz = dz / d;
+          p.x = c.x + nx * min;
+          p.z = c.z + nz * min;
+          const vn = v.x * nx + v.z * nz;
+          if (vn < 0) { v.x -= 1.4 * vn * nx; v.z -= 1.4 * vn * nz; }
+        }
+      }
+    }
+    const B = this.yarnBounds;
+    if (p.x < B.minX || p.x > B.maxX) { p.x = Math.max(B.minX, Math.min(B.maxX, p.x)); v.x *= -0.4; }
+    if (p.z < B.minZ || p.z > B.maxZ) { p.z = Math.max(B.minZ, Math.min(B.maxZ, p.z)); v.z *= -0.4; }
   }
 
   /** where the ball of wool is */
@@ -2982,6 +3112,7 @@ export class Room {
       C.mesh.rotation.x = C.a;
     }
     this.rollYarn(dt);
+    this.moveMouse(dt);
     this.flyBug(dt, d.lamp > 0.5, 1 - Room.dark(hour), date.getMonth(), rain);
     this.sky.uniforms.uTime.value = this.time;
     this.sky.uniforms.uHour.value = hour;

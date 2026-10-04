@@ -90,6 +90,8 @@ export class PixelApp {
       books: this.room.books,
       bump: (at, k) => this.room.bump(at, k),
       batLure: (v) => this.room.batLure(v),
+      mouse: () => this.room.mouse,
+      carry: (at, yaw) => this.room.carryMouse(at, yaw),
       pinLure: (sec, at) => {
         this.room.pinLure(sec, at);
         // (a hand on the wand feels the paws have them)
@@ -98,6 +100,12 @@ export class PixelApp {
     };
     // the monstera knocked: its leaves rustle
     this.room.onRustle = (k) => this.audio.play('rustle', { gain: 0.08 + 0.18 * Math.min(1, k), pan: 0.5 });
+    // the toy mouse coming down on the floor: a soft pat of felt
+    this.room.onMouseLand = (k) => {
+      if (k < 0.05) return;
+      const pan = Math.max(-0.8, Math.min(0.8, this.room.mouse.p.clone().project(this.stage.camera).x * 0.8));
+      this.audio.play('step', { gain: 0.05 + 0.12 * k, rate: 1.5, pan });
+    };
     // the little bell on the wand's feathers; the feathers pulled out from under a paw (felt)
     this.room.onBell = (k) => this.audio.play('bell', { gain: 0.06 + 0.12 * k, pan: Math.max(-0.8, Math.min(0.8, this.room.lureAt().clone().project(this.stage.camera).x * 0.8)) });
     this.room.onLureFree = () => this.haptic.tap?.();
@@ -178,6 +186,18 @@ export class PixelApp {
         if (mess && this.hitThing(mess, x, y, 30)) {
           this.room.sweepMug();
           this.haptic.tap?.();
+          return;
+        }
+        // the toy mouse: tapped, thrown into the room (somewhere on the floor beyond, in an arc),
+        // and the cat may go after it
+        const M = this.room.mouse;
+        if (M.state === 'floor' && this.hitThing(M.obj, x, y, 24)) {
+          const to = this.room.keepClear(new THREE.Vector3(-0.45 + 1.0 * Math.random(), 0, this.room.spots.bed.z - 0.35 - 0.25 * Math.random()), 0.06);
+          const d = Math.hypot(to.x - M.p.x, to.z - M.p.z);
+          this.room.tossMouse(to.clone().sub(M.p), Math.min(2.6, d / 0.34));
+          this.audio.play('pencil', { gain: 0.04, rate: 0.7 });
+          this.haptic.tap?.();
+          this.avatar.fetchNow();
           return;
         }
         // the pencil the cat pushed off the sill: tapped, it goes back up
@@ -1059,6 +1079,12 @@ export class PixelApp {
 
   private hints(dt: number, touching: boolean) {
     const s = this.state;
+    // the first present: what it is, and that you can throw it for the cat
+    if (this.avatar.presenting && !s.hints.gift && !touching) {
+      s.hints.gift = 1;
+      this.hintUi.show('선물을 물어 왔어요. 장난감 쥐를 톡 치면 던져 줄 수 있어요', 6000);
+      return;
+    }
     // the first time it plays with its ball of wool: that you can roll it too
     if (this.avatar.doing === 'play' && !s.hints.yarnDrag && !touching && !this.toyFinger) {
       s.hints.yarnDrag = 1;

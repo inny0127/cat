@@ -12,9 +12,9 @@ await page.goto((process.env.REEL_BASE ?? 'http://localhost:5173/') + 'index.htm
 await page.waitForFunction(() => window.__pcat, null, { timeout: 180000 });
 const report = await page.evaluate(async (minutes) => {
   const app = window.__pcat;
-  const acts = ['wander', 'sun', 'warm', 'play', 'sill', 'box', 'wash', 'zoomies', 'stare', 'sneeze', 'rub', 'scratch', 'window', 'groom', 'yawn', 'stretch', 'bed', 'greet'];
+  const acts = ['wander', 'sun', 'warm', 'play', 'sill', 'box', 'wash', 'zoomies', 'stare', 'sneeze', 'rub', 'scratch', 'window', 'groom', 'yawn', 'stretch', 'bed', 'greet', 'gift'];
   const issues = [];
-  let t = 1, seen = {}, drag = null, drags = 0, errands = 0, laser = null, wand = null, laserUses = 0, wandUses = 0, returns = 0;
+  let t = 1, seen = {}, drag = null, drags = 0, errands = 0, laser = null, wand = null, laserUses = 0, wandUses = 0, returns = 0, tosses = 0;
   // a cat that wants to go somewhere and does not move
   let stillFor = 0, lastAct = '';
   const lastPos = { x: 0, z: 0 };
@@ -34,6 +34,12 @@ const report = await page.evaluate(async (minutes) => {
     if (i % 1100 === 700 && Math.random() < 0.6 && app.brain.mode !== 'away') { app.brain.leave(['eat', 'drink', 'litter'][Math.floor(Math.random() * 3)]); errands++; }
     if (app.brain.mode === 'away' && i % 400 === 0) app.state.awayUntil = Math.min(app.state.awayUntil, app.state.lastTick + 5000);
     if (i % 2000 === 1500) app.brain.toAwake('rest');
+    // now and then the toy mouse is thrown (a tap on it, as a finger would)
+    if (i % 700 === 350 && app.room.mouse.state === 'floor') {
+      const q = app.room.mouse.p.clone().project(app.stage.camera);
+      app.input.h.glassTap((q.x * 0.5 + 0.5) * innerWidth, (-q.y * 0.5 + 0.5) * innerHeight);
+      tosses++;
+    }
     // now and then the app is shut and opened again half an hour later (the cat says hello)
     if (i % 2600 === 1300 && app.brain.mode !== 'away') { app.onVisibility(false); app.state.lastTick -= 1800e3; app.onVisibility(true); returns++; }
     // now and then a finger takes the ball of wool and drags it about a few seconds
@@ -107,6 +113,9 @@ const report = await page.evaluate(async (minutes) => {
     if (![m.pos.x, m.pos.z, m.yaw].every(Number.isFinite)) { issues.push(`NaN at ${i}`); break; }
     if (c.perch !== null && !(app.avatar.act && (app.avatar.act.name === 'sill' || app.avatar.act.name === 'chase'))) issues.push(`perched without the sill act at ${i}`);
     if (c.liftHold !== null && !(app.avatar.act && ['sill', 'box', 'chase', 'tease', 'startle'].includes(app.avatar.act.name))) issues.push(`held in the air without the sill or box act at ${i}`);
+    if (app.room.mouse.state === 'mouth' && app.avatar.doing !== 'gift') issues.push(`the toy mouse left in a mouth at ${i}`);
+    const mp = app.room.mouse.p;
+    if (!Number.isFinite(mp.x + mp.y + mp.z) || mp.y < -0.01 || mp.y > 2) issues.push(`the toy mouse lost (${mp.x.toFixed(2)}, ${mp.y.toFixed(2)}, ${mp.z.toFixed(2)}) at ${i}`);
     if (Math.abs(m.pos.x) > 3 || Math.abs(m.pos.z) > 3) issues.push(`far away ${m.pos.x.toFixed(2)},${m.pos.z.toFixed(2)} at ${i}`);
     const moved = Math.hypot(m.pos.x - lastPos.x, m.pos.z - lastPos.z) > 0.002;
     lastPos.x = m.pos.x; lastPos.z = m.pos.z;
@@ -116,7 +125,7 @@ const report = await page.evaluate(async (minutes) => {
     if (i % 2400 === 0) await new Promise((r) => setTimeout(r, 0));
   }
   app.stage.render();
-  return { issues: issues.slice(0, 20), seen, drags, errands, laserUses, wandUses, returns, mug: app.room.mugUp ? 'up' : 'down', mode: app.brain.mode, doing: app.avatar.doing };
+  return { issues: issues.slice(0, 20), seen, drags, errands, laserUses, wandUses, returns, tosses, mug: app.room.mugUp ? 'up' : 'down', mode: app.brain.mode, doing: app.avatar.doing };
 }, minutes);
 console.log(JSON.stringify(report), 'errors:', errs.slice(0, 10));
 await b.close();

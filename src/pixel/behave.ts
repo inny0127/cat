@@ -102,6 +102,12 @@ export interface Ctx {
   hold: (lift: number | null) => void;
   /** a blink (slow: a cat's long, soft blink at someone it trusts) */
   blink: (slow: boolean) => void;
+  /** its toy mouse, if there is one (where, whether it is lying still, in its mouth, or in the
+   *  air), taken up in the mouth (where the mouth is now, which way it faces) or let fall (null);
+   *  and where its mouth is */
+  mouse: () => { p: THREE.Vector3; state: 'floor' | 'mouth' | 'air'; moving: boolean } | null;
+  carry: (at: THREE.Vector3 | null, yaw?: number) => void;
+  mouthAt: () => THREE.Vector3;
 }
 
 export interface SillSpot { launch: THREE.Vector3; seat: THREE.Vector3; land: THREE.Vector3; height: number }
@@ -750,6 +756,102 @@ export class Greet implements Act {
   }
   stop(c: Ctx) {
     c.m.layer = null;
+    c.m.stop();
+  }
+}
+
+/**
+ * A present: it goes to its toy mouse (at a run, if you have just thrown it: a game of fetch,
+ * with a pounce on it where it lands), takes it up in its mouth, and carries it to the glass, its
+ * head and its tail up; there it lets it fall at your feet, sits and looks at you and tells you
+ * so (a mrrow: look what I have brought you)
+ */
+export class Gift implements Act {
+  readonly name = 'gift';
+  phase: 'go' | 'pounce' | 'take' | 'bring' | 'drop' | 'show' = 'go';
+  private t = 0;
+  private aimIn = 0;
+  private readonly side = Math.random() < 0.5 ? -1 : 1;
+  constructor(private readonly fetch = false) {}
+  /** going for it, its eyes are on the mouse; bringing it and after, on you */
+  get ownGaze() {
+    return this.phase === 'go' || this.phase === 'pounce' || this.phase === 'take';
+  }
+  update(dt: number, c: Ctx) {
+    const m = c.m, M = c.mouse();
+    if (!M) return false;
+    this.t += dt;
+    // (where the mouth would be over it: the cat stands its head's reach off, facing it)
+    const toward = (p: THREE.Vector3) => Math.atan2(p.x - m.pos.x, p.z - m.pos.z);
+    if (this.phase === 'go') {
+      if (M.state === 'mouth') return false;
+      // (thrown: after it the moment it is down)
+      if (M.state === 'air') { m.setPosture('crouch'); m.lookAt(M.p, 1); return this.t < 4; }
+      const d = Math.hypot(M.p.x - m.pos.x, M.p.z - m.pos.z);
+      if ((this.aimIn -= dt) <= 0 || !m.goal) {
+        this.aimIn = 0.3;
+        const away = d > 1e-3 ? 0.15 / d : 0;
+        const stand = new THREE.Vector3(M.p.x + (m.pos.x - M.p.x) * away, 0, M.p.z + (m.pos.z - M.p.z) * away);
+        m.setPosture('stand');
+        m.walkTo(c.keepClear(stand, 0.08), this.fetch ? 0.7 : 0.26, toward(M.p), () => {
+          this.phase = this.fetch && !M.moving ? 'pounce' : 'take';
+          this.t = 0;
+        });
+      }
+      m.lookAt(M.p, 1);
+      return this.t < 25;
+    }
+    if (this.phase === 'pounce') {
+      // (a quick crouch and a hop onto it, the forepaws coming down on it)
+      m.setPosture('crouch');
+      const u = Math.min(1, this.t / 0.7), hop = Math.sin(Math.PI * Math.max(0, (u - 0.45) / 0.55));
+      m.layer = { pose: { hipY: 0.1 + 0.03 * hop, chestPitch: 0.25 * hop, neckPitch: -0.45, headPitch: -0.25, earFwd: 0.7, pupil: 0.9 }, w: 1 };
+      if (u >= 1) { m.layer = null; this.phase = 'take'; this.t = 0; }
+      return true;
+    }
+    if (this.phase === 'take') {
+      // the head down to it, the mouth open, and shut on it
+      m.stop();
+      m.setPosture('stand');
+      const down = ease(this.t / 0.35);
+      m.layer = { pose: { neckPitch: -1.0 * down, headPitch: -0.45 * down, jaw: this.t > 0.2 && this.t < 0.55 ? 0.55 : 0.05, earFwd: 0.4 }, w: 1 };
+      if (this.t > 0.55) c.carry(c.mouthAt(), m.yaw);
+      if (this.t > 0.85) { this.phase = 'bring'; this.t = 0; }
+      return true;
+    }
+    if (this.phase === 'bring') {
+      // to the glass with it, the head up and the tail up, proud of it
+      if (this.t <= dt) m.lookAt(null);
+      c.carry(c.mouthAt(), m.yaw);
+      m.setPosture('stand');
+      m.layer = { pose: { neckPitch: 0.1, headPitch: 0.08, jaw: 0.08, earFwd: 0.35 }, w: ease(this.t / 0.3) };
+      // (a step short of the glass: its mouth, and so the mouse, are well ahead of its feet)
+      if (!m.goal) m.walkTo(new THREE.Vector3(c.window.x, 0, c.window.z - 0.1), 0.26, -this.side * 0.42, () => { this.phase = 'drop'; this.t = 0; });
+      return this.t < 25;
+    }
+    if (this.phase === 'drop') {
+      // the head down, and the mouth opens: there it is, at your feet
+      m.setPosture('stand');
+      const down = ease(this.t / 0.4);
+      m.layer = { pose: { neckPitch: -0.65 * down, headPitch: -0.3 * down, jaw: this.t > 0.45 ? 0.4 : 0.08, earFwd: 0.3 }, w: 1 };
+      if (this.t > 0.45) c.carry(null, m.yaw);
+      else c.carry(c.mouthAt(), m.yaw);
+      if (this.t > 0.9) { m.layer = null; this.phase = 'show'; this.t = 0; }
+      return true;
+    }
+    // sat by it, looking up at you: a mrrow, and a slow blink
+    m.setPosture('sit');
+    m.layer = { pose: { earFwd: 0.35 }, w: ease(this.t / 0.4) };
+    if (this.t > 0.6 && this.t - dt <= 0.6) c.say(Math.random() < 0.6 ? 'meow' : 'trill');
+    if (this.t > 2.4 && this.t - dt <= 2.4) c.blink(true);
+    return this.t < 6;
+  }
+  stop(c: Ctx) {
+    // (whatever is in its mouth falls)
+    const M = c.mouse();
+    if (M?.state === 'mouth') c.carry(null);
+    c.m.layer = null;
+    c.m.lookAt(null);
     c.m.stop();
   }
 }
@@ -1760,6 +1862,11 @@ export function chooseAct(c: Ctx, atHome: boolean, posture: PoseName): Act | nul
     // the feathers of the wand lying on the floor: now and then a game with them on its own
     const lure = c.lure();
     if (atHome && lure && !lure.held && lure.p.y < 0.05) opts.push([0.3 * (0.4 + m.arousal) * (1 - m.sleepy), () => new Tease(true)]);
+    // fond of you, now and then it brings you its toy mouse (lying somewhere off from the glass)
+    const toy = c.mouse();
+    if (atHome && toy && toy.state === 'floor' && Math.hypot(toy.p.x - c.window.x, toy.p.z - c.window.z) > 0.3) {
+      opts.push([0.45 * Math.max(0, (m.trust - 0.35) / 0.65) * (0.5 + m.arousal) * (1 - m.sleepy), () => new Gift()]);
+    }
     const box = c.box();
     if (atHome && box) opts.push([0.7 * (1 - 0.4 * m.sleepy), () => new Box(box)]);
     // now and then, more at dusk and after dark, a mad few seconds
