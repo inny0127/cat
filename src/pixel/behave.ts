@@ -1441,7 +1441,8 @@ export class Sill implements Act {
         const P = c.pencil();
         const go = (step: typeof K.step, len: number) => { K.step = step; K.t = 0; K.len = len; };
         let paw: Record<string, unknown> = {};
-        if (!P) { m.layer = null; m.lookAt(null); this.next('look', 0.6); return true; }
+        // (called down, or wanted elsewhere: it leaves the pencil be, unless it is on its way down)
+        if (!P || (this.leaving && K.step !== 'watch')) { m.layer = null; m.lookAt(null); this.next('look', 0.6); return true; }
         if (K.step === 'eye') {
           m.lookAt(P.at, 1);
           if (K.t > K.len) go('you', rand(0.8, 1.5));

@@ -1380,6 +1380,16 @@ export class Room {
       flap(W, D * 0.3, 0, -D / 2, Math.PI);
       flap(D, W * 0.26, W / 2, 0, Math.PI / 2);
       flap(D, W * 0.26, -W / 2, 0, -Math.PI / 2);
+      // what a box that came in the post has on its side: a shipping label (on the part of its
+      // front you see: the box stands at the corner of the picture, its flaps over the rest)
+      const onFront = (w: number, h: number, x: number, y: number, m: THREE.Material, dz = 0.0008) => {
+        const q = new THREE.Mesh(new THREE.PlaneGeometry(w, h), m);
+        q.position.set(x, y, D / 2 + t / 2 + dz);
+        box.add(q);
+      };
+      onFront(0.07, 0.046, 0.075, H * 0.45, this.mat('paper'));
+      const ink = this.mat('ink');
+      for (const [w, y] of [[0.05, 0.015], [0.038, 0.004], [0.046, -0.007]] as [number, number][]) onFront(w, 0.0035, 0.075 - (0.05 - w) / 2, H * 0.45 + y, ink, 0.0016);
       box.position.set(bx - 0.31, 0, bz + 0.35);
       box.rotation.y = 0.35;
       this.group.add(box);
