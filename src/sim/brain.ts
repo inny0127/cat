@@ -55,6 +55,8 @@ const VOICE_LEN: Record<string, number> = { trill: 0.29, meow: 0.65, meowSoft: 0
  * The cat's mind while you're looking: moods that rise and fade, a body that wants food and
  * sleep, and a relationship with you that every touch nudges.
  */
+const asleepNow = (m: string) => m === 'sleep' || m === 'doze';
+
 export class Brain {
   mode: Mode = 'sleep';
   private modeT = 0;
@@ -87,6 +89,8 @@ export class Brain {
   private angryUntil = 0;
   private askIn = rand(3, 8);
   private peekEye = 0;
+  /** asleep under a hand it trusts, not woken by it (so it purrs in its sleep) */
+  private drowsy = false;
   private glance: { x: number; y: number; until: number } | null = null;
   private attention: { x: number; y: number; until: number } | null = null;
   private errandWait = 0;
@@ -202,7 +206,18 @@ export class Brain {
     const zone = this.senses.zoneAt(c.px, c.py);
     this.lastTouch = this.time;
     this.touchCount++;
-    if (this.mode === 'sleep' || this.mode === 'doze') {
+    if ((this.mode === 'sleep' || this.mode === 'doze') && this.s.trust > 0.65 && this.irritation < 0.2
+      && zone !== 'tail' && zone !== 'paw' && zone !== 'belly' && zone !== 'none') {
+      // so sure of the hand that it is not worth waking for: an ear turned to it, an eye opened a
+      // slit and shut again, and it sleeps on under it, more lightly, and before long purrs in its
+      // sleep (its tail, its paws and its belly it keeps to itself, asleep or not)
+      this.anim.twitchEar('both', 0.35);
+      this.setMode('doze');
+      this.sleepDepth = Math.min(this.sleepDepth, 0.56);
+      this.drowsy = true;
+      this.peekEye = 0.22;
+      this.later(rand(1.1, 1.8), () => { if (this.mode === 'doze' || this.mode === 'sleep') this.peekEye = 0; });
+    } else if (this.mode === 'sleep' || this.mode === 'doze') {
       const deep = this.sleepDepth;
       // a hand out of nowhere: startle, harder when deeply asleep or not trusting
       const startle = deep * (0.35 + 0.45 * clamp(0.5 - this.s.trust));
@@ -797,6 +812,7 @@ export class Brain {
 
   private toAwake(m: 'rest' | 'alert', quiet = false) {
     this.sleepDepth = 0;
+    this.drowsy = false;
     this.setMode(m);
     this.wantSleepIn = rand(35, 110);
     if (!quiet) this.anim.twitchEar('both', 0.5);
@@ -821,8 +837,11 @@ export class Brain {
     const sick = clamp((THRESH.sick - s.health) / THRESH.sick * 1.6);
     const night = nightness(Date.now());
 
-    // purr: builds slowly, lingers after the hand lifts
-    const wantPurr = (m === 'enjoy' || (m === 'rest' && this.pleasure > 0.3)) ? smoothstep(0.28, 0.75, this.pleasure) * (1 - sick * 0.5) : 0;
+    // purr: builds slowly, lingers after the hand lifts (asleep under a hand it trusts, a softer
+    // purr in its sleep; the hand long gone, that is over)
+    if (this.drowsy && !touching && this.time - this.lastTouch > 25) this.drowsy = false;
+    const sleepPurr = asleepNow(m) && this.drowsy ? 0.75 * smoothstep(0.12, 0.6, this.pleasure) : 0;
+    const wantPurr = Math.max(sleepPurr, (m === 'enjoy' || (m === 'rest' && this.pleasure > 0.3)) ? smoothstep(0.28, 0.75, this.pleasure) : 0) * (1 - sick * 0.5);
     this.purr += (wantPurr - this.purr) * Math.min(1, dt * (wantPurr > this.purr ? 0.5 : 0.35));
     if (this.purr > 0.3) this.hadPurred = true;
     a.purr = this.purr;

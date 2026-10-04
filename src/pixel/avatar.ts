@@ -970,7 +970,9 @@ export class PixelAvatar implements Avatar {
   /** the brain's wish for a posture right now */
   private wanted(): PoseName {
     if (!this.alive) return 'side';
-    if (this.sleep > 0.75) {
+    // (curled up deep asleep, and a hand it trusts on it: it sleeps on more lightly, curled as it
+    // was, not up into a loaf)
+    if (this.sleep > 0.75 || (this.deep && this.sleep >= 0.5)) {
       if (!this.deep) {
         this.deep = true;
         // (now and then, a cat quite sure of you, belly up)
