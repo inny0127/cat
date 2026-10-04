@@ -397,9 +397,36 @@ export class Stretch implements Act {
   private t = 0;
   private readonly claws = Math.random() < 0.45;
   private pulls = 0;
+  /** after the forelegs, now and then the hind legs: up on all fours, one hind leg and then the
+   *  other pushed out straight behind, the toes spread, a moment each */
+  private hind = Math.random() < 0.6;
+  private hindAsked = false;
   constructor(private readonly then: PoseName) {}
   update(dt: number, c: Ctx) {
     this.t += dt;
+    // (only side on to you: facing you, its hind legs would be out of sight behind it, and it would
+    // seem only to stand there)
+    if (this.t >= 3.6 && !this.hindAsked) {
+      this.hindAsked = true;
+      if (Math.abs(Math.sin(c.m.yaw)) < 0.6) this.hind = false;
+    }
+    if (this.hind && this.t >= 3.6 && this.t < 6.4) {
+      c.m.setPosture('stand');
+      const u = this.t - 3.9, leg = u < 1.25 ? 'LH' : 'RH', v = u < 1.25 ? u : u - 1.25;
+      // (each leg out and back over a second and a bit, a little tremble at full stretch)
+      const w = u < 0 ? 0 : ease(v / 0.4) * (1 - ease((v - 0.8) / 0.35));
+      const tr = 0.004 * Math.sin(this.t * 40) * ease((v - 0.35) / 0.1) * (1 - ease((v - 0.75) / 0.1));
+      c.m.layer = {
+        pose: { [leg]: { planted: 0, x: 0.035, z: -0.34 + tr, y: 0.05, flex: -0.5 }, hipY: 0.186, hipPitch: -0.08, neckPitch: 0.3, headPitch: 0, eyeOpen: 0.5, squint: 0.4 },
+        w,
+      };
+      return true;
+    }
+    if (this.hind && this.t >= 6.4) {
+      c.m.layer = null;
+      c.m.setPosture(this.then);
+      return this.t < 7.6;
+    }
     c.m.setPosture(this.t < 3.6 ? 'stretch' : this.then);
     if (this.claws && this.t > 1.4 && this.t < 3.3) {
       // each pull: the paw put out a little further, then drawn back along the floor, claws in
