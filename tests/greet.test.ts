@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import * as THREE from 'three';
 import { Motor } from '../src/cat3d/motor';
 import { NEUTRAL } from '../src/cat3d/mood';
-import { Gift, Greet, type Ctx } from '../src/pixel/behave';
+import { Beg, Gift, Greet, type Ctx } from '../src/pixel/behave';
 
 /** a cat (its motor) lying in its bed, with only what a hello needs of a room */
 function room() {
@@ -114,5 +114,43 @@ describe('a present', () => {
     }
     expect(seen.has('pounce')).toBe(true);
     expect(fastest).toBeGreaterThan(0.45);
+  });
+});
+
+describe('asking at the empty bowl', () => {
+  function withBowl() {
+    const r = room();
+    const said: string[] = [];
+    Object.assign(r.c, { say: (k: string) => said.push(k), keepClear: (p: THREE.Vector3) => p });
+    return { ...r, said };
+  }
+
+  it('over to the bowl, a sniff in it, round to you and sat by it, and a plaintive meow', () => {
+    const { c, m, said } = withBowl();
+    m.snap('loaf');
+    const bowl = new THREE.Vector3(-0.3, 0, -0.45);
+    const act = new Beg(bowl, true, () => true), seen = new Set<string>();
+    let going = true, t = 0;
+    for (; t < 40 && going; t += 0.02) {
+      going = act.update(0.02, c);
+      m.update(0.02);
+      seen.add(act.phase);
+    }
+    expect([...seen]).toEqual(expect.arrayContaining(['go', 'sniff', 'turn', 'ask']));
+    // (sat beside the bowl, near it, facing you: the viewer is toward +z)
+    expect(Math.hypot(m.pos.x - bowl.x, m.pos.z - bowl.z)).toBeLessThan(0.35);
+    expect(Math.cos(m.yaw)).toBeGreaterThan(0.7);
+    expect(m.targetPosture).toBe('sit');
+    expect(said).toEqual(['meowPlead']);
+    expect(going).toBe(false);
+  });
+
+  it('fed meanwhile, it stops at once', () => {
+    const { c, m } = withBowl();
+    let empty = true;
+    const act = new Beg(new THREE.Vector3(-0.3, 0, -0.45), false, () => empty);
+    for (let t = 0; t < 1; t += 0.02) { act.update(0.02, c); m.update(0.02); }
+    empty = false;
+    expect(act.update(0.02, c)).toBe(false);
   });
 });

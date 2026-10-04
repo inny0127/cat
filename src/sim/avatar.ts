@@ -54,6 +54,9 @@ export interface Avatar {
   /** you are back after a while away and it is awake: hello, if the body can say it (up to the
    *  glass, tail up; glad: how glad, 0 .. 1) */
   greet?(glad: number): void;
+  /** hungry or thirsty with the bowl empty: it asks you at the bowl, if the body can show it (true
+   *  if it does; empty: whether the bowl is still empty) */
+  beg?(what: 'food' | 'water', urgent: boolean, empty: () => boolean): boolean;
   /** the hands gone, it puts its coat to rights where they were, if the body can show it */
   tidy?(where: 'face' | 'flank' | 'chest'): void;
   /** leave: dir -1 left, 1 right; calm walks off rather than bolting; reason: the errand, if one

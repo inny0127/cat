@@ -4,7 +4,7 @@ import { POSES, SIDE_TURN, type Leg, type PoseLayer, type PoseName } from '../ca
 import { NEUTRAL, type Mood } from '../cat3d/mood';
 import type { Avatar } from '../sim/avatar';
 import type { EarMood, TailMood } from '../rig/animator';
-import { chooseAct, groomChest, groomFlank, knead, restingPose, sneeze, toBed, toWindow, wander, warmUp, washFace, yawn, type Act, type Ctx, sunbathe, Play, Sill, Hunt, Box, Zoomies, Walk, Stare, Rub, scratchEar, wakeUp, stretchSideOn, Greet, Gift, Snub, type SillSpot } from './behave';
+import { chooseAct, groomChest, groomFlank, knead, restingPose, sneeze, toBed, toWindow, wander, warmUp, washFace, yawn, type Act, type Ctx, sunbathe, Play, Sill, Hunt, Box, Zoomies, Walk, Stare, Rub, scratchEar, wakeUp, stretchSideOn, Greet, Gift, Snub, Beg, type SillSpot } from './behave';
 import { Chase, Startle, type LaserDot } from './chase';
 import { Tease, type Lure } from './tease';
 
@@ -243,6 +243,18 @@ export class PixelAvatar implements Avatar {
     this.act = far && glad > 0.7 && Math.random() < 0.25 ? new Gift() : new Greet(glad);
   }
 
+  /** hungry or thirsty, the bowl empty: it goes and asks you at the bowl (true if it does: awake,
+   *  its own master, not up on something or in a game or on its way somewhere) */
+  beg(what: 'food' | 'water', urgent: boolean, empty: () => boolean) {
+    if (!this.alive || this.isHidden || this.sleep > 0.3 || this.errand || this.trip || this.perched || !this.spots) return false;
+    if (this.mode !== 'rest' && this.mode !== 'alert') return false;
+    if (this.hands.length || this.act instanceof Chase || this.act instanceof Tease || this.act instanceof Startle || this.act instanceof Play
+      || this.act instanceof Hunt || this.act instanceof Greet || this.act instanceof Gift || this.act instanceof Beg) return false;
+    this.stopAct();
+    this.act = new Beg((what === 'food' ? this.spots.food : this.spots.water).clone(), urgent, empty);
+    return true;
+  }
+
   /** where its mouth is (between the lips, under the nose), in the room */
   private readonly mouthW = new THREE.Vector3();
   mouthAt() {
@@ -366,7 +378,7 @@ export class PixelAvatar implements Avatar {
       sound: (name, gain) => this.outside?.sound(name, gain),
       say: (kind) => {
         this.outside?.sound(kind, 0.55);
-        this.vocalize(kind, { trill: 0.29, meow: 0.65, meowSoft: 0.44, chirp: 0.11 }[kind], 0);
+        this.vocalize(kind, { trill: 0.29, meow: 0.65, meowSoft: 0.44, meowPlead: 0.92, chirp: 0.11 }[kind], 0);
       },
       chirp: () => this.outside?.chirp(),
       bug: () => this.outside?.bug?.() ?? null,

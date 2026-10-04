@@ -56,7 +56,7 @@ export interface Ctx {
   /** a sound of the cat's own (a soft thump landing from a jump) */
   sound: (name: string, gain: number) => void;
   /** a word from the cat: the sound, and the mouth saying it */
-  say: (kind: 'trill' | 'meow' | 'meowSoft' | 'chirp') => void;
+  say: (kind: 'trill' | 'meow' | 'meowSoft' | 'meowPlead' | 'chirp') => void;
   /** how hard it is raining (0 .. 1): a grey day is for watching it from the sill */
   rain: number;
   /** what is falling is snow */
@@ -815,6 +815,77 @@ export class Snub implements Act {
     // over it: back to itself
     if (c.mode !== 'annoyed' && c.mode !== 'angry' && this.t > 1.5) return false;
     return this.t < 45;
+  }
+  stop(c: Ctx) {
+    c.m.layer = null;
+    c.m.lookAt(null);
+  }
+}
+
+/**
+ * Hungry (or thirsty) and the bowl empty: over to it, a sniff down into it, nothing there; then
+ * round to you, sat by it looking up at you, and a meow, a plaintive one if it has waited long, as
+ * a cat asks. Fed meanwhile, it stops at once (and goes to eat of its own accord).
+ */
+export class Beg implements Act {
+  readonly name = 'beg';
+  phase: 'go' | 'sniff' | 'turn' | 'ask' = 'go';
+  private t = 0;
+  private set = false;
+  private said = false;
+  private readonly stay = rand(7, 11);
+  constructor(private readonly bowl: THREE.Vector3, private readonly urgent: boolean, private readonly empty: () => boolean) {}
+  /** on the bowl till it has turned round to you */
+  get ownGaze() {
+    return this.phase !== 'ask';
+  }
+  update(dt: number, c: Ctx) {
+    const m = c.m;
+    this.t += dt;
+    if (!this.empty()) return false;
+    if (this.phase === 'go') {
+      if (!this.set) {
+        this.set = true;
+        // (stopped with its mouth over the bowl, as when it eats)
+        const face = Math.atan2(this.bowl.x - m.pos.x, this.bowl.z - m.pos.z);
+        m.setPosture('stand');
+        m.walkTo(new THREE.Vector3(this.bowl.x - Math.sin(face) * 0.2, 0, this.bowl.z - Math.cos(face) * 0.2), 0.32, face, () => {
+          this.phase = 'sniff';
+          this.t = 0;
+        });
+      }
+      m.lookAt(this.bowl, 1);
+      return this.t < 14;
+    }
+    if (this.phase === 'sniff') {
+      // the head down into it a moment, sniffing: nothing
+      m.setPosture('stand');
+      m.lookAt(null);
+      m.layer = { pose: { neckPitch: -0.85, headPitch: -0.25, earFwd: 0.2 }, w: hump(this.t, 1.7, 0.35) };
+      if (this.t > 1.8) { this.phase = 'turn'; this.t = 0; this.set = false; m.layer = null; }
+      return true;
+    }
+    if (this.phase === 'turn') {
+      // a step aside, toward the middle of the room, and round to you: sat beside the bowl, so
+      // that you see it empty there
+      if (!this.set) {
+        this.set = true;
+        const v = c.viewer();
+        const side = this.bowl.x < 0 ? 1 : -1;
+        const at = c.keepClear(new THREE.Vector3(this.bowl.x + side * 0.15, 0, this.bowl.z + 0.1), 0.06);
+        m.setPosture('stand');
+        m.walkTo(at, 0.2, Math.atan2(v.x - at.x, v.z - at.z), () => { this.phase = 'ask'; this.t = 0; });
+      }
+      return this.t < 6;
+    }
+    // sat by it looking up at you (the eyes are on you of themselves), the ears to you; the meow
+    m.setPosture('sit');
+    m.layer = { pose: { earFwd: 0.35 }, w: ease(this.t / 0.4) };
+    if (!this.said && this.t > 0.7) {
+      this.said = true;
+      c.say(this.urgent ? 'meowPlead' : 'meow');
+    }
+    return this.t < this.stay;
   }
   stop(c: Ctx) {
     c.m.layer = null;

@@ -640,7 +640,12 @@ export class Brain {
       if (this.askIn <= 0) {
         const urgent = s.hunger > 0.85 || s.thirst > 0.85;
         this.askIn = urgent ? rand(10, 20) : rand(18, 40);
-        if (n.food || n.water) this.say(urgent ? 'meowPlead' : 'meow');
+        // (at the bowl itself, as often as it can: over to it, a sniff, and sat by it asking you;
+        // the meow is its, there)
+        const what = n.food ? 'food' : 'water';
+        const empty = () => (what === 'food' ? s.food : s.water) < 0.05;
+        if ((n.food || n.water) && chance(0.7) && this.anim.beg?.(what, urgent, empty)) this.askIn += 8;
+        else if (n.food || n.water) this.say(urgent ? 'meowPlead' : 'meow');
         else if (chance(0.5)) this.say('meowSoft');
         this.attention = null;
         this.showNeedHint(n);
