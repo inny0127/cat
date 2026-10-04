@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { Cat3D } from '../cat3d/cat';
-import { POSES, type PoseLayer, type PoseName } from '../cat3d/pose';
+import { POSES, type Leg, type PoseLayer, type PoseName } from '../cat3d/pose';
 import { NEUTRAL, type Mood } from '../cat3d/mood';
 import type { Avatar } from '../sim/avatar';
 import type { EarMood, TailMood } from '../rig/animator';
@@ -580,10 +580,17 @@ export class PixelAvatar implements Avatar {
     }
     const t = (this.stretchT += dt), P = POSES[posture];
     const tr = 0.005 * Math.sin(t * 38) * ease((t - 1.1) / 0.3) * (1 - ease((t - 2.2) / 0.25));
+    // flat out on its side the paws go straight ahead and back; curled up, the forepaws reach out
+    // past its nose and the hind paws out behind its back (the upper legs a little the further)
+    const [uf, lf, uh, lh] = posture === 'curlL' ? ['RF', 'LF', 'RH', 'LH'] as const : ['LF', 'RF', 'LH', 'RH'] as const;
+    const reach = (leg: Leg, dx: number, dz: number, dy = 0) => ({ x: P[leg].x + dx, y: P[leg].y + dy, z: P[leg].z + dz, flex: 0 });
+    const c = CURLED(posture);
     m.layer = {
       pose: {
-        LF: { z: P.LF.z + 0.07 + tr, y: P.LF.y + 0.008, flex: 0 }, RF: { z: P.RF.z + 0.055 + tr, flex: 0 },
-        LH: { z: P.LH.z - 0.06, flex: 0 }, RH: { z: P.RH.z - 0.045, flex: 0 },
+        [uf]: c ? reach(uf, 0.05, -0.05 + tr, 0.005) : reach(uf, 0, 0.07 + tr, 0.008),
+        [lf]: c ? reach(lf, -0.045, -0.045 + tr) : reach(lf, 0, 0.055 + tr),
+        [uh]: c ? reach(uh, 0.015, 0.07) : reach(uh, 0, -0.06),
+        [lh]: c ? reach(lh, -0.012, 0.06) : reach(lh, 0, -0.045),
         // (the trunk as it lies: lying on its side, bending the back or the neck would lift it off
         // the bed)
         headPitch: P.headPitch + 0.15, tailCurl: P.tailCurl * 0.5,
@@ -634,7 +641,7 @@ export class PixelAvatar implements Avatar {
     const e = ease(s.u), A = POSES[m.posture === 'curlL' ? 'curlL' : 'curl'][paw];
     const L = this.shadeLayer;
     Object.assign(L.pose[paw] as object, {
-      x: A.x + (0.28 - A.x) * e, y: A.y + (0.06 - A.y) * e + 0.045 * Math.sin(Math.PI * e), z: A.z + (-0.08 - A.z) * e,
+      x: A.x + (0.144 - A.x) * e, y: A.y + (0.089 - A.y) * e + 0.04 * Math.sin(Math.PI * e), z: A.z + (-0.224 - A.z) * e,
       flex: A.flex + (1 - A.flex) * e,
     });
     m.layer = L;

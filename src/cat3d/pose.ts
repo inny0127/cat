@@ -81,15 +81,18 @@ function mirror(p: Pose): Pose {
   return q;
 }
 
-/** curled up asleep on the right side, nose to tail */
+/** curled up asleep on the right side, nose to tail: the back bent right round, so the head
+ *  comes back past the hind paws, the head itself turned up off its side so the sleeping face
+ *  shows, the forepaws tucked in by it and the tail laid round the front of it all to the nose
+ *  (lying on its side, the tail's lift is what sweeps it along the floor, round the belly) */
 const CURL = make({
   hipY: 0.064, hipZ: -0.12, hipPitch: 0.0, hipRoll: 1.38, hipYaw: 0.4,
-  lumbarPitch: -0.75, lumbarYaw: 0.0, chestPitch: -0.55, chestRoll: 0.05,
-  neckPitch: -0.55, neckYaw: 0.15, headPitch: -0.45, headRoll: -0.25,
-  LF: foot(0.075, 0.032, 0.05, 0, 0, 0.8), RF: foot(-0.065, 0.013, 0.03, 0, 0, 0.8),
+  lumbarPitch: -1.2, lumbarYaw: 0.0, chestPitch: -1.0, chestRoll: 0.05,
+  neckPitch: -0.9, neckYaw: 0.15, headPitch: -0.25, headRoll: -1.0,
+  LF: foot(0.17, 0.035, -0.12, 0, 0, 0.8), RF: foot(-0.15, 0.013, -0.13, 0, 0, 0.8),
   LH: foot(0.085, 0.034, -0.07, 0, 0, 0.5), RH: foot(-0.07, 0.013, -0.08, 0, 0, 0.5),
   pastern: 0.5, hindFlat: 0.6,
-  tailLift: -0.1, tailSide: -1.1, tailCurve: 0.1, tailCurl: -1.7, tailSag: 1,
+  tailLift: -1.9, tailSide: 0, tailCurve: -2.8, tailCurl: 0.8, tailSag: 1,
   eyeOpen: 0, squint: 0, earFwd: -0.15, earOut: 0.2, breath: 0.8,
 });
 
@@ -188,6 +191,13 @@ export const POSES = {
 };
 
 export type PoseName = keyof typeof POSES;
+
+/**
+ * How far round from face on a posture lies in its bed, so that the side of it you see is the one
+ * worth seeing: curled up, turned a little, it shows the round of its back, the face and the tail
+ * wrapped under the chin, not the inside of the curl.
+ */
+export const SHOW_TURN: Partial<Record<PoseName, number>> = { curl: -0.35, curlL: 0.35 };
 
 /** a pose laid over another: any channel, and any of a paw's numbers */
 export type PoseLayer = { [K in keyof Pose]?: Pose[K] extends Foot ? Partial<Foot> : number };

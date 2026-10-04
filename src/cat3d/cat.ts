@@ -10,7 +10,7 @@ import { Body } from './body';
 import { Tail } from './tail';
 import { Stepper } from './stepper';
 import { Motor } from './motor';
-import { LEGS, POSES, type Leg, type PoseName } from './pose';
+import { LEGS, POSES, SHOW_TURN, type Leg, type PoseName } from './pose';
 
 export interface CatOptions {
   shells?: number;
@@ -205,7 +205,8 @@ export class Cat3D {
    * Where the body's middle lies in a posture, and which way the face points, in the cat's own
    * frame (x to its left, z ahead of where it stood; the face as a heading, 0 straight ahead):
    * curled up, a cat lies well off to one side of where it stood, with its nose back by its tail.
-   * Measured once, by holding each posture a moment.
+   * Measured once, by holding each posture a moment. (The heading has the posture's SHOW_TURN in
+   * it: put the "face" toward you and it lies with its best side to you.)
    */
   footprint(posture: PoseName) {
     if (!this.prints.size) {
@@ -221,7 +222,7 @@ export class Cat3D {
         mesh.computeBoundingBox();
         mesh.boundingBox!.clone().applyMatrix4(mesh.matrixWorld).getCenter(c);
         f.set(0, 0, 1).applyQuaternion(k.wq[head]);
-        this.prints.set(name, { x: c.x, z: c.z, face: Math.atan2(f.x, f.z) });
+        this.prints.set(name, { x: c.x, z: c.z, face: Math.atan2(f.x, f.z) + (SHOW_TURN[name] ?? 0) });
       }
       this.place(x, z, yaw);
       this.snap(keep);
