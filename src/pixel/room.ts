@@ -1411,7 +1411,7 @@ export class Room {
       }
       const hb = shadowy(new THREE.Mesh(new THREE.TorusGeometry(0.018, 0.006, 6, 12, Math.PI * 1.3), china));
       bits.add(hb);
-      const pool = new THREE.Mesh(new THREE.CircleGeometry(1, 20).rotateX(-Math.PI / 2), this.mat('brown', { tone: -0.05 }));
+      const pool = new THREE.Mesh(new THREE.CircleGeometry(1, 20).rotateX(-Math.PI / 2), this.mat('brown', { tone: 0.05 }));
       {
         // (not a circle: a spill runs out in lobes)
         const pp = pool.geometry.attributes.position as THREE.BufferAttribute;
@@ -1422,6 +1422,11 @@ export class Room {
         }
       }
       pool.receiveShadow = true;
+      // (wet: a glint of the light from the window on it)
+      const glint = new THREE.Mesh(new THREE.CircleGeometry(1, 10).rotateX(-Math.PI / 2), this.mat('paint', { tone: -0.12 }));
+      glint.scale.set(0.32, 1, 0.16);
+      glint.position.set(-0.25, 0.0012, -0.3);
+      pool.add(glint);
       this.group.add(pool);
       pool.visible = false;
       this.group.add(bits);
@@ -2046,7 +2051,8 @@ export class Room {
       // (feathers are mostly air: they fall slowly and the air soon stops them; on the floor they
       // drag)
       const v = W.pos.clone().sub(W.prev);
-      v.multiplyScalar(onFloor ? 0.8 : 0.988);
+      // (sent sliding, feathers skid a little way over the boards before they stop)
+      v.multiplyScalar(onFloor ? (v.length() / h > 0.4 ? 0.96 : 0.8) : 0.988);
       if (onFloor) v.y = Math.max(0, v.y);
       W.prev.copy(W.pos);
       W.pos.add(v);
@@ -2270,7 +2276,7 @@ export class Room {
         C.pool.visible = true;
         C.pool.position.set(C.at.x + C.dir.x * 0.03, 0.0015, C.at.z + C.dir.z * 0.03);
         C.pool.rotation.y = Math.atan2(C.dir.x, C.dir.z);
-        C.pool.scale.setScalar(0.005);
+        C.pool.scale.set(0.005, 1, 0.005);
         C.spill = 0;
         this.onMug?.('crash', C.at.clone(), hit);
       }
@@ -2290,7 +2296,7 @@ export class Room {
       });
       C.spill = Math.min(1, C.spill + dt / 1.6);
       const r = 0.075 * Math.sqrt(1 - (1 - C.spill) * (1 - C.spill));
-      C.pool.scale.setScalar(Math.max(0.005, r));
+      C.pool.scale.set(Math.max(0.005, r), 1, Math.max(0.005, r));
     } else if (C.state === 'gone') {
       if ((C.back -= dt) <= 0) {
         // a fresh cup of tea on the books

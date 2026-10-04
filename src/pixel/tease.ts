@@ -35,7 +35,13 @@ export class Tease implements Act {
   private dur = 0;
   /** how long it has played, and how long it will before it has had enough */
   private total = 0;
-  private readonly patience = rand(70, 150);
+  private readonly patience: number;
+
+  /** alone: nobody has the wand, it is lying on the floor, and the cat has gone to play with the
+   *  feathers by itself (a pounce or two, a bat to send them sliding, a kick, and done) */
+  constructor(readonly alone = false) {
+    this.patience = alone ? rand(10, 22) : rand(70, 150);
+  }
   /** how fast the feathers go (smoothed), and how long since they last moved */
   private ls = 0;
   private still = 0;
@@ -94,7 +100,7 @@ export class Tease implements Act {
     if (this.phase !== 'sit') m.lookAt(L.p, 1);
     const keen: PoseLayer = { earFwd: 0.95, pupil: 1, eyeOpen: 1, whisker: 0.9, tailCurl: 0.7 * Math.sin(this.total * 9) };
     // had enough (not in the middle of a spring): off to sit and wash
-    if ((this.tired || (!L.held && this.still > 4)) && (this.phase === 'watch' || this.phase === 'go')) {
+    if ((this.tired || (!L.held && !this.alone && this.still > 4)) && (this.phase === 'watch' || this.phase === 'go')) {
       m.stop();
       m.layer = null;
       m.lookAt(null);
@@ -115,7 +121,7 @@ export class Tease implements Act {
         const L2 = this.local(c, L.p);
         if (h < 0.09) {
           // on the floor: after it, and pounced on
-          if (dist > 0.42) { if (this.ls > 0.12 || this.still < 2) this.next('go'); }
+          if (dist > 0.42) { if (this.ls > 0.12 || this.still < 2 || this.alone) this.next('go'); }
           else if (this.ls > 0.08 || this.t > 1.2) this.next('wiggle', this.ls > 0.3 ? rand(0.15, 0.35) : rand(0.4, 0.9));
         } else if (dist > 0.3) {
           // in the air, out of reach: closer (under it)
@@ -197,7 +203,14 @@ export class Tease implements Act {
           },
           w: Math.min(1, this.t / 0.12),
         };
-        if (!L.pinned) { m.layer = null; this.next('watch'); this.calm = rand(0.05, 0.25); }
+        if (!L.pinned) {
+          m.layer = null;
+          // (on its own, done with holding them: a bat with a paw sends them sliding off, to be
+          // after again)
+          if (this.alone && !L.held) c.batLure(this.fwd.clone().multiplyScalar(rand(0.6, 1)).add(new THREE.Vector3(Math.cos(m.yaw), 0, -Math.sin(m.yaw)).multiplyScalar(rand(-0.8, 0.8))));
+          this.next('watch');
+          this.calm = rand(0.05, 0.25);
+        }
         // (held a moment: now and then over onto its side with them, for a good kick)
         else if (this.t > 0.7 && !this.kicked && Math.random() < dt * 1.2) {
           this.kicked = true;

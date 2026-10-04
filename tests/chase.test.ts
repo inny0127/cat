@@ -136,6 +136,17 @@ describe('the feather wand', () => {
     expect(seen.has('pin')).toBe(true);
   });
 
+  it('lying on the floor, nobody playing: gone to, pounced on, and in a while left', () => {
+    const { c, m, world } = room();
+    // (the feathers lie where they are: a paw on them lets go of them at once)
+    world.lure = { p: new THREE.Vector3(0.1, 0.012, 0.7), v: new THREE.Vector3(), held: false, pinned: false };
+    const act = new Tease(true), seen = new Set<string>();
+    const ended = !run(act, c, m, 40, seen);
+    expect(seen.has('go')).toBe(true);
+    expect(seen.has('pounce')).toBe(true);
+    expect(ended).toBe(true);
+  });
+
   it('held up high over it: leapt at', () => {
     const { c, m, world } = room();
     world.lure = lure(0, 0.6, 0.15);

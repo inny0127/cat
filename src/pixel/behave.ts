@@ -3,7 +3,7 @@ import type { Motor } from '../cat3d/motor';
 import type { Mood } from '../cat3d/mood';
 import { POSES, type PoseLayer, type PoseName } from '../cat3d/pose';
 import type { LaserDot } from './chase';
-import type { Lure } from './tease';
+import { Tease, type Lure } from './tease';
 
 /**
  * What a cat does by itself between the brain's big decisions (sleep, errands, being stroked): a
@@ -1615,6 +1615,9 @@ export function chooseAct(c: Ctx, atHome: boolean, posture: PoseName): Act | nul
     if (atHome && c.mode === 'rest') opts.push([0.7 + 0.8 * m.sleepy, () => sunbathe(c)]);
     if (atHome && c.mode === 'rest' && c.warm()) opts.push([0.8 + 0.8 * m.sleepy, () => warmUp(c)]);
     if (atHome && c.yarn()) opts.push([0.6 * (0.4 + m.arousal) * (1 - m.sleepy) * (c.mode === 'rest' ? 1 : 0.4), () => new Play()]);
+    // the feathers of the wand lying on the floor: now and then a game with them on its own
+    const lure = c.lure();
+    if (atHome && lure && !lure.held && lure.p.y < 0.05) opts.push([0.3 * (0.4 + m.arousal) * (1 - m.sleepy), () => new Tease(true)]);
     const box = c.box();
     if (atHome && box) opts.push([0.7 * (1 - 0.4 * m.sleepy), () => new Box(box)]);
     // now and then, more at dusk and after dark, a mad few seconds
