@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { POSES, blendPose, clonePose, copyPose, GROUPS, type Foot, type Group, type Pose, type PoseLayer, type PoseName } from './pose';
+import { POSES, blendPose, clonePose, copyPose, GROUPS, type Foot, type Group, type Leg, type Pose, type PoseLayer, type PoseName } from './pose';
 import { Wobble, noise1, clamp } from '../util/math';
 import { NEUTRAL, bodyFor, eyesFor, type BodyLook, type Mood } from './mood';
 import type { GaitSignals } from './stepper';
@@ -317,6 +317,18 @@ export class Motor {
     if (Math.random() < 0.4) this.flickTail(0.45 + 0.3 * Math.random());
   }
 
+  /** running in its sleep: all four paws paddling a few seconds, the whiskers and the tail tip
+   *  going, building and dying away (how far through, how long) */
+  private dreamRunT = -1;
+  private dreamRunDur = 0;
+  dreamRun(dur = 2.5 + Math.random() * 2) {
+    this.dreamRunT = 0;
+    this.dreamRunDur = dur;
+  }
+  get dreamRunning() {
+    return this.dreamRunT >= 0;
+  }
+
   /** startle: the head jerks up */
   jolt(strength = 1) {
     this.joltW.kick((1.2 + Math.random() * 0.6) * strength);
@@ -596,6 +608,26 @@ export class Motor {
       paw.flex = Math.max(0, Math.min(1, paw.flex + 0.5 * dw));
       paw.z += 0.012 * dw;
       p.whisker = Math.max(-1, Math.min(1, p.whisker + 0.6 * dw));
+    }
+    if (this.dreamRunT >= 0) {
+      this.dreamRunT += dt;
+      const u = this.dreamRunT / this.dreamRunDur;
+      if (u >= 1) this.dreamRunT = -1;
+      else {
+        // (about three paddles a second, the fore and hind pairs a quarter out of step, only the
+        // paws bearing no weight; a little, as in a dream)
+        const env = Math.pow(Math.sin(Math.PI * u), 0.7), w = this.dreamRunT * Math.PI * 2 * 3.1;
+        const legs: [Leg, number][] = [['LF', 0], ['RF', Math.PI], ['LH', Math.PI * 0.5], ['RH', Math.PI * 1.5]];
+        for (const [leg, ph] of legs) {
+          const f = p[leg];
+          if (f.planted > 0.5) continue;
+          const s = Math.sin(w + ph);
+          f.z += 0.011 * env * s;
+          f.flex = Math.max(0, Math.min(1, f.flex + 0.22 * env * Math.max(0, s)));
+        }
+        p.whisker = Math.max(-1, Math.min(1, p.whisker + 0.5 * env * Math.sin(w * 2.3)));
+        p.tailCurl += 0.3 * env * Math.sin(w * 0.6);
+      }
     }
     this.tailFlickW.step(dt);
     // gaze

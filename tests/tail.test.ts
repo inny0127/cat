@@ -51,3 +51,23 @@ describe('keeping time', () => {
     expect(Math.abs(m.pose.tailCurl - rest)).toBeLessThan(0.05);
   });
 });
+
+describe('running in its sleep', () => {
+  it('all four paws paddle a few seconds, building and dying away, and then lie still', () => {
+    const m = new Motor();
+    m.snap('curl');
+    for (let i = 0; i < 40; i++) m.update(0.02);
+    const z0 = m.pose.LF.z, h0 = m.pose.LH.z;
+    m.dreamRun(2);
+    let fmax = 0, hmax = 0;
+    for (let t = 0; t < 2.5; t += 0.02) {
+      m.update(0.02);
+      fmax = Math.max(fmax, Math.abs(m.pose.LF.z - z0));
+      hmax = Math.max(hmax, Math.abs(m.pose.LH.z - h0));
+    }
+    expect(fmax).toBeGreaterThan(0.006);
+    expect(hmax).toBeGreaterThan(0.006);
+    expect(m.dreamRunning).toBe(false);
+    expect(Math.abs(m.pose.LF.z - z0)).toBeLessThan(0.002);
+  });
+});
