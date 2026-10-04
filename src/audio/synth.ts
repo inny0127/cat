@@ -413,6 +413,52 @@ export function pencil(sr: number) {
   return fade(normalize(out, 0.7), sr, 0.0005, 0.03);
 }
 
+/** a china mug breaking on floorboards: the crack of it going, a burst of bright pieces ringing
+ *  (china rings high and short, each piece its own note), the thud of its weight, and the last
+ *  bits skittering away and settling */
+export function shatter(sr: number) {
+  const out = new Float32Array(Math.floor(0.95 * sr));
+  // the crack: a hard broadband snap
+  clicks(out, sr, 0, 6, 0.006, 2500, 9000, 1, 0.0012);
+  const nz = new Float32Array(out.length);
+  for (let i = 0; i < Math.floor(0.05 * sr); i++) nz[i] = noise() * Math.exp(-i / (0.009 * sr));
+  filter(nz, sr, 'hp', 1800, 0.7);
+  for (let i = 0; i < out.length; i++) out[i] += nz[i] * 0.9;
+  // the weight of it on the boards
+  ping(out, sr, 0.002, rnd(130, 170), 0.45, 0.02);
+  // the pieces ringing: a scatter of short high partials, most in the first few hundredths
+  for (let k = 0; k < 16; k++) {
+    const at = 0.003 + Math.pow(Math.random(), 2.2) * 0.12;
+    ping(out, sr, at, rnd(2300, 7200), rnd(0.12, 0.32) * (1 - at * 4), rnd(0.012, 0.045));
+  }
+  // and skittering off over the floor, fewer and softer as they come to rest
+  for (let k = 0; k < 14; k++) {
+    const at = 0.1 + Math.pow(Math.random(), 1.6) * 0.75;
+    const a = 0.22 * Math.exp(-(at - 0.1) * 3.2);
+    clicks(out, sr, at, 1 + Math.floor(Math.random() * 3), 0.012, 2800, 7500, a, 0.0012);
+    if (Math.random() < 0.5) ping(out, sr, at, rnd(3000, 6500), a * 0.6, 0.01);
+  }
+  filter(out, sr, 'hp', 220, 0.7);
+  return fade(normalize(out, 0.85), sr, 0.0003, 0.08);
+}
+
+/** the little bell on a cat toy: a jingle (the ball inside striking the shell two or three times),
+ *  bright and thin, its partials not in tune with one another as a small bell's are not */
+export function bell(sr: number) {
+  const out = new Float32Array(Math.floor(0.4 * sr));
+  const f = rnd(2900, 3500);
+  const hits = 2 + Math.floor(Math.random() * 2);
+  for (let k = 0; k < hits; k++) {
+    const at = k * rnd(0.03, 0.06), a = k === 0 ? 1 : rnd(0.4, 0.7);
+    ping(out, sr, at, f, 0.5 * a, 0.07);
+    ping(out, sr, at, f * 1.52, 0.3 * a, 0.045);
+    ping(out, sr, at, f * 2.11, 0.18 * a, 0.03);
+    clicks(out, sr, at, 1, 0.002, 5000, 9000, 0.15 * a, 0.0008);
+  }
+  filter(out, sr, 'hp', 1200, 0.7);
+  return fade(normalize(out, 0.6), sr, 0.0005, 0.06);
+}
+
 /** a padded step on the floor */
 export function step(sr: number) {
   const out = new Float32Array(Math.floor(0.09 * sr));

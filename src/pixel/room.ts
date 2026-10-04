@@ -909,6 +909,7 @@ export class Room {
     });
     const skyMesh = add(new THREE.Mesh(new THREE.PlaneGeometry(ww, wh), this.sky), bx, winB + wh / 2, wallZ - 0.06);
     skyMesh.renderOrder = 20;
+    this.skyMesh = skyMesh;
     const paint = this.mat('paint');
     const bar = (w: number, h: number, d: number, x: number, y: number, z = wallZ - 0.02) => add(shadowy(new THREE.Mesh(new THREE.BoxGeometry(w, h, d), paint)), x, y, z);
     bar(ww + 0.08, 0.045, 0.08, bx, winT + 0.02);                       // head
@@ -951,6 +952,69 @@ export class Room {
       this.pen.homeYaw = pen.rotation.y;
       this.pen.r = r;
       this.pen.edge = wallZ + 0.255;
+    }
+    // a little laser pointer lying at the front of the sill (taken up, the red dot it makes is for
+    // the cat to chase): a dark barrel, a pale ring at the business end, a red button
+    {
+      const make = () => {
+        const g = new THREE.Group();
+        const r = 0.0065, len = 0.09;
+        const along = (m: THREE.Mesh, x: number) => { m.rotation.z = Math.PI / 2; m.position.x = x; g.add(m); return m; };
+        along(new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 8), this.mat('bookBlue', { tone: -0.05 })), 0);
+        along(new THREE.Mesh(new THREE.CylinderGeometry(r * 1.08, r * 1.08, 0.014, 8), this.mat('paint', { tone: -0.05 })), len / 2 - 0.007);
+        along(new THREE.Mesh(new THREE.CylinderGeometry(r * 1.02, r * 1.02, 0.006, 8), this.mat('paint', { tone: -0.12 })), -len / 2 + 0.003);
+        const button = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.004, 0.006), this.mat('redBowl', { tone: 0.25 }));
+        button.position.set(0.012, r, 0);
+        g.add(button);
+        // (the little window it shines from, red and lit while it shines)
+        const eye = new THREE.Mesh(new THREE.CircleGeometry(r * 0.6, 10), this.mat('redBowl', { tone: 0.35 }));
+        eye.rotation.y = Math.PI / 2;
+        eye.position.x = len / 2 + 0.0004;
+        g.add(eye);
+        return { g, eye: eye.material as THREE.ShaderMaterial };
+      };
+      const lp = make().g;
+      lp.traverse((o) => { if ((o as THREE.Mesh).isMesh) shadowy(o as THREE.Mesh); });
+      lp.position.set(bx - 0.14, winB + 0.0066, wallZ + 0.205);
+      lp.rotation.y = -0.38;
+      this.group.add(lp);
+      this.pointer = lp;
+      // (the same one in your hand, in front of the room, its end coming in from the bottom of the
+      // picture; no shadow of it falls in the room)
+      const held = make();
+      held.g.visible = false;
+      this.group.add(held.g);
+      this.held = held.g;
+      this.heldEye = held.eye;
+    }
+    // a feather wand left lying on the floor in front of the bed: a long cane, a string from its
+    // end, and on the string a little bell and a bunch of bright feathers (taken up, you dangle them
+    // for the cat)
+    {
+      const W = this.wand;
+      // (thin, and thinner at the end nearer you: it is seen close to)
+      const rod = shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.0034, 0.0021, 1, 6).translate(0, 0.5, 0), this.mat('brown', { tone: 0.2 })));
+      const lure = new THREE.Group();
+      const bell = shadowy(new THREE.Mesh(new THREE.SphereGeometry(0.0065, 8, 6), this.mat('bookMustard', { tone: 0.22 })));
+      bell.position.y = -0.004;
+      lure.add(bell);
+      const feathers: [Material, number, number, number][] = [['pink', 0.08, -0.42, 0.95], ['water', 0.1, 0, 1.1], ['bookMustard', 0.12, 0.42, 0.9], ['pink', 0.0, 0.18, 0.75]];
+      for (const [m, tone, a, len] of feathers) {
+        const f = shadowy(new THREE.Mesh(new THREE.SphereGeometry(1, 8, 6), this.mat(m, { tone })));
+        f.scale.set(0.014, 0.042 * len, 0.004);
+        // (hanging from the bell, fanned out, a little apart front to back)
+        f.position.set(Math.sin(a) * 0.042 * len, -0.014 - Math.cos(a) * 0.04 * len, a * 0.005);
+        f.rotation.z = a;
+        lure.add(f);
+      }
+      this.group.add(rod, lure);
+      W.rod = rod;
+      W.lure = lure;
+      W.tip.copy(W.restTip);
+      W.end.copy(W.restEnd);
+      W.pos.set(W.restTip.x - 0.1, 0.012, W.restTip.z - 0.07);
+      W.prev.copy(W.pos);
+      this.placeWand(0);
     }
 
     // October (to early November): a little pumpkin at the end of the sill
@@ -1308,6 +1372,7 @@ export class Room {
 
     // in front: a stack of books with a mug on top, and a ball of yarn the cat plays with
     const fx = bx + 0.42, fz = bz + 0.38;
+    this.books.set(fx, 0, fz);
     const stack: [Material, number, number][] = [['bookBlue', 0.2, 0.03], ['bookRed', 0.18, 0.025], ['bookMustard', 0.17, 0.028]];
     let fy = 0;
     stack.forEach(([mname, w, t], i) => {
@@ -1316,9 +1381,53 @@ export class Room {
       add(bk, fx, fy + t / 2, fz);
       fy += t;
     });
-    add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.028, 0.07, 16), this.mat('paint'))), fx + 0.01, fy + 0.035, fz);
-    add(shadowy(new THREE.Mesh(new THREE.TorusGeometry(0.018, 0.006, 6, 12), this.mat('paint'))), fx + 0.045, fy + 0.04, fz);
-    add(new THREE.Mesh(new THREE.CircleGeometry(0.028, 14).rotateX(-Math.PI / 2), this.mat('brown')), fx + 0.01, fy + 0.066, fz);
+    {
+      // the mug of tea, all of a piece (a cat can knock it off), its base at the top of the books
+      const mug = new THREE.Group();
+      const china = this.mat('paint');
+      const body = shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.028, 0.07, 16), china));
+      body.position.y = 0.035;
+      const handle = shadowy(new THREE.Mesh(new THREE.TorusGeometry(0.018, 0.006, 6, 12), china));
+      handle.position.set(0.035, 0.04, 0);
+      const tea = new THREE.Mesh(new THREE.CircleGeometry(0.028, 14).rotateX(-Math.PI / 2), this.mat('brown'));
+      tea.position.y = 0.066;
+      mug.add(body, handle, tea);
+      mug.position.set(fx + 0.01, fy, fz);
+      this.group.add(mug);
+      this.cup.mesh = mug;
+      this.cup.home.copy(mug.position);
+      this.cup.tea = tea;
+      // what is left of it on the floor: pieces of china, the handle, and the tea spreading
+      const bits = new THREE.Group();
+      bits.visible = false;
+      for (let k = 0; k < 6; k++) {
+        const a = (k / 6) * Math.PI * 2 + Math.random() * 0.4, w = 0.6 + Math.random() * 0.7, h = 0.018 + Math.random() * 0.022;
+        const pg = new THREE.CylinderGeometry(0.031, 0.03, h, 4, 1, true, a, w);
+        // (about its own middle, not the mug's: it is a piece on its own now)
+        pg.translate(-0.031 * Math.sin(a + w / 2), 0, -0.031 * Math.cos(a + w / 2));
+        const piece = shadowy(new THREE.Mesh(pg, china));
+        (piece.material as THREE.Material).side = THREE.DoubleSide;
+        bits.add(piece);
+      }
+      const hb = shadowy(new THREE.Mesh(new THREE.TorusGeometry(0.018, 0.006, 6, 12, Math.PI * 1.3), china));
+      bits.add(hb);
+      const pool = new THREE.Mesh(new THREE.CircleGeometry(1, 20).rotateX(-Math.PI / 2), this.mat('brown', { tone: -0.05 }));
+      {
+        // (not a circle: a spill runs out in lobes)
+        const pp = pool.geometry.attributes.position as THREE.BufferAttribute;
+        for (let i = 0; i < pp.count; i++) {
+          const x = pp.getX(i), z = pp.getZ(i), a = Math.atan2(z, x);
+          const k = 1 + 0.22 * Math.sin(a * 3 + 1.1) + 0.12 * Math.sin(a * 5 + 0.3);
+          pp.setXYZ(i, x * k * 1.3, 0, z * k * 0.85);
+        }
+      }
+      pool.receiveShadow = true;
+      this.group.add(pool);
+      pool.visible = false;
+      this.group.add(bits);
+      this.cup.bits = bits;
+      this.cup.pool = pool;
+    }
     this.mugTop = new THREE.Vector3(fx + 0.01, fy + 0.07, fz);
     const wool = this.mat('bookRed', { tone: 0.12, pattern: 5 });
     const yarn = shadowy(new THREE.Mesh(new THREE.SphereGeometry(0.045, 16, 12), wool));
@@ -1814,6 +1923,382 @@ export class Room {
     }
   }
 
+  /** the view out of the window (a laser pointed at it goes out into the town), and where the
+   *  stack of books with the mug on it stands */
+  private skyMesh: THREE.Object3D | null = null;
+  readonly books = new THREE.Vector3();
+  /** the laser pointer on the sill, and the same one in your hand when it has been taken up */
+  pointer: THREE.Object3D = new THREE.Group();
+  private held: THREE.Object3D = new THREE.Group();
+  readonly laserRay = new THREE.Raycaster();
+
+  /** the feather wand: its cane (from the end in your hand, or lying on the floor, to its tip), the
+   *  feathers on the end of the string (where, and where a moment ago: they swing as a weight on a
+   *  string does), the string's length; whether a hand has it and where the tip is being taken; a
+   *  cat's paws having the feathers (how much longer, where); the bell's last ring */
+  private readonly wand = {
+    rod: new THREE.Group() as THREE.Object3D, lure: new THREE.Group() as THREE.Object3D,
+    held: false, tip: new THREE.Vector3(), tipV: new THREE.Vector3(), aim: new THREE.Vector3(), end: new THREE.Vector3(),
+    restTip: new THREE.Vector3(0.1, 0.006, 0.47), restEnd: new THREE.Vector3(0.55, 0.006, 1.15),
+    pos: new THREE.Vector3(), prev: new THREE.Vector3(), vel: new THREE.Vector3(), L: 0.27, pinned: 0, pinAt: new THREE.Vector3(),
+    ring: 0, slack: 0,
+  };
+  /** the little bell on the wand: it rings when the feathers are jerked about (how hard) */
+  onBell: ((k: number) => void) | null = null;
+  /** the feathers pulled out from under a cat's paws */
+  onLureFree: (() => void) | null = null;
+
+  /** the end of the wand's cane (in the hand, or on the floor) */
+  get wandEnd() {
+    return this.wand.end;
+  }
+
+  /** the wand, to take hold of (the cane and the feathers) */
+  get wandParts(): THREE.Object3D[] {
+    return [this.wand.lure, this.wand.rod];
+  }
+
+  /** where the feathers are, how fast they are going, whether a hand has the wand, whether a cat's
+   *  paws have the feathers */
+  lureAt() {
+    return this.wand.pos;
+  }
+  get lureVel() {
+    return this.wand.vel;
+  }
+  get wandHeld() {
+    return this.wand.held;
+  }
+  get lurePinned() {
+    return this.wand.pinned > 0;
+  }
+
+  /** a hand takes up the wand (true), its end in the hand just below the picture; or lets it fall,
+   *  to lie with its end on the floor at a point */
+  holdWand(on: boolean, end?: THREE.Vector3) {
+    const W = this.wand;
+    W.held = on;
+    W.tipV.set(0, 0, 0);
+    if (on) W.aim.copy(W.tip);
+    else if (end) W.end.copy(end).setY(0.006);
+  }
+
+  /** where the hand takes the tip of the wand (a point in the room), and where the hand is (the
+   *  cane's other end) */
+  aimWand(tip: THREE.Vector3, hand: THREE.Vector3) {
+    this.wand.aim.copy(tip);
+    this.wand.end.copy(hand);
+  }
+
+  /** a paw hits the feathers: sent flying a way (m/s) */
+  batLure(v: THREE.Vector3) {
+    const W = this.wand;
+    if (W.pinned > 0) return;
+    // (Verlet: a change of velocity is a change of where it was)
+    W.prev.addScaledVector(v, -1 / 240);
+    W.ring = Math.max(W.ring, 0.6);
+  }
+
+  /** a cat's paws come down on the feathers: held there a while, at a point, however the string is
+   *  pulled (pulled hard, they come free) */
+  pinLure(sec: number, at: THREE.Vector3) {
+    const W = this.wand;
+    W.pinned = Math.max(W.pinned, sec);
+    W.pinAt.copy(at);
+    W.pinAt.y = Math.max(W.pinAt.y, 0.012);
+  }
+
+  /** the cane, the string and the feathers: the tip after the hand (quick, but a cane has some
+   *  give), or fallen to the floor; the feathers swinging on the string from it under their own
+   *  weight, held back by the air, dragging over the floor, held under a paw */
+  private moveWand(dt: number) {
+    const W = this.wand;
+    const n = 4, h = Math.min(dt, 0.05) / n;
+    const was = W.pos.clone();
+    for (let k = 0; k < n; k++) {
+      if (W.held) {
+        // a spring toward where the hand takes it, critically damped
+        const w = 26;
+        W.tipV.addScaledVector(W.aim.clone().sub(W.tip), w * w * h).multiplyScalar(Math.max(0, 1 - 2 * w * h));
+        W.tip.addScaledVector(W.tipV, h);
+      } else if (W.tip.y > 0.0061 || W.tipV.lengthSq() > 0) {
+        // let go: down it falls, and lies where it lands
+        W.tipV.y -= 9.8 * h;
+        W.tip.addScaledVector(W.tipV, h);
+        if (W.tip.y <= 0.006) { W.tip.y = 0.006; W.tipV.set(0, 0, 0); }
+      }
+      if (W.pinned > 0) {
+        // under its paws: there it stays, unless the string is pulled hard
+        W.pos.copy(W.pinAt);
+        W.prev.copy(W.pinAt);
+        if (W.held && W.tip.distanceTo(W.pinAt) > W.L + 0.16) {
+          W.pinned = 0;
+          W.ring = 1;
+          this.onLureFree?.();
+        }
+        continue;
+      }
+      const g = this.groundAt(W.pos.x, W.pos.z) + 0.012;
+      const onFloor = W.pos.y <= g + 0.002;
+      // (feathers are mostly air: they fall slowly and the air soon stops them; on the floor they
+      // drag)
+      const v = W.pos.clone().sub(W.prev);
+      v.multiplyScalar(onFloor ? 0.8 : 0.988);
+      if (onFloor) v.y = Math.max(0, v.y);
+      W.prev.copy(W.pos);
+      W.pos.add(v);
+      W.pos.y -= 6.5 * h * h;
+      // the string: never longer than it is
+      const d = W.pos.distanceTo(W.tip);
+      W.slack = Math.max(0, W.L - d);
+      if (d > W.L) W.pos.sub(W.tip).multiplyScalar(W.L / d).add(W.tip);
+      if (W.pos.y < g) W.pos.y = g;
+    }
+    W.pinned = Math.max(0, W.pinned - dt);
+    // how fast the feathers go; a jerk of them rings the bell
+    const nv = W.pos.clone().sub(was).divideScalar(Math.max(dt, 1e-3));
+    const jerk = nv.distanceTo(W.vel);
+    W.vel.copy(nv);
+    W.ring = Math.max(W.ring - dt * 3, 0);
+    if (jerk > 1.6 && W.ring <= 0) {
+      W.ring = 0.5;
+      this.onBell?.(Math.min(1, jerk / 5));
+    }
+    this.placeWand(dt);
+  }
+
+  /** the cane from its end to its tip, the feathers hanging from the knot the way the string runs
+   *  and trailing the way they go; the string (drawn as a line of single pixels) from the tip */
+  private placeWand(_dt: number) {
+    const W = this.wand, R = W.rod;
+    const along = W.tip.clone().sub(W.end);
+    const len = along.length();
+    R.position.copy(W.end);
+    R.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), along.divideScalar(Math.max(len, 1e-6)));
+    R.scale.set(1, len, 1);
+    const down = W.pos.clone().sub(W.tip);
+    if (down.lengthSq() < 1e-8) down.set(0, -1, 0);
+    down.normalize().addScaledVector(W.vel, -0.12);
+    // (lying on the floor, or the bed: flat on it)
+    if (W.pos.y < 0.016 || (W.pos.y < 0.046 && W.slack > 0.01)) down.y = Math.min(down.y, -0.05) * 0.2;
+    W.lure.position.copy(W.pos);
+    W.lure.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), down.normalize());
+  }
+
+  /** the string, for the picture: from the tip of the cane to the feathers, and how much it sags */
+  stringLine() {
+    const W = this.wand;
+    return { a: W.tip, b: W.pos, sag: W.slack };
+  }
+
+  /** the pointer in your hand (to tap and put down) */
+  get heldPointer(): THREE.Object3D {
+    return this.held;
+  }
+
+  /** where the laser pointer lies on the sill (a tap there puts it back) */
+  get pointerHome() {
+    return this.pointer.position;
+  }
+
+  /** the laser pointer taken up off the sill (true) or put back on it */
+  takePointer(up: boolean) {
+    this.pointer.visible = !up;
+    if (!up) this.held.visible = false;
+  }
+
+  /** the pointer in your hand, close in front of the glass, coming in from the bottom right of the
+   *  picture: turned toward the dot across the picture (not end on to you, as it truly would be,
+   *  aimed into the room: then it would be only a blob), tipped a little into the room (at: where
+   *  the dot is; null: off, lowered a little) */
+  private readonly aimS = new THREE.Vector2(-0.6, 0.6);
+  holdPointer(cam: THREE.PerspectiveCamera, at: THREE.Vector3 | null, dt = 0.016, safe = 0) {
+    const H = this.held;
+    H.visible = true;
+    const D = 1.25, tv = Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2);
+    const hh = tv * D, hw = hh * cam.aspect;
+    // (the hand just below the bottom edge, right of the middle; above whatever of the phone's own
+    // the bottom of the screen has, safe: a fraction of the screen's height)
+    // (shining, it is mostly down out of the way, only its end showing; not, more of it, to tap)
+    this.heldUp += ((at ? 0 : 1) - this.heldUp) * Math.min(1, dt * 8);
+    const hx = 0.62 * hw, hy = -hh - 0.05 + 0.028 * this.heldUp + 2 * hh * safe;
+    // the way to the dot on the screen, from the hand (in the camera's plane), eased
+    let ax = -0.5, ay = 0.75;
+    if (at) {
+      const q = at.clone().applyMatrix4(cam.matrixWorldInverse);
+      const sx = (q.x / -q.z) * D, sy = (q.y / -q.z) * D;
+      ax = sx - hx;
+      ay = Math.max(0.05 * hh, sy - hy);
+    }
+    const l = Math.hypot(ax, ay) || 1;
+    this.aimS.x += (ax / l - this.aimS.x) * Math.min(1, dt * 14);
+    this.aimS.y += (ay / l - this.aimS.y) * Math.min(1, dt * 14);
+    const dir = new THREE.Vector3(this.aimS.x, this.aimS.y, -0.55).normalize().transformDirection(cam.matrixWorld);
+    const hand = new THREE.Vector3(hx, hy, -D).applyMatrix4(cam.matrixWorld);
+    // (its barrel along +x: turned so that +x runs along the beam, the button up toward you)
+    H.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), dir);
+    H.position.copy(hand).addScaledVector(dir, 0.038);
+    this.heldEye.uniforms.uGlow.value = at ? 1 : 0;
+  }
+  private heldEye!: THREE.ShaderMaterial;
+  private heldUp = 1;
+
+  /** where a laser pointed through a screen point lands: the first thing in the room it meets,
+   *  what that is (the floor or the bed, the sill, the books and mug on them, anything else
+   *  upright; out: through the window, where no dot shows), and which way it faces */
+  laserHit(ndc: THREE.Vector2, cam: THREE.Camera) {
+    const R = this.laserRay;
+    R.setFromCamera(ndc, cam);
+    const hits = R.intersectObject(this.group, true);
+    for (const h of hits) {
+      let o: THREE.Object3D | null = h.object, seen = true;
+      for (; o; o = o.parent) {
+        if (!o.visible || o === this.held) { seen = false; break; }
+      }
+      if (!seen || !(h.object as THREE.Mesh).isMesh) continue;
+      const p = h.point.clone();
+      const n = h.face ? h.face.normal.clone().transformDirection(h.object.matrixWorld) : new THREE.Vector3(0, 1, 0);
+      if (n.dot(R.ray.direction) > 0) n.negate();
+      const { l, r, b, z } = this.win;
+      let on: 'floor' | 'bed' | 'sill' | 'books' | 'up' | 'out' = 'up';
+      let mug = false;
+      for (let q: THREE.Object3D | null = h.object; q; q = q.parent) if (q === this.cup.mesh) mug = true;
+      if (h.object === this.skyMesh) on = 'out';
+      else if (Math.hypot(p.x - this.books.x, p.z - this.books.z) < 0.16 && p.y < 0.17 && p.y > 0.004) on = 'books';
+      else if (p.y >= b - 0.006 && p.y < b + 0.2 && p.z > z - 0.05 && p.z < z + 0.27 && p.x > l - 0.08 && p.x < r + 0.08) on = 'sill';
+      else if (Math.hypot(p.x - this.spots.bed.x, p.z - this.spots.bed.z) < 0.22 && p.y < 0.1) on = 'bed';
+      else if (p.y < 0.04 && n.y > 0.5) on = 'floor';
+      return { p, n, on, mug };
+    }
+    return null;
+  }
+
+  /** the mug of tea on the books: standing there, going over the edge, falling, in pieces on the
+   *  floor (and, swept up, gone a while till there is another); how it moves; its pieces and the
+   *  tea spilled, and how they move */
+  private readonly cup = {
+    state: 'up' as 'up' | 'tip' | 'fall' | 'broken' | 'gone', mesh: new THREE.Group() as THREE.Object3D, home: new THREE.Vector3(),
+    tea: null as THREE.Object3D | null, bits: new THREE.Group() as THREE.Object3D, pool: new THREE.Group() as THREE.Object3D,
+    t: 0, dir: new THREE.Vector3(1, 0, 0), vel: new THREE.Vector3(), axis: new THREE.Vector3(), spin: 0,
+    pieces: [] as { v: THREE.Vector3; spin: number; axis: THREE.Vector3 }[], spill: 0, at: new THREE.Vector3(), back: 0,
+  };
+  /** the mug: falling over the edge (where), in pieces on the floor (where, how hard) */
+  onMug: ((what: 'tip' | 'crash' | 'swept', at: THREE.Vector3, k: number) => void) | null = null;
+
+  /** is there a mug of tea on the books (and steaming) */
+  get mugUp() {
+    return this.cup.state === 'up';
+  }
+
+  /** the pieces on the floor, to tap and sweep up (null: there are none) */
+  get mess(): THREE.Object3D | null {
+    return this.cup.state === 'broken' ? this.cup.bits : null;
+  }
+
+  /** a paw (or a cat landing) knocks the mug on the books, a way: over it goes, now and then
+   *  (sure: it was what the cat was after); true if it went */
+  knockMug(dir: THREE.Vector3, sure = false) {
+    const C = this.cup;
+    if (C.state !== 'up' || (!sure && Math.random() < 0.4)) return false;
+    C.state = 'tip';
+    C.t = 0;
+    C.dir.set(dir.x, 0, dir.z).normalize();
+    if (C.dir.lengthSq() < 0.5) C.dir.set(1, 0, 0);
+    // (the books stand at the front of the room: knocked toward you, it would land out of the
+    // picture; it goes over the side instead, the side the push was toward)
+    if (C.dir.z > 0.35) {
+      C.dir.z = 0.35;
+      C.dir.x = (Math.sign(C.dir.x) || 1) * Math.sqrt(1 - 0.35 * 0.35);
+    }
+    // (over the edge on the far side: it topples about its foot, then falls clear)
+    C.axis.set(0, 1, 0).cross(C.dir).normalize();
+    this.onMug?.('tip', C.mesh.position.clone(), 1);
+    return true;
+  }
+
+  /** the pieces swept up (and the tea mopped): gone, and some while after, a fresh cup */
+  sweepMug() {
+    const C = this.cup;
+    if (C.state !== 'broken') return;
+    C.state = 'gone';
+    C.bits.visible = false;
+    C.pool.visible = false;
+    C.back = 70 + Math.random() * 50;
+    this.onMug?.('swept', C.at.clone(), 1);
+  }
+
+  /** the mug going over, falling, breaking; the pieces skittering and settling, the tea spreading */
+  private moveMug(dt: number) {
+    const C = this.cup, M = C.mesh;
+    if (C.state === 'tip') {
+      // over about the edge of its foot, sliding the way it was pushed
+      C.t += dt;
+      const ang = Math.min(1.1, 9 * C.t * C.t);
+      M.position.copy(C.home).addScaledVector(C.dir, 0.06 * Math.min(1, C.t / 0.22));
+      M.quaternion.setFromAxisAngle(C.axis, ang);
+      if (C.t > 0.22) {
+        C.state = 'fall';
+        C.vel.copy(C.dir).multiplyScalar(0.45).setY(0.05);
+        C.spin = 7 + Math.random() * 4;
+      }
+    } else if (C.state === 'fall') {
+      C.vel.y -= 9.8 * dt;
+      M.position.addScaledVector(C.vel, dt);
+      M.rotateOnWorldAxis(C.axis, C.spin * dt);
+      if (M.position.y <= 0.01) {
+        // in pieces: they go skittering out from where it hit, the handle among them; the tea
+        // spreads out over the boards
+        const hit = Math.min(1, -C.vel.y / 1.4);
+        C.state = 'broken';
+        C.at.set(M.position.x, 0, M.position.z);
+        M.visible = false;
+        C.bits.visible = true;
+        C.bits.position.copy(C.at);
+        C.pieces = [];
+        C.bits.children.forEach((b, i) => {
+          const a = Math.random() * Math.PI * 2;
+          const sp = 0.25 + Math.random() * 0.55;
+          b.position.set(0, 0.006, 0);
+          b.rotation.set(Math.random() * 3, Math.random() * 6, Math.random() * 3);
+          const v = new THREE.Vector3(Math.cos(a) * sp + C.dir.x * 0.3, 0, Math.sin(a) * sp + C.dir.z * 0.3);
+          C.pieces.push({ v, spin: (Math.random() - 0.5) * 30, axis: new THREE.Vector3(Math.random() - 0.5, 1, Math.random() - 0.5).normalize() });
+          if (i === C.bits.children.length - 1) v.multiplyScalar(0.5);
+        });
+        C.pool.visible = true;
+        C.pool.position.set(C.at.x + C.dir.x * 0.03, 0.0015, C.at.z + C.dir.z * 0.03);
+        C.pool.rotation.y = Math.atan2(C.dir.x, C.dir.z);
+        C.pool.scale.setScalar(0.005);
+        C.spill = 0;
+        this.onMug?.('crash', C.at.clone(), hit);
+      }
+    } else if (C.state === 'broken') {
+      // the pieces slide and spin to a stop on the boards; the tea runs out to its edges
+      C.bits.children.forEach((b, i) => {
+        const P = C.pieces[i];
+        if (!P) return;
+        const sp = P.v.length();
+        if (sp > 0.001) {
+          b.position.addScaledVector(P.v, dt);
+          P.v.multiplyScalar(Math.max(0, sp - 2.6 * dt) / sp);
+          b.rotateOnWorldAxis(P.axis, P.spin * dt * Math.min(1, sp * 3));
+        }
+        // (lying on the floor, whichever way up)
+        b.position.y = 0.006;
+      });
+      C.spill = Math.min(1, C.spill + dt / 1.6);
+      const r = 0.075 * Math.sqrt(1 - (1 - C.spill) * (1 - C.spill));
+      C.pool.scale.setScalar(Math.max(0.005, r));
+    } else if (C.state === 'gone') {
+      if ((C.back -= dt) <= 0) {
+        // a fresh cup of tea on the books
+        C.state = 'up';
+        M.visible = true;
+        M.position.copy(C.home);
+        M.quaternion.identity();
+      }
+    }
+  }
+
   /** the little print on the sill (tapping it shows the credits) */
   print: THREE.Object3D = new THREE.Group();
   /** where the mug's steam rises from */
@@ -2018,6 +2503,59 @@ export class Room {
     const S = this.spots;
     const things: [THREE.Vector3, number][] = [[S.bed, 0.21], [S.food, 0.07], [S.water, 0.07], [S.litter, 0.19], ...this.things.filter(([, rr]) => rr > 0)];
     return !things.some(([c, rr]) => Math.hypot(p.x - c.x, p.z - c.z) < rr + r);
+  }
+
+  /** what a cat running about has to go round (not the bed: that it runs over; not the ball of
+   *  wool, which it sends flying) */
+  private inTheWay(): [THREE.Vector3, number][] {
+    const S = this.spots;
+    return [[S.food, 0.07], [S.water, 0.07], [S.litter, 0.19], ...this.things.filter(([c, r]) => r > 0 && c !== this.yarnHome)];
+  }
+
+  /** a point on the floor (for the middle of a cat r across) moved out of the room's things and
+   *  in from the walls: off the radiator, the plant, the books, the bowls (changed in place) */
+  keepClear(p: THREE.Vector3, r: number) {
+    const B = this.yarnBounds, w = this.win;
+    const bounds = () => {
+      p.x = Math.max(B.minX + 0.08, Math.min(B.maxX - 0.08, p.x));
+      // (in front of the radiator under the window, further out from the wall)
+      const back = w.z + (Math.abs(p.x - (w.l + w.r) / 2) < 0.3 ? 0.31 : 0.2);
+      p.z = Math.max(back, Math.min(B.maxZ - 0.05, p.z));
+    };
+    for (let k = 0; k < 3; k++) {
+      bounds();
+      for (const [c, R] of this.inTheWay()) {
+        const dx = p.x - c.x, dz = p.z - c.z, d = Math.hypot(dx, dz);
+        if (d >= R + r) continue;
+        const ux = d > 1e-4 ? dx / d : 0, uz = d > 1e-4 ? dz / d : 1;
+        p.x = c.x + ux * (R + r);
+        p.z = c.z + uz * (R + r);
+      }
+    }
+    bounds();
+    return p;
+  }
+
+  /** on the way from one point to another, a point to go by round whatever is in the way (null:
+   *  nothing is), on the side the way passes it, for a cat r across */
+  detour(from: THREE.Vector3, to: THREE.Vector3, r: number): THREE.Vector3 | null {
+    const ax = to.x - from.x, az = to.z - from.z, len2 = ax * ax + az * az;
+    if (len2 < 1e-6) return null;
+    let best: THREE.Vector3 | null = null, bestU = 2;
+    for (const [c, R] of this.inTheWay()) {
+      const u = ((c.x - from.x) * ax + (c.z - from.z) * az) / len2;
+      if (u <= 0.02 || u >= 0.98) continue;
+      const qx = from.x + ax * u, qz = from.z + az * u;
+      const d = Math.hypot(qx - c.x, qz - c.z);
+      if (d >= R + r || u >= bestU) continue;
+      // (out to the side the way already passes it, a little wider than it)
+      const len = Math.sqrt(len2);
+      let nx = -az / len, nz = ax / len;
+      if ((qx - c.x) * nx + (qz - c.z) * nz < 0) { nx = -nx; nz = -nz; }
+      best = this.keepClear(new THREE.Vector3(c.x + nx * (R + r + 0.05), 0, c.z + nz * (R + r + 0.05)), r * 0.6);
+      bestU = u;
+    }
+    return best;
   }
 
   /** a warm place on the floor in the sun, clear of the bed and the room's things, if the sun is
@@ -2305,6 +2843,8 @@ export class Room {
     su.uSnowLie.value = se.winter;
     this.time += dt;
     this.movePencil(dt);
+    this.moveMug(dt);
+    this.moveWand(dt);
     this.timeU.value = this.time;
     const flash = this.lightning(dt, this.stormOverride ?? stormAt(date, rain));
     su.uFlash.value = flash;

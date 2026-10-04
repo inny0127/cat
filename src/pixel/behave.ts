@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import type { Motor } from '../cat3d/motor';
 import type { Mood } from '../cat3d/mood';
 import { POSES, type PoseLayer, type PoseName } from '../cat3d/pose';
+import type { LaserDot } from './chase';
+import type { Lure } from './tease';
 
 /**
  * What a cat does by itself between the brain's big decisions (sleep, errands, being stroked): a
@@ -53,6 +55,8 @@ export interface Ctx {
   box: () => SillSpot | null;
   /** a sound of the cat's own (a soft thump landing from a jump) */
   sound: (name: string, gain: number) => void;
+  /** a word from the cat: the sound, and the mouth saying it */
+  say: (kind: 'trill' | 'meow' | 'meowSoft' | 'chirp') => void;
   /** how hard it is raining (0 .. 1): a grey day is for watching it from the sill */
   rain: number;
   /** what is falling is snow */
@@ -74,6 +78,22 @@ export interface Ctx {
   pushPencil: (dz: number, dx: number) => void;
   /** where you are, to look at */
   viewer: () => THREE.Vector3;
+  /** the red dot of a laser pointer shining in the room, if there is one (chase.ts) */
+  laser: () => LaserDot | null;
+  /** a point on the floor moved out of the room's things and in from the walls, for the middle of
+   *  a cat r across (changed in place); and a point to go by on the way from one point to another,
+   *  round whatever is in the way (null: the way is clear) */
+  keepClear: (p: THREE.Vector3, r: number) => THREE.Vector3;
+  detour: (from: THREE.Vector3, to: THREE.Vector3, r: number) => THREE.Vector3 | null;
+  /** a pounce on the books: the mug on them knocked the way it is going (true if it went over);
+   *  where the books stand */
+  knockMug: (dir: THREE.Vector3, sure?: boolean) => boolean;
+  books: () => THREE.Vector3;
+  /** the feathers on the wand, if it is about (tease.ts); a paw sending them swinging (m/s), and
+   *  paws holding them down a while at a point */
+  lure: () => Lure | null;
+  batLure: (v: THREE.Vector3) => void;
+  pinLure: (sec: number, at: THREE.Vector3) => void;
   /** up on something this high (null: on the floor), and held in the air at a height (a jump) */
   perch: (h: number | null) => void;
   hold: (lift: number | null) => void;

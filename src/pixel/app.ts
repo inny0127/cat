@@ -16,6 +16,8 @@ import { PixelAvatar } from './avatar';
 import { Senses3D } from './senses';
 import { Room } from './room';
 import { rainAt } from '../cat3d/roomlight';
+import { Capacitor } from '@capacitor/core';
+import { App as CapApp } from '@capacitor/app';
 
 const MODEL = './cat3d/fri.bin';
 
@@ -39,6 +41,7 @@ export class PixelApp {
   brain!: Brain;
   private last = 0;
   private visible = !document.hidden;
+  private visibleOnce = false;
   private askNotify = false;
   private askMotion = false;
   private idleHintAt = 14;
@@ -80,6 +83,33 @@ export class PixelApp {
       held: () => this.room.yarnHeld, pin: (sec, at) => this.room.pinYarn(sec, at), pinned: () => this.room.yarnPinned,
     };
     this.avatar.sillSpot = () => this.room.sillSpot();
+    this.avatar.ground = {
+      keepClear: (p, r) => this.room.keepClear(p, r),
+      detour: (from, to, r) => this.room.detour(from, to, r),
+      knockMug: (dir, sure) => this.room.knockMug(dir, sure),
+      books: this.room.books,
+      batLure: (v) => this.room.batLure(v),
+      pinLure: (sec, at) => {
+        this.room.pinLure(sec, at);
+        // (a hand on the wand feels the paws have them)
+        if (this.wandFinger) this.haptic.tap('medium');
+      },
+    };
+    // the little bell on the wand's feathers; the feathers pulled out from under a paw (felt)
+    this.room.onBell = (k) => this.audio.play('bell', { gain: 0.06 + 0.12 * k, pan: Math.max(-0.8, Math.min(0.8, this.room.lureAt().clone().project(this.stage.camera).x * 0.8)) });
+    this.room.onLureFree = () => this.haptic.tap?.();
+    // the mug knocked off the books: a clink as it goes; in pieces on the floor, a crash the cat
+    // jumps at (out of its sleep too), and you feel; swept up, a soft brushing
+    this.room.onMug = (what, at, k) => {
+      const pan = Math.max(-0.8, Math.min(0.8, at.clone().project(this.stage.camera).x * 0.8));
+      if (what === 'tip') this.audio.play('pencil', { gain: 0.18, rate: 1.4, pan });
+      else if (what === 'crash') {
+        this.audio.play('shatter', { gain: 0.45 + 0.35 * k, pan });
+        this.haptic.tap('heavy');
+        this.brain.thunder(0.85);
+        this.avatar.crash(at);
+      } else this.audio.play('scoop', { gain: 0.3, rate: 1.3, pan });
+    };
     this.avatar.boxSpot = () => this.room.boxSpot();
     this.avatar.outside = {
       birds: () => this.room.birds(),
@@ -139,6 +169,13 @@ export class PixelApp {
         this.gestureEnd();
         if (this.creditsOpen) { this.showCredits(false); return; }
         if (this.hitPrint(x, y)) { this.showCredits(true); return; }
+        // the broken mug on the floor: tapped, swept up
+        const mess = this.room.mess;
+        if (mess && this.hitThing(mess, x, y, 30)) {
+          this.room.sweepMug();
+          this.haptic.tap?.();
+          return;
+        }
         // the pencil the cat pushed off the sill: tapped, it goes back up
         if (this.room.pencilDown && this.hitThing(this.room.pencil, x, y, 22)) {
           this.room.putPencilBack();
@@ -161,14 +198,54 @@ export class PixelApp {
       longHold: (_x, _y, onCat) => this.longHold(onCat),
       hover: (x, y) => {
         this.brain.hover(x, y);
-        // (with a mouse: the ball of wool can be taken hold of)
-        const over = this.hitThing(this.room.yarnBall, x, y, 14);
+        if (this.laser.held) return;
+        // (with a mouse: the ball of wool, and the laser pointer, can be taken hold of)
+        const over = this.hitThing(this.room.yarnBall, x, y, 14) || (this.room.pointer.visible && this.hitThing(this.room.pointer, x, y, 14));
         if (over !== this.overToy) { this.overToy = over; canvas.style.cursor = over ? 'grab' : ''; }
       },
       firstGesture: () => this.audio.start(),
+      // the laser pointer in your hand: every finger on the glass is its red dot (a tap on the
+      // pointer itself puts it down)
+      takeAll: (x, y, id, kind) => {
+        const L = this.laser;
+        if (!L.held || this.creditsOpen) return false;
+        L.lift = kind === 'mouse' ? 0 : kind === 'pen' ? 10 : 34;
+        L.x0 = x;
+        L.y0 = y;
+        // (on the pointer in your hand, or where it lay on the sill: a tap puts it down there)
+        const home = this.room.pointerHome.clone().project(this.stage.camera);
+        const nearHome = Math.hypot((home.x * 0.5 + 0.5) * innerWidth - x, (-home.y * 0.5 + 0.5) * innerHeight - y) < 26;
+        if (nearHome || this.hitThing(this.room.heldPointer, x, y, 26)) { L.downOn = id; return true; }
+        L.id = id;
+        L.sx = x;
+        L.sy = y;
+        L.idle = 0;
+        if (kind === 'mouse') canvas.style.cursor = 'none';
+        return true;
+      },
+      // the laser pointer on the sill: taken up (and if the finger goes on, the dot is on);
       // the ball of wool: a finger on it rolls it about the floor for the cat; a tap flicks it
-      grabToy: (x, y) => {
-        if (this.creditsOpen || !this.hitThing(this.room.yarnBall, x, y, 26)) return false;
+      grabToy: (x, y, id, kind) => {
+        if (this.creditsOpen) return false;
+        if (this.wandFinger) return false;
+        if (!this.laser.held && this.room.pointer.visible && this.hitThing(this.room.pointer, x, y, 24)) {
+          this.takeLaser(true);
+          Object.assign(this.laser, { taking: id, x0: x, y0: y, lift: kind === 'mouse' ? 0 : kind === 'pen' ? 10 : 34 });
+          return true;
+        }
+        // the feather wand: taken up by its feathers or its cane
+        if (!this.hitThing(this.room.yarnBall, x, y, 26) && this.hitWand(x, y)) {
+          this.wandFinger = { x, y, id };
+          this.room.holdWand(true);
+          this.aimWand(x, y);
+          canvas.style.cursor = 'grabbing';
+          if (!this.state.hints.wand) {
+            this.state.hints.wand = 1;
+            this.hintUi.show('깃털을 흔들어 보세요. 높이 들면 고양이가 뛰어올라요', 5000);
+          }
+          return true;
+        }
+        if (!this.hitThing(this.room.yarnBall, x, y, 26)) return false;
         // held where the finger took it, not snapped to the fingertip
         const at = this.floorPoint(x, y);
         if (!at) return false;
@@ -176,7 +253,25 @@ export class PixelApp {
         canvas.style.cursor = 'grabbing';
         return true;
       },
-      dragToy: (x, y) => {
+      dragToy: (x, y, id) => {
+        const L = this.laser;
+        if (L.held) {
+          // (the finger that took it up, or that came down on it in your hand, shines it once it
+          // moves off)
+          if (id === L.taking || id === L.downOn) {
+            if (Math.hypot(x - L.x0, y - L.y0) < 14) return;
+            L.taking = L.downOn = -1;
+            L.id = id;
+          }
+          if (id === L.id) { L.sx = x; L.sy = y; L.idle = 0; }
+          return;
+        }
+        const wf = this.wandFinger;
+        if (wf && wf.id === id) {
+          wf.x = x;
+          wf.y = y;
+          return;
+        }
         const f = this.toyFinger;
         const at = f && this.floorPoint(x, y);
         if (!f || !at) return;
@@ -184,7 +279,36 @@ export class PixelApp {
         f.y = y;
         this.room.holdYarn(at.add(f.off));
       },
-      releaseToy: (tap) => {
+      releaseToy: (tap, id) => {
+        const L = this.laser;
+        if (L.held) {
+          if (id === L.downOn && tap) this.takeLaser(false);
+          if (id === L.id) {
+            L.id = -1;
+            if (canvas.style.cursor === 'none') canvas.style.cursor = 'crosshair';
+            // (the first time the dot goes off: how to put the pointer down)
+            if (!this.state.hints.laserDown && L.used > 4) {
+              this.state.hints.laserDown = 1;
+              this.hintUi.show('아래의 포인터를 톡 누르면 내려놓아요', 4500);
+            }
+          }
+          if (id === L.taking) L.taking = -1;
+          if (id === L.downOn) L.downOn = -1;
+          this.gestureEnd();
+          return;
+        }
+        const wf = this.wandFinger;
+        if (wf && wf.id === id) {
+          // let go: the wand falls where it is, its cane along the floor the way the hand was
+          // (across the picture toward its bottom corner, where it shows)
+          this.wandFinger = null;
+          const tip = this.room.stringLine().a, hand = this.room.wandEnd;
+          const dx = hand.x - tip.x, dz = hand.z - tip.z, d = Math.hypot(dx, dz) || 1;
+          this.room.holdWand(false, new THREE.Vector3(tip.x + (dx / d) * 0.8, 0, tip.z + (dz / d) * 0.8));
+          canvas.style.cursor = '';
+          this.gestureEnd();
+          return;
+        }
         const f = this.toyFinger;
         this.toyFinger = null;
         this.room.holdYarn(null);
@@ -194,10 +318,12 @@ export class PixelApp {
       },
     });
     canvas.addEventListener('pointerdown', () => this.audio.start());
+    this.audio.unlockOn(window);
+    this.native();
     this.motion.onShake = (k) => this.brain.kibble(k);
 
     window.addEventListener('resize', () => { this.stage.resize(); this.frame3d(); });
-    document.addEventListener('visibilitychange', () => this.onVisibility());
+    document.addEventListener('visibilitychange', () => this.onVisibility(!document.hidden));
     window.addEventListener('pagehide', () => this.persist(true));
     window.addEventListener('keydown', (e) => this.key(e, true));
     window.addEventListener('keyup', (e) => this.key(e, false));
@@ -316,8 +442,18 @@ export class PixelApp {
     const lead = want.x + 0.08 * Math.sin(m.yaw) + m.vel.x * 0.7 * (1 - m.zoom);
     const off = lead - this.panX, dead = 0.07;
     const goal = Math.max(-0.5, Math.min(0.6, off > dead ? lead - dead : off < -dead ? lead + dead : this.panX));
+    const L = this.laser, wf = this.wandFinger;
+    const playing = this.avatar.doing === 'chase' || this.avatar.doing === 'tease';
+    const tool = L.held && L.id >= 0 ? L.sx : wf ? wf.x : null;
+    if (tool !== null && playing) {
+      // the red dot on: the room holds still under the finger (else the dot would slide off with
+      // it as the view went after the cat), unless the dot is held out near an edge, which takes
+      // the view on that way
+      const ex = (tool / innerWidth) * 2 - 1, edge = 0.7;
+      if (Math.abs(ex) > edge) this.panX = Math.max(-0.5, Math.min(0.6, this.panX + Math.sign(ex) * ((Math.abs(ex) - edge) / (1 - edge)) * 0.45 * dt));
+    }
     // (a little quicker after it when it is tearing about, so that it is not lost off the side)
-    this.panX += (goal - this.panX) * (1 - Math.exp(-dt * (1.8 + 1.2 * m.zoom)));
+    else this.panX += (goal - this.panX) * (1 - Math.exp(-dt * (1.8 + 1.2 * m.zoom)));
     const rate = this.focusT > this.focus ? 1.6 : 0.8;
     this.focus += Math.max(-rate * dt, Math.min(rate * dt, this.focusT - this.focus));
     this.placeCamera();
@@ -369,6 +505,135 @@ export class PixelApp {
     if (ray.intersectObject(o, true).length) return true;
     const p = o.getWorldPosition(new THREE.Vector3()).project(this.stage.camera);
     return Math.hypot((p.x * 0.5 + 0.5) * innerWidth - sx, (-p.y * 0.5 + 0.5) * innerHeight - sy) < near;
+  }
+
+  /** the laser pointer: taken up off the sill or not; the finger shining it (which, where, and how
+   *  far above the fingertip the dot shows, so that it is not under the finger); the touch that
+   *  took it up, or that came down on it in your hand (a tap there puts it down); where those
+   *  began; how long since it was last shone and for how long all told; where the dot is */
+  private readonly laser = {
+    held: false, id: -1, sx: 0, sy: 0, lift: 0, taking: -1, downOn: -1, x0: 0, y0: 0, idle: 0, used: 0,
+    hit: null as { p: THREE.Vector3; n: THREE.Vector3; on: 'floor' | 'bed' | 'sill' | 'books' | 'up' | 'out' | 'cat'; mug?: boolean } | null,
+  };
+
+  /** a finger holding the feather wand (where, which) */
+  private wandFinger: { x: number; y: number; id: number } | null = null;
+
+  /** is the feather wand under a screen point: its feathers (a finger is wider than they are), or
+   *  its cane where it shows */
+  private hitWand(sx: number, sy: number) {
+    const [lure, rod] = this.room.wandParts;
+    if (this.hitThing(lure, sx, sy, 30)) return true;
+    const ray = new THREE.Raycaster();
+    for (const [ox, oy] of [[0, 0], [8, 0], [-8, 0], [0, 8], [0, -8]]) {
+      ray.setFromCamera(new THREE.Vector2(((sx + ox) / innerWidth) * 2 - 1, -((sy + oy) / innerHeight) * 2 + 1), this.stage.camera);
+      if (ray.intersectObject(rod, false).length) return true;
+    }
+    return false;
+  }
+
+  /** where the finger takes the wand: the feathers hang where the finger is, on the air in front of
+   *  the bed (up the picture is up), or on the floor nearer you below that; the cane's tip above
+   *  them, its other end in your hand just below the picture */
+  private aimWand(sx: number, sy: number) {
+    const cam = this.stage.camera, ray = this.floorRay;
+    ray.setFromCamera(new THREE.Vector2((sx / innerWidth) * 2 - 1, -(sy / innerHeight) * 2 + 1), cam);
+    const o = ray.ray.origin, d = ray.ray.direction;
+    const zP = this.room.spots.bed.z + 0.25;
+    const p = o.clone().addScaledVector(d, Math.abs(d.z) > 1e-4 ? (zP - o.z) / d.z : 3);
+    if (p.y < 0 && d.y < -1e-4) p.copy(o).addScaledVector(d, -o.y / d.y);
+    p.x = Math.max(-0.62, Math.min(0.72, p.x));
+    p.y = Math.max(0, Math.min(0.85, p.y));
+    p.z = Math.min(this.room.spots.bed.z + 0.6, p.z);
+    // (the string's length above them: taut, so that they go where the finger goes, dragging over
+    // the floor or swinging in the air)
+    const tip = p.add(new THREE.Vector3(0, 0.27, 0));
+    // (the hand off the bottom right corner: the cane comes in across the picture, not up it)
+    const tv = Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2), D = 1.5;
+    const hand = new THREE.Vector3(1.05 * tv * D * cam.aspect, -tv * D - 0.03, -D).applyMatrix4(cam.matrixWorld);
+    this.room.aimWand(tip, hand);
+  }
+
+  /** how much of the bottom of the screen is the phone's own (the home bar), css px */
+  private safeB = -1;
+  private safeBottom() {
+    if (this.safeB < 0) {
+      const probe = document.createElement('div');
+      probe.style.cssText = 'position:fixed;bottom:0;height:0;padding-bottom:env(safe-area-inset-bottom);visibility:hidden;pointer-events:none';
+      document.body.appendChild(probe);
+      this.safeB = probe.getBoundingClientRect().height || 0;
+      probe.remove();
+      addEventListener('resize', () => { this.safeB = -1; }, { once: true });
+    }
+    return this.safeB;
+  }
+
+  /** how far along a ray it first meets the cat's body (its capsules), or -1 */
+  private rayCat(ray: THREE.Ray) {
+    const caps = this.cat.shared.uCaps.value as THREE.Vector4[];
+    const a = new THREE.Vector3(), b = new THREE.Vector3(), pr = new THREE.Vector3(), ps = new THREE.Vector3();
+    let best = -1;
+    for (let i = 0; i + 1 < caps.length; i += 2) {
+      const r = caps[i].w;
+      if (r <= 0) continue;
+      a.set(caps[i].x, caps[i].y, caps[i].z);
+      b.set(caps[i + 1].x, caps[i + 1].y, caps[i + 1].z);
+      const d2 = ray.distanceSqToSegment(a, b, pr, ps);
+      if (d2 > r * r) continue;
+      const t = ray.origin.distanceTo(pr) - Math.sqrt(r * r - d2);
+      if (best < 0 || t < best) best = t;
+    }
+    return best;
+  }
+
+  /** the laser pointer taken up off the sill, or put back down on it */
+  private takeLaser(up: boolean) {
+    const L = this.laser;
+    L.held = up;
+    L.id = L.taking = L.downOn = -1;
+    L.idle = 0;
+    L.hit = null;
+    this.room.takePointer(up);
+    this.audio.play('pencil', { gain: 0.12, rate: up ? 1.5 : 1.25 });
+    this.haptic.tap?.();
+    this.canvas.style.cursor = up ? 'crosshair' : '';
+    if (up && !this.state.hints.laser) {
+      this.state.hints.laser = 1;
+      this.hintUi.show('화면을 누른 채 움직이면 빨간 점이 따라가요', 5000);
+    }
+  }
+
+  /** the dot where the finger points (on whatever it falls on first, the cat too); the pointer in
+   *  your hand aimed at it; what the cat sees of it; and, a good while unused, the pointer put down */
+  private readonly laserNdc = new THREE.Vector2();
+  private shineLaser(dt: number) {
+    const L = this.laser, cam = this.stage.camera;
+    let dot: THREE.Vector3 | null = null;
+    if (L.held) {
+      L.idle += dt;
+      L.hit = null;
+      if (L.id >= 0) {
+        L.used += dt;
+        const sx = L.sx, sy = L.sy - L.lift;
+        this.laserNdc.set((sx / innerWidth) * 2 - 1, -(sy / innerHeight) * 2 + 1);
+        L.hit = this.room.laserHit(this.laserNdc, cam);
+        if (L.hit && L.hit.on !== 'out') dot = L.hit.p;
+        // (the cat in the way: the dot is on its coat, though as far as the cat knows it is where
+        // it was, behind; the dot is drawn where the finger points either way, so what matters is
+        // only the cat in front of the window, where there would be no dot: the capsules round its
+        // body are enough to tell)
+        else if (!this.avatar.hidden) {
+          const t = this.rayCat(this.room.laserRay.ray);
+          if (t > 0) dot = this.room.laserRay.ray.at(t, new THREE.Vector3());
+        }
+      }
+      this.room.holdPointer(cam, dot, dt, this.safeBottom() / Math.max(1, innerHeight));
+      if (L.idle > 45 && L.id < 0 && L.taking < 0 && L.downOn < 0) this.takeLaser(false);
+    }
+    this.stage.setLaser(dot);
+    const h = L.hit;
+    this.avatar.laser = dot && h && h.on !== 'cat' && h.on !== 'out' ? { p: h.p, n: h.n, on: h.on, mug: h.mug } : null;
+    if (dot && this.brain.mode !== 'sleep' && this.brain.mode !== 'doze') this.brain.toy(L.sx, L.sy - L.lift, dt);
   }
 
   /** a finger moving the ball of wool: where it is (css px), and where the ball is from the
@@ -441,6 +706,20 @@ export class PixelApp {
     return Math.hypot(dx, dy) < 26;
   }
 
+  /** in the native app (iOS, Android): the back button closes the credits, or puts the app away
+   *  (the cat is not quit, only left); going to the background saves, as the page hiding does */
+  private native() {
+    if (!Capacitor.isNativePlatform()) return;
+    void CapApp.addListener('backButton', () => {
+      if (this.creditsOpen) this.showCredits(false);
+      else void CapApp.minimizeApp();
+    });
+    // (if the page has not already been told)
+    void CapApp.addListener('appStateChange', ({ isActive }) => {
+      if (isActive !== this.visible) this.onVisibility(isActive);
+    });
+  }
+
   /** permission prompts must come from inside a tap */
   private gestureEnd() {
     this.audio.start();
@@ -474,8 +753,10 @@ export class PixelApp {
     }
   }
 
-  private onVisibility() {
-    this.visible = !document.hidden;
+  private onVisibility(visible = !document.hidden) {
+    if (visible === this.visible && this.visibleOnce) return;
+    this.visibleOnce = true;
+    this.visible = visible;
     if (!this.visible) {
       this.persist(true);
       this.audio.suspend();
@@ -614,7 +895,7 @@ export class PixelApp {
       document.querySelector('meta[name="theme-color"]')?.setAttribute('content', tc);
     }
     // the tea on the books steams; by day dust turns in the sun
-    this.stage.setSteam(this.room.mugTop, 1);
+    this.stage.setSteam(this.room.mugUp ? this.room.mugTop : null, 1);
     this.stage.setMotes(this.room.dust(dt, (1 - dark) * (1 - rain)));
     // a moth round the lamp, a fly at the window: their wings a blur of up and down
     const bug = this.room.bugAt();
@@ -626,6 +907,15 @@ export class PixelApp {
     this.stage.setTime(now);
     this.hints(dt, contacts.length > 0);
     this.moveCamera(dt, contacts.length > 0);
+    this.shineLaser(dt);
+    // the feather wand in the hand: the tip after the finger (the view may have moved under it);
+    // its string drawn; the feathers for the cat, dangled or lying where it fell
+    const wf = this.wandFinger;
+    if (wf) this.aimWand(wf.x, wf.y);
+    const sl = this.room.stringLine();
+    this.stage.setString(sl.a, sl.b, sl.sag * 0.6);
+    this.avatar.wand = { p: this.room.lureAt(), v: this.room.lureVel, held: this.room.wandHeld, pinned: this.room.lurePinned };
+    if (wf && this.room.lureVel.length() > 0.08) this.brain.toy(wf.x, wf.y, dt);
     if ((this.saveIn -= dt) < 0) {
       this.saveIn = 10;
       this.persist(false);
@@ -658,8 +948,23 @@ export class PixelApp {
         s.hints.pet = 1;
         this.hintUi.show('손가락으로 살며시 쓰다듬어 보세요', 5000);
       }
+      return;
+    }
+    // once it has been stroked a while: its toys, one at a time, while it is awake and nobody is
+    // doing anything (the laser pointer on the sill, then the feather wand on the floor)
+    const awake = this.brain.mode === 'rest' || this.brain.mode === 'alert';
+    // (twice each at most: after that, they are yours to find)
+    const nudge = (k: string) => !s.hints[k] && (s.hints[k + 'Nudge'] ?? 0) < 2;
+    if (s.alive && awake && !this.avatar.hidden && s.stats.petSeconds > 8 && !this.laser.held && !this.wandFinger && (nudge('laser') || nudge('wand'))) {
+      if ((this.toyHintIn -= dt) < 0) {
+        this.toyHintIn = 240;
+        const k = nudge('laser') ? 'laser' : 'wand';
+        s.hints[k + 'Nudge'] = (s.hints[k + 'Nudge'] ?? 0) + 1;
+        this.hintUi.show(k === 'laser' ? '창턱의 레이저 포인터를 톡 눌러 보세요' : '바닥의 깃털 낚싯대를 잡고 흔들어 보세요', 5000);
+      }
     }
   }
+  private toyHintIn = 40;
 }
 
 function localStorageHas() {

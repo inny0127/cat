@@ -5,6 +5,8 @@ import { NEUTRAL, type Mood } from '../cat3d/mood';
 import type { Avatar } from '../sim/avatar';
 import type { EarMood, TailMood } from '../rig/animator';
 import { chooseAct, groomChest, groomFlank, knead, restingPose, sneeze, toBed, toWindow, wander, warmUp, washFace, yawn, type Act, type Ctx, sunbathe, Play, Sill, Hunt, Box, Zoomies, Walk, Stare, Rub, scratchEar, wakeUp, stretchSideOn, type SillSpot } from './behave';
+import { Chase, Startle, type LaserDot } from './chase';
+import { Tease, type Lure } from './tease';
 
 const LYING: PoseName[] = ['loaf', 'sphinx', 'side', 'curl', 'curlL'];
 const CURLED = (p: PoseName) => p === 'curl' || p === 'curlL';
@@ -76,6 +78,28 @@ export class PixelAvatar implements Avatar {
   lureMoving = false;
   /** a bird on the ledge outside, if there is one (where, on the glass) */
   visitor: THREE.Vector3 | null = null;
+  /** the red dot of a laser pointer, while one shines in the room (set by the app); a moment's
+   *  stare at it before it has to be had; and after a long game of it, a while before it will be
+   *  drawn in again (it only watches) */
+  laser: LaserDot | null = null;
+  private laserT = 0;
+  private laserNeed = 0.3;
+  private chaseRest = 0;
+  /** the room's say in where a cat can run, and what it can knock over (set by the app) */
+  ground: {
+    keepClear: (p: THREE.Vector3, r: number) => THREE.Vector3;
+    detour: (from: THREE.Vector3, to: THREE.Vector3, r: number) => THREE.Vector3 | null;
+    knockMug: (dir: THREE.Vector3, sure?: boolean) => boolean;
+    books: THREE.Vector3;
+    batLure: (v: THREE.Vector3) => void;
+    pinLure: (sec: number, at: THREE.Vector3) => void;
+  } | null = null;
+  /** the feathers of the wand (set by the app): dangled by a hand, a moment's watching and it has
+   *  to have them; after a long game, a while before it will play again */
+  wand: Lure | null = null;
+  private wandT = 0;
+  private wandNeed = 0.5;
+  private teaseRest = 0;
   /** how strong the sun in the room is (set by the app): asleep in it, a cat draws a paw over its
    *  eyes */
   glare = 0;
@@ -180,6 +204,22 @@ export class PixelAvatar implements Avatar {
     this.cat.motor.flickEar('both', 0.4);
     if (!this.act && !this.errand && !this.trip) this.heard = { at: at.clone(), t: 1.3 + Math.random() * 0.8, tilt: this.puzzle() };
   }
+  /** a crash in the room (the mug in pieces on the floor): it starts at it, asleep or awake;
+   *  awake and about, it is off from it at a scramble, and then has a look (up on the sill or in
+   *  the box, it only stares) */
+  crash(at: THREE.Vector3) {
+    if (!this.alive || this.isHidden) return;
+    this.cat.motor.jolt(1.3);
+    this.cat.motor.flickEar('both', 1.2);
+    if (this.sleep > 0.3 || this.errand || this.trip) return;
+    if (this.perched) { this.see(at); return; }
+    this.stopAct();
+    this.act = new Startle(this.ctx, at);
+    // (and no games for a little while after)
+    this.chaseRest = Math.max(this.chaseRest, 8);
+    this.teaseRest = Math.max(this.teaseRest, 8);
+  }
+
   /** thunder (loud 0 .. 1): it looks to the window; awake, a near clap may send it to cover, into
    *  the box if it is out, or to its bed */
   thunder(loud: number, at: THREE.Vector3) {
@@ -198,7 +238,7 @@ export class PixelAvatar implements Avatar {
   /** up on the sill or in the box (or jumping to or from them): it has to come out before anything
    *  else */
   private get perched() {
-    return (this.act instanceof Sill || this.act instanceof Box) && this.act.up;
+    return (this.act instanceof Sill || this.act instanceof Box || this.act instanceof Chase) && this.act.up;
   }
   private fading: { t: number; dur: number; onDone?: () => void } | null = null;
   private readonly look = new THREE.Vector3();
@@ -252,6 +292,10 @@ export class PixelAvatar implements Avatar {
       box: () => this.boxSpot?.() ?? null,
       birds: () => this.outside?.birds() ?? null,
       sound: (name, gain) => this.outside?.sound(name, gain),
+      say: (kind) => {
+        this.outside?.sound(kind, 0.55);
+        this.vocalize(kind, { trill: 0.29, meow: 0.65, meowSoft: 0.44, chirp: 0.11 }[kind], 0);
+      },
       chirp: () => this.outside?.chirp(),
       bug: () => this.outside?.bug?.() ?? null,
       scareBug: (from) => this.outside?.scareBug?.(from),
@@ -259,6 +303,14 @@ export class PixelAvatar implements Avatar {
       pencil: () => this.outside?.pencil?.() ?? null,
       pushPencil: (dz, dx) => this.outside?.pushPencil?.(dz, dx),
       viewer: () => this.viewer(),
+      laser: () => this.laser,
+      keepClear: (p, r) => this.ground?.keepClear(p, r) ?? p,
+      detour: (from, to, r) => this.ground?.detour(from, to, r) ?? null,
+      knockMug: (dir, sure) => this.ground?.knockMug(dir, sure) ?? false,
+      books: () => this.ground?.books ?? new THREE.Vector3(9, 0, 9),
+      lure: () => this.wand,
+      batLure: (v) => this.ground?.batLure(v),
+      pinLure: (sec, at) => this.ground?.pinLure(sec, at),
       perch: (h) => { this.cat.perch = h; },
       hold: (y) => { this.cat.liftHold = y; },
     };
@@ -357,9 +409,55 @@ export class PixelAvatar implements Avatar {
               : name === 'rub' && c.posts().length ? new Rub(c, c.posts()[0]) : name === 'scratch' ? scratchEar() : toBed(c, 'loaf');
   }
 
+  /** the red dot of a laser pointer: awake and its own master, it drops what it was doing and is
+   *  after it (up on the sill with the dot up there too, after it there; in the box, out first) */
+  chaseNow() {
+    if (!this.alive || this.sleep > 0.3 || this.errand || this.trip || this.hidden || this.chaseRest > 0 || !this.laser) return false;
+    if (this.mode !== 'rest' && this.mode !== 'alert') return false;
+    // (not while it is getting over a fright)
+    if (this.mood.sleepy > 0.75 || this.act instanceof Chase || this.act instanceof Startle) return false;
+    if (this.act instanceof Sill && this.act.up) {
+      const ph = this.act.phase;
+      if (this.laser.on === 'sill' && (ph === 'settle' || ph === 'sit' || ph === 'nap' || ph === 'about' || ph === 'knock')) {
+        this.act.stop(this.ctx);
+        this.act = new Chase(this.ctx, true);
+        return true;
+      }
+    }
+    if (this.perched) {
+      if (!this.afterPerch) {
+        this.afterPerch = () => { this.chaseNow(); };
+        (this.act as Sill | Box).leave();
+      }
+      return false;
+    }
+    this.stopAct();
+    this.act = new Chase(this.ctx);
+    return true;
+  }
+
+  /** feathers dangled before it: awake and its own master, it drops what it was doing for them */
+  teaseNow() {
+    if (!this.alive || this.sleep > 0.3 || this.errand || this.trip || this.hidden || this.teaseRest > 0 || !this.wand) return false;
+    if (this.mode !== 'rest' && this.mode !== 'alert') return false;
+    if (this.mood.sleepy > 0.75 || this.act instanceof Tease || this.act instanceof Startle || (this.act instanceof Chase && this.laser)) return false;
+    if (this.perched) {
+      if (!this.afterPerch) {
+        this.afterPerch = () => { this.teaseNow(); };
+        (this.act as Sill | Box | Chase).leave();
+      }
+      return false;
+    }
+    this.stopAct();
+    this.act = new Tease();
+    return true;
+  }
+
   /** something to chase: awake and its own master, it drops what it was doing and plays */
   playNow() {
     if (!this.alive || this.sleep > 0.3 || this.errand || this.trip || this.hidden || this.perched || this.playRest > 0) return false;
+    // (not while it is after the red dot, or the feathers, or getting over a fright)
+    if ((this.act instanceof Chase && this.laser) || (this.act instanceof Tease && this.wand?.held) || this.act instanceof Startle) return false;
     if (this.mode !== 'rest' && this.mode !== 'alert') return false;
     if (this.act?.name === 'play') return true;
     if (this.mood.sleepy > 0.6) return false;
@@ -372,7 +470,7 @@ export class PixelAvatar implements Avatar {
     if (!this.act) return;
     // up on the sill or in the box it is not simply dropped: it is asked out, and carries on until
     // it is
-    if ((this.act instanceof Sill || this.act instanceof Box) && this.act.up) {
+    if ((this.act instanceof Sill || this.act instanceof Box || this.act instanceof Chase) && this.act.up) {
       this.act.leave();
       return;
     }
@@ -442,6 +540,8 @@ export class PixelAvatar implements Avatar {
         this.act.stop(c);
         // played itself out: not again for a while
         if (this.act instanceof Play) this.playRest = this.act.tired ? 60 : 6;
+        if (this.act instanceof Chase) this.chaseRest = this.act.tired ? 90 : 2;
+        if (this.act instanceof Tease) this.teaseRest = this.act.tired ? 60 : 2;
         if (this.act instanceof Hunt) this.huntRest = 40 + Math.random() * 60;
         this.act = null;
       }
@@ -515,13 +615,32 @@ export class PixelAvatar implements Avatar {
     if (this.afterPerch && !this.perched) {
       const f = this.afterPerch;
       this.afterPerch = null;
-      if (this.act instanceof Sill || this.act instanceof Box) { this.act.stop(this.ctx); this.act = null; }
+      if (this.act instanceof Sill || this.act instanceof Box || this.act instanceof Chase) { this.act.stop(this.ctx); this.act = null; }
       f();
     }
     if (this.errand) this.doErrand(dt);
     this.leanIntoHand(dt);
     this.playRest = Math.max(0, this.playRest - dt);
     this.huntRest = Math.max(0, this.huntRest - dt);
+    // the red dot of a laser pointer: a moment's stare, and it is after it
+    this.chaseRest = Math.max(0, this.chaseRest - dt);
+    if (this.laser && !(this.act instanceof Chase)) {
+      this.laserT += dt;
+      if (this.laserT > this.laserNeed && this.chaseNow()) this.laserT = 0;
+    } else {
+      this.laserT = 0;
+      this.laserNeed = 0.15 + Math.random() * 0.45;
+    }
+    // the feathers on the wand dangled and twitched: watched a moment, then it has to have them
+    this.teaseRest = Math.max(0, this.teaseRest - dt);
+    const W = this.wand;
+    if (W && W.held && !(this.act instanceof Tease)) {
+      this.wandT += dt * (W.v.length() > 0.15 ? 1 : 0.2);
+      if (this.wandT > this.wandNeed && this.teaseNow()) this.wandT = 0;
+    } else {
+      this.wandT = 0;
+      this.wandNeed = 0.3 + Math.random() * 0.6;
+    }
     // a ball someone is moving about: watched a moment, then it has to have it
     if (this.lure && this.act?.name !== 'play') {
       this.lureT += dt * (this.lureMoving ? 1 : 0.25);
@@ -556,6 +675,8 @@ export class PixelAvatar implements Avatar {
     if ((this.act instanceof Sill || this.act instanceof Play || this.act instanceof Hunt || this.act instanceof Box || this.act instanceof Zoomies || this.act instanceof Stare || this.act?.ownGaze) && this.mode !== 'enjoy') { /* the act decides */ }
     else if (!this.alive || this.sleep > 0.5 || busy) m.lookAt(null);
     else if (this.lure) m.lookAt(this.lure, 1);
+    else if (this.laser) m.lookAt(this.laser.p, 1);
+    else if (this.wand?.held) m.lookAt(this.wand.p, 1);
     else if (this.visitor) {
       // a bird on the ledge: eyes on it, and now and then a chatter at it
       m.lookAt(this.visitor, 1);
@@ -828,7 +949,7 @@ export class PixelAvatar implements Avatar {
     if (this.perched) {
       // down off the sill first
       this.afterPerch = () => this.bolt(dir, onDone, calm, reason);
-      (this.act as Sill | Box).leave();
+      (this.act as Sill | Box | Chase).leave();
       return;
     }
     const m = this.cat.motor;

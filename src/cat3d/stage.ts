@@ -99,6 +99,10 @@ uniform vec3 uNotes[4];  // music notes rising off the radio: where (art pixels)
 uniform vec4 uBug;       // a moth or a fly: where (art pixels), how far off (view depth), and what
                          // (0 none, 1 a moth, 2 a fly; its fraction, the wings' beat)
 uniform vec3 uBugCol;    // ... and the colour of the light on it
+uniform vec3 uLaser;     // the red dot of a laser pointer: where (art pixels), how bright (0: off)
+uniform vec3 uStrA;      // a string (the feather wand's): from here (art pixels, view depth) ...
+uniform vec3 uStrB;      // ... to here
+uniform vec2 uStrSag;    // how far it sags at its middle (art pixels; and whether there is one)
 uniform float uTime;
 uniform vec3 uTintSun;   // the colour of the hour: on what the sun lights,
 uniform vec3 uTintShade; // ... on everything else,
@@ -128,6 +132,20 @@ vec3 neutral(vec3 c) {
   return mix(c, vec3(np), g);
 }
 vec3 toSRGB(vec3 c) { c = clamp(c, 0.0, 1.0); return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c)); }
+// is an art pixel on a line drawn as pixel art draws one (one pixel to a column, or to a row,
+// whichever way it runs more), and how far along it
+float onLine(vec2 a, vec2 b, ivec2 p) {
+  vec2 d = b - a, c = vec2(p) + 0.5;
+  if (abs(d.x) >= abs(d.y)) {
+    if (abs(d.x) < 0.5) return all(equal(ivec2(floor(a)), p)) ? 0.0 : -1.0;
+    float t = (c.x - a.x) / d.x;
+    if (t < 0.0 || t > 1.0) return -1.0;
+    return int(floor(a.y + t * d.y)) == p.y ? t : -1.0;
+  }
+  float t = (c.y - a.y) / d.y;
+  if (t < 0.0 || t > 1.0) return -1.0;
+  return int(floor(a.x + t * d.x)) == p.x ? t : -1.0;
+}
 vec3 toLin(vec3 c) { return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(0.04045, c)); }
 vec3 oklab(vec3 c) {
   c = toLin(c);
@@ -391,6 +409,38 @@ void main() {
       else if (up && (q == ivec2(0, 1) || q == ivec2(1, 1))) col = mix(col, vec3(0.85, 0.88, 0.95) * uBugCol, 0.6);
     }
   }
+  // the wand's string, a line of single pixels (sagging when slack), behind whatever is nearer
+  if (uStrSag.y > 0.0) {
+    vec2 a = uStrA.xy, b = uStrB.xy, m = (a + b) * 0.5 - vec2(0.0, uStrSag.x);
+    vec2 lo = min(min(a, b), m) - 1.0, hi = max(max(a, b), m) + 1.0;
+    if (float(p.x) >= lo.x && float(p.x) <= hi.x && float(p.y) >= lo.y && float(p.y) <= hi.y) {
+      float t1 = onLine(a, m, p), t2 = t1 < 0.0 ? onLine(m, b, p) : -1.0;
+      float t = t1 >= 0.0 ? 0.5 * t1 : t2 >= 0.0 ? 0.5 + 0.5 * t2 : -1.0;
+      if (t >= 0.0) {
+        float z = mix(uStrA.z, uStrB.z, t);
+        bool behind = depth < 0.99999 && lin(depth) < z - 0.02;
+        if (!behind) col = mix(col, vec3(0.36, 0.25, 0.31), 0.85);
+      }
+    }
+  }
+  // the red dot of a laser pointer on whatever it falls on (the cat too): a hot point nearly white
+  // at its heart, red round it, a speckle of red light on the surface about it, and a glow
+  if (uLaser.z > 0.0) {
+    // (from the middle of the art pixel the dot is in, so that it is round about its own middle;
+    // its speckle shimmers, as a laser's does)
+    ivec2 q = p - ivec2(floor(uLaser.xy));
+    float r = length(vec2(q));
+    float sp = fract(sin(dot(vec2(q) + floor(uTime * 20.0) * vec2(3.1, 7.7), vec2(12.9898, 78.233))) * 43758.5453);
+    vec3 red = vec3(1.0, 0.12, 0.24);
+    float k = 0.0, g = 0.0;
+    if (r < 0.5) { col = mix(col, vec3(1.0, 0.93, 0.9), uLaser.z); g = 1.0; }
+    else if (r < 1.2) { col = mix(col, vec3(1.0, 0.36, 0.42), uLaser.z); g = 1.0; }
+    else if (r < 1.5) { col = mix(col, red, uLaser.z); g = 0.85; }
+    else if (r < 2.3) { k = 0.45 + 0.25 * sp; g = 0.5; }
+    else if (r < 3.2 && sp > 0.55) { k = 0.25; g = 0.2; }
+    if (k > 0.0) col = mix(col, 1.0 - (1.0 - col) * (1.0 - red), k * uLaser.z);
+    glow = max(glow, g * uLaser.z);
+  }
   gl_FragColor = vec4(col, glow);
 }`;
 
@@ -532,6 +582,8 @@ export class Stage {
         uMotes: { value: Array.from({ length: 16 }, () => new THREE.Vector3()) },
         uNotes: { value: Array.from({ length: 4 }, () => new THREE.Vector3()) },
         uBug: { value: new THREE.Vector4() }, uBugCol: { value: new THREE.Vector3(1, 1, 1) },
+        uLaser: { value: new THREE.Vector3() },
+        uStrA: { value: new THREE.Vector3() }, uStrB: { value: new THREE.Vector3() }, uStrSag: { value: new THREE.Vector2() },
         uTime: { value: 0 },
         uCatDull: { value: 0 },
         uTintSun: { value: new THREE.Vector3(1, 1, 1) },
@@ -718,6 +770,29 @@ export class Stage {
     const depth = -at.clone().applyMatrix4(this.camera.matrixWorldInverse).z;
     u.set(a.x, a.y, depth, (kind === 'moth' ? 1 : 2) + (up ? 0.75 : 0.25));
     if (light) (this.pixel.mat.uniforms.uBugCol.value as THREE.Vector3).copy(light);
+  }
+
+  /** the red dot of a laser pointer, at a world point (null: off) */
+  setLaser(at: THREE.Vector3 | null, bright = 1) {
+    if (!this.pixel) return;
+    const u = this.pixel.mat.uniforms.uLaser.value as THREE.Vector3;
+    if (!at || bright <= 0) { u.set(0, 0, 0); return; }
+    const a = this.toArt(at, new THREE.Vector2());
+    u.set(a.x, a.y, bright);
+  }
+
+  /** a string from one world point to another, sagging so far at its middle (metres; null: none) */
+  setString(a: THREE.Vector3 | null, b?: THREE.Vector3, sag = 0) {
+    if (!this.pixel) return;
+    const u = this.pixel.mat.uniforms;
+    if (!a || !b) { (u.uStrSag.value as THREE.Vector2).set(0, 0); return; }
+    const pa = this.toArt(a, new THREE.Vector2()), pb = this.toArt(b, new THREE.Vector2());
+    const za = -a.clone().applyMatrix4(this.camera.matrixWorldInverse).z, zb = -b.clone().applyMatrix4(this.camera.matrixWorldInverse).z;
+    (u.uStrA.value as THREE.Vector3).set(pa.x, pa.y, za);
+    (u.uStrB.value as THREE.Vector3).set(pb.x, pb.y, zb);
+    // (metres to art pixels at that distance)
+    const px = (2 * Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2) * (za + zb) * 0.5) / this.pixelRows();
+    (u.uStrSag.value as THREE.Vector2).set(sag / px, 1);
   }
 
   /** how much colour an ill cat's coat has lost (0 .. 1) */

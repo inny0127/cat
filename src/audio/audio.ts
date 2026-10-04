@@ -38,11 +38,19 @@ export class CatAudio {
 
   start() {
     if (this.ctx) {
-      if (this.ctx.state === 'suspended') void this.ctx.resume();
+      // (suspended, or on iOS 'interrupted' by a call or the app going to the background: only a
+      // touch can start it again)
+      if (this.ctx.state !== 'running') void this.ctx.resume();
       return;
     }
     const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     if (!AC) return;
+    // on iOS: a room's sounds, not a music player's: they mix with whatever else is playing and
+    // keep quiet with the phone's silent switch, as a game's do
+    const session = (navigator as unknown as { audioSession?: { type: string } }).audioSession;
+    if (session) {
+      try { session.type = 'ambient'; } catch { /* not settable here */ }
+    }
     const ctx = (this.ctx = new AC({ latencyHint: 'interactive' }));
     this.master = ctx.createGain();
     this.master.gain.value = 0.9;
@@ -187,6 +195,8 @@ export class CatAudio {
       ['rugScratch', () => S.rugScratch(sr), 3],
       ['thump', () => S.thump(sr), 2],
       ['pencil', () => S.pencil(sr), 3],
+      ['shatter', () => S.shatter(sr), 2],
+      ['bell', () => S.bell(sr), 4],
       ['step', () => S.step(sr), 4],
       ['rain', () => S.rain(sr), 1],
       ['birdChip', () => S.birdChip(sr), 4],
@@ -288,6 +298,16 @@ export class CatAudio {
   }
   resume() {
     if (this.ctx && this.ctx.state !== 'running') void this.ctx.resume();
+  }
+
+  /** Safari lets sound start only from the end of a touch (or a click, a key), not its start:
+   *  every such event starts it, until it is running */
+  unlockOn(target: EventTarget) {
+    const go = () => {
+      this.start();
+      if (this.ctx?.state === 'running') for (const t of ['touchend', 'pointerup', 'click', 'keydown']) target.removeEventListener(t, go, true);
+    };
+    for (const t of ['touchend', 'pointerup', 'click', 'keydown']) target.addEventListener(t, go, true);
   }
 }
 

@@ -15,11 +15,33 @@ export class Haptic {
     return typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function';
   }
 
+  /** iOS Safari has no vibrate(), but (from iOS 18) a switch control ticks under the finger when it
+   *  is flipped: a hidden one, flipped from inside a touch, is a tap to feel */
+  private iosSwitch: HTMLLabelElement | null = null;
+  private iosTick() {
+    if (!this.iosSwitch) {
+      const label = document.createElement('label');
+      label.setAttribute('aria-hidden', 'true');
+      label.style.cssText = 'position:fixed;left:-100px;top:-100px;width:1px;height:1px;overflow:hidden;opacity:0;pointer-events:none';
+      const input = document.createElement('input');
+      input.type = 'checkbox';
+      input.setAttribute('switch', '');
+      input.tabIndex = -1;
+      label.appendChild(input);
+      document.body.appendChild(label);
+      this.iosSwitch = label;
+    }
+    this.iosSwitch.click();
+  }
+  private readonly ios = typeof navigator !== 'undefined' && (/iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
+
   tap(kind: 'light' | 'medium' | 'heavy' = 'light') {
     if (this.native) {
       void Haptics.impact({ style: kind === 'heavy' ? ImpactStyle.Heavy : kind === 'medium' ? ImpactStyle.Medium : ImpactStyle.Light });
     } else if (this.webVibrate) {
       navigator.vibrate(kind === 'heavy' ? 40 : kind === 'medium' ? 22 : 10);
+    } else if (this.ios) {
+      try { this.iosTick(); } catch { /* no way to feel it here */ }
     }
   }
 
