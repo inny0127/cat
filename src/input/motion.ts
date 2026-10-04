@@ -1,12 +1,19 @@
 /**
- * Shaking the phone like a bag of kibble. iOS asks permission for motion sensors, which has to
- * happen inside a touch handler, so `ask()` is called from one when the cat first wants food.
+ * Shaking the phone like a bag of kibble; and how it is tipped, for looking through it as through
+ * a window (tiltX, tiltY). iOS asks permission for motion sensors, which has to happen inside a
+ * touch handler, so `ask()` is called from one when the cat first wants food.
  */
 type PermissionFn = () => Promise<'granted' | 'denied'>;
 
 export class MotionInput {
   onShake: (strength: number) => void = () => {};
   active = false;
+  /** how the phone is tipped from the way it has been held of late, in the screen's own axes (-1 ..
+   *  1 each way: the right edge away from you, the top toward you) */
+  tiltX = 0;
+  tiltY = 0;
+  private held: { x: number; y: number } | null = null;
+  private lastTurn = 0;
   private needsPermission: boolean;
   private gx = 0;
   private gy = 0;
@@ -30,12 +37,16 @@ export class MotionInput {
     return this.needsPermission && !this.active;
   }
 
-  /** must run inside a user gesture on iOS */
+  /** must run inside a user gesture on iOS (motion, and the phone's turn, which iOS may ask for
+   *  on its own) */
   async ask() {
     if (!this.needsPermission || this.active) return this.active;
     try {
       const DME = (window as unknown as { DeviceMotionEvent: { requestPermission: PermissionFn } }).DeviceMotionEvent;
-      const r = await DME.requestPermission();
+      const DOE = (window as unknown as { DeviceOrientationEvent?: { requestPermission?: PermissionFn } }).DeviceOrientationEvent;
+      const asked = [DME.requestPermission()];
+      if (DOE && typeof DOE.requestPermission === 'function') asked.push(DOE.requestPermission().catch(() => 'denied' as const));
+      const [r] = await Promise.all(asked);
       if (r === 'granted') this.listen();
     } catch {
       /* dismissed */
@@ -47,6 +58,27 @@ export class MotionInput {
     if (this.active) return;
     this.active = true;
     window.addEventListener('devicemotion', (e) => this.sample(e));
+    window.addEventListener('deviceorientation', (e) => this.turn(e));
+  }
+
+  /** the phone's turn, into the screen's axes; measured from the way it has been held these last
+   *  few seconds (which drifts after it), so that however it is held, still is the middle */
+  private turn(e: DeviceOrientationEvent) {
+    if (e.beta == null || e.gamma == null) return;
+    const ang = screen.orientation?.angle ?? 0;
+    let x = e.gamma, y = e.beta;
+    if (ang === 90) { x = e.beta; y = -e.gamma; }
+    else if (ang === 270 || ang === -90) { x = -e.beta; y = e.gamma; }
+    else if (ang === 180) { x = -e.gamma; y = -e.beta; }
+    const now = e.timeStamp / 1000;
+    const dt = this.lastTurn ? Math.min(0.25, Math.max(0, now - this.lastTurn)) : 0;
+    this.lastTurn = now;
+    if (!this.held || Math.abs(y - this.held.y) > 60) this.held = { x, y };
+    const k = 1 - Math.exp(-dt / 3);
+    this.held.x += (x - this.held.x) * k;
+    this.held.y += (y - this.held.y) * k;
+    this.tiltX = Math.max(-1, Math.min(1, (x - this.held.x) / 18));
+    this.tiltY = Math.max(-1, Math.min(1, (y - this.held.y) / 18));
   }
 
   private sample(e: DeviceMotionEvent) {

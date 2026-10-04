@@ -431,6 +431,9 @@ export class PixelApp {
 
   /** where the view is: the whole room, or (touching the cat) close on it, easing between */
   private readonly roomView = { target: new THREE.Vector3(), dir: new THREE.Vector3(0, 0.3, 1), dist: 3 };
+  /** where the eye is off to the side of the glass, the phone tipped (metres; eased after it) */
+  private readonly head = new THREE.Vector2();
+  private readonly still = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
   private closeDist = 1.5;
   /** how close it comes this time: no closer than keeps the cat's face on the screen */
   private closeNow = 1.5;
@@ -461,8 +464,21 @@ export class PixelApp {
     const el = Math.atan2(dir.y, dir.z);
     cam.position.copy(target).addScaledVector(dir, dist / Math.cos(el));
     cam.rotation.set(0, 0, 0);
+    // the phone tipped: as an eye moved off to the side of a window, the view through it shifts
+    // (the room behind the glass the more the further back, the sky most of all) while the glass
+    // itself stays put: the eye moved across and the lens shifted back to the same glass (not
+    // close in on the cat, where the hand is)
+    const hx = this.head.x * (1 - f), hy = this.head.y * (1 - f);
+    let gx = 0, gy = 0;
+    if ((hx || hy) && this.room) {
+      cam.position.x += hx;
+      cam.position.y += hy;
+      const dg = Math.max(0.5, cam.position.z - (this.room.spots.bed.z + 0.45));
+      gx = hx / (dg * tvp * cam.aspect);
+      gy = hy / (dg * tvp);
+    }
     cam.updateMatrixWorld();
-    this.stage.setShift(Math.tan(el) / tvp);
+    this.stage.setShift(Math.tan(el) / tvp + gy, gx);
     // coming in close round a spot on the cat touched: the view slid square to itself till that
     // spot is under the finger again (fully while the hand is on it or the view holds close; going
     // back out, less and less), so far that the middle of the cat stays well on the screen
@@ -626,6 +642,12 @@ export class PixelApp {
     else this.panX += (goal - this.panX) * (1 - Math.exp(-dt * (1.8 + 1.2 * m.zoom)));
     const rate = this.focusT > this.focus ? 1.6 : 0.8;
     this.focus += Math.max(-rate * dt, Math.min(rate * dt, this.focusT - this.focus));
+    // (the right edge tipped away from you is the eye gone off to the left of the glass; the top
+    // tipped toward you, the eye gone up, looking down through it)
+    const mo = this.motion, k = 1 - Math.exp(-dt * 6);
+    const wx = this.still ? 0 : -0.14 * mo.tiltX, wy = this.still ? 0 : 0.08 * mo.tiltY;
+    this.head.x += (wx - this.head.x) * k;
+    this.head.y += (wy - this.head.y) * k;
     this.placeCamera();
   }
 

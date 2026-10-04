@@ -688,7 +688,7 @@ export class Stage {
     const r = this.renderer;
     // the art is drawn a little wider than the screen: the same view, with a margin round it
     const cam = this.camera, n = P.nominal, mg = (P.rt.width - n.x) / 2, mgy = (P.rt.height - n.y) / 2;
-    cam.setViewOffset(n.x, n.y, -mg, -mgy + this.shiftPx, P.rt.width, P.rt.height);
+    cam.setViewOffset(n.x, n.y, -mg - this.shiftPxX, -mgy + this.shiftPx, P.rt.width, P.rt.height);
     r.setRenderTarget(P.rt);
     r.render(this.scene, cam);
     const u = P.mat.uniforms;
@@ -884,20 +884,26 @@ export class Stage {
    *  is below the level of the camera); whole art pixels in pixel art */
   private shift = 0;
   private shiftPx = 0;
-  setShift(s: number) {
-    if (s === this.shift) return;
+  private shiftPxX = 0;
+  setShift(s: number, sx = 0) {
+    if (s === this.shift && sx === this.shiftX) return;
     this.shift = s;
+    this.shiftX = sx;
     this.level();
   }
+  /** (across, as the eye moves off to one side of the glass: of half the picture's width) */
+  private shiftX = 0;
 
   /** the camera's own view (what rays and projections use) with the lens shifted */
   private level() {
     const cam = this.camera;
     const n = this.pixel ? this.pixel.nominal : this.renderer.getDrawingBufferSize(new THREE.Vector2());
     const px = this.pixel ? Math.round((this.shift * n.y) / 2) : (this.shift * n.y) / 2;
+    const qx = this.pixel ? Math.round((this.shiftX * n.x) / 2) : (this.shiftX * n.x) / 2;
     this.shiftPx = this.pixel ? px : 0;
-    if (px === 0) cam.clearViewOffset();
-    else cam.setViewOffset(n.x, n.y, 0, px, n.x, n.y);
+    this.shiftPxX = this.pixel ? qx : 0;
+    if (px === 0 && qx === 0) cam.clearViewOffset();
+    else cam.setViewOffset(n.x, n.y, -qx, px, n.x, n.y);
   }
 
   render() {
