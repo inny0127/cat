@@ -21,6 +21,7 @@ const EDGES: [PoseName, PoseName, number][] = [
   ['sphinx', 'side', 1.4],
   ['side', 'curl', 1.6],
   ['loaf', 'curl', 1.9],
+  ['loaf', 'curlL', 1.9],
   ['alert', 'sit', 0.9],
   ['arch', 'crouch', 0.5],
 ];
@@ -35,7 +36,7 @@ const RISE: Record<Group, [number, number]> = {
   hips: [0.12, 0.85], hind: [0.12, 0.85], chest: [0, 0.8], front: [0, 0.75],
   head: [0, 0.65], tail: [0.2, 0.8], ears: [0, 0.5], face: [0, 0.8],
 };
-const LOW: Partial<Record<PoseName, number>> = { stand: 3, alert: 3, arch: 3, stretch: 3, crouch: 2, sit: 2, loaf: 1, sphinx: 1, side: 0, curl: 0 };
+const LOW: Partial<Record<PoseName, number>> = { stand: 3, alert: 3, arch: 3, stretch: 3, crouch: 2, sit: 2, loaf: 1, sphinx: 1, side: 0, curl: 0, curlL: 0 };
 
 const ease = (t: number) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * t * (t * (t * 6 - 15) + 10));
 

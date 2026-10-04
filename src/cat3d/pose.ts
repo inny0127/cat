@@ -69,6 +69,30 @@ const make = (over: Partial<Pose>): Pose => {
   return Object.assign(p, structuredClone(over));
 };
 
+/** the same pose the other way round: what was turned to the left turned to the right, the legs
+ *  changed over (a paw's x is measured outward on its own side) */
+function mirror(p: Pose): Pose {
+  const q = structuredClone(p);
+  for (const k of ['hipYaw', 'hipRoll', 'lumbarYaw', 'chestYaw', 'chestRoll', 'neckYaw', 'headYaw', 'headRoll', 'tailSide', 'tailCurl'] as const) q[k] = -p[k];
+  q.LF = structuredClone(p.RF);
+  q.RF = structuredClone(p.LF);
+  q.LH = structuredClone(p.RH);
+  q.RH = structuredClone(p.LH);
+  return q;
+}
+
+/** curled up asleep on the right side, nose to tail */
+const CURL = make({
+  hipY: 0.064, hipZ: -0.12, hipPitch: 0.0, hipRoll: 1.38, hipYaw: 0.4,
+  lumbarPitch: -0.75, lumbarYaw: 0.0, chestPitch: -0.55, chestRoll: 0.05,
+  neckPitch: -0.55, neckYaw: 0.15, headPitch: -0.45, headRoll: -0.25,
+  LF: foot(0.075, 0.032, 0.05, 0, 0, 0.8), RF: foot(-0.065, 0.013, 0.03, 0, 0, 0.8),
+  LH: foot(0.085, 0.034, -0.07, 0, 0, 0.5), RH: foot(-0.07, 0.013, -0.08, 0, 0, 0.5),
+  pastern: 0.5, hindFlat: 0.6,
+  tailLift: -0.1, tailSide: -1.1, tailCurve: 0.1, tailCurl: -1.7, tailSag: 1,
+  eyeOpen: 0, squint: 0, earFwd: -0.15, earOut: 0.2, breath: 0.8,
+});
+
 export const POSES = {
   /** standing easy: legs a little bent, not locked straight */
   stand: make({ hipY: 0.204 }),
@@ -130,16 +154,9 @@ export const POSES = {
   }),
 
   /** curled up asleep on the right side, nose to tail */
-  curl: make({
-    hipY: 0.064, hipZ: -0.12, hipPitch: 0.0, hipRoll: 1.38, hipYaw: 0.4,
-    lumbarPitch: -0.75, lumbarYaw: 0.0, chestPitch: -0.55, chestRoll: 0.05,
-    neckPitch: -0.55, neckYaw: 0.15, headPitch: -0.45, headRoll: -0.25,
-    LF: foot(0.075, 0.032, 0.05, 0, 0, 0.8), RF: foot(-0.065, 0.013, 0.03, 0, 0, 0.8),
-    LH: foot(0.085, 0.034, -0.07, 0, 0, 0.5), RH: foot(-0.07, 0.013, -0.08, 0, 0, 0.5),
-    pastern: 0.5, hindFlat: 0.6,
-    tailLift: -0.1, tailSide: -1.1, tailCurve: 0.1, tailCurl: -1.7, tailSag: 1,
-    eyeOpen: 0, squint: 0, earFwd: -0.15, earOut: 0.2, breath: 0.8,
-  }),
+  curl: CURL,
+  /** the same, on the left side */
+  curlL: mirror(CURL),
 
   /** low crouch, all four on the floor: eating, sniffing, stalking */
   crouch: make({

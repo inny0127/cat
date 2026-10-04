@@ -6,7 +6,8 @@ import type { Avatar } from '../sim/avatar';
 import type { EarMood, TailMood } from '../rig/animator';
 import { chooseAct, groomChest, groomFlank, knead, restingPose, sneeze, toBed, toWindow, wander, warmUp, washFace, yawn, type Act, type Ctx, sunbathe, Play, Sill, Hunt, Box, Zoomies, Walk, Stare, Rub, scratchEar, wakeUp, stretchSideOn, type SillSpot } from './behave';
 
-const LYING: PoseName[] = ['loaf', 'sphinx', 'side', 'curl'];
+const LYING: PoseName[] = ['loaf', 'sphinx', 'side', 'curl', 'curlL'];
+const CURLED = (p: PoseName) => p === 'curl' || p === 'curlL';
 const wrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
 const ease = (x: number) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x));
 
@@ -461,10 +462,21 @@ export class PixelAvatar implements Avatar {
     return this.isHidden;
   }
 
+  /** which side it curls up on this time (picked afresh each time it goes off to sleep) */
+  private curlPose: PoseName = Math.random() < 0.5 ? 'curl' : 'curlL';
+  private deep = false;
+
   /** the brain's wish for a posture right now */
   private wanted(): PoseName {
     if (!this.alive) return 'side';
-    if (this.sleep > 0.75) return 'curl';
+    if (this.sleep > 0.75) {
+      if (!this.deep) {
+        this.deep = true;
+        this.curlPose = Math.random() < 0.5 ? 'curl' : 'curlL';
+      }
+      return this.curlPose;
+    }
+    if (this.sleep < 0.5) this.deep = false;
     if (this.sleep > 0.3) return 'loaf';
     if (this.headLift > 0.8) return 'sit';
     return 'loaf';
@@ -547,12 +559,12 @@ export class PixelAvatar implements Avatar {
     const m = this.cat.motor;
     const posture = m.posture;
     if (this.stretchT <= 0) {
-      if (!may || (this.stretchIn -= dt) > 0 || (posture !== 'side' && posture !== 'curl') || !m.settled || this.shade.u > 0) return;
+      if (!may || (this.stretchIn -= dt) > 0 || (posture !== 'side' && !CURLED(posture)) || !m.settled || this.shade.u > 0) return;
       this.stretchT = 1e-3;
       this.stretchIn = 150 + Math.random() * 420;
     }
     // (woken, or touched, it stops there)
-    if (!may || (posture !== 'side' && posture !== 'curl')) {
+    if (!may || (posture !== 'side' && !CURLED(posture))) {
       this.stretchT = 0;
       m.layer = null;
       return;
@@ -589,7 +601,7 @@ export class PixelAvatar implements Avatar {
       s.u = 0;
       s.on = false;
     }
-    const curled = m.posture === 'curl' && m.targetPosture === 'curl';
+    const curled = CURLED(m.posture) && m.targetPosture === m.posture;
     if (!s.on && s.u <= 0) {
       if (!may || !curled || !m.settled || (s.in -= dt) > 0) return;
       s.on = true;
@@ -607,9 +619,12 @@ export class PixelAvatar implements Avatar {
       return;
     }
     // from where it lies to the eyes, over the top of the head, the paw curling as it comes down
-    const e = ease(s.u), A = POSES.curl.LF;
-    const L = (this.shadeLayer ??= { pose: { LF: {} }, w: 1 });
-    Object.assign(L.pose.LF as object, {
+    // (the upper forepaw: the left lying on the right side, the right on the left)
+    const paw = m.posture === 'curlL' ? 'RF' : 'LF';
+    if (!this.shadeLayer || !this.shadeLayer.pose[paw]) this.shadeLayer = { pose: { [paw]: {} }, w: 1 };
+    const e = ease(s.u), A = POSES[m.posture === 'curlL' ? 'curlL' : 'curl'][paw];
+    const L = this.shadeLayer;
+    Object.assign(L.pose[paw] as object, {
       x: A.x + (0.28 - A.x) * e, y: A.y + (0.06 - A.y) * e + 0.045 * Math.sin(Math.PI * e), z: A.z + (-0.08 - A.z) * e,
       flex: A.flex + (1 - A.flex) * e,
     });
