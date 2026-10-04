@@ -36,6 +36,11 @@ export class PixelApp {
   private readonly awake = new KeepAwake();
   /** when a finger was last on the screen at all (s, the page's clock) */
   private inputAt = 0;
+  /** the radio playing and the room left open a long while, untouched (kept on while you work):
+   *  now and then the cat comes to the glass for a moment of you (when it last did; how long
+   *  untouched till it does again) */
+  private nudgedAt = 0;
+  private nudgeGap = (40 + Math.random() * 15) * 60;
   readonly notifier = new Notifier();
   readonly motion = new MotionInput();
   readonly hintUi: Hint;
@@ -1140,6 +1145,17 @@ export class PixelApp {
   /** one step of the cat's life, mind and body (also driven by tests in fixed steps) */
   tick(dt: number, now: number) {
     stepLife(this.state, dt * 1000, false);
+    // the radio on and the room left open and untouched a long while: the cat comes for a moment
+    // of you (dozing, it wakes for it, with a stretch; deep asleep, not this time)
+    if (this.audio.musicOn && this.visible && now - Math.max(this.inputAt, this.nudgedAt) > this.nudgeGap) {
+      const was = this.brain.mode;
+      if (this.brain.rouse()) {
+        if (was === 'doze' || was === 'sleep') this.avatar.wakeStretch();
+        this.avatar.nudgeNow();
+      }
+      this.nudgedAt = now;
+      this.nudgeGap = (40 + Math.random() * 15) * 60;
+    }
     if (!this.state.alive && this.brain.mode !== 'dead' && this.brain.mode !== 'gone') this.brain.wake(now, false);
     const contacts: Contact[] = this.avatar.hidden ? [] : this.input.onCat();
     this.brain.update(dt, now, contacts);

@@ -1003,6 +1003,10 @@ export class PawGlass implements Act {
   private asks = 1 + Math.floor(Math.random() * 2);
   private said = false;
   constructor(private readonly finger: () => GlassFinger | null, private invite = false) {}
+  /** asked, and nobody came to the glass */
+  get unanswered() {
+    return this.invite;
+  }
   /** asking you for a game, and has said so (or put a paw to the glass) */
   get asking() {
     return this.invite && (this.phase === 'pat' || (this.phase === 'ask' && this.said));

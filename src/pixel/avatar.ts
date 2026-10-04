@@ -435,6 +435,20 @@ export class PixelAvatar implements Avatar {
   }
   private lightsOutIn = 0;
 
+  /** you here a long while but busy (the room open, the radio on, nobody touching it): it comes
+   *  to the glass and asks for a moment of you, as a cat walks over the keyboard; no answer, and
+   *  it lies down by the glass, as near you as it can get (true if it will; 1 on its way to ask,
+   *  2 asking) */
+  private nudge = 0;
+  nudgeNow() {
+    if (!this.alive || this.isHidden || this.errand || this.trip || this.hands.length || this.nudge) return false;
+    if (this.mood.trust < 0.3 || this.sleep > 0.75) return false;
+    this.nudge = 1;
+    // (whatever it is at, it leaves off: up on the sill or in the box, it is asked down first)
+    if (this.act) this.stopAct();
+    return true;
+  }
+
   /** the lamp put on in the dark: asleep, it stirs, its ears flick, an eye opens a slit against
    *  the light (and shuts again), and, curled up, a paw comes up over its eyes and stays there a
    *  good while; awake, a blink or two at it */
@@ -868,6 +882,9 @@ export class PixelAvatar implements Avatar {
     if (this.act) {
       if (!this.act.update(dt, c)) {
         this.act.stop(c);
+        // (asked for a moment of you and no one came: then it will be by you)
+        const unanswered = this.nudge === 2 && this.act instanceof PawGlass && this.act.unanswered;
+        if (this.nudge === 2) this.nudge = 0;
         // played itself out: not again for a while
         if (this.act instanceof Play) this.playRest = this.act.tired ? 60 : 6;
         if (this.act instanceof Chase) this.chaseRest = this.act.tired ? 90 : 2;
@@ -875,7 +892,7 @@ export class PixelAvatar implements Avatar {
         if (this.act instanceof Hunt) this.huntRest = 40 + Math.random() * 60;
         // (a wash done, or the nose licked: now and then the tip of the tongue stays out)
         if (/^(wash|groom|boop)/.test(this.act.name)) this.maybeBlep(this.act.name === 'boop' ? 0.3 : 0.15);
-        this.act = null;
+        this.act = unanswered ? byYou(c) : null;
       }
       return;
     }
@@ -888,6 +905,15 @@ export class PixelAvatar implements Avatar {
         this.act = wakeUp(c);
         return;
       }
+    }
+    // asking for a moment of you (nudgeNow): to the glass with it, once awake and down
+    if (this.nudge === 1) {
+      if (this.sleep < 0.3 && this.mode === 'rest') {
+        this.nudge = 2;
+        this.act = new PawGlass(() => this.fingerNow(), true);
+        return;
+      }
+      if (this.sleep > 0.75 || !this.alive) this.nudge = 0;
     }
     // a finger moving on the glass a while: a cat in the mood comes and pats at it
     const F = this.fingerNow();

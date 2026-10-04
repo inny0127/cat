@@ -237,6 +237,17 @@ export class Brain {
     if (this.mode === 'sleep' || this.mode === 'doze') this.toAwake('alert');
   }
 
+  /** up of its own accord to come to you (the room long open and untouched, the radio on): from a
+   *  doze, or a light sleep, it wakes for it; deep asleep, it does not (true if awake now) */
+  rouse() {
+    if (this.mode === 'rest' || this.mode === 'alert') return true;
+    if ((this.mode === 'doze' || this.mode === 'sleep') && this.sleepDepth < 0.75) {
+      this.toAwake('rest');
+      return true;
+    }
+    return false;
+  }
+
   glassTap(sx: number, sy: number) {
     if (this.inert) return;
     this.taps = this.taps.filter((t) => this.time - t < 5);
