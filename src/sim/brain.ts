@@ -22,7 +22,7 @@ export interface Senses {
 }
 
 const HINT = {
-  pet: '손가락으로 살며시 쓰다듬어 보세요',
+  pet: '고양이 머리나 볼을 손가락으로 살며시 쓰다듬어 보세요',
   foodShake: '휴대폰을 흔들면 사료 봉지 소리가 나요',
   foodScrub: '빈 곳을 좌우로 빠르게 문지르면 사료를 부어 줄 수 있어요',
   water: '빈 곳을 길게 누르고 있으면 물을 따라요',
@@ -122,7 +122,9 @@ export class Brain {
     // (by the clock on the wall: now is the brain's own time, seconds since the page opened)
     const nightly = nightness(Date.now());
     if (firstEver) {
-      this.toSleep(1);
+      // (the first time: awake in its bed, and it has seen you, a new face at the glass; a cat that
+      // does not know you yet, deep asleep, would only start at the first touch)
+      this.toAwake('rest');
       return;
     }
     // back after a while: it has seen you, and is glad of it as far as it is fond of you, and the

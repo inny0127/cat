@@ -1171,7 +1171,8 @@ export class PixelApp {
       this.idleHintAt -= dt;
       if (this.idleHintAt < 0) {
         s.hints.pet = 1;
-        this.hintUi.show('손가락으로 살며시 쓰다듬어 보세요', 5000);
+        // (where a cat that hardly knows you likes a hand best: its head, its cheeks)
+        this.hintUi.show('고양이 머리나 볼을 손가락으로 살며시 쓰다듬어 보세요', 5500);
       }
       return;
     }

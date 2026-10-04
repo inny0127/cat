@@ -52,7 +52,7 @@ export function newPersonality(generation: number): Personality {
   return {
     likes: {
       chin: r() * 0.15, cheek: r() * 0.15, head: r() * 0.2, neck: r() * 0.2,
-      back: r() * 0.3, rump: r() * 0.45, flank: r() * 0.25, ear: r() * 0.2, tail: r() * 0.15,
+      back: r() * 0.3, rump: r() * 0.45, flank: r() * 0.15, ear: r() * 0.2, tail: r() * 0.15,
     },
     tolerance: 0.75 + Math.random() * 0.6,
     warmth: 0.7 + Math.random() * 0.6,

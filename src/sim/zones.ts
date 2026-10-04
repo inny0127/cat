@@ -13,7 +13,7 @@ export const ZONE_LIKE: Record<Zone, number> = {
   neck: 0.6,
   back: 0.35,
   rump: 0.1,
-  flank: 0.0,
+  flank: 0.15,
   ear: -0.15,
   face: -0.35,
   paw: -0.55,
