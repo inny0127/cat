@@ -435,6 +435,29 @@ export class PixelAvatar implements Avatar {
   }
   private lightsOutIn = 0;
 
+  /** the lamp put on in the dark: asleep, it stirs, its ears flick, an eye opens a slit against
+   *  the light (and shuts again), and, curled up, a paw comes up over its eyes and stays there a
+   *  good while; awake, a blink or two at it */
+  lightsOn() {
+    if (!this.alive || this.isHidden) return;
+    const m = this.cat.motor;
+    if (this.sleep > 0.5) {
+      this.dazzle = 1.8;
+      this.dazzled = 25 + Math.random() * 45;
+      if (!this.shade.on) this.shade.in = Math.min(this.shade.in, 1.2 + Math.random() * 0.8);
+      m.jolt(0.12);
+      m.flickEar('both', 0.6);
+      if (Math.random() < 0.5) this.cat.sigh();
+    } else {
+      m.flickEar('both', 0.4);
+      m.blinkNow();
+    }
+  }
+  /** how long since the lamp came on in its eyes (the slit of an eye), and how long it will keep
+   *  them shaded from it */
+  private dazzle = 0;
+  private dazzled = 0;
+
   fetchNow() {
     const M = this.ground?.mouse();
     if (!M || !this.alive || this.isHidden || this.sleep > 0.3 || this.errand || this.trip || this.perched) return false;
@@ -757,7 +780,9 @@ export class PixelAvatar implements Avatar {
     // (woken in the middle of a stretch in its sleep: that is over)
     if (this.stretchT > 0 && (this.sleep <= 0.3 || !this.alive)) this.sleepStretch(0, false);
     this.waking = Math.max(0, this.waking - dt);
-    this.shadeEyes(dt, this.alive && this.sleep > 0.75 && atHome && !this.touched && !this.act && this.stretchT <= 0 && this.glare > 0.4);
+    this.dazzle = Math.max(0, this.dazzle - dt);
+    this.dazzled = Math.max(0, this.dazzled - dt);
+    this.shadeEyes(dt, this.alive && this.sleep > 0.75 && atHome && !this.touched && !this.act && this.stretchT <= 0 && (this.glare > 0.4 || this.dazzled > 0));
     if (!this.alive) {
       this.stopAct();
       m.setPosture('side');
@@ -988,7 +1013,8 @@ export class PixelAvatar implements Avatar {
     // asleep, now and then it opens an eye to see what you are up to (the upper one, lying on
     // its side; the brain says when and how far)
     {
-      const want = this.alive && this.sleep > 0.5 ? Math.min(0.6, this.eyeTarget) : 0;
+      // (and the lamp just come on: a slit of an eye against it, a moment, and shut again)
+      const want = this.alive && this.sleep > 0.5 ? Math.min(0.6, Math.max(this.eyeTarget, this.dazzle > 0.5 ? 0.3 : 0)) : 0;
       this.cat.peek += (want - this.cat.peek) * (1 - Math.exp(-dt * (want > this.cat.peek ? 4 : 6)));
       this.cat.peekEye = m.posture === 'curlL' ? 1 : 0;
     }

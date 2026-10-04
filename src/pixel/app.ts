@@ -222,6 +222,10 @@ export class PixelApp {
           this.audio.play('pencil', { gain: 0.09, rate: on ? 2.3 : 2.0, pan: -0.5 });
           this.avatar.hear(this.room.lampPos.clone());
           if (!on) this.avatar.lightsOut();
+          else {
+            const ck = this.clock();
+            if (Room.dark(ck.getHours() + ck.getMinutes() / 60) > 0.6) this.avatar.lightsOn();
+          }
           this.haptic.tap?.();
           return;
         }
