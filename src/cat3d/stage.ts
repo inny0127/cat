@@ -94,6 +94,8 @@ uniform float uNear;
 uniform float uFar;
 uniform vec3 uPalEye[${PAL_EYE.length}];
 uniform vec4 uSteam;     // steam off a hot drink: where it rises from (art pixels, view depth), and how much
+uniform vec4 uGlint;     // a glint of sun on the floor: its middle (art pixels) and its half widths across and up
+uniform vec2 uGlintK;    // ... its view depth, and how bright (0: none)
 uniform vec3 uMotes[16]; // dust in the sunlight: where (art pixels), and how bright (0 for none)
 uniform vec3 uNotes[4];  // music notes rising off the radio: where (art pixels), how bright
 uniform vec4 uBug;       // a moth or a fly: where (art pixels), how far off (view depth), and what
@@ -448,6 +450,22 @@ void main() {
       }
     }
   }
+  // a glint of sun thrown off a car's windows in the street below, sweeping across the floor: a
+  // soft warm patch, brightest in the middle in steps, its fringe a checker; on the floor only
+  // (anything standing in front of it is in front of it)
+  if (uGlintK.y > 0.0 && !(depth < 0.99999 && lin(depth) < uGlintK.x - 0.06)) {
+    vec2 d = (vec2(p) + 0.5 - uGlint.xy) / max(uGlint.zw, vec2(1.0));
+    float r = length(d);
+    // (a hot middle nearly white, gold round it, the fringe a warm wash over what is there)
+    int ring = r < 0.38 ? 3 : r < 0.66 ? 2 : r < 0.88 ? 1 : r < 1.0 && bayer(p) > 0.5 ? 1 : 0;
+    if (ring > 0) {
+      float k = uGlintK.y;
+      if (ring == 3) col = mix(col, vec3(1.0, 0.97, 0.88), 0.85 * k);
+      else if (ring == 2) col = mix(col, max(col, vec3(1.0, 0.86, 0.56)), 0.7 * k);
+      else col = mix(col, 1.0 - (1.0 - col) * (1.0 - vec3(1.0, 0.85, 0.55) * 0.6), k);
+      glow = max(glow, (ring == 3 ? 0.55 : ring == 2 ? 0.35 : 0.12) * k);
+    }
+  }
   // the red dot of a laser pointer on whatever it falls on (the cat too): a hot point nearly white
   // at its heart, red round it, a speckle of red light on the surface about it, and a glow
   if (uLaser.z > 0.0) {
@@ -652,6 +670,7 @@ export class Stage {
         uPalEye: { value: eyePalette() },
         uRampTex: { value: rampTexture() },
         uSteam: { value: new THREE.Vector4() },
+        uGlint: { value: new THREE.Vector4() }, uGlintK: { value: new THREE.Vector2() },
         uMotes: { value: Array.from({ length: 16 }, () => new THREE.Vector3()) },
         uNotes: { value: Array.from({ length: 4 }, () => new THREE.Vector3()) },
         uBug: { value: new THREE.Vector4() }, uBugCol: { value: new THREE.Vector3(1, 1, 1) },
@@ -803,6 +822,20 @@ export class Stage {
     if (!at || amount <= 0) { u.set(0, 0, 0, 0); return; }
     const a = this.toArt(at);
     u.set(Math.floor(a.x), Math.floor(a.y), -at.clone().applyMatrix4(this.camera.matrixWorldInverse).z, amount);
+  }
+
+  /** a glint of sun on the floor: its middle, how wide (m), how bright (0: none) */
+  setGlint(at: THREE.Vector3 | null, r = 0.05, bright = 1) {
+    if (!this.pixel) return;
+    const u = this.pixel.mat.uniforms.uGlint.value as THREE.Vector4, k = this.pixel.mat.uniforms.uGlintK.value as THREE.Vector2;
+    if (!at || bright <= 0) { k.set(0, 0); return; }
+    // (its outline on the floor as you see it: half widths across and up, from the floor's own
+    // directions at it)
+    const a = this.toArt(at), b = new THREE.Vector2(), c = new THREE.Vector2();
+    this.toArt(at.clone().setX(at.x + r), b);
+    this.toArt(at.clone().setZ(at.z + r), c);
+    u.set(a.x, a.y, Math.max(1, Math.abs(b.x - a.x)), Math.max(1, Math.abs(c.y - a.y)));
+    k.set(-at.clone().applyMatrix4(this.camera.matrixWorldInverse).z, bright);
   }
 
   /** dust motes: world points with a brightness each (up to 16) */

@@ -917,6 +917,12 @@ export class PixelApp {
     this.avatar.laser = dot && h && h.on !== 'cat' && h.on !== 'out'
       ? { p: h.p, n: h.n, on: h.on, mug: h.mug, self: L.self ?? undefined, selfAt: L.self ? L.selfAt : undefined }
       : dot && L.self ? { p: L.selfAt, n: new THREE.Vector3(0, 1, 0), on: 'floor', self: L.self, selfAt: L.selfAt } : null;
+    // the sun thrown across the floor off a window across the way: drawn there, watched, and, if
+    // the cat has a mind to, chased as a dot is (not while there is a red one)
+    const G = this.room.glint;
+    this.stage.setGlint(G ? G.p : null, G?.r, G?.k ?? 0);
+    this.avatar.glint = G && G.k > 0.2 && !dot ? G.p : null;
+    if (!this.avatar.laser && this.avatar.chasingGlint && G) this.avatar.laser = { p: G.p, n: new THREE.Vector3(0, 1, 0), on: 'floor' };
     if (dot && this.brain.mode !== 'sleep' && this.brain.mode !== 'doze') this.brain.toy(L.sx, L.sy - L.lift, dt);
     // (shone for a while at a cat fast asleep: that it can be woken)
     const asleep = this.brain.mode === 'sleep' || this.brain.mode === 'doze';

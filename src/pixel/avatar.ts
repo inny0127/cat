@@ -82,6 +82,11 @@ export class PixelAvatar implements Avatar {
    *  stare at it before it has to be had; and after a long game of it, a while before it will be
    *  drawn in again (it only watches) */
   laser: LaserDot | null = null;
+  /** a glint of sun going across the floor (the room's): its eyes go after it, and now and then,
+   *  in the mood for it, the rest of it (decided as it comes) */
+  glint: THREE.Vector3 | null = null;
+  chasingGlint = false;
+  private glintSeen = false;
   private laserT = 0;
   private laserNeed = 0.3;
   private chaseRest = 0;
@@ -997,6 +1002,16 @@ export class PixelAvatar implements Avatar {
     this.huntRest = Math.max(0, this.huntRest - dt);
     this.pawRest = Math.max(0, this.pawRest - dt);
     this.clock += dt;
+    // a glint across the floor: after it or not, as the mood takes it
+    if (this.glint && !this.glintSeen) {
+      this.glintSeen = true;
+      const free = this.alive && !this.isHidden && this.sleep < 0.3 && !this.errand && !this.trip && !this.hands.length && !this.perched
+        && (this.mode === 'rest' || this.mode === 'alert');
+      this.chasingGlint = free && this.mood.sleepy < 0.5 && Math.random() < 0.2 + 0.45 * Math.max(0, this.mood.arousal);
+    } else if (!this.glint) {
+      this.glintSeen = false;
+      this.chasingGlint = false;
+    }
     // the red dot of a laser pointer: a moment's stare, and it is after it
     this.chaseRest = Math.max(0, this.chaseRest - dt);
     if (this.laser && !(this.act instanceof Chase)) {
@@ -1052,6 +1067,7 @@ export class PixelAvatar implements Avatar {
     else if (!this.alive || this.sleep > 0.5 || busy) m.lookAt(null);
     else if (this.lure) m.lookAt(this.lure, 1);
     else if (this.laser) m.lookAt(this.laser.p, 1);
+    else if (this.glint && this.sleep < 0.5) m.lookAt(this.glint, 1);
     else if (this.wand?.held) m.lookAt(this.wand.p, 1);
     else if (this.visitor) {
       // a bird on the ledge: eyes on it, and now and then a chatter at it

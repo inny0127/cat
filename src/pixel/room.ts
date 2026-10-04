@@ -2838,6 +2838,26 @@ export class Room {
     this.jetIn = 150 + Math.random() * 300;
   }
 
+  /** a window swung open across the way on a sunny day, and the sun off it thrown in at the window
+   *  and swept across the floor, a soft warm patch that goes as quickly as it came (where it is,
+   *  how wide, how bright; null: none). Now and then */
+  glint: { p: THREE.Vector3; r: number; k: number } | null = null;
+  private glintRun: { t: number; dur: number; a: THREE.Vector3; b: THREE.Vector3; r: number } | null = null;
+  private glintIn = 90 + Math.random() * 240;
+
+  /** a glint now, across the floor one way or the other */
+  glintNow() {
+    const { l, r, z } = this.win;
+    // (across the front of the room, on the rug before the bed, out of the sun's own patch)
+    const dir = Math.random() < 0.5 ? 1 : -1, mid = (l + r) / 2, zz = z + 0.72 + Math.random() * 0.2;
+    this.glintRun = {
+      t: 0, dur: 2.2 + Math.random() * 1.6, r: 0.04 + Math.random() * 0.025,
+      a: new THREE.Vector3(mid - dir * 0.8, 0.004, zz + (Math.random() - 0.5) * 0.16),
+      b: new THREE.Vector3(mid + dir * 0.8, 0.004, zz + (Math.random() - 0.5) * 0.16),
+    };
+    this.glintIn = 240 + Math.random() * 300;
+  }
+
   /** a shooting star now */
   meteorNow() {
     const M = this.meteor;
@@ -3301,6 +3321,20 @@ export class Room {
     if (Room.dark(hour) < 0.3 && rain < 0.2 && (su.uCloud.value as number) < 0.7 && (this.jetIn -= dt) <= 0 && J.t < 0) this.jetNow();
     if (J.t >= 0) J.t = J.t > 110 ? -1 : J.t + dt;
     (su.uJet.value as THREE.Vector4).set(J.x, J.y, J.t, J.climb);
+    // (the sun thrown off a window across the way: only while the sun is out and on this side)
+    if (!this.glintRun && d.sun > 0.25 && rain < 0.1 && (su.uCloud.value as number) < 0.7 && (this.glintIn -= dt) <= 0) this.glintNow();
+    const G = this.glintRun;
+    if (G) {
+      G.t += dt;
+      const u = G.t / G.dur;
+      if (u >= 1) { this.glintRun = null; this.glint = null; }
+      else {
+        // (a window swinging: quick at first, slowing as it opens; it flickers a little as it goes)
+        const e = 1 - (1 - u) * (1 - u);
+        const k = Math.min(1, u / 0.1) * Math.min(1, (1 - u) / 0.25) * (0.88 + 0.12 * Math.sin(G.t * 29));
+        this.glint = { p: G.a.clone().lerp(G.b, e), r: G.r, k };
+      }
+    }
     // (birds come down by day, when it is dry and not snowing)
     this.updateVisitor(dt, hour > 7 && hour < 17.5 && rain < 0.1 && !se.snowing);
     (su.uBolt.value as THREE.Vector3).set(this.storm.x, this.storm.seed, this.storm.bolt && flash > 0.2 ? 1 : 0);
