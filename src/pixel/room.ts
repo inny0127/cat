@@ -236,6 +236,8 @@ uniform vec2 uFall;      // leaves (or blossom) coming down off the tree: how ma
 uniform vec4 uVisitor;   // a sparrow on the ledge outside: where along it, how high above it (flying;
                          // window pixels), its pose (0 stands, 1 pecks, 2 hops, 3 4 wings up, down),
                          // which way it faces (1 right, -1 left; 0: no bird)
+uniform vec4 uJet;       // a plane high up by day: where it comes in (of the window), how long since
+                         // (s; below 0, none), how far up it climbs across (of the window's height)
 uniform vec4 uMeteor;    // a shooting star: where it starts (of the window), how long since (s;
                          // below 0, none), and which way it falls (-1 left, 1 right)
 uniform vec3 uDrop;      // one drop running down the glass (window pixels), if z: the one a cat is after
@@ -525,6 +527,30 @@ void main() {
       }
     }
   } else {
+    // now and then a plane high up, a speck catching the sun, drawing a line of white behind it
+    // across the sky, which stays a long while after, spreading and thinning till it is gone (by the
+    // low sun, pink and gold)
+    if (uJet.z >= 0.0) {
+      float sx0 = uJet.x * Wd, dirx = uJet.x < 0.5 ? 1.0 : -1.0;
+      float v = (Wd * 1.3) / 34.0;
+      float head = sx0 + dirx * uJet.z * v;
+      float x = sp.x + 0.5;
+      float along = (x - sx0) * dirx, dist = (head - x) * dirx;
+      float yl = uJet.y * H + uJet.w * H * along / Wd;
+      float dy = sp.y + 0.5 - yl;
+      if (along >= 0.0 && dist >= -0.5) {
+        float age = dist / v;
+        float wide = 0.5 + 0.9 * smoothstep(4.0, 30.0, age);
+        float fade = 1.0 - smoothstep(25.0, 70.0, age);
+        vec3 trail = tod(hex(250.0, 252.0, 255.0), hex(255.0, 236.0, 214.0), hex(255.0, 206.0, 196.0), c);
+        if (dist < 0.5 && abs(dy) < 0.5) { c = hex(255.0, 255.0, 250.0); a = 0.17; }
+        else if (abs(dy) < wide && fade > 0.0) {
+          // (the line breaking up into checks as it thins)
+          float k = fade * (abs(dy) < 0.5 ? 0.7 : 0.4);
+          if (k > 0.3 || mod(sp.x + sp.y, 2.0) < 1.0) c = mix(c, trail, max(k, 0.25));
+        }
+      }
+    }
     // a few birds crossing now and then, wings up, wings down
     float tb = mod(uTime + 20.0, 47.0);
     if (tb < 16.0 && uRain < 0.3) {
@@ -966,7 +992,7 @@ export class Room {
     this.sky = new THREE.ShaderMaterial({
       uniforms: {
         uTime: { value: 0 }, uHour: { value: 12 }, uSkyPx: { value: new THREE.Vector2(48, 56) }, uPxSize: { value: 0.01 }, uPar: { value: 0 }, uRain: { value: 0 },
-        uSnowing: { value: 0 }, uSnowLie: { value: 0 }, uRainbow: { value: 0 }, uCloud: { value: 0.5 }, uMoon: { value: 0.5 }, uFog: { value: 0 }, uFlash: { value: 0 }, uBolt: { value: new THREE.Vector3() }, uMeteor: { value: new THREE.Vector4(0, 0, -1, 1) }, uVisitor: { value: new THREE.Vector4() }, uFall: { value: new THREE.Vector2() }, uDrop: { value: new THREE.Vector3() },
+        uSnowing: { value: 0 }, uSnowLie: { value: 0 }, uRainbow: { value: 0 }, uCloud: { value: 0.5 }, uMoon: { value: 0.5 }, uFog: { value: 0 }, uFlash: { value: 0 }, uBolt: { value: new THREE.Vector3() }, uMeteor: { value: new THREE.Vector4(0, 0, -1, 1) }, uJet: { value: new THREE.Vector4(0, 0, -1, 0) }, uVisitor: { value: new THREE.Vector4() }, uFall: { value: new THREE.Vector2() }, uDrop: { value: new THREE.Vector3() },
         uLeafA: { value: new THREE.Vector3(122 / 255, 162 / 255, 96 / 255) }, uLeafB: { value: new THREE.Vector3(76 / 255, 116 / 255, 76 / 255) },
         uLeafC: { value: new THREE.Vector3(1, 0.7, 0.75) }, uLeafs: { value: new THREE.Vector2(1, 0) },
       },
@@ -2774,6 +2800,21 @@ export class Room {
   private meteorIn = 60 + Math.random() * 240;
   onMeteor: (() => void) | null = null;
 
+  /** a plane crossing high up by day, and its trail: where it came in (of the window), how long
+   *  since, how far it climbs across; the next in a while */
+  private readonly jet = { t: -1, x: 0, y: 0, climb: 0 };
+  private jetIn = 40 + Math.random() * 200;
+
+  /** a plane now */
+  jetNow() {
+    const J = this.jet;
+    J.t = 0;
+    J.x = Math.random() < 0.5 ? -0.05 : 1.05;
+    J.y = 0.78 + 0.12 * Math.random();
+    J.climb = (Math.random() - 0.5) * 0.12;
+    this.jetIn = 150 + Math.random() * 300;
+  }
+
   /** a shooting star now */
   meteorNow() {
     const M = this.meteor;
@@ -3206,6 +3247,11 @@ export class Room {
     if (Room.dark(hour) > 0.85 && rain < 0.3 && (su.uCloud.value as number) < 0.75 && (this.meteorIn -= dt) <= 0) this.meteorNow();
     if (M.t >= 0) M.t = M.t > 1 ? -1 : M.t + dt;
     (su.uMeteor.value as THREE.Vector4).set(M.x, M.y, M.t, M.dir);
+    // (a plane by day, when it is not overcast or raining; the trail behind it a minute and more)
+    const J = this.jet;
+    if (Room.dark(hour) < 0.3 && rain < 0.2 && (su.uCloud.value as number) < 0.7 && (this.jetIn -= dt) <= 0 && J.t < 0) this.jetNow();
+    if (J.t >= 0) J.t = J.t > 110 ? -1 : J.t + dt;
+    (su.uJet.value as THREE.Vector4).set(J.x, J.y, J.t, J.climb);
     // (birds come down by day, when it is dry and not snowing)
     this.updateVisitor(dt, hour > 7 && hour < 17.5 && rain < 0.1 && !se.snowing);
     (su.uBolt.value as THREE.Vector3).set(this.storm.x, this.storm.seed, this.storm.bolt && flash > 0.2 ? 1 : 0);
