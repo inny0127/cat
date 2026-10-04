@@ -612,11 +612,12 @@ export class Walk implements Act {
   }
 }
 
-/** come to the glass and sit looking at you a while, then back to bed */
+/** come to the glass and sit looking at you a while (a little side-on, the head turned to you:
+ *  square on, a sitting cat is a pillar), then back to bed */
 export const toWindow = (c: Ctx) => {
   const bed = c.bed('loaf');
   return new Walk('window', [
-    { to: c.window, face: 0, stay: rand(8, 22), posture: 'sit' },
+    { to: c.window, face: (Math.random() < 0.5 ? -1 : 1) * 0.42, stay: rand(8, 22), posture: 'sit' },
     { to: bed.to, face: bed.yaw, stay: 0.1, posture: 'loaf' },
   ]);
 };
@@ -653,12 +654,14 @@ export class Greet implements Act {
       this.t = 0;
     }
     if (this.phase === 'come') {
-      // (the walk carries the tail; the eyes are on you, the avatar's business)
+      // (the walk carries the tail; the eyes are on you, the avatar's business; very glad, the
+      // tail held up quivers, as a cat's does for someone it has missed)
       m.setPosture('stand');
-      m.layer = { pose: { earFwd: 0.35 }, w: 1 };
+      m.layer = { pose: { earFwd: 0.35, tailSide: this.quiver(c) }, w: 1 };
       if (!this.set) {
         this.set = true;
-        m.walkTo(c.window, 0.3, 0, () => { this.phase = 'sit'; this.t = 0; this.set = false; });
+        // (sat a little side-on, the head turned to you: square on, a sitting cat is a pillar)
+        m.walkTo(c.window, 0.3, -this.side * 0.42, () => { this.phase = 'sit'; this.t = 0; this.set = false; });
       }
       return true;
     }
@@ -669,7 +672,7 @@ export class Greet implements Act {
       const up = this.phase === 'sit' ? 1 - ease((this.t - 0.5) / 1.4) : 0;
       const S = POSES.sit;
       m.layer = {
-        pose: { earFwd: 0.3, tailLift: S.tailLift + (1.25 - S.tailLift) * up, tailHook: S.tailHook + (0.6 - S.tailHook) * up, tailSag: S.tailSag * (1 - up) },
+        pose: { earFwd: 0.3, tailLift: S.tailLift + (1.25 - S.tailLift) * up, tailHook: S.tailHook + (0.6 - S.tailHook) * up, tailSag: S.tailSag * (1 - up), tailSide: S.tailSide * (1 - up) + this.quiver(c) * up },
         w: ease(this.t / 0.4) || (this.phase === 'stay' ? 1 : 0),
       };
       // a slow blink at you once it is settled (and, gladder, another later on)
@@ -702,6 +705,11 @@ export class Greet implements Act {
       if (--this.bumps <= 0) this.phase = 'stay';
     }
     return true;
+  }
+  /** the upright tail quivering, quick and small, if it is glad enough */
+  private quiver(c: Ctx) {
+    const k = Math.max(0, (this.glad - 0.65) / 0.35);
+    return k > 0 ? 0.05 * k * Math.sin(c.m.time * 75) : 0;
   }
   stop(c: Ctx) {
     c.m.layer = null;
