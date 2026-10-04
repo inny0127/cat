@@ -122,9 +122,9 @@ void main() {
       else if (fx < pw + max(0.045, fwidth(vWorld.x / 0.12))) tone += 0.05;
     } else if (vWorld.y < 0.335) m = ${PIX.paint};
     else {
-      // old plaster, a little uneven
+      // plaster: flat (a speckle in it set the edges of the light's bands where the light changes
+      // slowly across the wall, the floor's glow fading up it, wandering like a range of hills)
       m = ${PIX.wall};
-      tone += (vnoise(vWorld.xy * 45.0 + 7.0) - 0.5) * 0.02;
     }
     // the floor's shadow along the foot of the wall
     tone -= 0.12 * (1.0 - smoothstep(0.0, 0.06, vWorld.y));
@@ -160,6 +160,17 @@ void main() {
     float t = fract(uSide * (vLocal.x / 0.17 * 5.0 + 0.5) * 0.5);
     fold = t >= 0.14 && t < 0.27 ? 1 : t >= 0.6 && t < 0.93 ? -1 : 0;
     N = normalize(vec3(0.0, N.y, N.z));
+  } else if (uPattern == 11) {
+    // sisal rope wound round a post: turn on turn up it (a helix: each turn climbs one rope's
+    // width), a dark line where each turn meets the next and the round of it catching the light,
+    // rough with fibres; the post painted in the round as a column is (uPattern 9)
+    float a = atan(vLocal.z, vLocal.x) / 6.2832;
+    float turn = (vLocal.y + 0.021 * a) / 0.021;
+    float f = fract(turn), pw = max(0.24, fwidth(turn));
+    if (f < pw) tone -= 0.15;
+    else if (f > pw + 0.2 && f < pw + 0.5) tone += 0.05;
+    tone += (vnoise(vec2(a * 70.0, vLocal.y * 150.0)) - 0.5) * 0.07;
+    tone += 0.16 * (dot(N, normalize(vec3(-0.42, 0.55, 0.72))) - 0.55);
   } else if (uPattern == 4) {
     // fleece: soft and a little uneven
     tone += (vnoise(vWorld.xz * 70.0) - 0.5) * 0.08;
@@ -892,6 +903,8 @@ export interface Spots {
   sniff: { to: THREE.Vector3; face: number }[];
   /** upright things to rub a cheek on: the lamp's pole */
   posts: THREE.Vector3[];
+  /** the scratching post: where it stands on the floor, and how thick its post is */
+  scratcher?: { at: THREE.Vector3; r: number };
 }
 
 export class Room {
@@ -917,6 +930,12 @@ export class Room {
   /** the standard lamp rocking on its foot (tipped so far each way, and how fast), and where its
    *  light is when it stands straight */
   private readonly lampSway = { group: new THREE.Group() as THREE.Object3D, ax: 0, az: 0, vx: 0, vz: 0, home: new THREE.Vector3() };
+  /** the scratching post rocking on its foot (tipped so far each way, and how fast), and the
+   *  pompom on its string under the top swinging (out so far each way, and how fast) */
+  private readonly postSway = {
+    group: new THREE.Group() as THREE.Object3D, at: new THREE.Vector3(), ax: 0, az: 0, vx: 0, vz: 0,
+    pom: new THREE.Group() as THREE.Object3D, px: 0, pz: 0, pvx: 0, pvz: 0,
+  };
 
   /** a cat knocks against something, at a point, so hard (0 .. 1): the monstera's pot, and its
    *  leaves shake and rustle; a curtain, and it swings */
@@ -930,6 +949,15 @@ export class Room {
     if (dl < 0.16) {
       S.vz += (dx / (dl || 1)) * k * 0.09;
       S.vx -= (dz / (dl || 1)) * k * 0.09;
+    }
+    // the scratching post: raked or knocked, it rocks a little on its foot, away from the cat, and
+    // the pompom under its top swings
+    const P = this.postSway, px = P.at.x - at.x, pz = P.at.z - at.z, pl = Math.hypot(px, pz);
+    if (pl < 0.3) {
+      P.vz += (px / (pl || 1)) * k * 0.05;
+      P.vx -= (pz / (pl || 1)) * k * 0.05;
+      P.pvx += (Math.random() - 0.5) * k * 1.6;
+      P.pvz += (px / (pl || 1)) * k * 1.2;
     }
     const w = this.win;
     for (const C of this.curtains) {
@@ -1429,6 +1457,40 @@ export class Room {
       this.group.add(clock);
     }
 
+    // a scratching post by the wall at the left (seen on wide screens, and when the view goes
+    // that way after the cat): a post wound with sisal rope, on a round foot and under a round top
+    // in the teal plush of the cat's bed, and a pompom on a string from the top's edge. Raked, it
+    // rocks a little on its foot and the pompom swings
+    {
+      const P = this.postSway, r = 0.042, h = 0.56;
+      P.at.set(bx - 0.82, 0, wallZ + 0.2);
+      const post = new THREE.Group();
+      post.position.copy(P.at);
+      const plush = this.mat('bed', { pattern: 6 });
+      const foot = shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.145, 0.15, 0.03, 28), plush));
+      foot.position.y = 0.015;
+      const rope = shadowy(new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, 18, 1, true), this.mat('cardboard', { pattern: 11 })));
+      rope.position.y = 0.03 + h / 2;
+      const top = shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.125, 0.032, 28), plush));
+      top.position.y = 0.03 + h + 0.016;
+      post.add(foot, rope, top);
+      // (the pompom hangs from under the top on the side toward you, away from the room's middle,
+      // where a cat at the post has it by its ear and not in its face)
+      const pom = new THREE.Group();
+      pom.position.set(-0.06, 0.03 + h, 0.08);
+      const sl = 0.15;
+      const string = new THREE.Mesh(new THREE.CylinderGeometry(0.003, 0.003, sl, 4), this.mat('rugCream', { tone: -0.1 }));
+      string.position.y = -sl / 2;
+      const ball = shadowy(new THREE.Mesh(new THREE.SphereGeometry(0.02, 10, 8), this.mat('pink', { tone: 0.06, pattern: 4 })));
+      ball.position.y = -sl - 0.016;
+      pom.add(string, ball);
+      post.add(pom);
+      this.group.add(post);
+      P.group = post;
+      P.pom = pom;
+      S.scratcher = { at: P.at, r };
+    }
+
     // the lamp: a bronze stand, a linen shade
     const lx = bx - 0.3, lz = bz - 0.2;
     // (its foot a low dome, which catches the light along its top; a flat disc is a black blot)
@@ -1729,13 +1791,16 @@ export class Room {
     cap(V(winL - 0.07, winB - 0.02, wallZ + 0.14), V(winR + 0.07, winB - 0.02, wallZ + 0.14), 0.04, 0.5);
     cap(V(bx - 2, 0.318, wallZ + 0.01), V(bx + 2, 0.318, wallZ + 0.01), 0.015, 0.4);
     cap(V(bx - 0.2, 0.16, wallZ + 0.055), V(bx + 0.2, 0.16, wallZ + 0.055), 0.07, 0.5);   // the radiator
+    const PS = this.postSway.at;
+    cap(V(PS.x, 0.04, PS.z), V(PS.x, 0.58, PS.z), 0.05, 0.45);               // the scratching post
     this.yarnHome.set(yx, 0, yz);
-    this.things.push([V(px, 0, pz), 0.11], [V(lx, 0, lz), 0.08], [V(fx, 0, fz), 0.14], [this.yarnHome, 0.05], this.box.thing);
+    this.things.push([V(px, 0, pz), 0.11], [V(lx, 0, lz), 0.08], [V(fx, 0, fz), 0.14], [this.yarnHome, 0.05], this.box.thing, [PS, 0.16]);
     this.hides.push([V(fx, 0, fz), 0.14]);
     // worth a sniff: the monstera's pot, the radiator, the yarn, the books with the mug on them
     const face = (from: THREE.Vector3, at: THREE.Vector3) => Math.atan2(at.x - from.x, at.z - from.z);
     for (const [sx2, sz2, ax, az] of [
       [px - 0.22, pz + 0.14, px, pz], [bx - 0.06, wallZ + 0.26, bx - 0.06, wallZ], [yx - 0.18, yz + 0.07, yx, yz], [fx - 0.17, fz + 0.03, fx, fz],
+      [PS.x + 0.25, PS.z + 0.06, PS.x, PS.z],
     ]) {
       const to = V(sx2, 0, sz2);
       S.sniff.push({ to, face: face(to, V(ax, 0, az)) });
@@ -3039,6 +3104,9 @@ export class Room {
   groundAt(x: number, z: number) {
     const L = this.lampSway.home, rl = Math.hypot(x - L.x, z - L.z);
     if (rl < 0.083) return rl < 0.08 ? 0.004 + 0.0256 * Math.sqrt(1 - (rl / 0.08) ** 2) : 0.006;
+    // (the scratching post's plush foot)
+    const Q = this.postSway.at;
+    if (Math.hypot(x - Q.x, z - Q.z) < 0.15) return 0.03;
     // inside the box: its cardboard floor
     const B = this.box;
     if (B && B.here) {
@@ -3357,6 +3425,24 @@ export class Room {
       S.az += S.vz * h;
       S.group.rotation.set(S.ax, 0, S.az);
       this.lampPos.set(S.home.x - Math.sin(S.az) * S.home.y, S.home.y, S.home.z + Math.sin(S.ax) * S.home.y);
+    }
+    // the scratching post rocking on its heavy foot, quickly still; the pompom under its top
+    // swinging on its string, pulled about by the top as it rocks
+    {
+      const P = this.postSway, h = Math.min(dt, 0.05);
+      const ox = P.vx, oz = P.vz;
+      P.vx += (-90 * P.ax - 5 * P.vx) * h;
+      P.vz += (-90 * P.az - 5 * P.vz) * h;
+      P.ax += P.vx * h;
+      P.az += P.vz * h;
+      P.group.rotation.set(P.ax, 0, P.az);
+      // (the top's lurch, carried down the string: a hand's length below a point 0.6 m up)
+      P.pvx += (P.vx - ox) * 4 + (-62 * P.px - 0.9 * P.pvx) * h;
+      P.pvz += (P.vz - oz) * 4 + (-62 * P.pz - 0.9 * P.pvz) * h;
+      P.px += P.pvx * h;
+      P.pz += P.pvz * h;
+      if (Math.abs(P.px) + Math.abs(P.pz) < 1e-4 && Math.abs(P.pvx) + Math.abs(P.pvz) < 1e-3) P.px = P.pz = P.pvx = P.pvz = 0;
+      P.pom.rotation.set(P.px, 0, P.pz);
     }
     // the curtains: brushed, they swing out and back, and settle, and hang straight (still air
     // does not stir them; a stir too small to see would only make their folds' edges flicker)

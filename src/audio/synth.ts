@@ -389,6 +389,28 @@ export function rugScratch(sr: number) {
   return fade(normalize(out, 0.5), sr, 0.003, 0.03);
 }
 
+/** claws dragged down a post wound with sisal rope: the knock of the paw going on, then a long
+ *  coarse rip of fibres catching and tearing free, lower and harsher than a rug's pile */
+export function sisal(sr: number) {
+  const dur = rnd(0.26, 0.36);
+  const out = new Float32Array(Math.floor((dur + 0.06) * sr));
+  ping(out, sr, 0, rnd(130, 170), 0.45, 0.02);
+  const n = Math.floor(rnd(55, 75));
+  for (let i = 0; i < n; i++) {
+    const u = i / n;
+    clicks(out, sr, 0.015 + u * dur, 2, 0.008, 900, 4200, 0.15 + 0.6 * Math.sin(Math.PI * Math.min(1, u * 1.15)), 0.0012);
+  }
+  // (the rasp under it, swelling with the pull and dying as the claws come free)
+  const nz = new Float32Array(out.length);
+  for (let i = 0; i < nz.length; i++) {
+    const u = (i / sr - 0.015) / dur;
+    nz[i] = u > 0 && u < 1 ? noise() * Math.sin(Math.PI * u) ** 0.7 : 0;
+  }
+  filter(nz, sr, 'bp', 1700, 0.8);
+  for (let i = 0; i < out.length; i++) out[i] += nz[i] * 0.5;
+  return fade(normalize(out, 0.55), sr, 0.002, 0.03);
+}
+
 /** a soft landing / settling thump */
 export function thump(sr: number) {
   const out = new Float32Array(Math.floor(0.2 * sr));

@@ -29,6 +29,8 @@ export interface Ctx {
   sniff: () => { to: THREE.Vector3; face: number }[];
   /** upright things to rub a cheek on (where they stand on the floor) */
   posts: () => THREE.Vector3[];
+  /** the scratching post, if there is one: where it stands on the floor, how thick its post is */
+  scratcher: () => { at: THREE.Vector3; r: number } | null;
   /** a bird come down on the ledge outside the window, if there is one (where, on the glass) */
   visitor: () => THREE.Vector3 | null;
   /** a place on the floor in the sun, if the sun is in; and whether a point is in it */
@@ -195,6 +197,10 @@ class Seq implements Act {
   private i = 0;
   private cur: Act | null = null;
   constructor(readonly name: string, private readonly parts: (() => Act)[]) {}
+  /** (where it looks is the part's own business, if the part under way says so) */
+  get ownGaze() {
+    return this.cur?.ownGaze ?? false;
+  }
   update(dt: number, c: Ctx) {
     while (this.i < this.parts.length) {
       this.cur ??= this.parts[this.i]();
@@ -234,13 +240,19 @@ export const stretchSideOn = (c: Ctx, then: PoseName, hind?: boolean) => {
 
 /** waking of itself from a long sleep: a big yawn where it lies, the head hardly lifted from the
  *  bed; then up and round side on to you (whichever way is the less of a turn), a long stretch,
- *  forelegs and then hind legs, and round to lie down on its chest to get on with the day */
-export const wakeUp = (c: Ctx) => new Seq('wake', [
-  () => new Layered('yawn', 2.6, 0.8, () => ({
-    jaw: 1, tongue: 0.5, tongueUp: 1, eyeOpen: 0.08, squint: 0.8, neckPitch: -0.2, headPitch: 0, earOut: 0.35, earFwd: -0.3,
-  }), null, { at: 0.5, sound: 'yawn', gain: 0.22 }),
-  () => stretchSideOn(c, 'loaf', Math.random() < 0.8),
-]);
+ *  forelegs and then hind legs, and round to lie down on its chest to get on with the day. Now and
+ *  then the stretch is done up the scratching post instead, and the claws seen to while it is at
+ *  it */
+export const wakeUp = (c: Ctx) => {
+  const post = c.scratcher?.();
+  const atPost = !!post && Math.random() < 0.3;
+  return new Seq('wake', [
+    () => new Layered('yawn', 2.6, 0.8, () => ({
+      jaw: 1, tongue: 0.5, tongueUp: 1, eyeOpen: 0.08, squint: 0.8, neckPitch: -0.2, headPitch: 0, earOut: 0.35, earFwd: -0.3,
+    }), null, { at: 0.5, sound: 'yawn', gain: 0.22 }),
+    atPost ? () => new Claw(post!) : () => stretchSideOn(c, 'loaf', Math.random() < 0.8),
+  ]);
+};
 
 /** washing a flank: head round to the side and down, licking in strokes */
 export const groomFlank = () => {
@@ -675,7 +687,7 @@ export class Greet implements Act {
   private readonly flop: number;
   private roll = 1;
   /** waiting: found sat at the glass already, waiting for you (and there you are) */
-  constructor(private readonly glad: number, private readonly waiting = false) {
+  constructor(readonly glad: number, private readonly waiting = false) {
     this.bumps = glad > 0.5 && Math.random() < 0.8 ? (Math.random() < 0.4 ? 2 : 1) : 0;
     this.stay = rand(5, 9) + 8 * glad;
     this.flop = glad > 0.75 && Math.random() < 0.4 ? rand(4.5, 7) : 0;
@@ -1309,6 +1321,150 @@ export class PawGlass implements Act {
       hipY: 0.13, hipZ: -0.09, hipPitch: 1.25, lumbarPitch: 0.3, chestPitch: -1.35,
       tailLift: 0.6, tailSide: B.paw === 'LF' ? -0.9 : 0.9, tailCurve: 1, tailSag: 1,
       [B.paw]: paw(B.paw, a.x, a.y), [other]: paw(other, 0.045, a.y - 0.05),
+    };
+  }
+  stop(c: Ctx) {
+    c.m.layer = null;
+    c.m.lookAt(null);
+  }
+}
+
+/**
+ * Claws seen to on the scratching post: over to it (a sniff at its foot, now and then), up on its
+ * hind legs at it, the forepaws high on the rope; and the claws dragged down it, one paw and then
+ * the other, hard, the back long, the tail up and the eyes half shut with the good of it, the rope
+ * rasping and the post rocking; a last long pull with both together, the whole cat stretched; and
+ * down again, sat by it, with a look round at you (it is its post, and it has seen to it).
+ */
+export class Claw implements Act {
+  readonly name = 'claw';
+  phase: 'go' | 'sniff' | 'up' | 'rake' | 'pull' | 'down' | 'after' = 'go';
+  private t = 0;
+  private set = false;
+  /** how many drags down the rope (each paw's), and how many done */
+  private readonly strokes = 5 + Math.floor(Math.random() * 4);
+  private drags = 0;
+  private readonly sniffs = Math.random() < 0.45;
+  /** which paw drags first */
+  private readonly lead: PawSide = Math.random() < 0.5 ? 'LF' : 'RF';
+  /** how far from the post's middle it stands, and the paws' reach up it */
+  static readonly STAND = 0.28;
+  static readonly TOP = 0.47;
+  static readonly DROP = 0.09;
+  /** drags a second (each paw drags once in a cycle) */
+  static readonly RATE = 1.5;
+  constructor(private readonly post: { at: THREE.Vector3; r: number }) {}
+  get ownGaze() {
+    return true;
+  }
+  update(dt: number, c: Ctx) {
+    const m = c.m, P = this.post;
+    this.t += dt;
+    // (it stands at the side of the post toward the room's middle, side on to you, facing it)
+    const face = -Math.PI / 2;
+    if (this.phase === 'go') {
+      if (!this.set) {
+        this.set = true;
+        m.setPosture('stand');
+        m.walkTo(new THREE.Vector3(P.at.x + Claw.STAND, 0, P.at.z), 0.3, face, () => {
+          this.phase = this.sniffs ? 'sniff' : 'up';
+          this.t = 0;
+        });
+      }
+      m.lookAt(new THREE.Vector3(P.at.x, 0.3, P.at.z), 0.7);
+      return this.t < 12;
+    }
+    // (stood: up from all fours on to the hind legs and down again, as a cat does it; sat, after)
+    m.setPosture(this.phase === 'after' ? 'sit' : 'stand');
+    const surface = Claw.STAND - P.r - 0.008;
+    if (this.phase === 'sniff') {
+      // the nose down to the foot of it and up the rope a little, the whiskers forward
+      m.lookAt(null);
+      const k = hump(this.t, 1.4, 0.35), up = ease((this.t - 0.6) / 0.5);
+      m.layer = { pose: { neckPitch: -0.55 * k + 0.35 * up * k, headPitch: -0.3 * k + 0.05 * Math.sin(this.t * 38) * k, whisker: 1, earFwd: 0.8 }, w: k };
+      if (this.t > 1.4) { this.phase = 'up'; this.t = 0; }
+      return true;
+    }
+    m.lookAt(null);
+    const look: PoseLayer = { eyeOpen: 0.5, squint: 0.45, earFwd: 0.15, earOut: 0.3, whisker: 0.2 };
+    if (this.phase === 'up') {
+      // up on the hind legs, the forepaws going up the rope to the top of their reach
+      const w = ease(this.t / 0.5);
+      m.layer = { pose: { ...look, ...this.stance(surface, 0, 0, 0) }, w };
+      if (this.t >= 0.5) { this.phase = 'rake'; this.t = 0; }
+      return true;
+    }
+    if (this.phase === 'rake') {
+      // one paw dragged down the rope while the other goes back up for its turn
+      const cyc = this.t * Claw.RATE;
+      const n = Math.floor(cyc * 2);
+      if (n >= this.drags && n < this.strokes) {
+        this.drags = n + 1;
+        const side = (n % 2 === 0) === (this.lead === 'LF') ? 1 : -1;
+        c.sound('sisal', 0.2 + 0.08 * Math.random());
+        c.bump(new THREE.Vector3(P.at.x + P.r, Claw.TOP, P.at.z + side * 0.03), 0.5);
+      }
+      const ph = (u: number) => ((u % 1) + 1) % 1;
+      const a = ph(cyc), b = ph(cyc + 0.5);
+      m.layer = { pose: { ...look, ...this.stance(surface, this.lead === 'LF' ? a : b, this.lead === 'LF' ? b : a, 1) }, w: 1 };
+      // (done: both paws back at the top for the last long pull)
+      if (cyc * 2 >= this.strokes && ph(cyc) < 0.1) { this.phase = 'pull'; this.t = 0; }
+      return true;
+    }
+    if (this.phase === 'pull') {
+      // both paws drawn slowly down together, the back stretched long, the tail up and quivering
+      const u = ease(this.t / 0.9);
+      if (this.t - dt <= 0.05 && this.t > 0.05) {
+        c.sound('sisal', 0.3);
+        c.bump(new THREE.Vector3(P.at.x + P.r, Claw.TOP, P.at.z), 0.8);
+      }
+      const L = this.stance(surface, 0, 0, 0);
+      const pd = Claw.DROP * 1.3 * u;
+      for (const k of ['LF', 'RF'] as const) {
+        const f = L[k] as { y: number; flex: number };
+        f.y -= pd;
+        f.flex = -0.9 + 0.55 * u;
+      }
+      L.lumbarPitch = (L.lumbarPitch ?? 0) - 0.2 * u;
+      L.chestPitch = (L.chestPitch ?? 0) + 0.1 * u;
+      L.tailCurl = 0.25 * Math.sin(this.t * 30) * u;
+      m.layer = { pose: { ...look, eyeOpen: 0.3, squint: 0.6, ...L }, w: 1 };
+      if (this.t > 1.1) { this.phase = 'down'; this.t = 0; }
+      return true;
+    }
+    if (this.phase === 'down') {
+      const L = this.stance(surface, 0, 0, 0);
+      for (const k of ['LF', 'RF'] as const) (L[k] as { y: number }).y -= Claw.DROP * 1.3;
+      m.layer = { pose: { ...look, ...L }, w: 1 - ease(this.t / 0.5) };
+      if (this.t >= 0.5) { this.phase = 'after'; this.t = 0; m.layer = null; }
+      return true;
+    }
+    // sat by it, a look round at you, pleased with that
+    m.layer = null;
+    m.lookAt(this.t > 0.3 && this.t < 2.2 ? c.viewer() : null, 1);
+    if (this.t > 0.9 && this.t - dt <= 0.9 && c.mood.trust > 0.6) m.slowBlink();
+    return this.t < 2.6;
+  }
+  /** up at the post: the hind legs under it, the body long up the post, the forepaws on the rope
+   *  (each so far through its drag: 0 at the top, going down until 0.55, then back up off the
+   *  rope; going: whether it is under way, the shoulders working with the paws) */
+  private stance(surface: number, l: number, r: number, going: number): PoseLayer {
+    const paw = (u: number, x: number) => {
+      const drag = u < 0.55;
+      const s = drag ? ease(u / 0.55) : 1 - ease((u - 0.55) / 0.45);
+      const off = drag ? 0 : Math.sin(Math.PI * (u - 0.55) / 0.45);
+      return { planted: 0, frame: 0, x, y: Claw.TOP - Claw.DROP * s, z: surface - 0.03 * off, flex: drag ? -0.95 + 0.6 * s : -1 + 0.3 * off };
+    };
+    const ld = l < 0.55 ? Math.sin(Math.PI * l / 0.55) : 0, rd = r < 0.55 ? Math.sin(Math.PI * r / 0.55) : 0;
+    // (the back long and straight up to the shoulders, the head down between the forelegs; the
+    // hind legs stood up straight under it, on their toes)
+    const hind = { planted: 1, frame: 0, x: 0.045, y: 0.013, z: -0.13, flex: 0 };
+    return {
+      hipY: 0.2, hipZ: -0.1, hipPitch: 0.85, lumbarPitch: 0.1, chestPitch: -0.3 + 0.05 * going * (ld + rd),
+      chestRoll: 0.07 * going * (ld - rd), neckPitch: -0.55, headPitch: -0.25,
+      hindFlat: 0.15, LH: hind, RH: { ...hind },
+      tailLift: 0.95, tailSide: 0.15, tailCurve: 0.5, tailSag: 0.4,
+      LF: paw(l, 0.03), RF: paw(r, 0.03),
     };
   }
   stop(c: Ctx) {
@@ -2766,6 +2922,9 @@ export function chooseAct(c: Ctx, atHome: boolean, posture: PoseName): Act | nul
     // content and about, it goes and marks its things
     const posts = c.posts();
     if (atHome && posts.length) opts.push([0.3 * (0.4 + m.pleasure) * (1 - m.sleepy), () => new Rub(c, pick(posts))]);
+    // ... and its claws, on the scratching post
+    const post = c.scratcher();
+    if (atHome && post) opts.push([0.4 * (0.4 + m.arousal) * (1 - 0.7 * m.sleepy), () => new Claw(post)]);
     if (atHome && c.mode === 'rest') opts.push([0.7 + 0.8 * m.sleepy, () => sunbathe(c)]);
     if (atHome && c.mode === 'rest' && c.warm()) opts.push([0.8 + 0.8 * m.sleepy, () => warmUp(c)]);
     // very fond of you and drowsy: a nap as near you as it can get

@@ -659,9 +659,10 @@ export class PixelApp {
     // never past the room's ends
     // (and a little toward where its head is: rubbing along the lamp, its face was off the side
     // while the middle of it was still in view)
-    const lead = want.x + 0.08 * Math.sin(m.yaw) + m.vel.x * 0.7 * (1 - m.zoom);
+    // (at the scratching post, the post in the picture with it: it stands by the room's left end)
+    const lead = want.x + 0.08 * Math.sin(m.yaw) + m.vel.x * 0.7 * (1 - m.zoom) + (this.avatar.doing === 'claw' ? -0.1 : 0);
     const off = lead - this.panX, dead = 0.07;
-    const goal = Math.max(-0.5, Math.min(0.6, off > dead ? lead - dead : off < -dead ? lead + dead : this.panX));
+    const goal = Math.max(-0.66, Math.min(0.6, off > dead ? lead - dead : off < -dead ? lead + dead : this.panX));
     const L = this.laser, wf = this.wandFinger;
     const playing = this.avatar.doing === 'chase' || this.avatar.doing === 'tease';
     const tool = L.held && L.id >= 0 ? L.sx : wf ? wf.x : null;
@@ -670,7 +671,7 @@ export class PixelApp {
       // it as the view went after the cat), unless the dot is held out near an edge, which takes
       // the view on that way
       const ex = (tool / innerWidth) * 2 - 1, edge = 0.7;
-      if (Math.abs(ex) > edge) this.panX = Math.max(-0.5, Math.min(0.6, this.panX + Math.sign(ex) * ((Math.abs(ex) - edge) / (1 - edge)) * 0.45 * dt));
+      if (Math.abs(ex) > edge) this.panX = Math.max(-0.66, Math.min(0.6, this.panX + Math.sign(ex) * ((Math.abs(ex) - edge) / (1 - edge)) * 0.45 * dt));
     }
     // (a little quicker after it when it is tearing about, so that it is not lost off the side)
     else this.panX += (goal - this.panX) * (1 - Math.exp(-dt * (1.8 + 1.2 * m.zoom)));

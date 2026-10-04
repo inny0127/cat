@@ -4,7 +4,7 @@ import { POSES, SIDE_TURN, type Leg, type PoseLayer, type PoseName } from '../ca
 import { NEUTRAL, type Mood } from '../cat3d/mood';
 import type { Avatar } from '../sim/avatar';
 import type { EarMood, TailMood } from '../rig/animator';
-import { boop, byYou, chooseAct, groomChest, groomFlank, knead, restingPose, sneeze, toBed, toWindow, wander, warmUp, washFace, yawn, type Act, type Ctx, sunbathe, Play, Sill, Hunt, Box, Zoomies, Walk, Stare, Rub, scratchEar, wakeUp, stretchSideOn, Greet, Gift, Snub, Beg, PawGlass, TailChase, type GlassFinger, type SillSpot } from './behave';
+import { boop, byYou, chooseAct, groomChest, groomFlank, knead, restingPose, sneeze, toBed, toWindow, wander, warmUp, washFace, yawn, type Act, type Ctx, sunbathe, Play, Sill, Hunt, Box, Zoomies, Walk, Stare, Rub, scratchEar, wakeUp, stretchSideOn, Greet, Gift, Snub, Beg, PawGlass, TailChase, Claw, type GlassFinger, type SillSpot } from './behave';
 import { Chase, Startle, type LaserDot } from './chase';
 import { Tease, type Lure } from './tease';
 
@@ -57,7 +57,7 @@ export class PixelAvatar implements Avatar {
   /** an errand in the room: to the bowl, eat or drink there, then off out of the room */
   private errand: { reason: string; phase: 'go' | 'do' | 'off'; t: number; dur: number; dir: number } | null = null;
   /** the room's places (bowls, box), once there is a room */
-  spots: { food: THREE.Vector3; water: THREE.Vector3; litter: THREE.Vector3; sniff?: { to: THREE.Vector3; face: number }[]; posts?: THREE.Vector3[] } | null = null;
+  spots: { food: THREE.Vector3; water: THREE.Vector3; litter: THREE.Vector3; sniff?: { to: THREE.Vector3; face: number }[]; posts?: THREE.Vector3[]; scratcher?: { at: THREE.Vector3; r: number } } | null = null;
   /** a place in the sun on the floor, if there is one now */
   sunSpot: (() => THREE.Vector3 | null) | null = null;
   /** is a circle on the floor clear of the room's things */
@@ -577,6 +577,7 @@ export class PixelAvatar implements Avatar {
       night: 0,
       sniff: () => this.spots?.sniff ?? [],
       posts: () => this.spots?.posts ?? [],
+      scratcher: () => this.spots?.scratcher ?? null,
       visitor: () => this.visitor,
       sun: () => this.sunSpot?.() ?? null,
       clear: (p, r) => this.floorClear?.(p, r) ?? true,
@@ -713,7 +714,7 @@ export class PixelAvatar implements Avatar {
   }
 
   /** start one of its acts now (for the lab and tests) */
-  startAct(name: 'yawn' | 'groom' | 'groom chest' | 'wash' | 'stretch' | 'window' | 'wander' | 'knead' | 'bed' | 'sun' | 'play' | 'sill' | 'box' | 'zoomies' | 'warm' | 'sneeze' | 'stare' | 'rub' | 'scratch' | 'greet' | 'gift' | 'ask' | 'tail' | 'by you') {
+  startAct(name: 'yawn' | 'groom' | 'groom chest' | 'wash' | 'stretch' | 'window' | 'wander' | 'knead' | 'bed' | 'sun' | 'play' | 'sill' | 'box' | 'zoomies' | 'warm' | 'sneeze' | 'stare' | 'rub' | 'scratch' | 'greet' | 'gift' | 'ask' | 'tail' | 'by you' | 'claw') {
     // (not on its way somewhere, to the bowls or out of the room: the walk there is its business)
     if (this.perched || this.trip) return;
     this.stopAct();
@@ -723,7 +724,7 @@ export class PixelAvatar implements Avatar {
         : name === 'knead' ? knead() : name === 'sun' ? sunbathe(c) : name === 'play' ? new Play()
           : name === 'sill' && this.sillSpot ? new Sill(this.sillSpot())
             : name === 'box' && this.boxSpot?.() ? new Box(this.boxSpot()!) : name === 'zoomies' ? new Zoomies(c) : name === 'warm' ? warmUp(c) ?? toBed(c, 'loaf') : name === 'sneeze' ? sneeze(c) : name === 'stare' ? new Stare(c)
-              : name === 'rub' && c.posts().length ? new Rub(c, c.posts()[0]) : name === 'scratch' ? scratchEar() : name === 'greet' ? new Greet(0.9) : name === 'gift' ? new Gift() : name === 'ask' ? new PawGlass(c.finger, true) : name === 'tail' ? new TailChase() : name === 'by you' ? byYou(c) : toBed(c, 'loaf');
+              : name === 'rub' && c.posts().length ? new Rub(c, c.posts()[0]) : name === 'scratch' ? scratchEar() : name === 'greet' ? new Greet(0.9) : name === 'gift' ? new Gift() : name === 'ask' ? new PawGlass(c.finger, true) : name === 'tail' ? new TailChase() : name === 'by you' ? byYou(c) : name === 'claw' && c.scratcher() ? new Claw(c.scratcher()!) : toBed(c, 'loaf');
   }
 
   /** the red dot of a laser pointer: awake and its own master, it drops what it was doing and is
@@ -905,7 +906,11 @@ export class PixelAvatar implements Avatar {
         if (this.act instanceof Hunt) this.huntRest = 40 + Math.random() * 60;
         // (a wash done, or the nose licked: now and then the tip of the tongue stays out)
         if (/^(wash|groom|boop)/.test(this.act.name)) this.maybeBlep(this.act.name === 'boop' ? 0.3 : 0.15);
-        this.act = unanswered ? byYou(c) : null;
+        // (gladdest to see you, now and then off to the scratching post with it after: claws dragged
+        // down it with a will, as a cat does when its people come home)
+        const post = c.scratcher();
+        const proud = this.act instanceof Greet && this.act.glad > 0.55 && !!post && Math.random() < 0.3;
+        this.act = unanswered ? byYou(c) : proud ? new Claw(post!) : null;
       }
       return;
     }
