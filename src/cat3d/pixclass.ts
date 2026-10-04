@@ -34,7 +34,7 @@ export const RAMPS: string[][] = [
   ['#7e7290', '#ab9fb8', '#d4cad4', '#efe7e4', '#fffbf3'],   // white fur: lavender in shadow, warm in the light
   ['#7b5160', '#b9806f', '#e2ac82', '#f6cf9b', '#ffebc2'],   // cream
   ['#5e2f3a', '#9a4434', '#cf6a32', '#ec9447', '#f9bd6c'],   // ginger
-  ['#42222f', '#6c2f30', '#9c4329', '#c15e2c', '#dc8240'],   // the stripes
+  ['#5a2c37', '#863a31', '#b2532b', '#d7742f', '#eb9a48'],   // the stripes: a deeper ginger, lost in the shade
   ['#74405a', '#ab5f78', '#da8b9a', '#f3b0b0', '#ffd6cc'],   // pink skin: ears, nose, pads
   ['#1d1420', '#2c1d27', '#42292f', '#5d3a3a', '#7c534c'],   // dark skin, the lids' margin
   ['#2b1020', '#4c182c', '#77283d', '#a6424f', '#cf6f72'],   // the inside of the mouth

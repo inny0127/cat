@@ -151,10 +151,10 @@ int tabby(int cls, vec3 P) {
     band = fract(ph) < 0.38 && hashT(vec2(floor(ph), sign(P.x))) > 0.25;
   } else {
     float th = atan(abs(P.x), P.y - 0.2);
-    float ph = (P.z + 0.022 * th) / 0.03 + 0.22 * sin(th * 3.0 + P.z * 37.0) + 0.08 * sin(th * 7.0 - P.z * 90.0);
+    float ph = (P.z + 0.022 * th) / 0.03 + 0.22 * sin(th * 3.0 + P.z * 37.0) + 0.04 * sin(th * 7.0 - P.z * 90.0);
     float k = floor(ph);
     // (each band its own width, and now and then one broken partway down the flank)
-    float wide = 0.3 + 0.16 * hashT(vec2(k, 3.0 + sign(P.x)));
+    float wide = 0.36 + 0.14 * hashT(vec2(k, 3.0 + sign(P.x)));
     bool broken = hashT(vec2(k, sign(P.x))) > 0.7 && th > 0.6 + 0.6 * hashT(vec2(k, 7.0));
     band = (fract(ph) < wide && !broken) || th < 0.1;
   }

@@ -310,11 +310,23 @@ void main() {
     // just behind something nearer (a leg across the chest, the bed's rim on the floor): a line in
     // this colour's own shade, never black
     float w = invDepth(p);
-    float front = max(max(invDepth(p + ivec2(-1, 0)), invDepth(p + ivec2(1, 0))), max(invDepth(p + ivec2(0, 1)), invDepth(p + ivec2(0, -1)))) - w;
-    if (front > 0.035 * w && w > 0.25) level -= level >= 2 ? 1 : 0;
+    float dl = invDepth(p + ivec2(-1, 0)), dr = invDepth(p + ivec2(1, 0)), dd = invDepth(p + ivec2(0, -1)), du = invDepth(p + ivec2(0, 1));
+    float front = max(max(dl, dr), max(du, dd)) - w;
+    // the cat, just behind a nearer part of itself (the head over the shoulder, the chin over the
+    // chest, a leg across the flank) or down in a fold of itself: the line a pixel artist draws
+    // where one form passes over another. A step in its depth, not a slope: measured against the
+    // line through its neighbours either side (1/depth runs straight across a flat surface, so a
+    // back seen aslant is no edge, and a round flank turning away bulges the other way), in metres
+    float crease = 0.0;
+    if (kind == 1) {
+      float z2 = 1.0 / (w * w);
+      if (nm[3] >= 0 && nm[4] >= 0) crease = max(crease, (dl + dr - 2.0 * w) * z2);
+      if (nm[1] >= 0 && nm[6] >= 0) crease = max(crease, (dd + du - 2.0 * w) * z2);
+    }
+    if ((front > 0.035 * w || crease > 0.018) && w > 0.25) level -= level >= 2 ? 1 : 0;
     // the top edge of a thing against what lies behind it catches the window's light: a line a
     // step lighter, as a pixel artist picks out an edge (not on what glows, nor in the dark)
-    else if (!glows && w > 0.25 && w - invDepth(p + ivec2(0, 1)) > 0.035 * w && L > 0.2) level += 1;
+    else if (!glows && w > 0.25 && w - du > 0.035 * w && L > 0.2) level += 1;
     col = ramp(mat, level);
     // the colour of the light it is in: the lamp's, the sun's (the moon's), the shade's, mixed as
     // they are mixed on it
