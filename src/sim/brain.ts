@@ -485,7 +485,10 @@ export class Brain {
       if (reason === 'sulk') {
         s.where = 'away';
         s.awayReason = 'sulk';
-        const mins = 2 + 18 * this.irritation * (1 - 0.6 * clamp(s.trust)) + rand(0, 3);
+        // (a cat you have only just met, in the first days, sulks a few minutes, not the best part
+        // of half an hour: you are still finding out what it will have)
+        const newness = clamp(1 - (now - s.born) / (3 * 864e5));
+        const mins = (2 + 18 * this.irritation * (1 - 0.6 * clamp(s.trust)) + rand(0, 3)) * (1 - 0.7 * newness);
         s.awayUntil = now + mins * 60_000;
         s.grudgeUntil = s.awayUntil;
         s.trust = clamp(s.trust - 0.04, -1, 1);
