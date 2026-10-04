@@ -12,9 +12,9 @@ await page.goto((process.env.REEL_BASE ?? 'http://localhost:5173/') + 'index.htm
 await page.waitForFunction(() => window.__pcat, null, { timeout: 180000 });
 const report = await page.evaluate(async (minutes) => {
   const app = window.__pcat;
-  const acts = ['wander', 'sun', 'warm', 'play', 'sill', 'box', 'wash', 'zoomies', 'stare', 'sneeze', 'rub', 'scratch', 'window', 'groom', 'yawn', 'stretch', 'bed', 'greet', 'gift'];
+  const acts = ['wander', 'sun', 'warm', 'play', 'sill', 'box', 'wash', 'zoomies', 'stare', 'sneeze', 'rub', 'scratch', 'window', 'groom', 'yawn', 'stretch', 'bed', 'greet', 'gift', 'ask', 'tail', 'by you'];
   const issues = [];
-  let t = 1, seen = {}, drag = null, drags = 0, errands = 0, laser = null, wand = null, laserUses = 0, wandUses = 0, returns = 0, tosses = 0;
+  let t = 1, seen = {}, drag = null, drags = 0, errands = 0, laser = null, wand = null, laserUses = 0, wandUses = 0, returns = 0, tosses = 0, glass = null, glasses = 0;
   // a cat that wants to go somewhere and does not move
   let stillFor = 0, lastAct = '';
   const lastPos = { x: 0, z: 0 };
@@ -42,8 +42,21 @@ const report = await page.evaluate(async (minutes) => {
     }
     // now and then the app is shut and opened again half an hour later (the cat says hello)
     if (i % 2600 === 1300 && app.brain.mode !== 'away') { app.onVisibility(false); app.state.lastTick -= 1800e3; app.onVisibility(true); returns++; }
+    // now and then a finger on the glass beside the cat, moved about slowly a few seconds (the cat
+    // may come and pat at it), and lifted
+    if (i % 1300 === 650 && !drag && !laser && !wand && !glass && Math.random() < 0.6) {
+      const m = app.cat.motor, cam = app.stage.camera;
+      const q = cam.position.clone().set(m.pos.x + (Math.random() < 0.5 ? -1 : 1) * 0.1, 0.12 + Math.random() * 0.25, app.room.spots.bed.z + 0.45).project(cam);
+      glass = { x: (q.x * 0.5 + 0.5) * innerWidth, y: (-q.y * 0.5 + 0.5) * innerHeight, until: i + 120 + Math.floor(Math.random() * 100), k: 0 };
+      if (app.input.h.hitCat(glass.x, glass.y, false) || glass.x < 0 || glass.x > innerWidth || glass.y < 0 || glass.y > innerHeight) glass = null;
+      else { app.input.down(ev(glass.x, glass.y, t)); glasses++; }
+    } else if (glass) {
+      glass.k += 0.05;
+      app.input.move(ev(glass.x + 22 * Math.sin(glass.k * 2.3), glass.y + 5 * Math.sin(glass.k * 3.9), t));
+      if (i >= glass.until) { app.input.up(ev(glass.x, glass.y, t), false); glass = null; }
+    }
     // now and then a finger takes the ball of wool and drags it about a few seconds
-    if (i % 300 === 0 && !drag && !laser && !wand && Math.random() < 0.4) {
+    if (i % 300 === 0 && !drag && !laser && !wand && !glass && Math.random() < 0.4) {
       const p = app.room.yarnAt().clone().project(app.stage.camera);
       const x = (p.x * 0.5 + 0.5) * innerWidth, y = (-p.y * 0.5 + 0.5) * innerHeight;
       drag = { x, y, until: i + 40 + Math.floor(Math.random() * 120), vx: 0, vy: 0 };
@@ -131,7 +144,7 @@ const report = await page.evaluate(async (minutes) => {
     if (i % 2400 === 0) await new Promise((r) => setTimeout(r, 0));
   }
   app.stage.render();
-  return { issues: issues.slice(0, 20), batch: app.room.batchCount, seen, drags, errands, laserUses, wandUses, returns, tosses, mug: app.room.mugUp ? 'up' : 'down', mode: app.brain.mode, doing: app.avatar.doing };
+  return { issues: issues.slice(0, 20), batch: app.room.batchCount, seen, drags, errands, laserUses, wandUses, returns, tosses, glasses, mug: app.room.mugUp ? 'up' : 'down', mode: app.brain.mode, doing: app.avatar.doing };
 }, minutes);
 console.log(JSON.stringify(report), 'errors:', errs.slice(0, 10));
 await b.close();
