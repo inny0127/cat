@@ -180,9 +180,10 @@ class Settled implements Act {
   }
 }
 
-/** a big yawn: the mouth wide, eyes squeezed, head back, ears out; now and then you hear it */
+/** a big yawn: the mouth wide, the tongue curled up at its tip in the bottom of it, eyes squeezed,
+ *  head back, ears out; now and then you hear it */
 export const yawn = (heard = Math.random() < 0.5) => new Layered('yawn', 2.4, 0.7, () => ({
-  jaw: 1, eyeOpen: 0.08, squint: 0.8, headPitch: 0.35, neckPitch: 0.1, earOut: 0.35, earFwd: -0.3,
+  jaw: 1, tongue: 0.5, tongueUp: 1, eyeOpen: 0.08, squint: 0.8, headPitch: 0.35, neckPitch: 0.1, earOut: 0.35, earFwd: -0.3,
 }), null, heard ? { at: 0.45, sound: 'yawn', gain: 0.22 } : null);
 
 /** one act after another */
@@ -232,7 +233,7 @@ export const stretchSideOn = (c: Ctx, then: PoseName, hind?: boolean) => {
  *  forelegs and then hind legs, and round to lie down on its chest to get on with the day */
 export const wakeUp = (c: Ctx) => new Seq('wake', [
   () => new Layered('yawn', 2.6, 0.8, () => ({
-    jaw: 1, eyeOpen: 0.08, squint: 0.8, neckPitch: -0.2, headPitch: 0, earOut: 0.35, earFwd: -0.3,
+    jaw: 1, tongue: 0.5, tongueUp: 1, eyeOpen: 0.08, squint: 0.8, neckPitch: -0.2, headPitch: 0, earOut: 0.35, earFwd: -0.3,
   }), null, { at: 0.5, sound: 'yawn', gain: 0.22 }),
   () => stretchSideOn(c, 'loaf', Math.random() < 0.8),
 ]);
