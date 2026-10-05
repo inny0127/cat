@@ -1263,7 +1263,13 @@ export class PixelApp {
     if (this.cat.motor.nibbled) {
       this.cat.motor.nibbled = false;
       this.haptic.tapSoon('medium');
-      this.justNow.add('bite');
+      if (this.avatar.doing !== 'trap') this.justNow.add('bite');
+    }
+    // (its hind feet raking your hand, caught in its trap: each kick felt, and heard, softly)
+    if (this.cat.motor.kicked) {
+      this.cat.motor.kicked = false;
+      this.haptic.tapSoon('light');
+      this.audio.play('step', { gain: 0.12, rate: 0.9 + 0.3 * Math.random(), pan: this.catPan() });
     }
     // (its tongue on your finger: each lick felt, a little rasp, and heard, hardly)
     if (this.cat.motor.lickLanded) {
@@ -1459,6 +1465,7 @@ export class PixelApp {
     if (doing === 'stare') now.add('stare');
     if (doing === 'zoomies') now.add('zoomies');
     if (doing === 'snub') now.add('snub');
+    if (doing === 'trap') now.add('trap');
     if (Math.abs(m.tilt) > 0.25) now.add('tilt');
     if (m.blep > 0.9 && !asleep) now.add('blep');
     // (a loaf: lying with its paws tucked under, awake and easy, a good while)

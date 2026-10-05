@@ -4,7 +4,7 @@ import { POSES, SIDE_TURN, type Leg, type PoseLayer, type PoseName } from '../ca
 import { NEUTRAL, type Mood } from '../cat3d/mood';
 import type { Avatar } from '../sim/avatar';
 import type { EarMood, TailMood } from '../rig/animator';
-import { boop, byYou, chooseAct, groomChest, groomFlank, knead, restingPose, sneeze, toBed, toWindow, wander, warmUp, washFace, yawn, type Act, type Ctx, sunbathe, Play, Sill, Hunt, Box, Zoomies, Walk, Stare, Rub, scratchEar, wakeUp, stretchSideOn, Greet, Gift, Snub, Beg, PawGlass, TailChase, Claw, Top, Fish, Bat, isPerching, type Perching, type ScratchPost, type GlassFinger, type SillSpot } from './behave';
+import { boop, byYou, chooseAct, groomChest, groomFlank, knead, restingPose, sneeze, toBed, toWindow, wander, warmUp, washFace, yawn, type Act, type Ctx, sunbathe, Play, Sill, Hunt, Box, Zoomies, Walk, Stare, Rub, scratchEar, wakeUp, stretchSideOn, Greet, Gift, Snub, Beg, PawGlass, TailChase, Claw, Top, Fish, Bat, Trap, isPerching, type Perching, type ScratchPost, type GlassFinger, type SillSpot } from './behave';
 import { Chase, Startle, type LaserDot } from './chase';
 import { Tease, type Lure } from './tease';
 
@@ -379,6 +379,22 @@ export class PixelAvatar implements Avatar {
       || this.act instanceof Zoomies || this.act instanceof PawGlass || this.act instanceof TailChase) return false;
     this.stopAct();
     this.act = boop();
+    return true;
+  }
+
+  /** a hand on its belly, and the belly offered (rolled over before you, flat out on its side,
+   *  asleep on its back): the hand trapped (see Trap). False: its belly is not to be had just now */
+  bellyTrap() {
+    if (!this.alive || this.isHidden || this.errand || this.trip || this.perched) return false;
+    if (this.act instanceof Trap) return true;
+    const m = this.cat.motor;
+    const kind = this.act instanceof Greet && this.act.phase === 'flop' ? 'flop' : m.posture === 'side' ? 'side' : m.posture === 'back' ? 'back' : null;
+    if (!kind) return false;
+    const sd = kind === 'flop' ? (this.act as Greet).roll : kind === 'side' ? 1 : 0;
+    // (woken by it, if it was asleep: wide awake at once)
+    this.sleep = 0;
+    this.stopAct();
+    this.act = new Trap(kind, sd);
     return true;
   }
 
@@ -906,7 +922,13 @@ export class PixelAvatar implements Avatar {
         this.swatStep(dt);
         return;
       }
-      // (a boop on the nose is seen through, though)
+      // (a boop on the nose is seen through, though; and a hand trapped is held till it is let go)
+      if (this.act instanceof Trap) {
+        if (!this.hands.length) this.act.release();
+        if (!this.act.update(dt, c)) this.stopAct();
+        this.swatStep(dt);
+        return;
+      }
       if (this.act && !(this.act.name === 'knead' && this.kneading) && this.act.name !== 'boop') this.stopAct();
       if (!this.act && this.kneading) this.act = knead();
       if (this.act && !this.act.update(dt, c) && this.act.name === 'boop') { this.stopAct(); this.maybeBlep(0.3); }
@@ -918,10 +940,11 @@ export class PixelAvatar implements Avatar {
     // a hand on it: it stops for it, whatever it was about (short of a game, a hunt, the zoomies
     // or a fright; up on something, it stays up there): not walked out from under the hand
     if (this.hands.length && this.act && !this.perched
-      && !(this.act instanceof Chase || this.act instanceof Tease || this.act instanceof Play || this.act instanceof Hunt || this.act instanceof Zoomies || this.act instanceof Startle)) {
+      && !(this.act instanceof Chase || this.act instanceof Tease || this.act instanceof Play || this.act instanceof Hunt || this.act instanceof Zoomies || this.act instanceof Startle || this.act instanceof Trap)) {
       this.stopAct();
       m.stop();
     }
+    if (this.act instanceof Trap && !this.hands.length) this.act.release();
     // its own time: carry on with what it is doing, or now and then think of something
     if (this.act) {
       if (!this.act.update(dt, c)) {

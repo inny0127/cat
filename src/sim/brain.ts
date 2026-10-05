@@ -228,11 +228,22 @@ export class Brain {
       this.toAwake(this.s.trust > 0.4 && zone !== 'tail' && zone !== 'paw' ? 'rest' : 'alert');
       this.peekEye = 0;
     }
+    // its belly offered (rolled over before you, flat out, asleep on its back) and a hand put on
+    // it: a trap, the hand hugged and bitten at and kicked, and let go. Half a game and half
+    // meant: for as long as it has the hand, no harm done; a hand left on its belly after, that is
+    // another thing
+    if (zone === 'belly' && this.mode !== 'angry' && this.s.trust > 0.25 && this.anim.bellyTrap?.()) {
+      this.trapUntil = this.time + 3.2;
+      this.arousal = clamp(this.arousal + 0.35);
+      this.irritation = clamp(this.irritation + 0.05);
+    }
     if (this.mode === 'angry' && this.time - this.hissAt < 2.5) {
       // you touched it right after it hissed
       this.leave('sulk');
     }
   }
+  /** a hand in its trap till then (see touchStart) */
+  private trapUntil = -1;
 
   touchEnd(c: Contact, tap: boolean) {
     if (this.inert) return;
@@ -532,6 +543,8 @@ export class Brain {
       W.over = (W.over ?? 0) + over * dt;
     }
     if (this.mode === 'angry') p = Math.min(p, -0.4);
+    // (a hand in its trap is its game while it lasts)
+    else if (zone === 'belly' && this.time < this.trapUntil) p = Math.max(p, -0.04);
     if (s.health < THRESH.sick) p *= 0.5;
 
     if (p > 0) {

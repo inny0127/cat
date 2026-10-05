@@ -320,6 +320,8 @@ export class Motor {
   nibbled = false;
   /** set as each lick lands (for whoever wants to feel it or hear it, to clear) */
   lickLanded = false;
+  /** set as each kick of the hind feet lands on a hand (for whoever wants to feel it, to clear) */
+  kicked = false;
   /** the tip of the tongue left out between the lips, forgotten there (0 .. 1): a blep */
   blep = 0;
   /** the beat of music it is keeping time with, its tail tip flicking to it (0 .. 1 at each beat) */

@@ -731,7 +731,7 @@ export class Greet implements Act {
   /** gladdest of all, now and then: down on its side before you, belly up (how long; which side
    *  it is lying on) */
   private readonly flop: number;
-  private roll = 1;
+  roll = 1;
   /** waiting: found sat at the glass already, waiting for you (and there you are) */
   constructor(readonly glad: number, private readonly waiting = false) {
     this.bumps = glad > 0.5 && Math.random() < 0.8 ? (Math.random() < 0.4 ? 2 : 1) : 0;
@@ -2161,6 +2161,122 @@ const bellyUp = (sd: number, t: number, D: number, rock: number): { pose: PoseLa
     w,
   };
 };
+
+/**
+ * Its belly offered (rolled over before you, flat out on its side, asleep on its back) and a hand
+ * put on it: a trap. All at once the forepaws close round the hand and hold it, the head curls in
+ * to bite at it and the hind feet rake it, kick after kick, the tail lashing, the ears out and the
+ * pupils black; then it lets go and lies looking at you, eyes wide, as if nothing had happened.
+ * Half a game and half meant: a cat sure enough of you to show you its belly is not asking for a
+ * hand on it. kind: what it was lying as ('flop': rolled half over, as in Greet and the roll in
+ * the sun; 'side': flat out on its side; 'back': on its back); sd: the side it lies on (1: its
+ * right, -1: its left; on its back, 0)
+ */
+export class Trap implements Act {
+  readonly name = 'trap';
+  phase: 'grab' | 'kick' | 'let' = 'grab';
+  private t = 0;
+  private all = 0;
+  private readonly hold = rand(1.5, 2.6);
+  private readonly look = rand(0.9, 1.5);
+  /** the pose it was in as it sprang (eased out of over the first moment) */
+  private from: PoseLayer | null = null;
+  private kicks = -1;
+  private bites = 0;
+  constructor(readonly kind: 'flop' | 'side' | 'back', readonly sd: number) {}
+  get ownGaze() {
+    return true;
+  }
+  /** the hand gone from its grip: let go of it */
+  release() {
+    if (this.phase === 'let') return;
+    this.phase = 'let';
+    this.t = 0;
+  }
+  update(dt: number, c: Ctx) {
+    const m = c.m;
+    this.t += dt;
+    this.all += dt;
+    if (!this.from) {
+      const p = m.pose as unknown as Record<string, unknown>;
+      const from: Record<string, unknown> = {};
+      for (const k in p) from[k] = typeof p[k] === 'number' ? p[k] : { ...(p[k] as object) };
+      this.from = from as PoseLayer;
+    }
+    m.stop();
+    m.setPosture(this.kind === 'back' ? 'back' : this.kind === 'side' ? 'side' : 'crouch');
+    if (this.phase === 'grab' && this.t > 0.22) { this.phase = 'kick'; this.t = 0; }
+    if (this.phase === 'kick' && this.t > this.hold) this.release();
+    const sd = this.sd, back = this.kind === 'back';
+    const kicking = this.phase === 'kick' ? ease(this.t / 0.15) : 0;
+    const held = this.phase === 'let' ? 1 - ease(this.t / 0.3) : 1;
+    // (the kicks, about four a second, the two hind feet nearly together; and a bite at the hand
+    // now and then between them)
+    const ph = this.all * Math.PI * 2 * 4.2;
+    const k1 = Math.max(0, Math.sin(ph)) * kicking, k2 = Math.max(0, Math.sin(ph + 0.7)) * kicking;
+    const n = this.phase === 'kick' ? Math.floor(this.all * 4.2 - 0.25) : this.kicks;
+    if (n > this.kicks) { if (this.kicks >= 0) m.kicked = true; this.kicks = n; }
+    const bite = this.phase === 'let' ? 0 : Math.max(0, Math.sin(this.all * 6.5 - 0.6)) ** 2;
+    if (bite > 0.9 && this.bites < Math.floor(this.all * 6.5 / (Math.PI * 2)) + 1) { this.bites++; m.nibbled = true; }
+    // let go: the paws open and come away, the head comes round to look at you
+    const open = 1 - held;
+    let pose: PoseLayer;
+    if (!back) {
+      const S = POSES.side;
+      const [uf, lf, uh, lh] = sd > 0 ? ['LF', 'RF', 'LH', 'RH'] : ['RF', 'LF', 'RH', 'LH'];
+      // (the body rocked by the kicks, the back curled so the hind feet come up under the hand)
+      const rock = 0.06 * (k1 - k2);
+      pose = {
+        hipY: S.hipY, hipZ: S.hipZ, hipPitch: S.hipPitch, hipRoll: sd * (S.hipRoll + 0.34 + rock), lumbarPitch: -0.42 * held, chestRoll: sd * (S.chestRoll + 0.32 - rock), chestPitch: -0.12,
+        neckPitch: -0.38 * held + 0.1 * open, neckYaw: sd * 0.05, headPitch: -0.42 * held - 0.15 * bite - 0.1 * open, headRoll: sd * (S.headRoll + 0.35 * open), jaw: 0.32 * bite,
+        // (the forepaws out round the hand, in front of the belly)
+        [uf]: { planted: 0, frame: 0, x: 0.165 - 0.04 * open, y: 0.1 + 0.04 * open, z: 0.09 + 0.04 * open, flex: 0.85 - 0.55 * open },
+        [lf]: { planted: 0, frame: 0, x: -0.15 + 0.04 * open, y: 0.055 + 0.02 * open, z: 0.1 + 0.03 * open, flex: 0.85 - 0.55 * open },
+        // (the hind feet together, raking up at it)
+        [uh]: { planted: 0, frame: 0, x: 0.1 + 0.07 * k1, y: 0.06 + 0.05 * k1, z: -0.22 + 0.22 * k1, flex: 0.3 + 0.2 * k1 },
+        [lh]: { planted: 0, frame: 0, x: -0.07 - 0.07 * k2, y: 0.03 + 0.04 * k2, z: -0.21 + 0.2 * k2, flex: 0.3 + 0.2 * k2 },
+        pastern: S.pastern, hindFlat: S.hindFlat,
+        earFwd: -0.3 * held + 0.3 * open, earOut: 0.35 * held, pupil: 1, eyeOpen: 0.9 + 0.1 * open, squint: 0, whisker: 0.8 * held,
+        tailLift: S.tailLift, tailSide: 0.8 * Math.sin(this.all * 7) * held, tailCurve: S.tailCurve, tailSag: 1,
+      };
+    } else {
+      // on its back: all four paws up round the hand over its belly, the head lifted to it
+      const B = POSES.back;
+      pose = {
+        hipY: B.hipY, hipZ: B.hipZ, hipPitch: B.hipPitch, hipRoll: B.hipRoll, lumbarPitch: -0.28 * held, chestRoll: B.chestRoll, chestPitch: -0.12 * held,
+        neckPitch: -0.55 * held - 0.15 * open, neckYaw: 0.25 * held + 0.7 * open, headPitch: -0.3 * held - 0.2 * open - 0.12 * bite, headYaw: 0.15 * held + 0.5 * open, headRoll: 0.3 * open, jaw: 0.3 * bite,
+        LF: { planted: 0, frame: 0, x: 0.01 + 0.05 * open, y: 0.21 - 0.03 * open, z: 0.07 + 0.04 * open, flex: 0.85 - 0.5 * open },
+        RF: { planted: 0, frame: 0, x: 0.01 + 0.05 * open, y: 0.2 - 0.03 * open, z: 0.05 + 0.04 * open, flex: 0.85 - 0.5 * open },
+        LH: { planted: 0, frame: 0, x: 0.07, y: 0.15 + 0.05 * k1, z: -0.14 + 0.13 * k1, flex: 0.35 },
+        RH: { planted: 0, frame: 0, x: 0.07, y: 0.15 + 0.05 * k2, z: -0.13 + 0.12 * k2, flex: 0.35 },
+        pastern: B.pastern, hindFlat: B.hindFlat,
+        earFwd: -0.3 * held + 0.3 * open, earOut: 0.35 * held, pupil: 1, eyeOpen: 0.9 + 0.1 * open, squint: 0, whisker: 0.8 * held,
+        tailLift: B.tailLift, tailSide: 0.8 * Math.sin(this.all * 7) * held + B.tailSide * open, tailCurve: B.tailCurve, tailSag: 1,
+      };
+    }
+    // (sprung from where it lay: out of that pose in a moment, quicker than the eye)
+    const e = ease(this.all / 0.16);
+    if (e < 1 && this.from) {
+      const F = this.from as Record<string, unknown>, P = pose as Record<string, unknown>;
+      for (const k in P) {
+        const a = F[k], b = P[k];
+        if (typeof b === 'number' && typeof a === 'number') P[k] = a + (b - a) * e;
+        else if (b && typeof b === 'object' && a && typeof a === 'object') {
+          const fa = a as Record<string, number>, fb = b as Record<string, number>;
+          for (const fk in fb) if (typeof fa[fk] === 'number') fb[fk] = fa[fk] + (fb[fk] - fa[fk]) * e;
+        }
+      }
+    }
+    m.layer = { pose, w: 1 };
+    // its eyes on the hand while it has it; let go, on you
+    m.lookAt(this.phase === 'let' ? c.viewer() : null, 1);
+    return this.phase !== 'let' || this.t < this.look;
+  }
+  stop(c: Ctx) {
+    c.m.layer = null;
+    c.m.lookAt(null);
+  }
+}
 
 /** lie a long while in the patch of sun on the floor, as cats will, then back to bed (now and
  *  then first a roll in the warm of it: over onto its back, wriggling, rocking from side to back
