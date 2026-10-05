@@ -1,4 +1,4 @@
-// node tools/soak.mjs [minutes]: runs the pixel cat's life in fixed steps of game time with acts,
+// node tools/soak.mjs [minutes] (SOAK_QUERY=px=2.1 for more of the query): runs the pixel cat's life in fixed steps of game time with acts,
 // hours and weather changing at random, and reports anything wrong (errors, NaN, a cat left up in
 // the air or perched off the sill, a still thing of the room's that moved).
 import { chromium } from 'playwright-core';
@@ -8,7 +8,7 @@ const page = await b.newPage({ viewport: { width: 390, height: 844 } });
 const errs = [];
 page.on('pageerror', (e) => errs.push(e.message));
 page.on('console', (m) => { if (m.type() === 'error') errs.push(m.text().slice(0, 300)); });
-await page.goto((process.env.REEL_BASE ?? 'http://localhost:5173/') + 'index.html?still');
+await page.goto((process.env.REEL_BASE ?? 'http://localhost:5173/') + 'index.html?still' + (process.env.SOAK_QUERY ? '&' + process.env.SOAK_QUERY : ''));
 await page.waitForFunction(() => window.__pcat, null, { timeout: 180000 });
 const report = await page.evaluate(async (minutes) => {
   const app = window.__pcat;
@@ -93,8 +93,9 @@ const report = await page.evaluate(async (minutes) => {
         if (laser.on) app.input.up({ ...ev(laser.x, laser.y, t), pointerId: 12 }, false);
         const [x, y] = scr(app.room.pointerHome);
         app.input.down({ ...ev(x, y, t), pointerId: 13 });
+        const L = app.laser, seen = `downOn ${L.downOn} id ${L.id} taking ${L.taking} at ${x.toFixed(0)},${y.toFixed(0)}`;
         app.input.up({ ...ev(x, y, t + 0.05), pointerId: 13 }, false);
-        if (app.laser.held) issues.push(`the laser pointer not put back at ${i} (cat under the finger: ${app.input.h.hitCat(x, y, false)}; ${app.avatar.doing})`);
+        if (app.laser.held) issues.push(`the laser pointer not put back at ${i} (cat under the finger: ${app.input.h.hitCat(x, y, false)}; ${app.avatar.doing}; ${seen})`);
         laser = null;
       }
     }
@@ -102,8 +103,8 @@ const report = await page.evaluate(async (minutes) => {
     if (i % 1200 === 900 && !laser && !drag && !wand && Math.random() < 0.6) {
       const [x, y] = scr(app.room.lureAt());
       app.input.down({ ...ev(x, y, t), pointerId: 14 });
-      wand = { x, y, until: i + 120 + Math.floor(Math.random() * 240), vx: 0, vy: 0, took: !!app.wandFinger };
-      if (!wand.took) issues.push(`the wand not taken up at ${i} (${x.toFixed(0)},${y.toFixed(0)}; cat under the finger: ${app.input.h.hitCat(x, y, false)}; ${app.avatar.doing})`);
+      wand = { x, y, until: i + 120 + Math.floor(Math.random() * 240), vx: 0, vy: 0, took: !!app.wandFinger, why: `laser ${app.laser.held} credits ${app.creditsOpen} yarn ${!!app.toyFinger}` };
+      if (!wand.took) issues.push(`the wand not taken up at ${i} (${x.toFixed(0)},${y.toFixed(0)}; cat under the finger: ${app.input.h.hitCat(x, y, false)}; ${app.avatar.doing}; ${wand.why})`);
       wandUses++;
     } else if (wand) {
       wand.vx += (Math.random() - 0.5) * 160; wand.vy += (Math.random() - 0.5) * 160;

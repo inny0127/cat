@@ -450,7 +450,12 @@ export class PixelApp {
 
   /** art pixels across the screen: about two css px each on a phone */
   static artWidth() {
-    return Math.round(clamp(innerWidth / 2.1, 150, 260));
+    // about one and two thirds of the screen's points to an art pixel (on a phone of three screen
+    // pixels to the point, five): fine enough for the cat's eyes and whiskers to be drawn with
+    // some care, and still pixel art you can see the pixels of; on a tablet, or a phone on its
+    // side, no finer than a phone held upright (?px=2.1: another size of pixel, for comparison)
+    const px = +(new URLSearchParams(location.search).get('px') ?? '') || 1.7;
+    return Math.round(clamp(innerWidth / px, 315 / px, 546 / px));
   }
 
   /** half the width of the room seen at the cat's bed (metres) */
