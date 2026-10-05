@@ -717,6 +717,13 @@ export class Stage {
     this.sizePixel();
   }
 
+  /** the art drawn this many pixels across from now on (as near as whole screen pixels allow) */
+  setArtWidth(width: number) {
+    if (!this.pixel || this.pixel.width === width) return;
+    this.pixel.width = width;
+    this.sizePixel();
+  }
+
   /** art pixels are exact squares of k screen pixels: as near the asked width as that allows, the
    *  art a little bigger than the screen and centred on it */
   private sizePixel() {

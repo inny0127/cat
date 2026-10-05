@@ -11,6 +11,7 @@ import { GlassFog, fogOnGlass } from './glassfog';
 import { Notifier, forecast } from '../platform/notify';
 import { Hint } from '../ui/hint';
 import { Firsts } from '../ui/firsts';
+import { SlowWatch } from './pace';
 import { Brain } from '../sim/brain';
 import { loadState, newCat, saveState, type CatState } from '../sim/state';
 import { stepLife, THRESH } from '../sim/life';
@@ -449,13 +450,31 @@ export class PixelApp {
   }
 
   /** art pixels across the screen: about two css px each on a phone */
-  static artWidth() {
+  static artWidth(px = PixelApp.pxWanted()) {
     // about one and two thirds of the screen's points to an art pixel (on a phone of three screen
     // pixels to the point, five): fine enough for the cat's eyes and whiskers to be drawn with
     // some care, and still pixel art you can see the pixels of; on a tablet, or a phone on its
-    // side, no finer than a phone held upright (?px=2.1: another size of pixel, for comparison)
-    const px = +(new URLSearchParams(location.search).get('px') ?? '') || 1.7;
+    // side, no finer than a phone held upright
     return Math.round(clamp(innerWidth / px, 315 / px, 546 / px));
+  }
+  /** the screen's points to an art pixel: as asked (?px=2.1, for comparison); or coarser on a
+   *  phone that has been found not to keep up with the finer (and remembered for it) */
+  private static pxWanted() {
+    const asked = +(new URLSearchParams(location.search).get('px') ?? '');
+    if (asked) return asked;
+    try {
+      if (localStorage.getItem(PixelApp.COARSE_KEY)) return PixelApp.COARSE;
+    } catch { /* storage shut: as usual */ }
+    return 1.7;
+  }
+  private static readonly COARSE = 2.1;
+  private static readonly COARSE_KEY = 'cat-window.coarse';
+  /** whether the phone keeps up with the picture (see SlowWatch): if not, the art drawn coarser */
+  private readonly slowWatch = new SlowWatch();
+  private keepUp(gapMs: number, busy: boolean) {
+    if (!busy || !this.slowWatch.frame(gapMs) || new URLSearchParams(location.search).get('px')) return;
+    this.stage.setArtWidth(PixelApp.artWidth(PixelApp.COARSE));
+    try { localStorage.setItem(PixelApp.COARSE_KEY, '1'); } catch { /* not remembered, then */ }
   }
 
   /** half the width of the room seen at the cat's bed (metres) */
@@ -1193,6 +1212,8 @@ export class PixelApp {
     // picture on a desk, gentler still)
     const idle = calm && nowMs / 1000 - this.inputAt > 180;
     if (this.last && nowMs - this.last < 1000 / (idle ? 20 : calm ? 30 : 60) - 3) return;
+    // (kept up with, while there is something moving to draw?)
+    if (this.last) this.keepUp(nowMs - this.last, this.visible && !this.manual && !calm);
     const dt = Math.min(0.05, this.last ? (nowMs - this.last) / 1000 : 0.016);
     this.last = nowMs;
     if (this.visible && !this.manual) this.tick(dt, nowMs / 1000);
