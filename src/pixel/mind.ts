@@ -18,6 +18,7 @@ const DOING: Record<string, string> = {
   paw: '유리 두드리기', snub: '등 돌리기', startle: '깜짝', sulk: '삐짐', trap: '손 붙잡기', 'to bed': '침대로',
   'look with you': '같이 보러 가기', boop: '코 인사', knead: '꾹꾹이', wake: '잠 깨기',
   sniff: '당신 냄새 맡기', shy: '눈 피하기', ambush: '매복', 'look up': '멈칫하고 보기',
+  cool: '시원한 바닥에서 쉬기', huff: '시무룩',
 };
 
 /** what is on its mind besides what it sees: the will to hunt, what it has a mind to do next,
@@ -33,7 +34,7 @@ export interface MindState {
    *  less keen) on each it is for it */
   lessons?: { key: string; by: number }[];
   wonder: string | null;
-  expects: { laser: number; wand: number; yarn: number; pet: number };
+  expects: { laser: number; wand: number; yarn: number; pet: number; food?: number };
   /** how lively it is (what it takes into its head, how often: whim.ts), and how drowsy */
   pace?: number;
   sleepy?: number;
@@ -135,8 +136,8 @@ export class Mind {
     // the lines
     const A = N.attending;
     const pct = (k: number) => `${Math.round(k * 100)}%`;
-    const top = (['laser', 'wand', 'yarn', 'pet'] as const).reduce((a, b) => (m.expects[b] > m.expects[a] ? b : a), 'laser');
-    const looks = m.expects[top] > 0.25 ? { laser: '레이저 놀이', wand: '깃털 놀이', yarn: '털실 놀이', pet: '쓰다듬기' }[top] : null;
+    const top = (['laser', 'wand', 'yarn', 'pet', 'food'] as const).reduce((a, b) => ((m.expects[b] ?? 0) > (m.expects[a] ?? 0) ? b : a), 'laser');
+    const looks = (m.expects[top] ?? 0) > 0.25 ? { laser: '레이저 놀이', wand: '깃털 놀이', yarn: '털실 놀이', pet: '쓰다듬기', food: '밥' }[top] : null;
     // (its mood in a word: keyed up, at its ease, drowsy, or quiet)
     const mood = m.pace === undefined ? null : m.pace > 0.85 ? '들뜸' : m.pace > 0.4 ? '느긋함' : (m.sleepy ?? 0) > 0.35 ? '나른함' : '차분함';
     const rows = [
