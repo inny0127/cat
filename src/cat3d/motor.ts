@@ -605,8 +605,8 @@ export class Motor {
         const want_yaw = this.roundAbout(dx, dz, dist) ?? Math.atan2(dx, dz);
         const e = wrap(want_yaw - this.yaw);
         // (on the spot a little slower than on the move; quicker at a run, but in an arc, not on
-        // a pin)
-        const maxTurn = (1.35 + 0.45 * clamp(this.speed / 0.2)) * (1 + 1.2 * this.zoom);
+        // a pin; and quicker keen or keyed up)
+        const maxTurn = (1.35 + 0.45 * clamp(this.speed / 0.2)) * (1 + 1.2 * this.zoom) * (1 + 0.6 * this.eager + 0.3 * this.mood.arousal);
         turn = clamp(e * 3.2, -maxTurn, maxTurn);
         // a cat walks round in an arc rather than stopping to pivot, slowing for the sharper
         // turns (near the goal too, so as not to circle it); the way behind it, it all but turns
