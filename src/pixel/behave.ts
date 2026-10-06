@@ -98,6 +98,9 @@ export interface Ctx {
    *  sight of), if it has a fair idea; what it goes for and aims at (a paw lands where the thing
    *  really is, or misses) */
   seen?: (id: string) => THREE.Vector3 | null;
+  /** one of its things moved while it was not looking, and where it is now: something to go and
+   *  see about (how much: 0 .. 1) */
+  curious?: () => { id: string; at: THREE.Vector3; k: number } | null;
   /** a point on the floor moved out of the room's things and in from the walls, for the middle of
    *  a cat r across (changed in place); and a point to go by on the way from one point to another,
    *  round whatever is in the way (null: the way is clear) */
@@ -2286,6 +2289,26 @@ export const wander = (c: Ctx) => {
 };
 
 /**
+ * One of its things not where it was (the ball of wool, the toy mouse, the feathers moved while it
+ * was not looking): over to it, slowing as it comes, and a look at it close, the neck stretched out
+ * to it and the nose working, the ears and whiskers forward, a little wary of it (the tail low);
+ * then it is satisfied, and stays where it is.
+ */
+export const investigate = (c: Ctx, at: THREE.Vector3) => {
+  const from = c.m.pos, d = Math.hypot(at.x - from.x, at.z - from.z) || 1;
+  const near = Math.min(d, 0.21);
+  const stand = c.keepClear(new THREE.Vector3(at.x - ((at.x - from.x) / d) * near, 0, at.z - ((at.z - from.z) / d) * near), 0.12);
+  const face = Math.atan2(at.x - stand.x, at.z - stand.z);
+  // (the head down to it on the floor, out to it a little higher)
+  const low = at.y < 0.1;
+  const sniffAt = (t: number): PoseLayer => ({
+    neckPitch: low ? -0.95 : -0.35, headPitch: (low ? -0.35 : 0.05) + 0.05 * Math.sin(t * 14), whisker: 0.8, earFwd: 0.7,
+    hipY: 0.18 + 0.01 * Math.sin(t * 1.3), tailLift: -0.25, eyeOpen: 1, pupil: 0.7,
+  });
+  return new Walk('investigate', [{ to: stand, face, stay: rand(1.8, 3.4), posture: 'stand', layer: sniffAt }], 0.2);
+};
+
+/**
  * Down on its side and rolled over onto its back, the belly up, the forepaws curled to its chest
  * and the hind legs loose, the back wriggled on the floor, the tail sweeping slowly; rocked (rock
  * 0 .. 1) right over onto its back and half back again, for the joy of it (sd: which side it is on,
@@ -3782,6 +3805,9 @@ export function idleOptions(c: Ctx, atHome: boolean, posture: PoseName): Option[
     // away from its bed (it stayed where it was, after something): back to it in its own time, the
     // sooner the drowsier it is, or after dark
     if (!atHome) add('bed', 1 + 1.6 * m.sleepy + 0.6 * c.night, () => toBed(c, 'loaf'), undefined, c.home);
+    // (one of its things moved while it was not looking: something to see about, and soon)
+    const cur = c.curious?.();
+    if (cur) add('investigate', 6 * cur.k * (1 - 0.7 * m.sleepy), () => investigate(c, cur.at.clone()), cur.id);
     add('still', 1.6, () => null);
   }
   return opts;

@@ -569,11 +569,13 @@ export class PixelAvatar implements Avatar {
     else if (this.act?.name === 'play') N.bias.set('yarn', 0.35);
     else if (this.act?.name === 'pompom') N.bias.set('pompom', 0.35);
     if (I) N.bias.set(I.id, (N.bias.get(I.id) ?? 0) + this.whim.pull);
+    for (const [id, k] of this.wonder) N.bias.set(id, (N.bias.get(id) ?? 0) + 0.3 * k);
     this.headYaw = Math.atan2(this.headF.x, this.headF.z);
     this.headPitch = Math.asin(Math.max(-1, Math.min(1, this.headF.y)));
     N.update(dt, this.eyeW, this.headYaw, this.headPitch, T);
     // (a hand come down on it out of nowhere: felt, and its eyes go round to it)
     if (this.handCue > 0 && N.unit('hand')) { N.cue('hand', this.handCue); this.handCue = 0; }
+    this.remember(dt);
     // (a big shift of the eyes, as often as not, a blink with it, as eyes do when they jump a long
     // way; intent on prey, its eyes hardly blink)
     m.focus = Math.min(1, 1.2 * N.hunt);
@@ -596,6 +598,50 @@ export class PixelAvatar implements Avatar {
   }
   private readonly headLocal = new THREE.Vector3();
   private dotWas = false;
+  /** where it last saw each of its things lying still (the ball of wool, the toy mouse, the
+   *  feathers), and how curious it is about one found somewhere else (fading over a minute or
+   *  so; satisfied, once it has been over and had a look) */
+  private readonly where = new Map<string, THREE.Vector3>();
+  private readonly wonder = new Map<string, number>();
+  private remember(dt: number) {
+    const N = this.nerves;
+    const mouse = this.ground?.mouse();
+    for (const id of ['yarn', 'mouse', 'wand']) {
+      const k = this.wonder.get(id);
+      if (k !== undefined) {
+        const left = k - dt / 60;
+        if (left <= 0) this.wonder.delete(id); else this.wonder.set(id, left);
+      }
+      const u = N.unit(id);
+      if (!u || !u.here) continue;
+      // (its own game with it, or a hand on it, or in its mouth: it knows well enough where it is)
+      const busy = (id === 'yarn' && (this.act?.name === 'play' || this.toys?.held()))
+        || (id === 'wand' && (this.act instanceof Tease || !!this.wand?.held))
+        || (id === 'mouse' && (!mouse || mouse.state !== 'floor' || this.act instanceof Gift || this.act instanceof Fish));
+      const was = this.where.get(id);
+      if (busy) { if (was) was.copy(u.belief); else this.where.set(id, u.belief.clone()); this.wonder.delete(id); continue; }
+      // (seen clearly: going somewhere before its eyes, it knows where it went; lying still somewhere
+      // else than it was, that it did not see)
+      if (u.vis < 0.5 || u.conf < 0.6) continue;
+      if (!was) { this.where.set(id, u.belief.clone()); continue; }
+      if (u.motion > 0.1) { was.copy(u.belief); continue; }
+      if (was.distanceTo(u.belief) > 0.2 && N.awake > 0.6) {
+        this.wonder.set(id, 1);
+        N.cue(id, 0.5);
+      }
+      was.copy(u.belief);
+    }
+  }
+  /** the thing it is most curious about just now, and where it is */
+  private curiosity() {
+    let best: { id: string; at: THREE.Vector3; k: number } | null = null;
+    for (const [id, k] of this.wonder) {
+      const at = this.where.get(id);
+      if (at && (!best || k > best.k)) best = { id, at, k };
+    }
+    return best;
+  }
+
   /** the way its head faces (world), as of the last look round */
   private headYaw = 0;
   private headPitch = 0;
@@ -857,6 +903,7 @@ export class PixelAvatar implements Avatar {
       viewer: () => this.viewer(),
       laser: () => this.seenLaser(),
       gaze: (id) => (this.nerves.attending?.id === id ? this.nerves.gazePoint : null),
+      curious: () => this.curiosity(),
       seen: (id) => {
         const u = this.nerves.unit(id);
         return u && u.conf > 0.25 ? u.belief : null;
@@ -1274,7 +1321,10 @@ export class PixelAvatar implements Avatar {
     // another; and what it does, it looks at first)
     this.easyNow = true;
     const w = this.whim.update(dt, () => idleOptions(c, atHome, m.posture), this.nerves);
-    if (w?.act) this.act = w.act;
+    if (w?.act) {
+      this.act = w.act;
+      if (w.o.key === 'investigate' && w.o.about) this.wonder.delete(w.o.about);
+    }
     else if (w && Math.random() < 0.5) this.rest = restingPose(this.mood, this.mode);
   }
 
