@@ -1207,8 +1207,11 @@ export class PixelApp {
   private readonly mind = (() => { const m = new Mind(); if (new URLSearchParams(location.search).has('mind')) m.toggle(true); return m; })();
   private seeMind() {
     const M = this.mind, av = this.avatar;
+    // (what it is about just now, as it would put it: a face close, an ambush, a look up from its
+    // coat, before the act it is in)
+    const doing = av.closeLooking ?? (av.doing === 'box' && av.doingPhase === 'duck' ? 'ambush' : av.glancing ? 'look up' : av.doing);
     M.update(av.nerves, {
-      intent: av.whim.intent?.o.key ?? null, doing: av.doing, wonder: av.wondering, expects: av.expects, dream: av.dreaming,
+      intent: av.whim.intent?.o.key ?? null, doing, wonder: av.wondering, expects: av.expects, dream: av.dreaming,
       urges: M.open ? av.whim.urges(av.nerves, 2) : undefined, lessons: M.open ? lessons(this.state, this.clock().getTime()) : undefined,
     });
     // (its lids down as far as sleep has them)
