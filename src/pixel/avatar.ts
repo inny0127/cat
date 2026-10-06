@@ -225,6 +225,11 @@ export class PixelAvatar implements Avatar {
   private closeT = -1;
   private farT = 0;
   private closeDone = false;
+  /** this close look: whether it will bump its head at your face (decided as it starts), done it
+   *  yet; and till when it will not again (its clock) */
+  private bonkWill = false;
+  private bonkDone = false;
+  private bonkRest = 0;
   private avertT = 0;
   private readonly lookAway = new THREE.Vector3();
   /** a sound heard in its sleep: where, and how much longer an ear stays round to it (s) */
@@ -780,6 +785,10 @@ export class PixelAvatar implements Avatar {
     if (this.closeT < 0) {
       this.closeT = 0;
       this.closeDone = false;
+      // (one that loves you, now and then, puts its head to your face: a bump of the forehead, the
+      // cheek drawn along after)
+      this.bonkWill = this.mood.trust > 0.7 && this.clock > this.bonkRest && Math.random() < 0.3 + 0.5 * (this.mood.trust - 0.7) / 0.3;
+      this.bonkDone = false;
       N.cue('you', 1.2);
     }
     this.closeT += dt;
@@ -792,6 +801,11 @@ export class PixelAvatar implements Avatar {
         this.closeDone = true;
         m.slowBlink();
         if (Math.random() < 0.25 + 0.3 * trust) this.ctx.say('trill');
+      }
+      if (this.bonkWill && !this.bonkDone && this.closeDone && t > 3.4 && N.attending?.id === 'you' && !m.licking && !m.slowBlinking) {
+        this.bonkDone = true;
+        this.bonkRest = this.clock + 40 + Math.random() * 40;
+        m.bonk(Math.random() < 0.5 ? -1 : 1);
       }
     } else {
       m.nose = 0;
@@ -1282,6 +1296,8 @@ export class PixelAvatar implements Avatar {
    * once and lies down again, unless a hand is on it; otherwise it shuffles and turns a little into
    * the middle of the bed.
    */
+  /** how long it has lain as it is, settled (s) */
+  private lyingFor = 0;
   private lieIn(p: PoseName, atHome: boolean, dt: number) {
     const m = this.cat.motor;
     // (up on its feet to turn round to something behind it (orient): let it, and settle after; not
@@ -1291,6 +1307,9 @@ export class PixelAvatar implements Avatar {
     const b = this.bedSpot(p);
     const e = wrap(b.yaw - m.yaw);
     if (atHome && !this.touched && Math.abs(e) > 0.8) {
+      // (only just lain down, it does not get straight up again to lie another way: it lies as it
+      // is a while first)
+      if (LYING.includes(m.posture) && this.lyingFor < 12) return;
       this.act = toBed(this.ctx, p);
       this.act.update(dt, this.ctx);
       return;
@@ -1740,6 +1759,7 @@ export class PixelAvatar implements Avatar {
     // (right up against a thing or in it on purpose, or up off the floor: no keeping clear of it)
     m.ghost = !!this.errand || this.perched || this.isHidden || this.act instanceof Claw || this.act instanceof Rub || this.act instanceof Top
       || this.act instanceof Sill || this.act instanceof Box || this.act instanceof Bat || this.act instanceof Fish || (this.act instanceof Chase && this.act.up);
+    this.lyingFor = LYING.includes(m.posture) && m.targetPosture === m.posture && !m.goal ? this.lyingFor + dt : 0;
     this.leanIntoHand(dt);
     this.askAfter(dt);
     this.lickHand(dt);

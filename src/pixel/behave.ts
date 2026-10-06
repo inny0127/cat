@@ -4064,7 +4064,9 @@ export const toBed = (c: Ctx, settle: PoseName) => {
   // onto the bed, then round once on the spot (two turns of a third, the third bringing it round
   // to the way it will lie), as a cat turns before it settles; already on it, it turns where it
   // stands (lying down, it shuffles the rest of the way into the middle)
-  const near = Math.hypot(c.m.pos.x - bed.to.x, c.m.pos.z - bed.to.z) < 0.2;
+  // (and on the bed as its being home has it, the middle of the bed not far: else it would lie down
+  // where it is, not at home by that, and get up to go to bed again)
+  const near = Math.hypot(c.m.pos.x - bed.to.x, c.m.pos.z - bed.to.z) < 0.2 && Math.hypot(c.m.pos.x - c.home.x, c.m.pos.z - c.home.z) < 0.16;
   const spot = near ? c.m.pos.clone() : bed.to;
   const dir = Math.random() < 0.5 ? 1 : -1, a = bed.yaw + dir * 0.6;
   const ring: Leg[] = [

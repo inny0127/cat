@@ -169,6 +169,22 @@ export class Motor {
   shy = 0;
   private noseNow = 0;
   private shyNow = 0;
+  /** a head bump at that face, a cat's hello to one it loves: how far into it (s; less than
+   *  nothing: none), and which cheek it draws along after */
+  private bonkT = -1;
+  private bonkSide = 1;
+  bonk(side = 1) {
+    this.bonkT = 0;
+    this.bonkSide = side;
+  }
+  get bonking() {
+    return this.bonkT >= 0;
+  }
+  /** set as the forehead meets the face (for whoever wants to feel it, to clear) */
+  bonked = false;
+  /** the eyes held shut by what it is doing just now (0 .. 1), awake or not: a posture's own shut
+   *  eyes are a sleeping one's, and open when it is awake; these are not */
+  shut = 0;
 
   // gaze (world point) and how much the head follows it
   readonly look = new THREE.Vector3(0, 0.2, 1);
@@ -670,6 +686,7 @@ export class Motor {
   private compose(dt: number) {
     const p = this.pose;
     copyPose(p, this.base);
+    this.shut = 0;
     const li = this.layerIn, kIn = 1 - Math.exp(-dt * 12);
     for (const g of ['hips', 'chest', 'front', 'hind'] as const) {
       const want = this.tt >= 1 && !this.path.length ? 1 : this.path.length ? 0 : this.prog[g] ?? 1;
@@ -984,6 +1001,24 @@ export class Motor {
       p.neckPitch += 0.12 * s;
       p.headPitch -= 0.14 * s;
       p.pupil = clamp(p.pupil + 0.35 * s);
+    }
+    // a head bump at that face: the forehead put out at it, quick, the eyes shut, a moment against
+    // it, and the cheek drawn along it after; then back
+    if (this.bonkT >= 0) {
+      const u = this.bonkT;
+      this.bonkT += dt;
+      const push = u < 0.3 ? ease(u / 0.3) : u < 0.55 ? 1 : u < 1.3 ? 1 - 0.6 * ease((u - 0.55) / 0.75) : u < 1.7 ? 0.4 * (1 - ease((u - 1.3) / 0.4)) : 0;
+      const rub = u > 0.45 && u < 1.6 ? Math.sin(Math.PI * (u - 0.45) / 1.15) : 0;
+      p.neckPitch -= 0.3 * push;
+      p.headPitch -= 0.35 * push - 0.1 * rub;
+      p.headRoll += this.bonkSide * 0.35 * rub;
+      p.headYaw += this.bonkSide * 0.3 * rub;
+      // (the eyes shut through it, not half open: a cat bunting you has them closed)
+      this.shut = Math.max(this.shut, Math.min(1, 1.5 * Math.max(push, rub)));
+      p.earFwd -= 0.3 * push;
+      p.earOut += 0.15 * push;
+      if (u < 0.3 && this.bonkT >= 0.3) this.bonked = true;
+      if (this.bonkT > 1.7) this.bonkT = -1;
     }
     // the puzzled tilt: over quickly, back slowly, the ears pricked while it lasts
     this.tiltNow += (this.tilt - this.tiltNow) * (1 - Math.exp(-dt * (this.tilt !== 0 ? 7 : 3.5)));

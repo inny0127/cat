@@ -518,7 +518,7 @@ export class Cat3D {
     const c01 = (x: number) => Math.max(0, Math.min(1, x));
     // (awake in a posture it sleeps in, curled up or on its back: the eyes open, as awake)
     const lid = p.eyeOpen + (0.7 - p.eyeOpen) * this.awake * c01(1 - p.eyeOpen / 0.3);
-    const open = c01(lid + ey.open * Math.min(1, lid / 0.6)) * (1 - motor.blink);
+    const open = c01(lid + ey.open * Math.min(1, lid / 0.6)) * (1 - motor.blink) * (1 - motor.shut);
     // (narrowed with pleasure, not annoyance: the eyes smile; and a slow blink, a cat's smile at
     // you, closes them in an arch too)
     const md = motor.mood;

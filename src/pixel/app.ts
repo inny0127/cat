@@ -820,6 +820,8 @@ export class PixelApp {
     const tvp = Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2);
     const el = Math.atan2(dir.y, dir.z);
     cam.position.copy(target).addScaledVector(dir, dist / Math.cos(el));
+    // (its forehead put to your face: the view gives a little, as a face would)
+    if (this.bumpT >= 0) cam.position.addScaledVector(dir, 0.006 * Math.sin(Math.PI * Math.min(1, this.bumpT / 0.3)));
     cam.rotation.set(0, 0, 0);
     // the phone tipped: as an eye moved off to the side of a window, the view through it shifts
     // (the room behind the glass the more the further back, the sky most of all) while the glass
@@ -1696,6 +1698,15 @@ export class PixelApp {
     // (keeping time with the radio, when it is in the mood)
     this.cat.motor.beat = this.avatar.groove > 0.01 ? this.avatar.groove * this.audio.beat() : 0;
     this.cat.update(dt);
+    // (its forehead put to your face: felt, a soft bump, and heard, just)
+    if (this.bumpT >= 0 && (this.bumpT += dt) > 0.3) this.bumpT = -1;
+    if (this.cat.motor.bonked) {
+      this.cat.motor.bonked = false;
+      this.bumpT = 0;
+      this.haptic.tapSoon('medium');
+      this.audio.play('thump', { gain: 0.09, rate: 0.7, pan: this.catPan() });
+      this.justNow.add('bonk');
+    }
     // (its teeth on your finger, gently: felt, a little firmer than a lick)
     // (its tail slapped down on the bed or the floor, cross: a soft thump)
     if (this.cat.motor.tailThumped) {
@@ -1891,6 +1902,8 @@ export class PixelApp {
 
   /** what it has just done that FIRSTS has a word for (gathered over the frame) */
   private justNow = new Set<string>();
+  /** the view giving a little under a head bump: how far into it (s; less than nothing: not) */
+  private bumpT = -1;
   private loafFor = 0;
 
   /** the first time it does each of the things in FIRSTS, a word on what it means */
