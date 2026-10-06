@@ -144,10 +144,18 @@ vec2 lidCurvesSoft(float xo, vec2 ul) {
   return vec2(cy + (ul.x + 0.03) * fu, cy + (ul.y + 0.03) * fl);
 }
 
+// where on the painted coat a lid's fur is: the brow just above the eye, straight up from the
+// point of the lid (the coat under the ball itself, in the socket the model's own eye hid, is
+// painted anyhow: white on one side, dark on the other, and a shut eye showed it as a smudge)
+vec2 lidUV(vec2 p) {
+  vec3 q = vec3(p.x * 0.55, 1.2, 1.0);
+  return vec2(dot(uLidU, q), dot(uLidV, q));
+}
+
 // the lid skin over the ball (dl: lid frame), lit as the painted coat is (skin.ts)
 vec3 lidSkin(vec3 N, vec3 dl) {
   vec3 col = uLidCol;
-  if (uLidTex > 0.5) col = texture2D(uLidMap, vec2(dot(uLidU, vec3(dl.xy, 1.0)), dot(uLidV, vec3(dl.xy, 1.0)))).rgb;
+  if (uLidTex > 0.5) col = texture2D(uLidMap, lidUV(dl.xy)).rgb;
   if (uFlat > 0.5) return gradePaint(col) * mix(0.64, 1.0, smoothstep(0.3, 0.6, dot(N, uKeyDir) * 0.5 + 0.5)) * 0.87;
   float wrap = clamp((dot(N, uKeyDir) + 0.3) / 1.3, 0.0, 1.0);
   return col * (uKeyCol * 0.3183 * wrap + uFillCol * 0.3183 * max(dot(N, uFillDir), 0.0) + uSkyCol * 1.4);
@@ -220,7 +228,7 @@ void main() {
       // their margin is the dark skin of a cat's lid rim
       vec3 Nl = normalize(vN);
       if (lidIn < 0.0 && !seam) {
-        int cls = uLidTex > 0.5 ? pixClass(texture2D(uLidMap, vec2(dot(uLidU, vec3(dlo.xy, 1.0)), dot(uLidV, vec3(dlo.xy, 1.0)))).rgb) : ${PIX.white};
+        int cls = uLidTex > 0.5 ? pixClass(texture2D(uLidMap, lidUV(dlo.xy)).rgb) : ${PIX.white};
         vec3 lt = uRoomLit > 0.5 ? roomLight(cameraPosition - vView, Nl, 1.0, 0.85) * vec3(subjectExposure(), 1.0, 1.0)
           : vec3(smoothstep(-0.15, 0.55, dot(Nl, uKeyDir)) * 0.62 + (Nl.y * 0.5 + 0.5) * 0.25 + 0.06, 0.0, 0.0);
         gl_FragColor = pixOutLit(cls, lt, 0.0);
