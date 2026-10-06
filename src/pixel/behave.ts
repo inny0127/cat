@@ -845,7 +845,9 @@ export class Greet implements Act {
       return true;
     }
     if (this.phase === 'see') {
-      // (where it is, a moment: the ears up and round to you, the eyes on you)
+      // (where it is, a moment: the ears up and round to you, the eyes on you; and up at once, the
+      // gladder the sooner, however sleepy it was)
+      m.eager = this.glad;
       m.layer = { pose: { earFwd: 0.45 }, w: ease(this.t / 0.3) };
       if (this.t < 0.8) return true;
       this.phase = 'come';
@@ -859,7 +861,7 @@ export class Greet implements Act {
       if (!this.set) {
         this.set = true;
         // (sat a little side-on, the head turned to you: square on, a sitting cat is a pillar)
-        m.walkTo(c.window, 0.3, -this.side * 0.42, () => { this.phase = 'sit'; this.t = 0; this.set = false; });
+        m.walkTo(c.window, 0.3, -this.side * 0.42, () => { this.phase = 'sit'; this.t = 0; this.set = false; m.eager = 0; });
       }
       return true;
     }
@@ -926,6 +928,7 @@ export class Greet implements Act {
   stop(c: Ctx) {
     c.m.layer = null;
     c.m.stop();
+    c.m.eager = 0;
   }
 }
 

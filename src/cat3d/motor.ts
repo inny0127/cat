@@ -148,6 +148,8 @@ export class Motor {
   obstacles: (() => readonly (readonly [THREE.Vector3, number])[]) | null = null;
   solids: (() => readonly (readonly [THREE.Vector3, number])[]) | null = null;
   ghost = false;
+  /** 0 .. 1: keen to be up and off (glad to see you): up out of lying down the sooner, sleepy or not */
+  eager = 0;
   /** 0 .. 1: quick off the mark and sharp in the turns (the zoomies), rather than an easy walk */
   zoom = 0;
   /** 0 .. 1: out of breath, after a run (the harder and the longer, the more; got back over half a
@@ -307,7 +309,7 @@ export class Motor {
     // (in its own time: languid when drowsy, quick when keyed up or frightened, quicker still in a
     // mad rush; and never twice quite the same)
     const md = this.mood;
-    const tempo = clamp(1 + 0.45 * md.sleepy - 0.3 * md.arousal - 0.35 * md.fear - 0.25 * this.zoom + 0.15 * this.lazy, 0.6, 1.5);
+    const tempo = clamp(1 + 0.45 * md.sleepy - 0.3 * md.arousal - 0.35 * md.fear - 0.25 * this.zoom + 0.15 * this.lazy - 0.35 * this.eager, 0.6, 1.5);
     this.tdur = edgeTime(this.posture, next) * (0.85 + Math.random() * 0.3) * tempo;
     this.sched = (LOW[next] ?? 2) > (LOW[this.posture] ?? 2) ? RISE : SCHEDULE;
     this.posture = next;
@@ -508,7 +510,10 @@ export class Motor {
   private get canWalk() {
     if (this.standing) return true;
     const feet = (p: PoseName) => p === 'stand' || p === 'crouch' || p === 'alert';
-    return this.path.length === 0 && feet(this.posture) && feet(this.fromName);
+    if (this.path.length === 0 && feet(this.posture) && feet(this.fromName)) return true;
+    // (up from sitting or lying to stand, keen to be off: away as the back legs straighten, not
+    // stood a moment first)
+    return this.eager > 0.3 && this.path.length === 0 && this.posture === 'stand' && this.tt > 0.75;
   }
 
   /** the way to head to get round whatever is first in the way between here and the goal, along
