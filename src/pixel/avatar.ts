@@ -2048,7 +2048,7 @@ export class PixelAvatar implements Avatar {
     this.cat.motor.hiss();
   }
 
-  vocalize(kind: 'trill' | 'meow' | 'meowSoft' | 'meowPlead' | 'chirp', dur: number, delay: number) {
+  vocalize(kind: 'trill' | 'meow' | 'meowSoft' | 'meowPlead' | 'chirp' | 'grumble', dur: number, delay: number) {
     if (!this.isHidden) this.cat.motor.vocalize(kind, dur, delay);
   }
 

@@ -1898,6 +1898,7 @@ export class PixelApp {
     if (this.brain.purr > 0.3 && asleep) now.add('sleeppurr');
     if (a.kneading || doing === 'knead') now.add('knead');
     if (a.nuzzled) now.add('rub');
+    if (this.brain.grumbled) { this.brain.grumbled = false; now.add('grumble'); }
     if (a.askingNow) now.add('more');
     if (m.posture === 'back' && asleep) now.add('back');
     if (doing === 'greet') now.add('greet');

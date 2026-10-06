@@ -45,7 +45,7 @@ export interface Avatar {
   swat(dirX?: number, dirY?: number): void;
   /** saying something (a meow, a trill, a chirp): the mouth shaped by it for as long as it lasts,
    *  starting after a delay (s), if the body can show it */
-  vocalize?(kind: 'trill' | 'meow' | 'meowSoft' | 'meowPlead' | 'chirp', dur: number, delay: number): void;
+  vocalize?(kind: 'trill' | 'meow' | 'meowSoft' | 'meowPlead' | 'chirp' | 'grumble', dur: number, delay: number): void;
   /** the hiss itself, if the body can show it (a mouth that opens) */
   hiss?(): void;
   sigh(): void;

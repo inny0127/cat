@@ -18,7 +18,7 @@ export interface PlayOpts {
  * Sounds from beyond the window (eating, the litter box) go through a muffled "far" bus.
  */
 /** the cat's own voice: what it says and sings, and its purr */
-const VOICE = new Set(['meow', 'meowSoft', 'meowPlead', 'trill', 'chirp', 'hiss', 'growl', 'yawn', 'sigh']);
+const VOICE = new Set(['meow', 'meowSoft', 'meowPlead', 'trill', 'chirp', 'grumble', 'hiss', 'growl', 'yawn', 'sigh']);
 
 export class CatAudio {
   ctx: AudioContext | null = null;
@@ -194,6 +194,7 @@ export class CatAudio {
       ['chirp', () => S.chirp(sr), 2],
       ['hiss', () => S.hiss(sr), 2],
       ['growl', () => S.growl(sr), 2],
+      ['grumble', () => S.grumble(sr), 3],
       ['kibblePour', () => S.kibblePour(sr), 1],
       ['kibbleShake', () => S.kibbleShake(sr), 3],
       ['water', () => S.waterPour(sr), 1],

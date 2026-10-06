@@ -174,6 +174,22 @@ export function trill(sr: number) {
   );
 }
 
+/** a low, short grumble through a mouth hardly open, "mrrrw", falling away: put out, a word of
+ *  warning (not yet a growl) */
+export function grumble(sr: number) {
+  const base = rnd(250, 310);
+  return voice(
+    sr, rnd(0.34, 0.48),
+    (x) => base * (1 + 0.12 * Math.sin(Math.PI * Math.min(1, x * 1.6)) - 0.2 * x),
+    (x) => {
+      const open = Math.sin(Math.PI * Math.min(1, x * 1.3));
+      return [400 + 150 * open, 1020 + 180 * open, 2300];
+    },
+    (x) => Math.min(1, x / 0.06) * Math.max(0, Math.min(1, (1 - x) / 0.3)),
+    { breath: 0.08, lp: 1800, am: (_x, t) => 0.62 + 0.38 * Math.max(0, Math.sin(2 * Math.PI * 23 * t)) },
+  );
+}
+
 /** short chirp/chatter */
 export function chirp(sr: number) {
   const base = rnd(700, 900);

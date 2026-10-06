@@ -847,13 +847,17 @@ export class Motor {
         } else if (v.kind === 'trill') {
           jaw = (0.06 + 0.04 * Math.max(0, Math.sin(v.t * Math.PI * 2 * 9))) * Math.sin(Math.PI * Math.min(1, x)) * out;
           lift = 0.08 * Math.sin(Math.PI * Math.min(1, x)) * out;
+        } else if (v.kind === 'grumble') {
+          // (a grumble: the mouth hardly open, the head down a touch, not up to anyone)
+          jaw = 0.13 * Math.sin(Math.PI * Math.min(1, x * 1.2)) * out;
+          lift = -0.06 * Math.sin(Math.PI * Math.min(1, x)) * out;
         } else {
           jaw = 0.35 * Math.sin(Math.PI * Math.min(1, x));
           lift = 0.04 * Math.sin(Math.PI * Math.min(1, x));
         }
         p.jaw = Math.max(p.jaw, jaw);
         p.headPitch += lift;
-        p.earFwd += 0.4 * lift;
+        p.earFwd += 0.4 * Math.max(0, lift);
         if (x > 1.25) this.voice = null;
       }
     }

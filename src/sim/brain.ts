@@ -51,7 +51,7 @@ const WHY: Record<string, string> = {
 };
 
 /** how long each voice lasts (s), for a mouth to move with when the sound itself is not playing */
-const VOICE_LEN: Record<string, number> = { trill: 0.29, meow: 0.65, meowSoft: 0.44, meowPlead: 0.92, chirp: 0.11 };
+const VOICE_LEN: Record<string, number> = { trill: 0.29, meow: 0.65, meowSoft: 0.44, meowPlead: 0.92, chirp: 0.11, grumble: 0.41 };
 
 /**
  * The cat's mind while you're looking: moods that rise and fade, a body that wants food and
@@ -538,6 +538,14 @@ export class Brain {
     // ---- thresholds
     const hissAt = 0.68 - 0.18 * clamp(-s.trust) + 0.1 * clamp(s.trust);
     if ((this.irritation > hissAt || (touching && this.fear > 0.72)) && now - this.hissAt > 4) this.hiss(contacts);
+    // (getting cross under a hand, short of a hiss: a low grumble, a word of warning; now and then,
+    // not over and over)
+    else if (touching && this.irritation > 0.34 && this.irritation < hissAt - 0.05 && now - this.grumbleAt > this.grumbleGap && now - this.hissAt > 4) {
+      this.grumbleAt = now;
+      this.grumbleGap = rand(6, 12);
+      this.grumbled = true;
+      this.say('grumble', { delay: rand(0, 0.3) });
+    }
     if (this.irritation > 0.93 || this.fear > 0.93) this.leave('sulk');
     if (this.mode === 'angry' && now > this.angryUntil) this.setMode(this.irritation > 0.4 ? 'annoyed' : 'alert');
 
@@ -958,6 +966,12 @@ export class Brain {
     this.anim.wakeStretch?.();
   }
 
+  /** when it last grumbled under a hand, and how long till it may again (s); grumbled just now
+   *  (for the word on it, the first time) */
+  private grumbleAt = -1e9;
+  private grumbleGap = 8;
+  grumbled = false;
+
   /** a fright: the most afraid it came to, and how long since it was at its worst (s) */
   private fright = { peak: 0, since: 0, will: false };
 
@@ -1215,12 +1229,12 @@ export class Brain {
   private chatterCooldown() {
     return this.time - this.lastSay < 4;
   }
-  say(what: 'trill' | 'meow' | 'meowSoft' | 'meowPlead' | 'chirp', o: { far?: boolean; delay?: number } = {}) {
+  say(what: 'trill' | 'meow' | 'meowSoft' | 'meowPlead' | 'chirp' | 'grumble', o: { far?: boolean; delay?: number } = {}) {
     const v = this.s.personality.voice;
     if (!o.far && chance(0.15 * (1.2 - v))) return; // quieter cats skip some
     this.lastSay = this.time;
     const sick = this.s.health < THRESH.sick;
-    const name = sick && what !== 'trill' ? 'meowSoft' : what;
+    const name = sick && what !== 'trill' && what !== 'grumble' ? 'meowSoft' : what;
     const dur = this.audio.play(name, { gain: (o.far ? 0.5 : 0.75) * (sick ? 0.6 : 1), far: o.far, delay: o.delay, pan: o.far ? rand(-0.7, 0.7) : -0.25 });
     // (and its mouth says it, sound or no sound; from out of the room, nothing to see)
     if (!o.far) this.anim.vocalize?.(name, dur || VOICE_LEN[name], o.delay ?? 0);
