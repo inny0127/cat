@@ -139,8 +139,11 @@ vec2 lidCurvesSoft(float xo, vec2 ul) {
   float cy = -0.02 + 0.015 * u;
   // wide open the upper lid is a round dome; as it comes down it keeps an arc (it slides over a
   // ball) instead of flattening into a bar
-  float fu = pow(e, 0.4 + 0.3 * clamp((0.5 - ul.x) / 0.6, 0.0, 1.0) + 0.25 * inner);
-  float fl = pow(e, 0.55 + 0.35 * inner);
+  // (and narrowed, the two lids close in to a lens with sharp corners, not a slot with square
+  // ends: a squint, a glare, a doze)
+  float narrow = clamp((0.6 - (ul.x - ul.y)) / 0.45, 0.0, 1.0);
+  float fu = pow(e, 0.4 + 0.3 * clamp((0.5 - ul.x) / 0.6, 0.0, 1.0) + 0.25 * inner + 0.6 * narrow);
+  float fl = pow(e, 0.55 + 0.35 * inner + 0.5 * narrow);
   return vec2(cy + (ul.x + 0.03) * fu, cy + (ul.y + 0.03) * fl);
 }
 
