@@ -500,6 +500,9 @@ export class Brain {
     this.time = now;
     this.t += dt;
     this.modeT += dt;
+    // (on edge after a fright: it wears off, away or here, the quicker under a hand it likes and
+    // quickest asleep)
+    this.shaken *= Math.exp(-dt / (asleepNow(this.mode) ? 25 : this.mode === 'enjoy' ? 50 : 140));
     this.runLater(dt);
     const s = this.s;
 
@@ -528,6 +531,7 @@ export class Brain {
     const touching = contacts.length > 0;
     for (const c of contacts) this.feel(c, dt);
     for (const id of this.ways.keys()) if (!contacts.some((c) => c.id === id)) this.ways.delete(id);
+    if (!contacts.length) this.rumpScratch = 0;
     if (touching) {
       this.lastTouch = now;
       this.stim += dt * (1 + 0.4 * (contacts.length - 1));
@@ -551,7 +555,6 @@ export class Brain {
     // (a real fright leaves it on edge a while; it wears off over a few minutes, the quicker under a
     // hand it likes, and a nap takes it off)
     if (this.fear > 0.3) this.shaken = Math.max(this.shaken, Math.min(1, this.fear * 1.1));
-    this.shaken *= Math.exp(-dt / (asleepNow(this.mode) ? 25 : this.mode === 'enjoy' ? 50 : 140));
 
     // ---- thresholds
     const hissAt = 0.68 - 0.18 * clamp(-s.trust) + 0.1 * clamp(s.trust);
