@@ -521,26 +521,42 @@ export class Motor {
     return best;
   }
 
-  /** the body out of anything solid it has got into (its chest and its hips, each a circle) */
-  private keepOut() {
-    if (this.ghost || !this.solids) return;
+  /** stepping out of a thing it was right up against or in on purpose (the box, the post), now
+   *  that that is over: not yet clear of it */
+  easingOut = false;
+  private wasGhost = false;
+
+  /** the body out of anything solid it has got into (its chest and its hips, each a circle).
+   *  Walked into, it is kept out there and then; right up against a thing or in it on purpose,
+   *  once that is over it steps out, as quick as it is going and at a walk at the least, the paws
+   *  going with it, and does not jump clear of it in one go */
+  private keepOut(dt: number) {
+    if (this.ghost || !this.solids) { this.wasGhost = this.ghost; return; }
+    if (this.wasGhost) { this.wasGhost = false; this.easingOut = true; }
     const fx = Math.sin(this.yaw), fz = Math.cos(this.yaw);
+    let left = this.easingOut ? Math.max(0.3, 1.3 * Math.abs(this.speed)) * dt : Infinity;
+    let inside = false;
     // (a few times over: squeezed between two things, out of the one is into the other)
     const solids = this.solids();
-    for (let pass = 0; pass < 4; pass++) {
+    for (let pass = 0; pass < 4 && left > 0; pass++) {
       let moved = false;
       for (const [c, R0] of solids) {
         for (const k of [0.11, -0.09]) {
           const dx = this.pos.x + fx * k - c.x, dz = this.pos.z + fz * k - c.z, d = Math.hypot(dx, dz), min = R0 + 0.075;
           if (d >= min - 1e-4) continue;
+          inside = true;
+          if (left <= 0) continue;
           const ux = d > 1e-4 ? dx / d : fx, uz = d > 1e-4 ? dz / d : fz;
-          this.pos.x += ux * (min - d);
-          this.pos.z += uz * (min - d);
+          const by = Math.min(min - d, left);
+          this.pos.x += ux * by;
+          this.pos.z += uz * by;
+          left -= by;
           moved = true;
         }
       }
       if (!moved) break;
     }
+    if (!inside) this.easingOut = false;
   }
 
   private locomote(dt: number) {
@@ -595,7 +611,7 @@ export class Motor {
     this.yaw = wrap(this.yaw + this.yawRate * dt);
     this.vel.set(Math.sin(this.yaw) * this.speed, 0, Math.cos(this.yaw) * this.speed);
     this.pos.addScaledVector(this.vel, dt);
-    this.keepOut();
+    this.keepOut(dt);
   }
 
   private arrive() {
