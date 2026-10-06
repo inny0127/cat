@@ -807,12 +807,29 @@ export class Motor {
       p.pastern += 0.12 * low;
       // (ill, sat or lying on its chest or up on its feet: hunched up, the back rounded, the head
       // drawn in and down, as a cat that is not well sits it out)
-      let upright = 0;
-      for (const [name, wgt] of this.postureWeights()) if (name !== 'side' && name !== 'back' && name !== 'curl' && name !== 'curlL') upright += wgt;
+      let upright = 0, sat = 0;
+      for (const [name, wgt] of this.postureWeights()) {
+        if (name !== 'side' && name !== 'back' && name !== 'curl' && name !== 'curlL') upright += wgt;
+        if (name === 'sit') sat += wgt;
+      }
       const hunch = f.hunch * clamp(upright) * (1 - own);
-      p.lumbarPitch += 0.16 * hunch;
+      // (sat up, the back is upright already: the shoulders hunched, not the back bent, which would
+      // lift the forepaws off the floor)
+      p.lumbarPitch += 0.16 * hunch * (1 - 0.75 * clamp(sat));
       p.neckPitch -= 0.28 * hunch;
       p.headPitch += 0.08 * hunch;
+      // (afraid and cross at once, on its feet: made big, the back arched up high on stiff legs,
+      // the head down, the tail up and bristling, as the cat in the window at Halloween)
+      const arch = f.arch * clamp(feet) * (1 - own);
+      // (the spine tipped up from the hips and down again at the shoulders: the top of the arch over
+      // the middle of the back; the neck up out of it to keep the face to the trouble)
+      p.hipY += 0.012 * arch;
+      p.hipPitch += 0.28 * arch;
+      p.lumbarPitch += 0.1 * arch;
+      p.chestPitch -= 0.52 * arch;
+      p.neckPitch += 0.2 * arch;
+      p.headPitch -= 0.04 * arch;
+      p.pastern -= 0.1 * arch;
     }
     p.breath = clamp(p.breath + f.breath);
     {
