@@ -4,7 +4,7 @@ import type { Haptic } from '../platform/haptics';
 import type { Hint } from '../ui/hint';
 import type { Contact } from '../input/pointer';
 import type { CatState } from './state';
-import { GRAIN_TOLERANT, ZONE_LIKE, type Zone } from './zones';
+import { GRAIN_TOLERANT, SCRATCH_LIKE, ZONE_LIKE, type Zone } from './zones';
 import { THRESH, chooseErrand, crepuscular, needs, nightness, runErrand } from './life';
 import { chance, clamp, rand, smoothstep } from '../util/math';
 import { expectation } from './habits';
@@ -522,6 +522,7 @@ export class Brain {
     // ---- touch
     const touching = contacts.length > 0;
     for (const c of contacts) this.feel(c, dt);
+    for (const id of this.ways.keys()) if (!contacts.some((c) => c.id === id)) this.ways.delete(id);
     if (touching) {
       this.lastTouch = now;
       this.stim += dt * (1 + 0.4 * (contacts.length - 1));
@@ -575,9 +576,13 @@ export class Brain {
     }
 
     // ---- mode from feelings while awake
+    // (with a margin each way: liking a hand and minding it, the cat does not flick from the one to
+    // the other and back with every little more or less of it; minding it, it is mollified only
+    // once it has got over most of it)
     if (this.mode !== 'sleep' && this.mode !== 'doze' && this.mode !== 'angry') {
-      if (touching && this.pleasure > 0.45 && this.irritation < 0.35) this.setMode('enjoy');
-      else if (this.irritation > 0.32) this.setMode('annoyed');
+      const annoyed = this.mode === 'annoyed', enjoying = this.mode === 'enjoy';
+      if (touching && this.pleasure > 0.45 && this.irritation < (annoyed ? 0.24 : 0.35)) this.setMode('enjoy');
+      else if (this.irritation > (enjoying ? 0.42 : 0.32)) this.setMode('annoyed');
       else if (this.mode === 'enjoy' && (!touching && now - this.lastTouch > 6)) this.setMode('rest');
       else if (this.mode === 'annoyed' && this.irritation < 0.18) this.setMode('rest');
     }
@@ -590,13 +595,34 @@ export class Brain {
     this.express(dt, contacts);
   }
 
+  /** each hand on it: how it has been going of late (see scratching) */
+  private readonly ways = new Map<number, { vx: number; vy: number; v: number; scratch: number }>();
+
+  /** how much of a scratch a hand is just now: 0 a stroke (it goes one way) or a hand at rest .. 1
+   *  the fingertips working at one spot, back and forth or round and round, a good few times a
+   *  second (their goings, averaged over a moment, cancel out) */
+  private scratching(c: Contact, dt: number) {
+    let w = this.ways.get(c.id);
+    if (!w) this.ways.set(c.id, (w = { vx: 0, vy: 0, v: 0, scratch: 0 }));
+    const k = 1 - Math.exp(-dt / 0.35), sp = Math.hypot(c.vx, c.vy);
+    w.vx += (c.vx - w.vx) * k;
+    w.vy += (c.vy - w.vy) * k;
+    w.v += (sp - w.v) * k;
+    const oneWay = w.v > 1e-6 ? Math.hypot(w.vx, w.vy) / w.v : 1;
+    w.scratch += ((w.v > 45 && oneWay < 0.45 ? 1 : 0) - w.scratch) * (1 - Math.exp(-dt * 5));
+    return w.scratch;
+  }
+
   /** pleasantness of one contact this frame, and its effect */
   private feel(c: Contact, dt: number) {
     const s = this.s;
     const zone = this.senses.zoneAt(c.px, c.py);
+    // (a scratch is quick by nature, and goes every way: neither is a rough hand, or one against
+    // the lie of the fur)
+    const sc = this.scratching(c, dt);
     if (zone === 'none') return 0;
     this.session.zones[zone] = (this.session.zones[zone] ?? 0) + dt;
-    const speed = Math.hypot(c.vx, c.vy);
+    const speed = Math.hypot(c.vx, c.vy) / (1 + 1.5 * sc);
     let base = ZONE_LIKE[zone] + (s.personality.likes[zone] ?? 0);
     const trust = s.trust;
     if (base >= 0) base *= 0.3 + 0.7 * smoothstep(-0.6, 0.55, trust);
@@ -610,12 +636,14 @@ export class Brain {
     else if (speed < 650) rough = 0.15 * (speed - 260) / 390;
     else rough = 0.15 + Math.min(0.7, (speed - 650) / 700);
     p -= rough;
-    if (speed > 40 && !GRAIN_TOLERANT[zone]) {
+    if (speed > 40 && !GRAIN_TOLERANT[zone] && sc < 0.9) {
       const [gx, gy] = this.senses.grainAt(c.px, c.py);
-      const along = (c.vx * gx + c.vy * gy) / speed;
-      if (along < -0.3) { against = 0.38 * -along; p -= against; this.session.against += dt; }
-      else if (along > 0.3) p += 0.07;
+      const along = (c.vx * gx + c.vy * gy) / Math.hypot(c.vx, c.vy);
+      if (along < -0.3) { against = 0.38 * -along * (1 - sc); p -= against; this.session.against += dt * (1 - sc); }
+      else if (along > 0.3) p += 0.07 * (1 - sc);
     }
+    // (and scratched where a cat likes it best, by a hand it knows: better than a stroke there)
+    p += sc * (SCRATCH_LIKE[zone] ?? 0) * smoothstep(-0.2, 0.5, trust);
     if (c.press > 0.8) p -= 0.15;
     // too much of a good thing
     const tol = (22 + 75 * clamp(trust)) * s.personality.tolerance;

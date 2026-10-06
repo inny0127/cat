@@ -1633,6 +1633,7 @@ export class PixelApp {
       this.nudgeGap = (40 + Math.random() * 15) * 60;
     }
     if (!this.state.alive && this.brain.mode !== 'dead' && this.brain.mode !== 'gone') this.brain.wake(now, false);
+    this.input.settle(now * 1000);
     const contacts: Contact[] = this.avatar.hidden ? [] : this.input.onCat();
     this.brain.update(dt, now, contacts);
     // what it feels shows in its eyes, ears, tail, fur and breath

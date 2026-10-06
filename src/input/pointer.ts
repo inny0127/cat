@@ -95,6 +95,8 @@ interface GlassTrack {
 
 export class PointerInput {
   readonly contacts = new Map<number, Contact>();
+  /** each finger's speed as of its last move (see settle) */
+  private readonly moved = new Map<number, [number, number]>();
   private glass = new Map<number, GlassTrack>();
   private lastTap = { t: 0, x: 0, y: 0 };
   private gestured = false;
@@ -198,6 +200,7 @@ export class PointerInput {
     c.last = e.timeStamp;
     c.press = this.pressOf(e);
     c.maxSpeed = Math.max(c.maxSpeed, Math.hypot(c.vx, c.vy));
+    this.moved.set(e.pointerId, [c.vx, c.vy]);
     if (this.duo?.ids.has(e.pointerId) && c.travel > 14) this.duo.ok = false;
     if (this.twoFingers(e.pointerId)) return;
     const g = this.glass.get(e.pointerId);
@@ -260,6 +263,7 @@ export class PointerInput {
     const c = this.contacts.get(e.pointerId);
     if (!c) return;
     this.contacts.delete(e.pointerId);
+    this.moved.delete(e.pointerId);
     const g = this.glass.get(e.pointerId);
     this.glass.delete(e.pointerId);
     if (g) {
@@ -379,6 +383,19 @@ export class PointerInput {
   }
 
   /** contacts currently resting on the cat */
+  /** a finger held still sends no moves, and would go on at the speed it had at its last one: a
+   *  few frames on from it, that is let go of, over a tenth of a second or so (nowMs: the clock
+   *  of the events' timeStamps) */
+  settle(nowMs: number) {
+    for (const c of this.contacts.values()) {
+      const v = this.moved.get(c.id), idle = nowMs - c.last;
+      if (!v || idle <= 40) continue;
+      const k = Math.exp(-(idle - 40) / 60);
+      c.vx = v[0] * k;
+      c.vy = v[1] * k;
+    }
+  }
+
   onCat(): Contact[] {
     const out: Contact[] = [];
     for (const c of this.contacts.values()) if (c.onCat) out.push(c);

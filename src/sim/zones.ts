@@ -25,6 +25,10 @@ export const ZONE_LIKE: Record<Zone, number> = {
 /** Fur you may rub any way round (cheeks and chin get rubbed against things on purpose). */
 export const GRAIN_TOLERANT: Partial<Record<Zone, true>> = { chin: true, cheek: true };
 
+/** How much more a cat likes being scratched there (the fingertips working at one spot) than
+ *  stroked: the top of its head, the roots of its ears, its cheeks and chin, the base of its tail. */
+export const SCRATCH_LIKE: Partial<Record<Zone, number>> = { head: 0.15, ear: 0.3, cheek: 0.1, chin: 0.12, neck: 0.1, rump: 0.15 };
+
 // the tucked-in chest/belly between the front legs and the tail's hook
 const BELLY: Pt[] = [[226, 352], [262, 338], [274, 356], [266, 392], [240, 398], [222, 382]];
 // the wrapped tail running along the bottom of the curl
