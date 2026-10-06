@@ -305,6 +305,20 @@ export class Motor {
     this.tt = 1;
   }
 
+  /** the body put straight into a posture by an act that has the whole of it in hand meanwhile (a
+   *  flop onto its side over a toy): no way there through the others, the act's own motion carrying
+   *  it over (and eased, as ever: not a cut) */
+  assume(name: PoseName) {
+    if (this.posture === name && this.target === name && !this.path.length && this.tt >= 1) return;
+    this.posture = this.target = this.fromName = name;
+    this.path = [];
+    copyPose(this.base, POSES[name]);
+    this.flipTail(this.base, name);
+    copyPose(this.from, this.base);
+    copyPose(this.to, this.base);
+    this.tt = 1;
+  }
+
   private nextOf(): PoseName {
     return this.posture;
   }

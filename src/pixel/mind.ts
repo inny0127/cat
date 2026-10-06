@@ -12,7 +12,7 @@ const DOING: Record<string, string> = {
   yawn: '하품', groom: '그루밍', 'groom chest': '가슴 그루밍', wash: '세수', stretch: '기지개', sneeze: '재채기',
   scratch: '귀 긁기', stare: '멍하니 보기', window: '당신 앞으로', wander: '냄새 맡으러', rub: '볼 비비기',
   claw: '발톱 갈기', pompom: '방울 치기', top: '스크래쳐 꼭대기', sun: '햇살 낮잠', warm: '라디에이터 옆',
-  'by you': '당신 곁에서 낮잠', play: '털실 놀이', tease: '깃털 놀이', fish: '쥐 인형 꺼내기', gift: '쥐 인형 선물',
+  'by you': '당신 곁에서 낮잠', play: '털실 놀이', tease: '깃털 놀이', fish: '쥐 인형 꺼내기', gift: '쥐 인형 선물', wrestle: '쥐 인형 레슬링',
   ask: '놀자고 조르기', box: '상자', tail: '꼬리 쫓기', zoomies: '우다다', sill: '창턱', bed: '침대로',
   investigate: '살펴보기', wait: '기다리기', chase: '빨간 점 쫓기', hunt: '벌레 사냥', greet: '반가워하기', beg: '밥 달라기',
   paw: '유리 두드리기', snub: '등 돌리기', startle: '깜짝', sulk: '삐짐', trap: '손 붙잡기', 'to bed': '침대로',

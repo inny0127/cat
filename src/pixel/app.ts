@@ -126,6 +126,7 @@ export class PixelApp {
       batLure: (v) => this.room.batLure(v),
       mouse: () => this.room.mouse,
       carry: (at, yaw) => this.room.carryMouse(at, yaw),
+      kickMouse: (dir, speed, up) => this.room.tossMouse(dir, speed, up),
       hookMouse: (toward) => this.room.hookMouse(toward),
       pompom: () => this.room.pompom(),
       batPompom: (v) => this.room.batPompom(v),
@@ -1963,6 +1964,7 @@ export class PixelApp {
     if (doing === 'look with you' && m.posture === 'sit') now.add('seewith');
     if (doing === 'snub') now.add('snub');
     if (doing === 'trap') now.add('trap');
+    if (doing === 'wrestle' && (phase === 'hug' || phase === 'let')) now.add('wrestle');
     if (Math.abs(m.tilt) > 0.25) now.add('tilt');
     if (m.blep > 0.9 && !asleep) now.add('blep');
     const close = a.closeLooking;

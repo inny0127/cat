@@ -4,7 +4,7 @@ import { POSES, SIDE_TURN, type Leg, type PoseLayer, type PoseName } from '../ca
 import { NEUTRAL, type Mood } from '../cat3d/mood';
 import type { Avatar } from '../sim/avatar';
 import type { EarMood, TailMood } from '../rig/animator';
-import { boop, byYou, canGlance, coolOff, feel, huff, idleOptions, mealLayer, mealPlan, type MealPlan, groomChest, groomFlank, knead, lookWith, restingPose, sneeze, toBed, toWindow, wander, warmUp, washFace, yawn, type Act, type Ctx, sunbathe, Play, Sill, Hunt, Box, Zoomies, Walk, Stare, Rub, scratchEar, wakeUp, stretchSideOn, Greet, Gift, Snub, Beg, PawGlass, TailChase, Claw, Top, Fish, Bat, Trap, Sulk, isPerching, type Perching, type ScratchPost, type GlassFinger, type SillSpot, type SulkSpot } from './behave';
+import { boop, byYou, canGlance, coolOff, feel, huff, idleOptions, mealLayer, mealPlan, type MealPlan, groomChest, groomFlank, knead, lookWith, restingPose, sneeze, toBed, toWindow, wander, warmUp, washFace, yawn, type Act, type Ctx, sunbathe, Play, Sill, Hunt, Box, Zoomies, Walk, Stare, Rub, scratchEar, wakeUp, stretchSideOn, Greet, Gift, Snub, Beg, PawGlass, TailChase, Claw, Top, Fish, Bat, Trap, Sulk, Wrestle, isPerching, type Perching, type ScratchPost, type GlassFinger, type SillSpot, type SulkSpot } from './behave';
 import { Chase, Startle, type LaserDot } from './chase';
 import { Tease, type Lure } from './tease';
 import { GOAL, Whim } from './whim';
@@ -130,6 +130,7 @@ export class PixelAvatar implements Avatar {
     pompom: () => THREE.Vector3 | null;
     batPompom: (v: THREE.Vector3) => void;
     carry: (at: THREE.Vector3 | null, yaw?: number) => void;
+    kickMouse?: (dir: THREE.Vector3, speed: number, up: number) => void;
   } | null = null;
   /** the feathers of the wand (set by the app): dangled by a hand, a moment's watching and it has
    *  to have them; after a long game, a while before it will play again */
@@ -994,6 +995,32 @@ export class PixelAvatar implements Avatar {
     return this.mouthW.set(0, -0.016, 0.05).applyMatrix4(head.matrixWorld);
   }
 
+  /** a point (a little over the floor) hidden from you (the camera) behind the room's tall things */
+  hiddenFromYou(p: THREE.Vector3) {
+    const v = this.viewer();
+    const dx = v.x - p.x, dz = v.z - p.z, L2 = dx * dx + dz * dz;
+    if (L2 < 1e-6) return false;
+    for (const b of this.blockers?.() ?? []) {
+      // (where the line from it to you passes nearest the thing's middle, and how high it is there)
+      const u = ((b.c.x - p.x) * dx + (b.c.z - p.z) * dz) / L2;
+      if (u <= 0 || u >= 1) continue;
+      if (Math.hypot(p.x + dx * u - b.c.x, p.z + dz * u - b.c.z) > b.r + 0.03) continue;
+      if (p.y + (v.y - p.y) * u < b.h) return true;
+    }
+    return false;
+  }
+
+  /** where its forepaws are (between the two), in the room */
+  private readonly pawsW = new THREE.Vector3();
+  private readonly pawW = new THREE.Vector3();
+  pawsAt() {
+    const k = this.cat.kin, legs = this.cat.body.legs;
+    this.cat.group.updateWorldMatrix(true, false);
+    this.pawsW.set(0, 0, 0);
+    for (const leg of ['LF', 'RF'] as const) this.pawsW.add(this.pawW.copy(k.wp[legs[leg].b[3]]).applyMatrix4(this.cat.group.matrixWorld));
+    return this.pawsW.multiplyScalar(0.5);
+  }
+
   /** its toy mouse thrown (where it is going): awake, its own master, and fond enough of you, it is
    *  after it (and now and then brings it back to you); else its eyes go after it */
   /** the lamp put out: a cat awake and not settled, now and then, takes the dark for its own and
@@ -1052,8 +1079,9 @@ export class PixelAvatar implements Avatar {
     this.perk(M.p, 0.2);
     if (Math.random() > 0.35 + 0.6 * Math.max(0, this.mood.trust)) return false;
     this.stopAct();
-    // (in under the radiator: a paw in after it first)
-    this.act = M.under ? new Fish() : new Gift(true);
+    // (in under the radiator: a paw in after it first; and now and then, caught, it is a tussle
+    // with it on the floor rather than brought back)
+    this.act = M.under ? new Fish() : Math.random() < 0.25 + 0.15 * Math.max(0, this.temper?.playful ?? 0) ? new Wrestle(true) : new Gift(true);
     return true;
   }
 
@@ -1251,6 +1279,9 @@ export class PixelAvatar implements Avatar {
       batPompom: (v) => this.ground?.batPompom(v),
       carry: (at, yaw) => this.ground?.carry(at, yaw),
       mouthAt: () => this.mouthAt(),
+      pawsAt: () => this.pawsAt(),
+      hidden: (p) => this.hiddenFromYou(p),
+      kickMouse: (dir, speed, up) => this.ground?.kickMouse?.(dir, speed, up),
       finger: () => this.fingerNow(),
     };
   }
@@ -1384,7 +1415,7 @@ export class PixelAvatar implements Avatar {
   }
 
   /** start one of its acts now (for the lab and tests) */
-  startAct(name: 'yawn' | 'groom' | 'groom chest' | 'wash' | 'stretch' | 'window' | 'wander' | 'knead' | 'bed' | 'sun' | 'play' | 'sill' | 'box' | 'zoomies' | 'warm' | 'sneeze' | 'stare' | 'rub' | 'scratch' | 'greet' | 'gift' | 'ask' | 'tail' | 'by you' | 'claw' | 'top' | 'fish' | 'pompom' | 'cool') {
+  startAct(name: 'yawn' | 'groom' | 'groom chest' | 'wash' | 'stretch' | 'window' | 'wander' | 'knead' | 'bed' | 'sun' | 'play' | 'sill' | 'box' | 'zoomies' | 'warm' | 'sneeze' | 'stare' | 'rub' | 'scratch' | 'greet' | 'gift' | 'ask' | 'tail' | 'by you' | 'claw' | 'top' | 'fish' | 'pompom' | 'cool' | 'wrestle') {
     // (not on its way somewhere, to the bowls or out of the room: the walk there is its business)
     if (this.perched || this.trip) return;
     this.stopAct();
@@ -1394,7 +1425,7 @@ export class PixelAvatar implements Avatar {
         : name === 'knead' ? knead() : name === 'sun' ? sunbathe(c) : name === 'play' ? new Play()
           : name === 'sill' && this.sillSpot ? new Sill(this.sillSpot())
             : name === 'box' && this.boxSpot?.() ? new Box(this.boxSpot()!) : name === 'zoomies' ? new Zoomies(c) : name === 'warm' ? warmUp(c) ?? toBed(c, 'loaf') : name === 'cool' ? coolOff(c) ?? toBed(c, 'loaf') : name === 'sneeze' ? sneeze(c) : name === 'stare' ? new Stare(c)
-              : name === 'rub' && c.posts().length ? new Rub(c, c.posts()[0]) : name === 'scratch' ? scratchEar() : name === 'greet' ? new Greet(0.9) : name === 'gift' ? new Gift() : name === 'ask' ? new PawGlass(c.finger, true) : name === 'tail' ? new TailChase() : name === 'by you' ? byYou(c) : name === 'claw' && c.scratcher() ? new Claw(c.scratcher()!) : name === 'top' && c.scratcher() ? new Top(c.scratcher()!) : name === 'fish' && c.mouse()?.under ? new Fish() : name === 'pompom' && c.pompom() ? new Bat() : toBed(c, 'loaf');
+              : name === 'rub' && c.posts().length ? new Rub(c, c.posts()[0]) : name === 'scratch' ? scratchEar() : name === 'greet' ? new Greet(0.9) : name === 'gift' ? new Gift() : name === 'ask' ? new PawGlass(c.finger, true) : name === 'tail' ? new TailChase() : name === 'by you' ? byYou(c) : name === 'claw' && c.scratcher() ? new Claw(c.scratcher()!) : name === 'top' && c.scratcher() ? new Top(c.scratcher()!) : name === 'fish' && c.mouse()?.under ? new Fish() : name === 'pompom' && c.pompom() ? new Bat() : name === 'wrestle' && c.mouse() && !c.mouse()!.under ? new Wrestle() : toBed(c, 'loaf');
   }
 
   /** you looking round the room at something over there (x along the room): awake, at its ease

@@ -140,6 +140,12 @@ export interface Ctx {
   hookMouse: (toward: THREE.Vector3) => void;
   carry: (at: THREE.Vector3 | null, yaw?: number) => void;
   mouthAt: () => THREE.Vector3;
+  /** where its forepaws are, between the two (what they hold is there); and the toy mouse sent off
+   *  a way across the floor (m/s), up a little (m/s) */
+  pawsAt?: () => THREE.Vector3;
+  kickMouse?: (dir: THREE.Vector3, speed: number, up: number) => void;
+  /** a point (a little over the floor) hidden from you behind the room's tall things */
+  hidden?: (p: THREE.Vector3) => boolean;
   /** a finger on the glass, if there is one (GlassFinger) */
   finger: () => GlassFinger | null;
 }
@@ -2523,6 +2529,375 @@ export class Gift implements Act {
   }
 }
 
+/**
+ * Its toy mouse, and a cat full of beans: over to it (at a run, thrown for it), down low a moment
+ * with the rump going, a hop onto it, and over onto its side with it gathered up in its forepaws:
+ * hugged to its chest and bitten at, the hind feet raking it, kick after kick, in bouts with a
+ * breather between, the tail lashing, the pupils black, the body rocking with it. Then a last kick
+ * sends it off across the floor (or the paws just open), and it lies looking after it, eyes wide;
+ * and fallen within reach, it has it again; else as often as not it is up and after it for another
+ * go, or it lies there as if it had all been the mouse's doing. On its side, its belly and the
+ * mouse your way if there is room for them. A mouse lying out of the way (off toward you, in a
+ * corner, hard by things) it first takes up in its mouth and carries off to the open floor by its
+ * bed, and has it out with it there.
+ */
+export class Wrestle implements Act {
+  readonly name = 'wrestle';
+  phase: 'go' | 'take' | 'bring' | 'drop' | 'crouch' | 'pounce' | 'hug' | 'let' | 'look' = 'go';
+  private t = 0;
+  private dur = 0;
+  private rounds = 0;
+  /** the side it is down on (1: its right) */
+  private sd = 1;
+  /** this hug: how long, and its bouts of kicking (on till, off till) */
+  private hugFor = 0;
+  private boutEnd = 0;
+  private restEnd = 0;
+  private kicks = -1;
+  private all = 0;
+  /** the last kick sends the mouse off; or the paws just open */
+  private kickOff = true;
+  private sent = false;
+  /** how hard it is kicking just now (0 .. 1, eased in and out of the bouts) */
+  private kickW = 0;
+  private from: PoseLayer | null = null;
+  /** where the mouse was as the paws closed on it (it is drawn in to them) */
+  private readonly grabFrom = new THREE.Vector3();
+  /** where it is taking it, carried */
+  private readonly to = new THREE.Vector3();
+  /** where it stands to put it down there, and which way it faces */
+  private readonly stand = new THREE.Vector3();
+  private standFace = 0;
+  /** where the mouse was when the way to it was worked out */
+  private readonly aimed = new THREE.Vector3(NaN, 0, 0);
+  private readonly fwd = new THREE.Vector3();
+  private readonly left = new THREE.Vector3();
+  private readonly at = new THREE.Vector3();
+  constructor(private readonly thrown = false) {}
+  get ownGaze() {
+    return this.phase !== 'bring';
+  }
+  private next(phase: Wrestle['phase'], dur = 0) {
+    this.phase = phase;
+    this.t = 0;
+    this.dur = dur;
+  }
+  /** a place to have it out with it: on the floor or its bed, clear of the room's things and the
+   *  bowls, not out in front of the bed toward you nor behind anything tall (where it is in the
+   *  picture, it and the cat on its side by it, whatever the shape of the screen) */
+  private open(c: Ctx, p: THREE.Vector3) {
+    if (p.z > c.home.z + 0.1 || p.z < c.home.z - 0.3) return false;
+    // (it, and the cat lying on its side behind it, both in sight)
+    if (c.hidden?.(this.at.copy(p).setY(0.03)) || c.hidden?.(this.at.set(p.x, 0.05, p.z - 0.12))) return false;
+    // (and room all round it for a cat flat out on its side, kicking: nothing hard in the way)
+    return c.keepClear(this.at.copy(p), 0.24).distanceTo(p) < 0.005;
+  }
+  /** a point off to the side of a thing, the side the cat is on (to come at it from there) */
+  private side(p: THREE.Vector3, from: THREE.Vector3) {
+    return new THREE.Vector3(p.x + (from.x >= p.x ? 1 : -1), 0, p.z);
+  }
+  /** the nearest such place to a point (null: none near) */
+  private openNear(c: Ctx, p: THREE.Vector3) {
+    let best: THREE.Vector3 | null = null, bd = 1e9;
+    const q = new THREE.Vector3();
+    for (let r = 0; r <= 0.9; r += 0.06) {
+      for (let k = 0, n = Math.max(1, Math.round(r * 40)); k < n; k++) {
+        const a = (k / n) * Math.PI * 2;
+        q.set(p.x + r * Math.cos(a), 0, Math.min(p.z, c.home.z + 0.06) + r * Math.sin(a));
+        if (!this.open(c, q)) continue;
+        const d = Math.hypot(q.x - p.x, q.z - p.z);
+        if (d < bd) { bd = d; best = q.clone(); }
+      }
+      if (best) return best;
+    }
+    return null;
+  }
+  /** on to the grab: its paws on it, the side it goes down on, the hug to come */
+  private grab(c: Ctx, M: { p: THREE.Vector3 }) {
+    const m = c.m;
+    // (down on the side its belly will be your way, if there is room for it and the mouse there,
+    // and it is in the picture; else the other)
+    const v = c.viewer(), toYou = (v.x - m.pos.x) * this.left.x + (v.z - m.pos.z) * this.left.z;
+    this.sd = toYou >= 0 ? 1 : -1;
+    const room = (sd: number) => {
+      const b = this.at.copy(m.pos).addScaledVector(this.left, 0.16 * sd).addScaledVector(this.fwd, 0.06);
+      return b.z < c.home.z + 0.3 && c.clear(b, 0.07) && c.keepClear(b.clone(), 0.05).distanceTo(b) < 0.01;
+    };
+    if (!room(this.sd) && room(-this.sd)) this.sd = -this.sd;
+    this.from = snapshot(m.pose);
+    // (over onto its side all at once, from where it is: the flop is its own)
+    m.assume('side');
+    this.grabFrom.copy(M.p);
+    this.hugFor = rand(3.5, 6.5);
+    this.boutEnd = rand(1.1, 1.9);
+    this.restEnd = 0;
+    this.kickOff = Math.random() < 0.7;
+    this.sent = false;
+    this.all = 0;
+    this.kicks = -1;
+    this.next('hug');
+  }
+  update(dt: number, c: Ctx) {
+    const m = c.m, M = c.mouse();
+    if (!M) return false;
+    this.t += dt;
+    this.all += dt;
+    this.fwd.set(Math.sin(m.yaw), 0, Math.cos(m.yaw));
+    this.left.set(Math.cos(m.yaw), 0, -Math.sin(m.yaw));
+    const d = Math.hypot(M.p.x - m.pos.x, M.p.z - m.pos.z);
+    // (gone in under the radiator, or taken off it: that is that; thrown off somewhere while it
+    // had it: after it)
+    // (taking it up and putting it down, the mouth sees to it itself)
+    const holding = this.phase === 'hug' || (this.phase === 'let' && !this.sent) || this.phase === 'bring';
+    const handling = this.phase === 'take' || this.phase === 'drop';
+    if (M.under || (!holding && !handling && M.state === 'mouth')) { m.layer = null; return false; }
+    if (holding && M.state !== 'mouth' && this.t > 0.1) {
+      m.layer = null;
+      if (this.phase === 'hug' || this.phase === 'let') { this.sent = true; this.next('look', rand(1, 1.8)); } else this.next('go');
+    }
+    switch (this.phase) {
+      case 'go': {
+        m.layer = null;
+        if (M.state === 'air') { m.stop(); m.setPosture('crouch'); m.lookAt(M.p, 1); return this.t < 4; }
+        m.lookAt(M.p, 1);
+        const run = this.thrown || this.rounds > 0;
+        if (run || d > 0.5) m.setPosture('stand');
+        // (aimed once, and again only if it has gone somewhere else)
+        if (!m.goal || Math.hypot(M.p.x - this.aimed.x, M.p.z - this.aimed.z) > 0.05) {
+          this.aimed.copy(M.p);
+          // (lying out of the way: to it, to take it up and off somewhere better)
+          const there = this.open(c, M.p);
+          // (right under its nose: down on it; near enough to spring at from where it is: round
+          // to it, and down low)
+          if (there && d <= 0.12) { m.stop(); this.next('crouch', rand(0.3, 0.6)); return true; }
+          if (there && d < 0.33) {
+            m.walkTo(m.pos.clone(), 0.2, Math.atan2(M.p.x - m.pos.x, M.p.z - m.pos.z), () => this.next('crouch', rand(0.4, 0.9)));
+            return true;
+          }
+          // (come at from the side, across the picture, if it can be: so it lies side on to you)
+          const spot = standTo(c, M.p, this.side(M.p, m.pos), there ? 0.21 : 0.15);
+          const k = d > 1e-3 ? (there ? 0.21 : 0.15) / d : 0;
+          const to = spot ? spot.to : c.keepClear(new THREE.Vector3(M.p.x + (m.pos.x - M.p.x) * k, 0, M.p.z + (m.pos.z - M.p.z) * k), 0.1);
+          const face = spot ? spot.face : Math.atan2(M.p.x - to.x, M.p.z - to.z);
+          m.walkTo(to, run && d > 0.6 ? 0.7 : 0.3, face, () => this.next(there ? 'crouch' : 'take', there ? rand(0.5, 1.1) : 0));
+        }
+        return this.t < 25;
+      }
+      case 'take': {
+        // the head down to it, the mouth open, and shut on it
+        m.stop();
+        m.setPosture('stand');
+        const down = ease(this.t / 0.35);
+        m.layer = { pose: { neckPitch: -1.0 * down, headPitch: -0.45 * down, jaw: this.t > 0.2 && this.t < 0.55 ? 0.55 : 0.05, earFwd: 0.5 }, w: 1 };
+        if (this.t > 0.55) c.carry(c.mouthAt(), m.yaw);
+        if (this.t > 0.85) {
+          // (off with it to the nearest open floor by its bed; none: it has it out with it here)
+          const p = this.openNear(c, M.p);
+          if (!p) { c.carry(null, m.yaw); m.layer = null; this.next('crouch', rand(0.4, 0.8)); return true; }
+          this.to.copy(p);
+          this.next('bring');
+        }
+        return true;
+      }
+      case 'bring': {
+        // off with it, the head up, brisk
+        c.carry(c.mouthAt(), m.yaw);
+        m.setPosture('stand');
+        m.lookAt(null);
+        m.layer = { pose: { neckPitch: 0.05, headPitch: 0.05, jaw: 0.08, earFwd: 0.5, tailLift: 0.2 }, w: ease(this.t / 0.3) };
+        // (stopping with its mouth, and the mouse, over the place: from where all of it is clear of
+        // things, facing it; and near enough is near enough)
+        if (!m.goal && this.t < 0.1) {
+          const spot = standTo(c, this.to, this.side(this.to, m.pos), 0.16);
+          if (spot) { this.stand.copy(spot.to); this.standFace = spot.face; m.walkTo(spot.to, 0.4, spot.face, () => this.next('drop')); }
+          else { this.stand.copy(m.pos); this.next('drop'); }
+        } else if ((this.t > 0.5 && Math.hypot(m.pos.x - this.stand.x, m.pos.z - this.stand.z) < 0.04 && Math.abs(wrapA(this.standFace - m.yaw)) < 0.4) || this.t > 8) { m.stop(); this.next('drop'); }
+        return true;
+      }
+      case 'drop': {
+        // the head down, and the mouth opens: down it goes, and it is on it
+        m.stop();
+        m.setPosture('stand');
+        const down = ease(this.t / 0.35);
+        m.layer = { pose: { neckPitch: -0.7 * down, headPitch: -0.3 * down, jaw: this.t > 0.4 ? 0.4 : 0.08, earFwd: 0.7 }, w: 1 };
+        if (this.t < 0.45) c.carry(c.mouthAt(), m.yaw);
+        else if (M.state === 'mouth') c.carry(null, m.yaw);
+        if (this.t > 0.8) { m.layer = null; this.next('crouch', rand(0.3, 0.7)); }
+        return true;
+      }
+      case 'crouch': {
+        // down low, the eyes on it, the rump going
+        if (M.moving || d > 0.32) { this.next('go'); return true; }
+        m.stop();
+        m.setPosture('crouch');
+        m.lookAt(M.p, 1);
+        const wg = wiggle(this.t, this.dur);
+        m.layer = {
+          pose: {
+            hipY: 0.15, hipPitch: -0.12, neckPitch: -0.45, headPitch: 0.1, hipYaw: 0.1 * wg, hipRoll: 0.07 * wg,
+            LH: { y: 0.012 + 0.012 * Math.max(0, wg) }, RH: { y: 0.012 + 0.012 * Math.max(0, -wg) },
+            earFwd: 0.9, pupil: 0.95, eyeOpen: 1, whisker: 0.8, tailLift: -0.3, tailSide: 0.4 * Math.sin(this.t * 11),
+          },
+          w: Math.min(1, this.t / 0.25),
+        };
+        if (this.t > this.dur) this.next('pounce', 0.38);
+        return true;
+      }
+      case 'pounce': {
+        // a hop onto it, the forepaws coming down on it
+        m.stop();
+        const u = Math.min(1, this.t / this.dur), arc = Math.sin(Math.PI * u);
+        const reach = Math.max(0, Math.min(0.18, d - 0.155));
+        m.pos.addScaledVector(this.fwd, ((Math.PI / 2) * reach / this.dur) * arc * dt);
+        const fore = { planted: 0, frame: 0, x: 0.03, y: 0.012 + 0.05 * arc, z: 0.115 + 0.08 * Math.sin(Math.PI * Math.min(1, u * 1.15)), flex: 0.2 * arc };
+        m.layer = { pose: { hipY: 0.15 + 0.04 * arc, chestPitch: 0.25 * arc, neckPitch: -0.3, headPitch: -0.05, LF: fore, RF: fore, earFwd: 0.9, pupil: 1, eyeOpen: 1, tailLift: 0.3 * arc - 0.2 }, w: 1 };
+        if (u >= 1) {
+          c.sound('thump', 0.1);
+          this.grab(c, M);
+        }
+        return true;
+      }
+      case 'hug':
+      case 'let': {
+        m.stop();
+        m.setPosture('side');
+        // (its eyes on it, the head curled in to it, all the while it has it)
+        m.lookAt(null);
+        // (in bouts: kicking a second or two, a breather holding it and biting, kicking again)
+        if (this.phase === 'hug') {
+          if (this.restEnd === 0 && this.t > this.boutEnd) this.restEnd = this.t + rand(0.5, 1.1);
+          else if (this.restEnd > 0 && this.t > this.restEnd) { this.boutEnd = this.t + rand(1, 1.8); this.restEnd = 0; }
+          if (this.t > this.hugFor && this.restEnd === 0) this.next('let', 0.55);
+        }
+        const kickingNow = this.phase === 'let' ? (this.kickOff ? 1 : 0) : this.restEnd === 0 && this.t > 0.3 ? 1 : 0;
+        this.kickW += (kickingNow - this.kickW) * Math.min(1, dt * 8);
+        const pose = this.hugPose(this.phase === 'let' ? ease(this.t / 0.4) * (this.kickOff ? 0.6 : 1) : 0);
+        // (the kicks: a scratch of claws on the felt now and then)
+        const n = Math.floor(this.all * 4.2 - 0.25);
+        if (n > this.kicks) {
+          if (this.kickW > 0.5 && this.kicks >= 0 && n % 2 === 0) c.sound('rugScratch', 0.035);
+          this.kicks = n;
+        }
+        // (flopped over from where it was, in a moment, and down with a soft thud)
+        const e = ease(this.all / 0.4);
+        if (e < 1 && this.from) blendFrom(pose, this.from, e);
+        if (this.all >= 0.3 && this.all - dt < 0.3 && this.from) c.sound('thump', 0.06);
+        m.layer = { pose, w: 1 };
+        // the mouse in its forepaws (drawn in to them as they close on it), turned about in them as
+        // it is bitten and kicked
+        if (this.phase === 'hug' || !this.sent) {
+          const P = c.pawsAt?.() ?? this.at.copy(m.pos).addScaledVector(this.left, 0.15 * this.sd).addScaledVector(this.fwd, 0.09).setY(0.07);
+          // (against its belly between the forepaws and the hind feet raking it, out where it shows)
+          const held = this.at.copy(P).addScaledVector(this.fwd, -0.035).addScaledVector(this.left, 0.035 * this.sd).setY(Math.max(0.03, P.y - 0.008));
+          const g = ease(this.all / 0.3);
+          if (g < 1) held.lerpVectors(this.grabFrom.clone().setY(0.016), held.clone(), g);
+          c.carry(held, m.yaw + this.sd * (1.2 + 0.5 * Math.sin(this.all * 5.3)));
+        }
+        if (this.phase === 'let' && !this.sent && this.t > (this.kickOff ? 0.28 : 0.15)) {
+          this.sent = true;
+          // (kicked: off back past the hind feet that sent it and out from its belly, low; or let
+          // fall)
+          if (this.kickOff && c.kickMouse) {
+            c.kickMouse(this.at.copy(this.fwd).multiplyScalar(-1).addScaledVector(this.left, 0.6 * this.sd), rand(0.6, 1.1), rand(0.6, 1.1));
+            c.sound('thump', 0.05);
+          } else c.carry(null, m.yaw + this.sd * Math.PI / 2);
+        }
+        if (this.phase === 'let' && this.t > this.dur) this.next('look', rand(1, 1.8));
+        return true;
+      }
+      case 'look': {
+        // lying there, the paws open, looking after it, eyes wide
+        m.stop();
+        m.setPosture('side');
+        m.lookAt(M.p, 1);
+        this.kickW += (0 - this.kickW) * Math.min(1, dt * 8);
+        const pose = this.hugPose(1);
+        // (come down within reach of its paws: it has it again)
+        const P = c.pawsAt?.();
+        if (P && M.state === 'floor' && !M.moving && this.t > 0.4 && this.t - dt <= 0.4 && this.rounds < 3 && Math.hypot(M.p.x - P.x, M.p.z - P.z) < 0.15 && Math.random() < 0.75) {
+          this.rounds++;
+          this.from = snapshot(m.pose);
+          this.grabFrom.copy(M.p);
+          this.hugFor = rand(2.5, 4.5);
+          this.boutEnd = rand(0.9, 1.6);
+          this.restEnd = 0;
+          this.kickOff = Math.random() < 0.7;
+          this.sent = false;
+          this.all = 0;
+          this.kicks = -1;
+          this.next('hug');
+          return true;
+        }
+        m.layer = { pose, w: 1 - ease((this.t - this.dur + 0.4) / 0.4) };
+        if (this.t < this.dur) return true;
+        m.layer = null;
+        // (up and after it again, full of it still; or done)
+        const T = c.temper?.playful ?? 0;
+        if (this.rounds < 1 + (T > 0.3 ? 1 : 0) && M.state !== 'mouth' && !M.under && d < 1.2 && Math.random() < 0.5 + 0.25 * T + 0.3 * c.mood.arousal) {
+          this.rounds++;
+          this.next('go');
+          return true;
+        }
+        return false;
+      }
+    }
+    return true;
+  }
+  /** on its side, the mouse hugged in its forepaws in front of its belly, its head curled in to it,
+   *  the hind feet raking it (as hard as kickW), the tail lashing; open: the paws open and come
+   *  away, the head up and round after it */
+  private hugPose(open: number): PoseLayer {
+    const S = POSES.side, sd = this.sd, held = 1 - open;
+    const [uf, lf, uh, lh] = sd > 0 ? ['LF', 'RF', 'LH', 'RH'] : ['RF', 'LF', 'RH', 'LH'];
+    const kw = this.kickW;
+    const ph = this.all * Math.PI * 2 * 4.2;
+    const k1 = Math.max(0, Math.sin(ph)) * kw, k2 = Math.max(0, Math.sin(ph + 0.7)) * kw;
+    // (a bite at it now and then, more between the bouts)
+    const bite = held * Math.max(0, Math.sin(this.all * (kw > 0.5 ? 6.5 : 4) - 0.6)) ** 2;
+    const rock = 0.06 * (k1 - k2) + 0.05 * Math.sin(this.all * 1.7) * held;
+    return {
+      hipY: S.hipY, hipZ: S.hipZ, hipPitch: S.hipPitch, hipRoll: sd * (S.hipRoll + 0.3 + rock), lumbarPitch: -0.4 * held, chestRoll: sd * (S.chestRoll + 0.28 - rock), chestPitch: -0.12,
+      neckPitch: -0.36 * held + 0.1 * open, neckYaw: sd * 0.05, headPitch: -0.4 * held - 0.15 * bite - 0.1 * open, headRoll: sd * (S.headRoll + 0.35 * open), jaw: 0.32 * bite,
+      // (the forepaws round it in front of the belly)
+      [uf]: { planted: 0, frame: 0, x: 0.15 - 0.03 * open, y: 0.085 + 0.03 * open, z: 0.1 + 0.04 * open, flex: 0.85 - 0.55 * open },
+      [lf]: { planted: 0, frame: 0, x: -0.14 + 0.03 * open, y: 0.05 + 0.02 * open, z: 0.11 + 0.03 * open, flex: 0.85 - 0.55 * open },
+      // (the hind feet together, raking up at it)
+      [uh]: { planted: 0, frame: 0, x: 0.1 + 0.06 * k1, y: 0.06 + 0.04 * k1, z: -0.22 + 0.19 * k1, flex: 0.3 + 0.2 * k1 },
+      [lh]: { planted: 0, frame: 0, x: -0.07 - 0.06 * k2, y: 0.03 + 0.035 * k2, z: -0.21 + 0.17 * k2, flex: 0.3 + 0.2 * k2 },
+      pastern: S.pastern, hindFlat: S.hindFlat,
+      earFwd: -0.15 * kw * held + 0.4 * open, earOut: 0.25 * held, pupil: 1, eyeOpen: 0.95 + 0.05 * open, squint: 0, whisker: 0.8,
+      tailLift: S.tailLift, tailSide: (0.7 * kw + 0.3) * Math.sin(this.all * 6) * held + 0.3 * Math.sin(this.all * 2.2) * open, tailCurve: S.tailCurve, tailSag: 1,
+    };
+  }
+  stop(c: Ctx) {
+    // (whatever is in its paws or its mouth falls)
+    const M = c.mouse();
+    if (M?.state === 'mouth') c.carry(null);
+    c.m.layer = null;
+    c.m.lookAt(null);
+    c.m.stop();
+  }
+}
+
+/** a pose as it is (to blend out of) */
+const snapshot = (pose: object): PoseLayer => {
+  const p = pose as Record<string, unknown>, out: Record<string, unknown> = {};
+  for (const k in p) out[k] = typeof p[k] === 'number' ? p[k] : { ...(p[k] as object) };
+  return out as PoseLayer;
+};
+/** a layer's pose from `from` part of the way (e: 0 all from .. 1 all its own), in place */
+const blendFrom = (pose: PoseLayer, from: PoseLayer, e: number) => {
+  const F = from as Record<string, unknown>, P = pose as Record<string, unknown>;
+  for (const k in P) {
+    const a = F[k], b = P[k];
+    if (typeof b === 'number' && typeof a === 'number') P[k] = a + (b - a) * e;
+    else if (b && typeof b === 'object' && a && typeof a === 'object') {
+      const fa = a as Record<string, number>, fb = b as Record<string, number>;
+      for (const fk in fb) if (typeof fa[fk] === 'number') fb[fk] = fa[fk] + (fb[fk] - fa[fk]) * e;
+    }
+  }
+};
+
 /** how long a flehmen face is held, with the head coming up into it and going back */
 const FLEHMEN = 3.0;
 /**
@@ -4178,7 +4553,7 @@ export function idleOptions(c: Ctx, atHome: boolean, posture: PoseName): Option[
   // (its temperament weighs everything it might do: a playful cat's games, a lazy one's long lies,
   // a bold one's ups and overs and intos, a curious one's going to see)
   const T = c.temper ?? { bold: 0, playful: 0, lazy: 0, curious: 0 };
-  const GAME = new Set(['play', 'tease', 'pompom', 'tail', 'zoomies', 'ask', 'gift', 'fish']);
+  const GAME = new Set(['play', 'tease', 'pompom', 'tail', 'zoomies', 'ask', 'gift', 'fish', 'wrestle']);
   const REST = new Set(['sun', 'warm', 'cool', 'by you', 'still', 'yawn']);
   const OUT = new Set(['wander', 'sill', 'top', 'box', 'claw', 'rub', 'window']);
   const tempered = (key: string) => GAME.has(key) ? (1 + 0.5 * T.playful) * (1 - 0.3 * T.lazy)
@@ -4246,6 +4621,8 @@ export function idleOptions(c: Ctx, atHome: boolean, posture: PoseName): Option[
     else if (toy && toy.state === 'floor' && Math.hypot(toy.p.x - c.window.x, toy.p.z - c.window.z) > 0.3) {
       add('gift', 0.45 * Math.max(0, (m.trust - 0.35) / 0.65) * (0.5 + m.arousal) * (1 - m.sleepy), () => new Gift(), 'mouse');
     }
+    // (and in the mood for a game, a tussle with it on its own: hugged, bitten and kicked)
+    if (toy && toy.state === 'floor' && !toy.under) add('wrestle', 0.3 * (0.3 + m.arousal) * (1 - m.sleepy), () => new Wrestle(), 'mouse');
     // in the mood for a game and fond of you, now and then it comes and asks you for one at the
     // glass
     // (the more, about the hour you mostly play with it)

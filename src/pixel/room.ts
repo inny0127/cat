@@ -2220,13 +2220,13 @@ export class Room {
     }
   }
 
-  /** the toy mouse thrown a way (on the floor, m/s), in an arc */
-  tossMouse(dir: THREE.Vector3, speed: number) {
+  /** the toy mouse thrown a way (on the floor, m/s), in an arc (up so fast, m/s) */
+  tossMouse(dir: THREE.Vector3, speed: number, up = 1.5 + 0.4 * Math.random()) {
     const M = this.toyMouse;
     const d = Math.hypot(dir.x, dir.z) || 1;
     M.state = 'air';
     M.under = false;
-    M.v.set((dir.x / d) * speed, 1.5 + 0.4 * Math.random(), (dir.z / d) * speed);
+    M.v.set((dir.x / d) * speed, up, (dir.z / d) * speed);
     M.spin = (Math.random() < 0.5 ? -1 : 1) * (5 + 6 * Math.random());
     if (M.group.position.y < 0.002) M.group.position.y = 0.002;
   }
