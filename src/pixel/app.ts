@@ -108,6 +108,8 @@ export class PixelApp {
     // (walking, round what is in the way; never in anything solid)
     this.cat.motor.obstacles = () => this.room.inTheWay();
     this.cat.motor.solids = () => this.room.solids();
+    // (what the cat's eyes cannot see past)
+    this.avatar.blockers = () => this.room.blockers();
     this.avatar.ground = {
       keepClear: (p, r) => this.room.keepClear(p, r),
       detour: (from, to, r) => this.room.detour(from, to, r),
@@ -863,6 +865,18 @@ export class PixelApp {
     }
   }
 
+  /** where a finger on the screen is, as a hand just in front of the room (the first finger
+   *  down; none if no finger is) */
+  private readonly handAt = new THREE.Vector3();
+  private handInRoom(): THREE.Vector3 | null {
+    const c = this.input.contacts.values().next();
+    if (c.done) return null;
+    const cam = this.stage.camera, el = this.stage.renderer.domElement.getBoundingClientRect();
+    const nx = ((c.value.sx - el.left) / el.width) * 2 - 1, ny = -((c.value.sy - el.top) / el.height) * 2 + 1;
+    const depth = Math.max(0.3, cam.position.z - (this.room.spots.bed.z + 0.75));
+    return Room.atDepth(cam, nx, ny, depth, this.handAt).applyMatrix4(cam.matrixWorld);
+  }
+
   /** a hand on the cat brings the view in close; some seconds after the last, back out */
   /** the middle of the cat's body, wherever it lies */
   private bodyMiddle(out = new THREE.Vector3()) {
@@ -1553,6 +1567,9 @@ export class PixelApp {
     this.avatar.mood = mood;
     if (contacts.length) this.touchedAt = now;
     this.avatar.hands = contacts;
+    // (a finger on the screen anywhere is your hand at the front of the room, to the cat's eyes;
+    // not while it holds the red dot or a toy: then it is what the hand moves that it watches)
+    this.avatar.userHand = this.laser.held || this.wandFinger || this.toyFinger ? null : this.handInRoom();
     this.avatar.touched = now - this.touchedAt < 4;
     // the ball of wool under a finger: the cat's eyes go to it, and moving it keeps it up and is
     // company; caught under its paws, the finger feels it

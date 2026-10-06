@@ -150,8 +150,9 @@ const report = await page.evaluate(async (minutes) => {
         const L = body.legs[leg];
         const g = kin.wp[L.b[3]].clone().sub(kin.wp[L.girdle]).applyQuaternion(kin.wq[L.girdle].clone().invert());
         const across = g.x * L.side, miss = body.reached[leg].distanceTo(c.targ[leg]);
-        if (across < -0.05 && legIssues < 12) { legIssues++; issues.push(`${leg} across under the body by ${(-across * 100).toFixed(1)} cm at ${i} (act ${app.avatar.doing}, ${m.posture})`); }
-        if (miss > 0.05 && legIssues < 12) { legIssues++; issues.push(`${leg} short of its paw by ${(miss * 100).toFixed(1)} cm at ${i} (act ${app.avatar.doing}, ${m.posture})`); }
+        const why = `act ${app.avatar.doing}${app.avatar.act?.phase ? '/' + app.avatar.act.phase : ''}, ${m.posture}, turning ${c.turnRate.toFixed(1)}, hips ${m.pose.hipYaw.toFixed(2)}/${m.pose.hipRoll.toFixed(2)}`;
+        if (across < -0.05 && legIssues < 12) { legIssues++; issues.push(`${leg} across under the body by ${(-across * 100).toFixed(1)} cm at ${i} (${why})`); }
+        if (miss > 0.05 && legIssues < 12) { legIssues++; issues.push(`${leg} short of its paw by ${(miss * 100).toFixed(1)} cm at ${i} (${why})`); }
       }
     }
     const moved = Math.hypot(m.pos.x - lastPos.x, m.pos.z - lastPos.z) > 0.002;

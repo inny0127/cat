@@ -18,7 +18,7 @@ function room() {
     room: { minX: -1, maxX: 1, minZ: -1, maxZ: 1 }, mode: 'alert', mood: { ...NEUTRAL }, kneading: false,
     bed: () => ({ to: new THREE.Vector3(), yaw: 0 }), sill: () => null, box: () => null,
     sound: (n: string) => calls.sounds.push(n), say: () => {},
-    laser: () => world.dot, keepClear: (p: THREE.Vector3) => p, detour: () => null,
+    laser: () => world.dot, gaze: () => null, keepClear: (p: THREE.Vector3) => p, detour: () => null,
     books: () => new THREE.Vector3(0.6, 0, 0.6),
     lure: () => world.lure, batLure: () => { calls.bat++; }, pinLure: () => { calls.pin++; },
     pencil: () => null, pushPencil: () => {}, mug: () => world.mug, pushMug: (dz: number) => { calls.pushes.push(dz); if (world.mug) world.mug.at.z += dz; },

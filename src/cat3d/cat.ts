@@ -256,6 +256,7 @@ export class Cat3D {
   place(x: number, z: number, yaw: number) {
     this.motor.pos.set(x, 0, z);
     this.motor.yaw = yaw;
+    this.motor.yawWas = null;
     this.first = true;
     this.tail.reset();
   }
@@ -465,6 +466,8 @@ export class Cat3D {
       e.eyeMat.uniforms.uShine.value = ey.shine;
     }
     this.aimEyes();
+    // (the root of the neck, for the next frame's gaze to turn about)
+    motor.eyeRef.copy(kin.wp[kin.i('neck1')]).applyMatrix4(group.matrixWorld);
     this.whiskers.setSpread(p.whisker);
     // how much of each sculpted posture the body is in
     const cw = this.shared.uCorrW.value;
@@ -513,7 +516,7 @@ export class Cat3D {
 
   /** eyeballs turn toward the gaze point inside their lids */
   private aimEyes() {
-    const g = this.motor.gaze;
+    const g = this.motor.eyeAt ?? this.motor.gaze;
     const w = this.tmp.b;
     for (const e of this.eyes) {
       e.group.updateWorldMatrix(true, false);

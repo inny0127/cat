@@ -7,6 +7,7 @@ import type { EarMood, TailMood } from '../rig/animator';
 import { boop, byYou, chooseAct, groomChest, groomFlank, knead, lookWith, restingPose, sneeze, toBed, toWindow, wander, warmUp, washFace, yawn, type Act, type Ctx, sunbathe, Play, Sill, Hunt, Box, Zoomies, Walk, Stare, Rub, scratchEar, wakeUp, stretchSideOn, Greet, Gift, Snub, Beg, PawGlass, TailChase, Claw, Top, Fish, Bat, Trap, Sulk, isPerching, type Perching, type ScratchPost, type GlassFinger, type SillSpot, type SulkSpot } from './behave';
 import { Chase, Startle, type LaserDot } from './chase';
 import { Tease, type Lure } from './tease';
+import { Nerves, type Blocker, type Thing } from './nerves';
 
 const LYING: PoseName[] = ['loaf', 'sphinx', 'side', 'back', 'curl', 'curlL'];
 const CURLED = (p: PoseName) => p === 'curl' || p === 'curlL';
@@ -83,6 +84,20 @@ export class PixelAvatar implements Avatar {
    *  stare at it before it has to be had; and after a long game of it, a while before it will be
    *  drawn in again (it only watches) */
   laser: LaserDot | null = null;
+  /** its eyes and the neurons behind them (nerves.ts): what it can see of the room from where its
+   *  eyes are, and what of that holds its attention; the room's say in what hides what (set by
+   *  the app) */
+  readonly nerves = new Nerves();
+  blockers: (() => readonly Blocker[]) | null = null;
+  /** your hand, while a finger is on the screen: just in front of the room (set by the app) */
+  userHand: THREE.Vector3 | null = null;
+  private readonly seeing: Thing[] = [];
+  private readonly eyeW = new THREE.Vector3();
+  private readonly headQ = new THREE.Quaternion();
+  private readonly headF = new THREE.Vector3();
+  /** the red dot as it has it: where it believes the dot is (lost: none) */
+  private readonly dotSeen: LaserDot = { p: new THREE.Vector3(), on: 'floor', n: new THREE.Vector3(0, 1, 0) };
+  private dotLost = true;
   /** a glint of sun going across the floor (the room's): its eyes go after it, and now and then,
    *  in the mood for it, the rest of it (decided as it comes) */
   glint: THREE.Vector3 | null = null;
@@ -485,6 +500,87 @@ export class PixelAvatar implements Avatar {
     return this.act instanceof PawGlass && this.act.nuzzled;
   }
   /** the finger on the glass now (null: gone) */
+  /** round further than its head will turn, the thing it attends to is turned to: the body comes
+   *  round on the spot, sitting or standing (lying down, the head does what it can) */
+  private orientT = 0;
+  private orient(dt: number, at: THREE.Vector3) {
+    const m = this.cat.motor;
+    const face = Math.atan2(at.x - m.pos.x, at.z - m.pos.z);
+    const off = Math.abs(wrap(face - m.yaw));
+    const up = m.targetPosture === 'sit' || m.targetPosture === 'stand' || m.targetPosture === 'crouch' || m.targetPosture === 'alert';
+    this.orientT = off > 1.3 && up && !m.goal && !this.act && !this.hands.length ? this.orientT + dt : 0;
+    if (this.orientT > 0.35) {
+      this.orientT = 0;
+      m.walkTo(m.pos.clone(), 0.2, face);
+    }
+  }
+
+  /** what it sees of the room this frame, from where its eyes are, and what its neurons make of it */
+  private sense(dt: number) {
+    const N = this.nerves, cat = this.cat, m = cat.motor, mood = this.mood;
+    const T = this.seeing;
+    T.length = 0;
+    const L = this.laser;
+    // (on its own coat it is felt; where it is, for the eyes, is where the beam goes on to: the dot
+    // on its back and the dot on the floor beside it are one dot to it, not a thing leaping about)
+    if (L) T.push({ id: 'dot', kind: 'dot', p: L.p, felt: !!L.self });
+    if (this.toys) T.push({ id: 'yarn', kind: 'toy', p: this.toys.yarn() });
+    if (this.wand?.held) T.push({ id: 'wand', kind: 'toy', p: this.wand.p });
+    if (this.glint) T.push({ id: 'glint', kind: 'glint', p: this.glint });
+    if (this.visitor) T.push({ id: 'bird', kind: 'bird', p: this.visitor });
+    const bug = this.outside?.bug?.();
+    if (bug) T.push({ id: 'bug', kind: 'bug', p: bug.p });
+    const mouse = this.ground?.mouse();
+    if (mouse && mouse.state !== 'mouth' && !mouse.under) T.push({ id: 'mouse', kind: 'toy', p: mouse.p });
+    const pom = this.ground?.pompom();
+    if (pom) T.push({ id: 'pompom', kind: 'toy', p: pom });
+    T.push({ id: 'you', kind: 'you', p: this.viewer() });
+    const F = this.fingerNow();
+    if (F) T.push({ id: 'hand', kind: 'hand', p: F.at });
+    else if (this.userHand) T.push({ id: 'hand', kind: 'hand', p: this.userHand });
+    // the eyes, and the way the head faces
+    cat.body.eyes(this.eyeW).applyMatrix4(cat.group.matrixWorld);
+    const head = cat.byName.get('head');
+    if (head) this.headF.set(0, 0, 1).applyQuaternion(head.getWorldQuaternion(this.headQ));
+    else this.headF.set(Math.sin(m.yaw), 0, Math.cos(m.yaw));
+    N.awake = this.alive && !this.isHidden ? Math.max(0, Math.min(1, 1 - this.sleep)) : 0;
+    N.playful = Math.max(0, Math.min(1, 0.45 + 0.5 * mood.arousal - 0.5 * mood.sleepy - 0.4 * mood.fear));
+    N.fond = Math.max(0, Math.min(1, 0.2 + 0.8 * mood.trust));
+    N.blockers = this.blockers ?? (() => []);
+    // (what it is about colours what it watches: after the dot, the dot)
+    N.bias.clear();
+    if (this.act instanceof Chase) N.bias.set('dot', 0.45);
+    else if (this.act instanceof Tease) N.bias.set('wand', 0.4);
+    else if (this.act?.name === 'play') N.bias.set('yarn', 0.35);
+    else if (this.act?.name === 'pompom') N.bias.set('pompom', 0.35);
+    N.update(dt, this.eyeW, Math.atan2(this.headF.x, this.headF.z), Math.asin(Math.max(-1, Math.min(1, this.headF.y))), T);
+    // (the red dot come on: the click of the pointer, and the room's light changed; it looks
+    // round for it wherever it is)
+    if (L && !this.dotWas) N.cue('dot', 1.4);
+    this.dotWas = !!L;
+  }
+  private dotWas = false;
+
+  /** the red dot as it has it: where it believes it is, if it is sure enough (once lost, it has to
+   *  be surer before it counts as found again); on its own coat it feels it, and knows */
+  private seenLaser(): LaserDot | null {
+    const L = this.laser;
+    if (L?.self) { this.dotLost = false; return L; }
+    const u = this.nerves.unit('dot');
+    if (!u || u.conf < (this.dotLost ? 0.45 : 0.25)) { this.dotLost = true; return null; }
+    this.dotLost = false;
+    const S = this.dotSeen;
+    S.p.copy(u.belief);
+    if (L) {
+      S.on = L.on;
+      S.n.copy(L.n);
+      S.mug = L.mug;
+      S.self = undefined;
+      S.selfAt = undefined;
+    }
+    return S;
+  }
+
   private fingerNow(): GlassFinger | null {
     const F = this.glassFinger;
     if (!F || this.clock - F.last > 0.25) return null;
@@ -697,7 +793,8 @@ export class PixelAvatar implements Avatar {
       mug: () => this.outside?.mug?.() ?? null,
       pushMug: (dz, dx) => this.outside?.pushMug?.(dz, dx),
       viewer: () => this.viewer(),
-      laser: () => this.laser,
+      laser: () => this.seenLaser(),
+      gaze: (id) => (this.nerves.attending?.id === id ? this.nerves.gazePoint : null),
       keepClear: (p, r) => this.ground?.keepClear(p, r) ?? p,
       detour: (from, to, r) => this.ground?.detour(from, to, r) ?? null,
       books: () => this.ground?.books ?? new THREE.Vector3(9, 0, 9),
@@ -1169,6 +1266,7 @@ export class PixelAvatar implements Avatar {
     this.huntRest = Math.max(0, this.huntRest - dt);
     this.pawRest = Math.max(0, this.pawRest - dt);
     this.clock += dt;
+    this.sense(dt);
     // under cover from the storm a while: out, and over to lie by the glass, near you (out of the
     // box first if it is in it)
     if (this.comfortIn > 0 && (this.comfortIn -= dt) <= 0) {
@@ -1198,7 +1296,9 @@ export class PixelAvatar implements Avatar {
     // the red dot of a laser pointer: a moment's stare, and it is after it
     this.chaseRest = Math.max(0, this.chaseRest - dt);
     if (this.laser && !(this.act instanceof Chase)) {
-      this.laserT += dt;
+      // (only once it has seen it and has its eyes on it; the more it has a mind to hunt, the
+      // sooner it is off)
+      this.laserT += dt * this.nerves.on('dot') * (0.6 + this.nerves.hunt);
       if (this.laserT > this.laserNeed && this.chaseNow()) this.laserT = 0;
     } else {
       this.laserT = 0;
@@ -1248,17 +1348,20 @@ export class PixelAvatar implements Avatar {
     // eyes on the finger, or on you (through the window); asleep, dead or busy, nowhere (up on
     // the sill it looks where it likes: out of the window)
     const busy = this.errand || (this.act && this.act.name !== 'window' && this.act.name !== 'knead' && this.act.name !== 'greet' && this.act.name !== 'gift');
+    const N = this.nerves, seen = this.alive && this.sleep <= 0.5 ? N.attending : null;
+    // (the eyes their own, ahead of the head, only while what it sees is what it looks at)
+    m.eyeAt = this.act instanceof Chase && seen?.id === 'dot' ? N.gazePoint : null;
     let tilt = 0;
     if ((this.act instanceof Sill || this.act instanceof Play || this.act instanceof Hunt || this.act instanceof Box || this.act instanceof Zoomies || this.act instanceof Stare || this.act?.ownGaze) && this.mode !== 'enjoy') { /* the act decides */ }
     else if (!this.alive || this.sleep > 0.5 || busy) m.lookAt(null);
-    else if (this.lure) m.lookAt(this.lure, 1);
-    else if (this.laser) m.lookAt(this.laser.p, 1);
-    else if (this.glint && this.sleep < 0.5) m.lookAt(this.glint, 1);
-    else if (this.wand?.held) m.lookAt(this.wand.p, 1);
-    else if (this.visitor) {
-      // a bird on the ledge: eyes on it, and now and then a chatter at it
-      m.lookAt(this.visitor, 1);
-      if ((this.chatterIn -= dt) <= 0) {
+    else if (seen && seen.kind !== 'you' && seen.kind !== 'hand') {
+      // whatever has its attention: the eyes on it in jumps, the head after them; and if it is
+      // round further than the head will turn, a moment, and the body turns round to it
+      m.lookAt(N.gazePoint, 1);
+      m.eyeAt = N.gazePoint;
+      this.orient(dt, N.gazePoint);
+      // (a bird on the ledge: now and then a chatter at it)
+      if (seen.kind === 'bird' && (this.chatterIn -= dt) <= 0) {
         this.chatterIn = 2.5 + Math.random() * 3;
         if (Math.random() < 0.6) this.outside?.chirp();
       }
@@ -1267,6 +1370,7 @@ export class PixelAvatar implements Avatar {
       tilt = this.heard.tilt;
     }
     else if (this.gazeTarget && this.screenToWorld(this.gazeTarget.x, this.gazeTarget.y, this.look)) m.lookAt(this.look, 0.9);
+    else if (seen) { m.lookAt(N.gazePoint, this.trip ? 0.3 : 0.85); m.eyeAt = N.gazePoint; }
     else m.lookAt(this.viewer(), this.trip ? 0.3 : 0.85);
     if (this.puzzledFor > 0) {
       this.puzzledFor -= dt;

@@ -67,6 +67,13 @@ function route(from: PoseName, to: PoseName): PoseName[] {
   return [to];
 }
 
+/** the numbers of a pose that are eased (all but the flags), and of each paw */
+const EASE_KEYS = Object.keys(POSES.stand).filter((k) => typeof (POSES.stand as unknown as Record<string, unknown>)[k] === 'number'
+  // (not the mouth: a chatter or a meow is quicker than this would let it be)
+  && k !== 'jaw' && k !== 'tongue' && k !== 'tongueUp');
+const FOOT_EASE = ['x', 'y', 'z', 'frame', 'flex'] as const;
+const LEG_KEYS: Leg[] = ['LF', 'RF', 'LH', 'RH'];
+
 /** which group each channel of a pose moves with */
 const GROUP_OF: Record<string, Group> = {};
 for (const [g, ks] of Object.entries(GROUPS)) for (const k of ks) GROUP_OF[k] = g as Group;
@@ -133,6 +140,16 @@ export class Motor {
   lookTarget: THREE.Vector3 | null = null;
   lookW = 0;
   lookWTarget = 0;
+  /** where the eyes themselves are on, if not on the gaze: they jump ahead and the head follows */
+  eyeAt: THREE.Vector3 | null = null;
+  /** the root of the neck (world, the cat's last frame): the gaze turns about it (not about the
+   *  eyes, which move as the head turns, so that the head would chase its own turning) */
+  readonly eyeRef = new THREE.Vector3(NaN, 0, 0);
+  private readonly lookDir = new THREE.Vector3(0, 0, 1);
+  private lookDist = 1;
+  private lookVel = 0;
+  private readonly lookTo = new THREE.Vector3();
+  private readonly lookAxis = new THREE.Vector3();
 
   // face
   blink = 0;
@@ -176,8 +193,41 @@ export class Motor {
     if (this.tt >= 1) this.advance();
   }
 
+  /** the pose eased toward what is asked: two smoothings one after the other (as a weight on a
+   *  spring, no overshoot), for every number of the trunk, the head, the paws, the ears and tail */
+  private eased: Float32Array | null = null;
+  private eased2: Float32Array | null = null;
+  private easePose(p: Pose, dt: number) {
+    const n = EASE_KEYS.length + 4 * FOOT_EASE.length;
+    const fresh = !this.eased;
+    if (!this.eased) { this.eased = new Float32Array(n); this.eased2 = new Float32Array(n); }
+    const a = this.eased, b = this.eased2!;
+    // (the paws quicker than the body: a kick or a swat is quick, and must stay so)
+    const kb = 1 - Math.exp(-dt * 40), kp = 1 - Math.exp(-dt * 120);
+    const P = p as unknown as Record<string, number>;
+    let i = 0;
+    const one = (get: () => number, set: (x: number) => void, k: number) => {
+      const x = get();
+      if (fresh || this.easeReset) { a[i] = x; b[i] = x; }
+      else {
+        a[i] += (x - a[i]) * k;
+        b[i] += (a[i] - b[i]) * k;
+        set(b[i]);
+      }
+      i++;
+    };
+    for (const key of EASE_KEYS) one(() => P[key], (x) => { P[key] = x; }, kb);
+    for (const leg of LEG_KEYS) {
+      const f = p[leg] as unknown as Record<string, number>;
+      for (const key of FOOT_EASE) one(() => f[key], (x) => { f[key] = x; }, kp);
+    }
+    this.easeReset = false;
+  }
+  private easeReset = false;
+
   /** jump straight into a posture (tests, restoring a saved state) */
   snap(name: PoseName) {
+    this.easeReset = true;
     this.posture = this.target = this.fromName = name;
     this.path = [];
     copyPose(this.base, POSES[name]);
@@ -378,10 +428,19 @@ export class Motor {
 
   update(dt: number) {
     this.time += dt;
+    // (an act that squares the body round to something itself, all at once: no quicker than a
+    // body can turn, and the rest of the turn next time)
+    if (this.yawWas !== null && dt > 0) {
+      const d = wrap(this.yaw - this.yawWas), lim = (5 + 3 * this.zoom) * dt;
+      if (Math.abs(d) > lim) this.yaw = wrap(this.yawWas + Math.sign(d) * lim);
+    }
     this.transition(dt);
     this.locomote(dt);
     this.compose(dt);
+    this.yawWas = this.yaw;
   }
+  /** where it faced at the end of the last step (null: put down somewhere, facing anywhere) */
+  yawWas: number | null = null;
 
   private transition(dt: number) {
     if (this.tt < 1) {
@@ -478,7 +537,10 @@ export class Motor {
     // accelerate like an animal: quick to start, a couple of steps to stop
     const acc = (want > this.speed ? 0.7 : 1.4) * (1 + 2 * this.zoom);
     this.speed += clamp(want - this.speed, -acc * dt, acc * dt);
-    this.yawRate += (turn - this.yawRate) * Math.min(1, dt * 5);
+    // (a body has weight: the turn comes on and goes off no faster than legs can swing it round,
+    // quicker in a mad rush; never a whip from one way to the other)
+    const yawAcc = (12 + 10 * this.zoom) * dt;
+    this.yawRate += clamp((turn - this.yawRate) * Math.min(1, dt * 5), -yawAcc, yawAcc);
     this.yaw = wrap(this.yaw + this.yawRate * dt);
     this.vel.set(Math.sin(this.yaw) * this.speed, 0, Math.cos(this.yaw) * this.speed);
     this.pos.addScaledVector(this.vel, dt);
@@ -514,6 +576,10 @@ export class Motor {
         }
       }
     }
+    // (and no part of it ever jumps: what the posture and the act ask for is followed closely, but
+    // eased, a few hundredths of a second behind: an act's overrides coming on all at once, or a
+    // posture asked for in the middle of another, are a quick movement, not a cut)
+    this.easePose(p, dt);
     const t = this.time;
     // the stride: the body rises over each leg as it stands straight under it, dips over the
     // swinging side and turns with the legs; the head rides it out
@@ -738,9 +804,29 @@ export class Motor {
       }
     }
     this.tailFlickW.step(dt);
-    // gaze
+    // gaze: turned about the eyes toward what it looks at (not slid across to it in a straight
+    // line, which between two things either side of the head goes right past its nose, and the
+    // head whips round)
     if (this.lookTarget) this.look.copy(this.lookTarget);
-    this.lookS.lerp(this.look, 1 - Math.exp(-dt * 7));
+    const kl = 1 - Math.exp(-dt * 7);
+    if (Number.isNaN(this.eyeRef.x)) this.lookS.lerp(this.look, kl);
+    else {
+      const to = this.lookTo.copy(this.look).sub(this.eyeRef);
+      const d = Math.max(0.15, to.length());
+      to.divideScalar(d);
+      // (the head swings round like a weight: it gathers speed, never more than a cat's head can
+      // go, and slows into place, the eyes having got there first)
+      const ang = this.lookDir.angleTo(to);
+      this.lookVel += (144 * ang - 24 * this.lookVel) * Math.min(dt, 0.05);
+      this.lookVel = Math.max(0, Math.min(9, this.lookVel));
+      if (ang > 1e-5) {
+        const axis = this.lookAxis.crossVectors(this.lookDir, to);
+        if (axis.lengthSq() < 1e-10) axis.set(0, 1, 0);
+        this.lookDir.applyAxisAngle(axis.normalize(), Math.min(ang, this.lookVel * dt)).normalize();
+      }
+      this.lookDist += (d - this.lookDist) * kl;
+      this.lookS.copy(this.eyeRef).addScaledVector(this.lookDir, Math.max(0.45, this.lookDist));
+    }
     this.lookW += (this.lookWTarget - this.lookW) * (1 - Math.exp(-dt * 3));
     // the feeling in the eyes: lids within a few tenths of a second, pupils flooding open faster
     // than they close down, the shine slowly

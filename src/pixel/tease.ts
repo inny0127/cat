@@ -270,7 +270,8 @@ export class Tease implements Act {
         const reach = clamp(h, 0.06, 0.3), out = clamp(L2.z, 0.1, 0.27), across = clamp(Math.abs(L2.x), 0.01, 0.09);
         const paw = { planted: 0, frame: 0, x: 0.02 + (across - 0.02) * up, y: 0.05 + (reach - 0.05) * up, z: 0.08 + (out - 0.08) * up, flex: 0.5 * up };
         m.setPosture('sit');
-        m.layer = { pose: { ...keen, chestPitch: -1.12 * up - 0.97 * (1 - up), hipY: 0.064 + 0.03 * up, neckPitch: 0.1 * up, [this.side > 0 ? 'LF' : 'RF']: paw }, w: 1 };
+        // (sat up a little taller for it, not so tall the other forepaw comes up off the floor)
+        m.layer = { pose: { ...keen, chestPitch: -1.12 * up - 0.97 * (1 - up), hipY: 0.064 + 0.011 * up, neckPitch: 0.1 * up, [this.side > 0 ? 'LF' : 'RF']: paw }, w: 1 };
         if (!this.hit && u > 0.45) {
           this.hit = true;
           const pawAt = m.pos.clone().addScaledVector(this.fwd, out).add(new THREE.Vector3(Math.cos(m.yaw), 0, -Math.sin(m.yaw)).multiplyScalar(this.side * across)).setY(reach);

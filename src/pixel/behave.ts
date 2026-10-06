@@ -89,8 +89,11 @@ export interface Ctx {
   pushMug: (dz: number, dx: number) => void;
   /** where you are, to look at */
   viewer: () => THREE.Vector3;
-  /** the red dot of a laser pointer shining in the room, if there is one (chase.ts) */
+  /** the red dot of a laser pointer shining in the room, as the cat has it: where it believes it
+   *  is, if it is sure enough (chase.ts) */
   laser: () => LaserDot | null;
+  /** where its eyes are, while they are on this thing (nerves.ts): in jumps, a little behind it */
+  gaze: (id: string) => THREE.Vector3 | null;
   /** a point on the floor moved out of the room's things and in from the walls, for the middle of
    *  a cat r across (changed in place); and a point to go by on the way from one point to another,
    *  round whatever is in the way (null: the way is clear) */

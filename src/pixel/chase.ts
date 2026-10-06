@@ -212,7 +212,7 @@ export class Chase implements Act {
     if (this.up || this.phase === 'gather') return this.aloft(dt, c, L);
     if (this.leaving) return false;
     // eyes on it all the while it is there to see
-    if (L && this.phase !== 'search') m.lookAt(L.p, 1);
+    if (L && this.phase !== 'search') m.lookAt(c.gaze('dot') ?? L.p, 1);
     const keen: PoseLayer = { earFwd: 0.95, pupil: 1, eyeOpen: 1, whisker: 0.9, tailCurl: 0.7 * Math.sin(this.total * 9) };
     // gone (and not in the middle of a spring): where did it go?
     if (!L && this.phase !== 'search' && this.phase !== 'pounce' && !(this.phase === 'leap' && this.t > this.dur)) {
@@ -294,7 +294,8 @@ export class Chase implements Act {
       }
       case 'notice': {
         // stock still, the head on it, the pupils going wide; up off the floor onto its feet, low
-        m.stop();
+        // (round behind it, where its head will not turn to: round on the spot to it)
+        if (!this.turnTo(c, L ? L.p : this.last)) m.stop();
         if (DOWN.has(m.targetPosture)) m.setPosture('crouch');
         m.layer = { pose: { ...keen }, w: Math.min(1, this.t / 0.15) };
         if (this.t > this.dur && L) this.decide(c, L);
@@ -417,7 +418,7 @@ export class Chase implements Act {
         // (and only then after it again)
         m.stop();
         m.setPosture('crouch');
-        if (L) m.lookAt(L.p, 1);
+        if (L) m.lookAt(c.gaze('dot') ?? L.p, 1);
         m.layer = { pose: { ...keen, hipY: 0.135, neckPitch: -0.3, tailSide: 0.5 * Math.sin(this.t * 9) }, w: 1 };
         if (this.t > this.dur) {
           m.layer = null;
@@ -531,11 +532,15 @@ export class Chase implements Act {
         const g = this.gone;
         if (m.speed < 0.1 && !DOWN.has(m.targetPosture)) m.setPosture(g > 2.5 ? 'sit' : 'crouch');
         let pose: PoseLayer = { earFwd: 0.6, pupil: 0.85, eyeOpen: 1, whisker: 0.5 };
-        if (g < 0.8) m.lookAt(this.last, 1);
+        if (g < 0.8) { m.lookAt(this.last, 1); this.turnTo(c, this.last); }
         else if (g < 3.4) {
           m.lookAt(null);
           const a = Math.sin((g - 0.8) * 2.4) * 0.85 * this.side;
           pose = { ...pose, neckYaw: a, headYaw: 0.5 * a, headRoll: -0.12 * a, neckPitch: -0.15 };
+          // (and round on the spot, one way and then the other: a look behind it too)
+          if (!m.goal && ((g > 1.3 && g - dt <= 1.3) || (g > 2.4 && g - dt <= 2.4))) {
+            m.walkTo(m.pos.clone(), 0.25, m.yaw + (g < 2 ? 1 : -1) * this.side * 2.1);
+          }
         } else if (g < 5.8) {
           // (round to you first, if it is facing away)
           if (Math.abs(wrapA(m.yaw)) > 1.4 && !m.goal && g < 4) m.walkTo(m.pos.clone(), 0.2, rand(-0.5, 0.5));
@@ -586,6 +591,15 @@ export class Chase implements Act {
     this.next('run');
   }
 
+  /** a thing round behind it, further than its head will turn: round on the spot to face it
+   *  (false: it is in front already) */
+  private turnTo(c: Ctx, p: THREE.Vector3) {
+    const m = c.m, face = Math.atan2(p.x - m.pos.x, p.z - m.pos.z);
+    if (Math.abs(wrapA(face - m.yaw)) < 1.1) return false;
+    if (!m.goal) m.walkTo(m.pos.clone(), 0.25, face);
+    return true;
+  }
+
   /** a pounce: how far to carry (the forepaws to come down on the dot, as near as a cat can
    *  judge), the way it faces now, and the longer the leap the longer it takes */
   private pounce(c: Ctx) {
@@ -612,7 +626,7 @@ export class Chase implements Act {
   private aloft(dt: number, c: Ctx, L: LaserDot | null) {
     const m = c.m, S = this.sill!;
     const keen: PoseLayer = { earFwd: 0.95, pupil: 1, eyeOpen: 1, whisker: 0.9, tailCurl: 0.7 * Math.sin(this.total * 9) };
-    if (L) m.lookAt(L.p, 1);
+    if (L) m.lookAt(c.gaze('dot') ?? L.p, 1);
     // (the sill's length a cat can go along, its body clear of the plant at one end and the radio
     // at the other)
     const sx = (x: number) => clamp(x, S.seat.x - 0.1, S.seat.x + 0.06);

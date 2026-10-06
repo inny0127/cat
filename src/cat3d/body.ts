@@ -153,9 +153,15 @@ export class Body {
     const chestRight = this.t.e.set(1, 0, 0).applyQuaternion(kin.wq[I.chest]);
     const chestYaw = Math.atan2(-chestRight.z, chestRight.x);
     const F = this.lookF;
+    // (aimed from the root of the neck, which the turn does not move: aimed from the eyes, a thing
+    // close by moved in the view as the head turned, and the head chased it, jerking; the eyes
+    // themselves make up the little difference)
+    const base = this.lookBase.copy(kin.wp[I.neck1]);
+    const far = this.lookFar.copy(target).sub(base);
+    far.setLength(Math.max(0.45, far.length())).add(base);
     for (const [b, fy, fp] of chain) {
-      this.eyes(eye);
-      D.copy(target).sub(eye);
+      eye.copy(base);
+      D.copy(far).sub(eye);
       if (D.lengthSq() < 1e-8) return;
       D.normalize();
       // a cat turns its head about so far before it would have to turn its body
@@ -166,12 +172,21 @@ export class Body {
       // point goes across behind it)
       const behind = Math.max(0, Math.min(1, (Math.abs(yaw) - 2) / (Math.PI - 2)));
       const w = weight * (1 - behind * behind * (3 - 2 * behind));
+      // (and turned as far as it goes one way after a thing that has gone on round behind, it
+      // stays that way: it does not swing right across to the other shoulder)
+      F.set(0, 0, 1).applyQuaternion(kin.wq[I.head]);
+      const was = Math.atan2(Math.sin(Math.atan2(F.x, F.z) - chestYaw), Math.cos(Math.atan2(F.x, F.z) - chestYaw));
+      if (Math.abs(yaw) > 1.5 && Math.abs(was) > 0.6 && Math.sign(yaw) !== Math.sign(was)) yaw = Math.sign(was) * 1.5;
       yaw = Math.max(-1.5, Math.min(1.5, yaw)) + chestYaw;
       const pitch = Math.max(-0.9, Math.min(0.9, Math.asin(Math.max(-1, Math.min(1, D.y)))));
       // this joint's share of the yaw and of the pitch, from where the head points now
       F.set(0, 0, 1).applyQuaternion(kin.wq[I.head]);
       const yawC = Math.atan2(F.x, F.z), pitchC = Math.asin(Math.max(-1, Math.min(1, F.y)));
-      const dy = Math.atan2(Math.sin(yaw - yawC), Math.cos(yaw - yawC));
+      // (a point nearly straight below the head has hardly any way round to it: the way round is
+      // the more nearly anything the more nearly straight down it is, and the head is left
+      // pointing the way it was rather than whipped about by the least shift of the point)
+      const flat = Math.hypot(D.x, D.z);
+      const dy = Math.atan2(Math.sin(yaw - yawC), Math.cos(yaw - yawC)) * Math.min(1, Math.max(0, (flat - 0.12) / 0.3));
       const yj = yawC + dy * fy, pj = pitchC + (pitch - pitchC) * fp;
       D.set(Math.sin(yj) * Math.cos(pj), Math.sin(pj), Math.cos(yj) * Math.cos(pj));
       // looking along D with the eyes level (cats keep their head upright), plus any deliberate tilt
@@ -190,6 +205,8 @@ export class Body {
     }
   }
   private readonly lookF = new THREE.Vector3();
+  private readonly lookBase = new THREE.Vector3();
+  private readonly lookFar = new THREE.Vector3();
 
 
   /**

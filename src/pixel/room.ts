@@ -3260,6 +3260,18 @@ export class Room {
     return this.things.filter(([c, r]) => r > 0 && c !== this.yarnHome);
   }
 
+  /** what stands on the floor tall enough to hide a thing behind it from a cat's eyes (its middle,
+   *  its radius, its height): the plant's pot, the books, the scratching post, the box when it is
+   *  out (the lamp's foot and the bowls are too low to hide anything) */
+  blockers(): { c: THREE.Vector3; r: number; h: number }[] {
+    const [pot, , books, , box, post] = this.things;
+    this.blocks.length = 0;
+    this.blocks.push({ c: pot[0], r: 0.1, h: 0.24 }, { c: books[0], r: 0.13, h: 0.1 }, { c: post[0], r: 0.07, h: 0.58 });
+    if (box[1] > 0) this.blocks.push({ c: box[0], r: Math.min(0.2, box[1]), h: this.box.h });
+    return this.blocks;
+  }
+  private readonly blocks: { c: THREE.Vector3; r: number; h: number }[] = [];
+
   /** a point on the floor (for the middle of a cat r across) moved out of the room's things and
    *  in from the walls: off the radiator, the plant, the books, the bowls (changed in place) */
   keepClear(p: THREE.Vector3, r: number) {
