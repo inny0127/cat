@@ -95,8 +95,11 @@ export class Whim {
       const on = o.about && A?.id === o.about ? A.a : 0;
       const rate = (o.w / (W * EVERY)) * (1 + 6 * on) * ramp;
       if (this.rnd() >= rate * dt) continue;
-      this.easy = 0;
       const act = o.make();
+      // (nothing to be had there after all, the sun gone off the floor: as if it never came into
+      // its head)
+      if (!act && o.key !== 'still') continue;
+      this.easy = 0;
       const at = o.about ? null : o.at ?? null;
       if (!act || (!o.about && !at)) return { o, act };
       this.intent = { o, act, at: at && at.clone(), id: o.about ?? GOAL, t: 0, on: 0, dwell: 0.3 + 1.1 * this.rnd() };
