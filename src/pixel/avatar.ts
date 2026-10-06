@@ -596,15 +596,49 @@ export class PixelAvatar implements Avatar {
     // further, the other a little; straight ahead, both forward
     const A = N.attending, E = m.earTo;
     if (A && N.awake > 0.5 && A.kind !== 'you') {
-      const to = this.headLocal.copy(A.belief).sub(this.eyeW).applyQuaternion(this.headQ.invert());
+      const to = this.headLocal.copy(A.belief).sub(this.eyeW).applyQuaternion(this.headInv.copy(this.headQ).invert());
       const az = Math.atan2(to.x, to.z), k = Math.min(1, A.a * 1.2);
       // (the cat's left is +x: the left ear turns out to it, the right ear in)
       const near = Math.min(1.3, Math.abs(az) * 0.9), far = Math.min(0.5, Math.abs(az) * 0.4);
       E.L = k * (az > 0 ? near : -far);
       E.R = k * (az > 0 ? -far : near);
     } else { E.L = 0; E.R = 0; }
+    this.listen(dt, A && A.kind !== 'you' ? A.a : 0);
+  }
+
+  /** where the radio stands (set by the app), for its ears */
+  radioAt: THREE.Vector3 | null = null;
+  /** a sound it is listening to without looking: where, and how long yet; and when it next turns
+   *  an ear to one */
+  private listenT = 0;
+  private listenIn = 3;
+  private readonly listenAt = new THREE.Vector3();
+  /**
+   * Listening: a sound it is not looking at turns an ear all the same, the one on that side round
+   * to it a moment, then back (the radio playing, the rain on the glass); its eyes on something,
+   * the ears are theirs.
+   */
+  private listen(dt: number, busy: number) {
+    const N = this.nerves, E = this.cat.motor.earTo;
+    if (N.awake < 0.6 || !this.alive || this.isHidden) { this.listenT = 0; return; }
+    if (this.listenT <= 0) {
+      if ((this.listenIn -= dt) > 0) return;
+      this.listenIn = 4 + Math.random() * 9;
+      const rain = this.ctx.rain > 0.4 && this.windowAt && Math.random() < 0.4;
+      if (rain) this.listenAt.copy(this.windowAt!);
+      else if (this.music && this.radioAt) this.listenAt.copy(this.radioAt);
+      else return;
+      this.listenT = 1.2 + Math.random() * 1.8;
+    }
+    this.listenT -= dt;
+    // (the ear on that side round to it, the more the further round it is; a little the other)
+    const to = this.headLocal.copy(this.listenAt).sub(this.eyeW).applyQuaternion(this.headInv.copy(this.headQ).invert());
+    const az = Math.atan2(to.x, to.z), k = (1 - busy) * Math.min(1, this.listenT / 0.3, 1);
+    const near = Math.min(1.3, Math.abs(az) * 0.9);
+    if (az > 0) E.L += k * (near - E.L); else E.R += k * (near - E.R);
   }
   private readonly headLocal = new THREE.Vector3();
+  private readonly headInv = new THREE.Quaternion();
   private dotWas = false;
   /** where it last saw each of its things lying still (the ball of wool, the toy mouse, the
    *  feathers), and how curious it is about one found somewhere else (fading over a minute or

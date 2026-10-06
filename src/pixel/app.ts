@@ -1205,6 +1205,7 @@ export class PixelApp {
     // (where the laser pointer lies, for its eyes to go to, when it is lying there)
     const P = this.room.pointer;
     this.avatar.pointerAt = P.visible ? P.getWorldPosition(this.pointerW) : null;
+    this.avatar.radioAt ??= this.room.radio.getWorldPosition(new THREE.Vector3());
   }
 
   /** is the feather wand under a screen point: its feathers (a finger is wider than they are), or
