@@ -137,6 +137,11 @@ export class Motor {
   ghost = false;
   /** 0 .. 1: quick off the mark and sharp in the turns (the zoomies), rather than an easy walk */
   zoom = 0;
+  /** 0 .. 1: out of breath, after a run (the harder and the longer, the more; got back over half a
+   *  minute or so): it breathes faster and deeper, and after a really hard one, still at last, it
+   *  pants a moment, the mouth open and the tip of the tongue showing */
+  exertion = 0;
+  private pantT = 0;
 
   // gaze (world point) and how much the head follows it
   readonly look = new THREE.Vector3(0, 0.2, 1);
@@ -677,6 +682,18 @@ export class Motor {
     p.jaw = clamp(p.jaw + f.jaw);
     p.headPitch += f.headPitch;
     p.breath = clamp(p.breath + f.breath);
+    {
+      const work = clamp(((this.speed - 0.3) / 0.8) * (1 + 0.5 * this.zoom));
+      this.exertion += (work - this.exertion) * kk(work > this.exertion ? 0.25 : 0.04);
+      p.breath = clamp(p.breath + 0.5 * this.exertion);
+      const pant = clamp((this.exertion - 0.7) / 0.2) * (1 - clamp(this.speed / 0.15)) * (1 - clamp(p.tailSag));
+      this.pantT += dt * 2.6;
+      if (pant > 0.01) {
+        p.jaw = Math.max(p.jaw, pant * (0.11 + 0.04 * Math.sin(this.pantT * Math.PI * 2)));
+        p.tongue = Math.max(p.tongue, 0.3 * pant);
+        p.tongueUp = Math.min(p.tongueUp, -0.1 * pant);
+      }
+    }
     if (this.hissT >= 0) {
       this.hissT += dt;
       const ht = this.hissT;

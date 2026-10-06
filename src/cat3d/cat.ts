@@ -479,7 +479,8 @@ export class Cat3D {
     // (a sigh: one breath slower and deeper than the rest, in, and a long way out)
     const sg = this.sighT >= 0 ? Math.sin(Math.PI * Math.min(1, this.sighT / 3.2)) : 0;
     if (this.sighT >= 0 && (this.sighT += dt) > 3.2) this.sighT = -1;
-    this.breathT += dt * (0.55 + 0.25 * (1 - p.breath)) * Math.max(0.3, motor.feel.breathRate) * (1 - 0.55 * sg);
+    // (out of breath after a run: quicker, as well as deeper)
+    this.breathT += dt * (0.55 + 0.25 * (1 - p.breath)) * Math.max(0.3, motor.feel.breathRate) * (1 + 1.8 * motor.exertion) * (1 - 0.55 * sg);
     this.shared.uBreath.value = 0.0022 * p.breath * (1 + 1.6 * sg) * Math.sin(this.breathT * Math.PI * 2);
     this.shared.uPuff.value = p.puff;
     // the skin of its back twitching, overstimulated: a wave back along it every second or so
