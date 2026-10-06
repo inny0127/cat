@@ -155,7 +155,8 @@ export interface ScratchPost {
  *  it is (up: up there, or in the air on the way up or down) */
 export interface Perching extends Act {
   readonly up: boolean;
-  leave(): void;
+  /** asked down (for a game: where the game is, to go for it from up there if it can) */
+  leave(at?: () => THREE.Vector3 | null): void;
 }
 export const isPerching = (a: Act | null): a is Perching => !!a && typeof (a as Perching).leave === 'function' && 'up' in a;
 
@@ -3083,7 +3084,7 @@ const smooth = (x: number) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * x * (10 + x * (
  */
 export class Box implements Act {
   readonly name = 'box';
-  phase: 'go' | 'gather' | 'in' | 'settle' | 'sit' | 'turn' | 'out' | 'done' = 'go';
+  phase: 'go' | 'gather' | 'in' | 'settle' | 'sit' | 'turn' | 'out' | 'duck' | 'spring' | 'done' = 'go';
   /** how deep asleep the cat is (set by the avatar): asleep in here, it stays and dozes */
   nap = 0;
   private t = 0;
@@ -3092,15 +3093,26 @@ export class Box implements Act {
   private look = Math.random() * 10;
   private readonly from = new THREE.Vector3();
   constructor(private readonly spot: SillSpot) {}
+  /** a game going on out there (where it is), and where it springs out to at it */
+  private prey: (() => THREE.Vector3 | null) | null = null;
+  private readonly to = new THREE.Vector3();
+  private readonly preyAt = new THREE.Vector3();
 
-  /** asked out: out as soon as it can be */
-  leave() {
+  /** asked out: out as soon as it can be. For a game, sat down in it: an ambush, down out of
+   *  sight with the eyes over the rim on it, and out over the side at it */
+  leave(at?: () => THREE.Vector3 | null) {
     this.leaving = true;
+    if (at) this.prey = at;
   }
 
   /** in the box or hopping in or out of it: it cannot simply be stopped */
   get up() {
-    return this.phase === 'in' || this.phase === 'settle' || this.phase === 'sit' || this.phase === 'turn' || this.phase === 'out';
+    return this.phase === 'in' || this.phase === 'settle' || this.phase === 'sit' || this.phase === 'turn' || this.phase === 'out'
+      || this.phase === 'duck' || this.phase === 'spring';
+  }
+  /** its eyes on the game over the rim, getting ready: they are its own */
+  get ownGaze() {
+    return this.phase === 'duck';
   }
 
   private next(phase: Box['phase'], dur = 0) {
@@ -3160,7 +3172,46 @@ export class Box implements Act {
         const deep = Math.min(1, Math.max(0, (this.nap - 0.3) / 0.5));
         const glance = (1 - deep) * (0.4 * Math.sin(this.look * 0.4) + 0.2 * Math.sin(this.look * 1.1));
         m.layer = { pose: { neckYaw: glance, headYaw: 0.5 * glance, neckPitch: -0.45 * deep, headPitch: -0.2 * deep, earFwd: 0.5 * (1 - deep) }, w: Math.min(1, this.t / 1.2) };
+        // (a game out there: down after it, out of sight, unless it is too sleepy for that)
+        const P = this.prey?.();
+        if (this.leaving && P && deep < 0.3) { this.preyAt.copy(P); this.next('duck', rand(0.8, 1.8)); return true; }
         if ((this.t > this.dur && this.nap <= 0.3) || this.leaving) { m.layer = null; this.next('turn', 0.6); }
+        return true;
+      }
+      case 'duck': {
+        // down in it, only the ears and the eyes over the rim, wide on it; at the end of it the
+        // rump shifts, a little wiggle, and out it goes
+        const P = this.prey?.();
+        if (P) this.preyAt.lerp(P, Math.min(1, dt * 8));
+        else { m.layer = null; this.prey = null; this.next('turn', 0.3); return true; }
+        m.setPosture('loaf');
+        m.lookAt(this.preyAt, 1);
+        const w = Math.min(1, this.t / 0.3), wig = this.t > this.dur - 0.45 ? Math.sin(this.t * 26) : 0;
+        m.layer = {
+          pose: { neckPitch: -0.6, headPitch: 0.45, hipY: 0.1, hipYaw: 0.08 * wig, earFwd: 0.9, earOut: 0.15, pupil: 1, eyeOpen: 1, whisker: 0.7, tailCurl: 0.8 * Math.sin(this.t * 9) },
+          w,
+        };
+        if (this.t > this.dur) {
+          // over the side the way it is, as far as clears the box, where there is floor for it
+          const dx = this.preyAt.x - S.seat.x, dz = this.preyAt.z - S.seat.z, d = Math.hypot(dx, dz) || 1;
+          const out = Math.max(0.3, Math.hypot(S.land.x - S.seat.x, S.land.z - S.seat.z));
+          this.to.set(S.seat.x + (dx / d) * out, 0, S.seat.z + (dz / d) * out);
+          c.keepClear(this.to, 0.08);
+          if (Math.hypot(this.to.x - S.seat.x, this.to.z - S.seat.z) < 0.25) this.to.copy(S.land);
+          this.from.copy(m.pos);
+          m.lookAt(null);
+          c.sound('scrabble', 0.1);
+          this.next('spring', 0.36);
+        }
+        return true;
+      }
+      case 'spring': {
+        // out over the side at it, turning to it in the air
+        const u = Math.min(1, this.t / this.dur);
+        const face = Math.atan2(this.to.x - this.from.x, this.to.z - this.from.z);
+        m.yaw = wrapA(m.yaw + wrapA(face - m.yaw) * Math.min(1, dt * 14));
+        this.hop(c, this.to, u, 0.006 * (1 - u));
+        if (u >= 1) { c.hold(null); m.layer = null; c.sound('thump', 0.12); this.next('done'); }
         return true;
       }
       case 'turn': {

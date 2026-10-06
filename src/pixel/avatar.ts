@@ -1296,7 +1296,7 @@ export class PixelAvatar implements Avatar {
     if (this.perched) {
       if (!this.afterPerch) {
         this.afterPerch = () => { this.chaseNow(); };
-        (this.act as Perching).leave();
+        (this.act as Perching).leave(() => this.laser?.p ?? null);
       }
       return false;
     }
@@ -1313,7 +1313,7 @@ export class PixelAvatar implements Avatar {
     if (this.perched) {
       if (!this.afterPerch) {
         this.afterPerch = () => { this.teaseNow(); };
-        (this.act as Perching).leave();
+        (this.act as Perching).leave(() => (this.wand?.held ? this.wand.p : null));
       }
       return false;
     }
@@ -1324,7 +1324,16 @@ export class PixelAvatar implements Avatar {
 
   /** something to chase: awake and its own master, it drops what it was doing and plays */
   playNow() {
-    if (!this.alive || this.sleep > 0.3 || this.errand || this.trip || this.hidden || this.perched || this.playRest > 0) return false;
+    if (!this.alive || this.sleep > 0.3 || this.errand || this.trip || this.hidden || this.playRest > 0) return false;
+    // (in the box, the ball of wool rolled about out there: an ambush, and then the game; up on
+    // the sill or the post, it only watches)
+    if (this.perched) {
+      if (this.act instanceof Box && !this.afterPerch && (this.mode === 'rest' || this.mode === 'alert') && this.mood.sleepy <= 0.6) {
+        this.afterPerch = () => { this.playNow(); };
+        this.act.leave(() => (this.lure ? this.toys?.yarn() ?? null : null));
+      }
+      return false;
+    }
     // (not while it is after the red dot, or the feathers, or getting over a fright)
     if ((this.act instanceof Chase && this.laser) || (this.act instanceof Tease && this.wand?.held) || this.act instanceof Startle) return false;
     if (this.mode !== 'rest' && this.mode !== 'alert') return false;
