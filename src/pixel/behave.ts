@@ -348,6 +348,16 @@ function blendLayers(a: PoseLayer, b: PoseLayer, k: number): PoseLayer {
   return out as PoseLayer;
 }
 
+/** the nose up into the air a moment, working in little runs of sniffs, the whiskers forward and
+ *  the ears up: something on the air, smelt and thought about */
+export const scent = () => {
+  const d = rand(1.6, 2.8), look = rand(-0.35, 0.35);
+  return new Layered('scent', d, 0.45, (t) => {
+    const runs = Math.max(0, Math.sin(t * 2.6));
+    return { headPitch: 0.22 + 0.035 * Math.sin(t * 52) * runs * runs, neckPitch: 0.12, headYaw: look, whisker: 0.45, earFwd: 0.3, eyeOpen: 0.85 };
+  });
+};
+
 /** a huff: asked you for something and no one came, the head drops a moment with a sigh, the ears
  *  go out a little, and it is over it */
 export const huff = () => new Layered('huff', 1.8, 0.45, (t) => {
@@ -4138,6 +4148,7 @@ export function idleOptions(c: Ctx, atHome: boolean, posture: PoseName): Option[
     }
     add('stretch', 0.35, () => stretchSideOn(c, posture === 'sit' ? 'sit' : 'loaf'));
     add('sneeze', 0.1, () => sneeze(c));
+    add('scent', 0.3 * (0.6 + m.arousal) * (1 - 0.5 * m.sleepy) * (1 + 0.4 * T.curious), scent);
     add('scratch', 0.22, scratchEar);
     add('stare', 0.25 * (0.5 + m.arousal) * (1 - m.sleepy), () => new Stare(c));
     // (the hour you mostly stroke it: over to you, and as near you as it can get, more)
