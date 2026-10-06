@@ -1632,6 +1632,7 @@ export class PixelApp {
     if (doing === 'rub' && phase === 'rub') now.add('bunt');
     if (doing === 'stare') now.add('stare');
     if (doing === 'zoomies') now.add('zoomies');
+    if (doing === 'look with you' && m.posture === 'sit') now.add('seewith');
     if (doing === 'snub') now.add('snub');
     if (doing === 'trap') now.add('trap');
     if (Math.abs(m.tilt) > 0.25) now.add('tilt');

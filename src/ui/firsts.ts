@@ -21,6 +21,7 @@ export const FIRSTS: Record<string, string> = {
   zoomies: '우다다! 남는 힘을 한꺼번에 쏟아내는 중이에요',
   blep: '혀끝이 쏙 나왔어요. 넣는 걸 깜빡했나 봐요',
   loaf: '식빵을 굽고 있어요. 앞발을 쏙 넣고 느긋하게 쉬는 중이에요',
+  seewith: '당신이 보는 곳이 궁금했나 봐요. 따라와서 같이 봐요',
 };
 
 /** the line at the foot of the screen, as far as the first words need it */
