@@ -529,7 +529,7 @@ export class PixelAvatar implements Avatar {
     // on its back and the dot on the floor beside it are one dot to it, not a thing leaping about)
     if (L) T.push({ id: 'dot', kind: 'dot', p: L.p, felt: !!L.self });
     if (this.toys) T.push({ id: 'yarn', kind: 'toy', p: this.toys.yarn() });
-    if (this.wand?.held) T.push({ id: 'wand', kind: 'toy', p: this.wand.p });
+    if (this.wand) T.push({ id: 'wand', kind: 'toy', p: this.wand.p });
     if (this.glint) T.push({ id: 'glint', kind: 'glint', p: this.glint });
     if (this.visitor) T.push({ id: 'bird', kind: 'bird', p: this.visitor });
     const bug = this.outside?.bug?.();
@@ -826,6 +826,10 @@ export class PixelAvatar implements Avatar {
       viewer: () => this.viewer(),
       laser: () => this.seenLaser(),
       gaze: (id) => (this.nerves.attending?.id === id ? this.nerves.gazePoint : null),
+      seen: (id) => {
+        const u = this.nerves.unit(id);
+        return u && u.conf > 0.25 ? u.belief : null;
+      },
       keepClear: (p, r) => this.ground?.keepClear(p, r) ?? p,
       detour: (from, to, r) => this.ground?.detour(from, to, r) ?? null,
       books: () => this.ground?.books ?? new THREE.Vector3(9, 0, 9),

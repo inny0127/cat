@@ -75,6 +75,23 @@ export class Tease implements Act {
   private best = 1e9;
   private stuck = 0;
 
+  /** where it believes the feathers are, and how fast they seem to go */
+  private readonly seenP = new THREE.Vector3(NaN, 0, 0);
+  private readonly seenV = new THREE.Vector3();
+  private seenAt(c: Ctx, L: Lure) {
+    // (lost sight of: where it last had them, till its eyes find them again)
+    const p = L.pinned ? L.p : c.seen?.('wand') ?? (Number.isNaN(this.seenP.x) || !c.seen ? L.p : this.seenP);
+    if (!Number.isNaN(this.seenP.x) && this.dtLast > 0) {
+      const v = this.tmpV.copy(p).sub(this.seenP).divideScalar(this.dtLast);
+      if (v.length() > 6) v.setLength(6);
+      this.seenV.lerp(v, Math.min(1, this.dtLast * 12));
+    }
+    this.seenP.copy(p);
+    return p;
+  }
+  private dtLast = 0;
+  private readonly tmpV = new THREE.Vector3();
+
   /** a point in front of the cat, in its own frame (x to its left, y up, z ahead) */
   private local(c: Ctx, p: THREE.Vector3) {
     const m = c.m, dx = p.x - m.pos.x, dz = p.z - m.pos.z;
@@ -91,16 +108,21 @@ export class Tease implements Act {
     }
     const L = c.lure();
     if (!L) return false;
+    this.dtLast = dt;
     this.t += dt;
     this.total += dt;
     this.calm = Math.max(0, this.calm - dt);
-    const sp = L.v.length();
+    // (where it believes the feathers are, seen a moment late and lost track of when whipped away
+    // too fast, is what it watches, goes after and aims at; under its paws it feels them. Whether a
+    // paw meets them is where they really are)
+    const P = this.seenAt(c, L);
+    const sp = this.seenV.length();
     this.ls += (sp - this.ls) * Math.min(1, dt * 8);
     this.still = sp > 0.1 || L.pinned ? 0 : this.still + dt;
     this.fwd.set(Math.sin(m.yaw), 0, Math.cos(m.yaw));
-    const dx = L.p.x - m.pos.x, dz = L.p.z - m.pos.z, dist = Math.hypot(dx, dz);
-    const face = Math.atan2(dx, dz), h = L.p.y;
-    if (this.phase !== 'sit') m.lookAt(L.p, 1);
+    const dx = P.x - m.pos.x, dz = P.z - m.pos.z, dist = Math.hypot(dx, dz);
+    const face = Math.atan2(dx, dz), h = P.y;
+    if (this.phase !== 'sit') m.lookAt((!L.pinned && c.gaze('wand')) || P, 1);
     const keen: PoseLayer = { earFwd: 0.95, pupil: 1, eyeOpen: 1, whisker: 0.9, tailCurl: 0.7 * Math.sin(this.total * 9) };
     // had enough (not in the middle of a spring): off to sit and wash
     if ((this.tired || (!L.held && !this.alone && this.still > 4)) && (this.phase === 'watch' || this.phase === 'go')) {
@@ -123,7 +145,7 @@ export class Tease implements Act {
           w: Math.min(1, this.t / 0.25),
         };
         if (this.t < 0.25 || this.calm > 0 || m.goal) return true;
-        const L2 = this.local(c, L.p);
+        const L2 = this.local(c, P);
         if (h < 0.09) {
           // on the floor: after it, and pounced on
           if (dist > 0.42) { if (this.ls > 0.12 || this.still < 2 || this.alone) this.next('go'); }
@@ -146,9 +168,9 @@ export class Tease implements Act {
         if (dist < this.best - 0.02) { this.best = dist; this.stuck = 0; }
         else this.stuck += dt;
         if ((dist < short + 0.08 && !m.goal) || this.stuck > 1.6) { m.stop(); m.zoom = 0; this.next('watch'); return true; }
-        if (!m.goal || Math.hypot(L.p.x - this.aim.x, L.p.z - this.aim.z) > 0.06) {
-          this.aim.copy(L.p);
-          const stop = new THREE.Vector3(L.p.x - (dx / (dist || 1)) * short, 0, L.p.z - (dz / (dist || 1)) * short);
+        if (!m.goal || Math.hypot(P.x - this.aim.x, P.z - this.aim.z) > 0.06) {
+          this.aim.copy(P);
+          const stop = new THREE.Vector3(P.x - (dx / (dist || 1)) * short, 0, P.z - (dz / (dist || 1)) * short);
           c.keepClear(stop, 0.13);
           const fast = dist > 0.7 || this.ls > 0.6;
           m.zoom = fast ? 0.6 : 0.2;
@@ -267,7 +289,7 @@ export class Tease implements Act {
       case 'swat': {
         // up on the haunches, a forepaw flung up and out at them, and down again
         const u = Math.min(1, this.t / this.dur), up = Math.sin(Math.PI * u);
-        const L2 = this.local(c, L.p);
+        const L2 = this.local(c, P);
         const reach = clamp(h, 0.06, 0.3), out = clamp(L2.z, 0.1, 0.27), across = clamp(Math.abs(L2.x), 0.01, 0.09);
         const paw = { planted: 0, frame: 0, x: 0.02 + (across - 0.02) * up, y: 0.05 + (reach - 0.05) * up, z: 0.08 + (out - 0.08) * up, flex: 0.5 * up };
         m.setPosture('sit');
@@ -289,7 +311,7 @@ export class Tease implements Act {
       }
       case 'rear': {
         // up on the hind legs, both forepaws up at them, clapping, one and then both
-        const L2 = this.local(c, L.p);
+        const L2 = this.local(c, P);
         if (dist > 0.36 || h > 0.55 || h < 0.06) { m.layer = null; this.next('watch'); return true; }
         m.yaw = wrapA(m.yaw + clamp(wrapA(face - m.yaw), -2, 2) * Math.min(1, dt * 5));
         m.stop();

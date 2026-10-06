@@ -94,6 +94,10 @@ export interface Ctx {
   laser: () => LaserDot | null;
   /** where its eyes are, while they are on this thing (nerves.ts): in jumps, a little behind it */
   gaze: (id: string) => THREE.Vector3 | null;
+  /** where it believes a thing is (nerves.ts: seen a moment late, carried on a little when lost
+   *  sight of), if it has a fair idea; what it goes for and aims at (a paw lands where the thing
+   *  really is, or misses) */
+  seen?: (id: string) => THREE.Vector3 | null;
   /** a point on the floor moved out of the room's things and in from the walls, for the middle of
    *  a cat r across (changed in place); and a point to go by on the way from one point to another,
    *  round whatever is in the way (null: the way is clear) */
@@ -2575,14 +2579,19 @@ export class Play implements Act {
 
   update(dt: number, c: Ctx) {
     const m = c.m;
-    const y = c.yarn();
-    if (!y) return false;
+    const Y = c.yarn();
+    if (!Y) return false;
     this.t += dt;
     this.total += dt;
-    // the ball's way and speed (it may be on a finger)
+    // (where it believes the ball is, seen a moment late and lost track of when flicked away too
+    // fast, is what it watches, goes after and aims at; under its paws it feels it. Whether a paw
+    // meets it is where it really is)
+    const y = c.toyPinned() || !c.seen ? Y : c.seen('yarn') ?? (Number.isNaN(this.was.x) ? Y : this.was);
+    const dT = Math.hypot(Y.x - m.pos.x, Y.z - m.pos.z);
+    // the ball's way and speed as it sees it (it may be on a finger)
     if (Number.isNaN(this.was.x)) this.was.copy(y);
     const inst = Math.hypot(y.x - this.was.x, y.z - this.was.z) / Math.max(dt, 1e-3);
-    this.ys += (inst - this.ys) * Math.min(1, dt * 8);
+    this.ys += (Math.min(inst, 6) - this.ys) * Math.min(1, dt * 8);
     this.was.copy(y);
     const held = c.toyHeld();
     this.sinceHand = held ? 0 : this.sinceHand + dt;
@@ -2600,7 +2609,7 @@ export class Play implements Act {
     this.fwd.set(Math.sin(m.yaw), 0, Math.cos(m.yaw));
     this.left.set(Math.cos(m.yaw), 0, -Math.sin(m.yaw));
     // eyes and head on the ball all the while
-    if (this.phase !== 'sit') m.lookAt(y, 1);
+    if (this.phase !== 'sit') m.lookAt((!c.toyPinned() && c.gaze('yarn')) || y, 1);
     const watch: PoseLayer = { earFwd: 0.9, pupil: 0.95, eyeOpen: 1, whisker: 0.8 };
     // enough is enough: off to sit and wash (not in the middle of a spring)
     if (this.tired && (this.phase === 'go' || this.phase === 'stalk')) {
@@ -2671,7 +2680,7 @@ export class Play implements Act {
           pose: { ...watch, hipY: 0.15 + 0.06 * arc, chestPitch: 0.3 * arc, neckPitch: -0.15, headPitch: 0.05, LF: fore, RF: fore, LH: hind, RH: hind, tailLift: 0.3 * arc - 0.2 },
           w: 1,
         };
-        if (!this.hits.has(-1) && u > 0.6 && dist < 0.21) {
+        if (!this.hits.has(-1) && u > 0.6 && dT < 0.21) {
           this.hits.add(-1);
           if (held) {
             // got it: down under both paws
@@ -2726,11 +2735,11 @@ export class Play implements Act {
         const paw = { planted: 0, frame: 0, x: across, y: 0.012 + 0.07 * lift, z: 0.125 + 0.1 * lift, flex: 0.35 * lift };
         m.setPosture('crouch');
         m.layer = { pose: { ...watch, hipY: 0.145, neckPitch: -0.35, headPitch: 0.05, [right ? 'RF' : 'LF']: paw, tailSide: 0.3 * Math.sin(this.t * 8) }, w: 1 };
-        if (!this.hits.has(k) && u > 0.55 && dist < 0.24) {
+        if (!this.hits.has(k) && u > 0.55 && dT < 0.24) {
           this.hits.add(k);
           // on a finger, a claw snags it a moment; loose, the right paw sweeps it off to the
           // cat's left, the left paw to its right
-          if (held) c.pin(rand(0.2, 0.35), y.clone());
+          if (held) c.pin(rand(0.2, 0.35), Y.clone());
           else c.kick(this.fwd.clone().multiplyScalar(0.5).addScaledVector(this.left, right ? 0.85 : -0.85), rand(0.3, 0.55));
         }
         return true;
@@ -3748,7 +3757,7 @@ export function idleOptions(c: Ctx, atHome: boolean, posture: PoseName): Option[
     if (c.yarn()) add('play', 0.6 * (0.4 + m.arousal) * (1 - m.sleepy) * (c.mode === 'rest' ? 1 : 0.4), () => new Play(), 'yarn');
     // the feathers of the wand lying on the floor: now and then a game with them on its own
     const lure = c.lure();
-    if (lure && !lure.held && lure.p.y < 0.05) add('tease', 0.3 * (0.4 + m.arousal) * (1 - m.sleepy), () => new Tease(true), undefined, lure.p.clone());
+    if (lure && !lure.held && lure.p.y < 0.05) add('tease', 0.3 * (0.4 + m.arousal) * (1 - m.sleepy), () => new Tease(true), 'wand');
     // fond of you, now and then it brings you its toy mouse (lying somewhere off from the glass)
     const toy = c.mouse();
     // (the toy mouse in under the radiator: a go at getting it out)
