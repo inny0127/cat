@@ -111,6 +111,8 @@ export interface BodyLook {
   hunch: number;
   /** on its feet, made big: the back arched high on stiff legs (afraid and ready to fight) */
   arch: number;
+  /** on its feet and cross: stiff-legged, the rump up a little, the head down and level, staring */
+  stiff: number;
   /** how deep the breathing is */
   breath: number;
   /** the tail's sway: added amplitude, and how many times faster */
@@ -127,7 +129,7 @@ export interface BodyLook {
  * easy when content, swivelled back and out when annoyed, flattened sideways in fear and pinned
  * back for the hiss; whiskers forward when keen, pulled back when afraid or cross; on its feet and
  * afraid, low on bent legs, slinking; ill, hunched up, the head drawn in; afraid and
- * ready to fight, the back arched high on stiff legs; the tail up with
+ * ready to fight, the back arched high on stiff legs; cross, stiff-legged, the head down, staring; the tail up with
  * a hook for a friend, low and tucked in fear, bottle-brush for the hiss, twitching when annoyed
  * and lashing in anger, low and limp when ill; fur standing on end, the mouth open to hiss; quick
  * shallow breaths in fear, slow deep ones at ease.
@@ -155,6 +157,7 @@ export function bodyFor(m: Mood): BodyLook {
     low: 0.9 * scared,
     hunch: 0.9 * m.sick,
     arch: Math.min(1, 1.6 * threat),
+    stiff: Math.min(1, 1.3 * cross),
     breath: 0.2 * m.pleasure - 0.15 * m.fear + 0.15 * m.sleepy,
     tailWave: 0.35 * cross + 0.45 * cross * cross + 0.25 * m.arousal - 0.08 * m.sleepy - 0.06 * m.pleasure,
     tailWaveSpeed: 1 + 1.6 * cross + 0.8 * m.arousal - 0.4 * m.sleepy - 0.3 * m.pleasure,

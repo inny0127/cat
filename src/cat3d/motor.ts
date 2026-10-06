@@ -830,6 +830,13 @@ export class Motor {
       p.neckPitch += 0.2 * arch;
       p.headPitch -= 0.04 * arch;
       p.pastern -= 0.1 * arch;
+      // (cross, on its feet: stiff in the legs, the rump a little up, the head down to the line of
+      // the back and the face level, a hard look)
+      const stiff = f.stiff * clamp(feet) * (1 - own) * (1 - f.arch);
+      p.hipY += 0.012 * stiff;
+      p.pastern -= 0.06 * stiff;
+      p.neckPitch -= 0.2 * stiff;
+      p.headPitch += 0.12 * stiff;
     }
     p.breath = clamp(p.breath + f.breath);
     {
