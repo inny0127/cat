@@ -574,6 +574,10 @@ export class PixelAvatar implements Avatar {
     N.update(dt, this.eyeW, this.headYaw, this.headPitch, T);
     // (a hand come down on it out of nowhere: felt, and its eyes go round to it)
     if (this.handCue > 0 && N.unit('hand')) { N.cue('hand', this.handCue); this.handCue = 0; }
+    // (a big shift of the eyes, as often as not, a blink with it, as eyes do when they jump a long
+    // way; intent on prey, its eyes hardly blink)
+    m.focus = Math.min(1, 1.2 * N.hunt);
+    if (N.jump > 0.7 && N.hunt < 0.5 && N.awake > 0.6 && Math.random() < 0.4) m.blinkNow();
     // (the red dot come on: the click of the pointer, and the room's light changed; it looks
     // round for it wherever it is)
     if (L && !this.dotWas) N.cue('dot', 1.4);

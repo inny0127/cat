@@ -112,6 +112,14 @@ describe('what the cat sees, and what it makes of it', () => {
     expect(at).toBeLessThan(0.35);
   });
 
+  it('a long jump of the eyes is told (for the blink that goes with it); a little one is not', () => {
+    let big = 0, small = 0;
+    watch((t) => [{ id: 'dot', kind: 'dot', p: t < 1 ? V(-0.4, 0, 0.9) : V(0.5, 0, 0.6) }], 1.6, () => 0, (n, t) => { if (t > 1) big = Math.max(big, n.jump); });
+    watch((t) => [{ id: 'dot', kind: 'dot', p: t < 1 ? V(0, 0, 0.9) : V(0.2, 0, 0.9) }], 1.6, () => 0, (n, t) => { if (t > 1) small = Math.max(small, n.jump); });
+    expect(big).toBeGreaterThan(0.7);
+    expect(small).toBeLessThan(0.35);
+  });
+
   it('a dot that darts about builds a will to hunt it, which ebbs slowly when it is gone', () => {
     let peak = 0;
     const n = watch((t) => [{ id: 'dot', kind: 'dot', p: V(0.3 * Math.sin(t * 3), 0, 0.8 + 0.2 * Math.cos(t * 2)) }], 2, () => 0, (n) => { peak = Math.max(peak, n.hunt); });

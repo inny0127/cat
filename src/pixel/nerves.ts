@@ -219,6 +219,10 @@ export class Nerves {
   /** a jump of the eyes under way (s left), and the time since the last */
   private sacc = 0;
   private since = 1;
+  /** how far the eyes went in a jump, if one ended this step (rad; 0: none); and so far, in the
+   *  one under way */
+  jump = 0;
+  private jumped = 0;
   /** an act's interest in a thing: added to what drives its neuron (top-down: after the dot, the
    *  dot is what it watches) */
   readonly bias = new Map<string, number>();
@@ -360,8 +364,9 @@ export class Nerves {
    */
   private aim(dt: number) {
     this.since += dt;
+    this.jump = 0;
     const A = this.attending;
-    if (!A) { this.sacc = 0; return; }
+    if (!A) { this.sacc = 0; this.jumped = 0; return; }
     // (unsure where it is but seeing it go, the eyes go after the movement itself)
     const to = this.t.c.copy(A.conf < 0.4 && A.vis > 0.15 ? A.seen : A.belief).sub(this.eye);
     const dist = Math.max(0.05, to.length());
@@ -369,12 +374,13 @@ export class Nerves {
     const err = this.gaze.angleTo(to);
     if (this.sacc > 0) {
       this.sacc -= dt;
-      this.turn(to, err * (1 - Math.exp(-dt / 0.025)));
+      this.jumped += this.turn(to, err * (1 - Math.exp(-dt / 0.025)));
+      if (this.sacc <= 0) { this.jump = this.jumped; this.jumped = 0; }
     } else if (err > 0.17 && this.since > 0.14) {
       // a jump
       this.sacc = 0.08;
       this.since = 0;
-      this.turn(to, err * (1 - Math.exp(-dt / 0.025)));
+      this.jumped = this.turn(to, err * (1 - Math.exp(-dt / 0.025)));
     } else {
       // following: about as fast as it goes, a little behind, and never very fast
       this.turn(to, Math.min(err, (0.85 * A.sweep + 2.2 * err) * dt, 1.6 * dt));
@@ -383,12 +389,14 @@ export class Nerves {
     this.gazePoint.copy(this.eye).addScaledVector(this.gaze, Math.max(0.2, dist));
   }
 
+  /** the eyes turned toward a way, so far (rad): how far they went */
   private turn(to: THREE.Vector3, by: number) {
-    if (by <= 1e-6) return;
+    if (by <= 1e-6) return 0;
     const axis = this.t.b.crossVectors(this.gaze, to);
     const s = axis.length();
-    if (s < 1e-6) { this.gaze.copy(to); return; }
+    if (s < 1e-6) { const a = this.gaze.angleTo(to); this.gaze.copy(to); return a; }
     this.gaze.applyAxisAngle(axis.divideScalar(s), by).normalize();
+    return by;
   }
 
   /**

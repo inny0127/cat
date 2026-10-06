@@ -162,6 +162,8 @@ export class Motor {
 
   // face
   blink = 0;
+  /** 0 .. 1: intent on something (a hunt): its eyes hardly blink */
+  focus = 0;
   private blinkT = 2;
   private blinkPhase = -1;
   private blinkSlow = false;
@@ -892,8 +894,8 @@ export class Motor {
         this.slowBlinkIn = want.slowBlinkEvery * (0.7 + 0.6 * Math.random());
       }
     } else this.slowBlinkIn = Math.min(this.slowBlinkIn, 5);
-    // blinking
-    this.blinkT -= dt;
+    // blinking (hardly at all, intent on something)
+    this.blinkT -= dt * (1 - 0.8 * clamp(this.focus));
     if (this.blinkPhase < 0 && this.blinkT < 0) {
       this.blinkPhase = 0;
       this.blinkSlow = false;
