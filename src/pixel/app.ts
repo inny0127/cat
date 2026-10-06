@@ -1690,6 +1690,11 @@ export class PixelApp {
     this.cat.motor.beat = this.avatar.groove > 0.01 ? this.avatar.groove * this.audio.beat() : 0;
     this.cat.update(dt);
     // (its teeth on your finger, gently: felt, a little firmer than a lick)
+    // (its tail slapped down on the bed or the floor, cross: a soft thump)
+    if (this.cat.motor.tailThumped) {
+      this.cat.motor.tailThumped = false;
+      if (!this.avatar.hidden) this.audio.play('thump', { gain: 0.035, rate: 1.5, pan: this.catPan() });
+    }
     if (this.cat.motor.nibbled) {
       this.cat.motor.nibbled = false;
       this.haptic.tapSoon('medium');

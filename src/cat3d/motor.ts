@@ -67,6 +67,8 @@ function route(from: PoseName, to: PoseName): PoseName[] {
   return [to];
 }
 
+const smooth01 = (x: number) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x));
+
 /** the numbers of a pose that are eased (all but the flags), and of each paw */
 const EASE_KEYS = Object.keys(POSES.stand).filter((k) => typeof (POSES.stand as unknown as Record<string, unknown>)[k] === 'number'
   // (not the mouth: a chatter or a meow is quicker than this would let it be)
@@ -433,6 +435,10 @@ export class Motor {
   }
   /** set as the teeth close on the finger (for whoever wants to feel it, to clear) */
   nibbled = false;
+  /** its tail brought down on the floor with a slap this frame (for whoever plays the sound) */
+  tailThumped = false;
+  private thumpT = -1;
+  private thumpIn = 1;
   /** set as each lick lands (for whoever wants to feel it or hear it, to clear) */
   lickLanded = false;
   /** set as each kick of the hind feet lands on a hand (for whoever wants to feel it, to clear) */
@@ -745,6 +751,29 @@ export class Motor {
     p.tailHook += f.tailHook * up;
     p.tailLift = Math.min(1.45, p.tailLift);
     p.tailSag = clamp(p.tailSag + f.tailSag);
+    // lying down and cross, the tail lifted off the floor and brought down with a slap, again and
+    // again, the crosser the oftener
+    {
+      const md = this.mood, cross = clamp(1.6 * md.irritation * (1 - md.fear) - 0.15);
+      // (lying on its side, the tail out along the floor behind it, up is the way its upper flank
+      // faces; lying on its chest the tail is wrapped round it, and only its tip goes)
+      let onSide = 0;
+      for (const [name, wgt] of this.postureWeights()) if (name === 'side') onSide += wgt;
+      const lying = clamp(onSide);
+      if (this.thumpT < 0 && cross * lying > 0.05 && (this.thumpIn -= dt) <= 0) {
+        this.thumpT = 0;
+        this.thumpIn = 0.8 + Math.random() * 1.4 * (1.3 - cross);
+      }
+      if (this.thumpT >= 0) {
+        const T = (this.thumpT += dt), was = T - dt;
+        const k = Math.min(1, 1.5 * cross) * lying;
+        const up = T < 0.34 ? smooth01(T / 0.34) : 1 - smooth01((T - 0.34) / 0.07);
+        p.tailSag *= 1 - 0.95 * up * k;
+        p.tailSide += 0.95 * up * k * Math.sign(p.hipRoll || 1);
+        if (was < 0.4 && T >= 0.4 && k > 0.2) this.tailThumped = true;
+        if (T > 0.52) this.thumpT = -1;
+      }
+    }
     p.puff = clamp(p.puff + f.puff);
     p.jaw = clamp(p.jaw + f.jaw);
     p.headPitch += f.headPitch;
