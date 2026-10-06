@@ -417,20 +417,77 @@ export const wakeUp = (c: Ctx) => {
   ]);
 };
 
-/** washing a flank: head round to the side and down, licking in strokes */
+/** a grooming in bouts: a few licks at a spot, a breath, and on to the next
+ *  spot along, now and then a nibble at a knot in the fur; how far along (0 .. 1) each spot is, and
+ *  when each part begins and ends */
+export interface GroomPart { at: number; until: number; kind: 'lick' | 'pause' | 'nibble'; spot: number; to: number; rate: number }
+
+export function groomPlan(least: number, most: number): GroomPart[] {
+  const parts: GroomPart[] = [];
+  const end = rand(least, most);
+  let t = 0, spot = rand(0, 0.3);
+  while (t < end) {
+    // (three to six licks, one and a quarter to one and a half a second, at the one spot)
+    const n = 3 + Math.floor(Math.random() * 4), rate = rand(1.25, 1.6), d = n / rate;
+    parts.push({ at: t, until: t + d, kind: 'lick', spot, to: spot, rate });
+    t += d;
+    if (Math.random() < 0.18) {
+      const nd = rand(0.5, 0.9);
+      parts.push({ at: t, until: t + nd, kind: 'nibble', spot, to: spot, rate });
+      t += nd;
+    }
+    // (a breath, the head up off it a little, and over to the next spot along)
+    const next = Math.min(1, spot + rand(0.12, 0.32)), p = rand(0.35, 0.8);
+    parts.push({ at: t, until: t + p, kind: 'pause', spot, to: next, rate });
+    t += p;
+    spot = next;
+  }
+  return parts;
+}
+
+/** where in its plan a grooming is at t: the spot along (eased from one to the next in the
+ *  breaths), the lick's stroke (0 .. 1: the head drawn down along the fur, the tongue out, and back),
+ *  how far up off it (the breaths), and a nibble's chatter */
+export function groomAt(P: GroomPart[], t: number) {
+  const last = P[P.length - 1];
+  const q = P.find((x) => t < x.until) ?? last;
+  const u = Math.max(0, Math.min(1, (t - q.at) / (q.until - q.at)));
+  if (q.kind === 'pause') {
+    const e = u * u * (3 - 2 * u);
+    return { spot: q.spot + (q.to - q.spot) * e, stroke: 0, lift: Math.sin(Math.PI * u), nibble: 0 };
+  }
+  if (q.kind === 'nibble') return { spot: q.spot, stroke: 0, lift: 0, nibble: Math.sin(Math.PI * u) * (0.5 + 0.5 * Math.sin((t - q.at) * Math.PI * 2 * 11)) };
+  // (each lick a stroke down along the fur and the head back up: the tongue out on the way down)
+  const ph = ((t - q.at) * q.rate) % 1;
+  return { spot: q.spot, stroke: ph < 0.6 ? Math.sin(Math.PI * ph / 0.6) : 0, lift: 0, nibble: 0 };
+}
+
+/** grooming its flank: the head turned right round to its side, working along it from the shoulder
+ *  toward the hip in bouts of licks, a breath between, now and then a nibble at a knot */
 export const groomFlank = () => {
-  const side = Math.random() < 0.5 ? 1 : -1, d = rand(5, 9);
-  return new Layered('groom', d, 0.7, (t) => ({
-    neckYaw: side * 1.05, headYaw: side * 0.7, neckPitch: -0.35, headPitch: -0.35 + 0.13 * Math.sin(t * 9),
-    jaw: 0.12 * Math.max(0, Math.sin(t * 9)), tongue: 0.8 * Math.max(0, Math.sin(t * 9)), tongueUp: -0.3, eyeOpen: 0.35, squint: 0.3,
-  }));
+  const side = Math.random() < 0.5 ? 1 : -1, P = groomPlan(5, 9);
+  const d = P[P.length - 1].until;
+  return new Layered('groom', d, 0.7, (t) => {
+    const g = groomAt(P, t), sp = g.spot;
+    return {
+      neckYaw: side * (0.9 + 0.3 * sp), headYaw: side * (0.6 + 0.15 * sp),
+      neckPitch: -0.28 - 0.18 * sp + 0.1 * g.lift, headPitch: -0.28 - 0.12 * sp - 0.15 * g.stroke + 0.06 * g.lift - 0.05 * g.nibble,
+      jaw: 0.12 * g.stroke + 0.14 * g.nibble, tongue: 0.8 * g.stroke, tongueUp: -0.3, eyeOpen: 0.35 + 0.15 * g.lift, squint: 0.3,
+    };
+  });
 };
 
-/** washing the chest: chin tucked, licking down the bib */
-export const groomChest = () => new Layered('groom chest', rand(3, 6), 0.6, (t) => ({
-  neckPitch: -0.75, headPitch: -0.55 + 0.12 * Math.sin(t * 8.5), jaw: 0.1 * Math.max(0, Math.sin(t * 8.5)),
-  tongue: 0.75 * Math.max(0, Math.sin(t * 8.5)), tongueUp: -0.5, eyeOpen: 0.4,
-}));
+/** washing the chest: chin tucked, licking down the bib in bouts, a breath between */
+export const groomChest = () => {
+  const P = groomPlan(3, 6), d = P[P.length - 1].until;
+  return new Layered('groom chest', d, 0.6, (t) => {
+    const g = groomAt(P, t), sp = g.spot;
+    return {
+      neckPitch: -0.7 - 0.1 * sp + 0.12 * g.lift, headPitch: -0.5 - 0.1 * sp - 0.14 * g.stroke + 0.08 * g.lift,
+      neckYaw: 0.12 * (sp - 0.5), jaw: 0.1 * g.stroke + 0.12 * g.nibble, tongue: 0.75 * g.stroke, tongueUp: -0.5, eyeOpen: 0.4 + 0.15 * g.lift,
+    };
+  });
+};
 
 /** washing the face: sitting up, a forepaw raised to the mouth and licked, then drawn up over the
  *  cheek to behind the ear with the head turned down into it, and again and again; then perhaps

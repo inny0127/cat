@@ -31,3 +31,39 @@ describe('at the bowl', () => {
     });
   }
 });
+
+describe('grooming in bouts', () => {
+  it('licks at a spot, a breath, and on along: the spots go one way, and the head never jumps', async () => {
+    const { groomPlan, groomAt, groomFlank, groomChest } = await import('../src/pixel/behave');
+    for (const r of [0.05, 0.5, 0.95]) {
+      const rnd = vi.spyOn(Math, 'random').mockReturnValue(r);
+      const P = groomPlan(5, 9);
+      rnd.mockRestore();
+      expect(P[0].kind).toBe('lick');
+      expect(P.some((p) => p.kind === 'pause')).toBe(true);
+      for (let i = 1; i < P.length; i++) {
+        expect(P[i].at).toBeCloseTo(P[i - 1].until, 9);
+        expect(P[i].spot).toBeGreaterThanOrEqual(P[i - 1].spot);
+      }
+      // (the spot it is at moves on only in the breaths, smoothly)
+      let was = groomAt(P, 0).spot, most = 0;
+      for (let t = 0; t < P[P.length - 1].until; t += 1 / 60) {
+        const g = groomAt(P, t);
+        most = Math.max(most, Math.abs(g.spot - was));
+        was = g.spot;
+      }
+      expect(most).toBeLessThan(0.03);
+    }
+    // (and the acts' own layers frame to frame)
+    for (const make of [groomFlank, groomChest]) {
+      const act = make() as unknown as { shape: (t: number) => Record<string, number>; dur: number };
+      let prev = act.shape(0), jump = 0;
+      for (let t = 1 / 60; t < act.dur; t += 1 / 60) {
+        const L = act.shape(t);
+        for (const k of ['neckPitch', 'headPitch', 'neckYaw', 'headYaw']) jump = Math.max(jump, Math.abs((L[k] ?? 0) - (prev[k] ?? 0)));
+        prev = L;
+      }
+      expect(jump).toBeLessThan(0.05);
+    }
+  });
+});
