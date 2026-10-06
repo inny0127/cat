@@ -246,6 +246,15 @@ export class Motor {
   /** ask for a posture; finds a way there through the others */
   setPosture(name: PoseName) {
     if (name === this.target && (this.path.length || this.tt < 1 || this.posture === name)) return;
+    // (asked straight back to the posture it is only just leaving: back from wherever the body has
+    // got to, not on to the end of the way first and back again, up and down for nothing)
+    if (this.tt < 0.6 && !this.path.length && name === this.fromName && name !== this.posture) {
+      this.target = name;
+      this.path = [name];
+      this.tt = 1;
+      this.advance();
+      return;
+    }
     this.target = name;
     this.path = route(this.tt < 1 ? this.nextOf() : this.posture, name);
     if (this.tt >= 1) this.advance();
