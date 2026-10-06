@@ -46,7 +46,7 @@ describe('a scratch, not a stroke', () => {
     expect(scratch.most).toBeLessThan(0.1);
     expect(scratch.pleasure).toBeGreaterThan(0.6);
     // (round and round, a little slower)
-    const round = hand('head', (t) => [160 * Math.cos(t * 9), 160 * Math.sin(t * 9)]);
+    const round = hand('head', (t) => [200 * Math.cos(t * 15), 200 * Math.sin(t * 15)]);
     expect(round.most).toBeLessThan(0.1);
     expect(round.pleasure).toBeGreaterThan(0.6);
   });
@@ -58,6 +58,12 @@ describe('a scratch, not a stroke', () => {
     // (as quick, but one way, against the lie of the fur, stroke after stroke)
     const against = hand('ear', (t) => [(t % 1) < 0.7 ? -300 : 0, 0]);
     expect(against.most).toBeGreaterThan(0.3);
+  });
+
+  it('a slow rub to and fro is no scratch: against the fur half the time', () => {
+    // (once a second each way: a stroke and a stroke back, on its ears)
+    const rub = hand('ear', (t) => [300 * Math.sin(t * Math.PI), 0]);
+    expect(rub.most).toBeGreaterThan(0.2);
   });
 
   it('a stranger it does not trust gets no more for scratching than for stroking', () => {

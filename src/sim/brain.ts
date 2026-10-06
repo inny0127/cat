@@ -595,21 +595,25 @@ export class Brain {
     this.express(dt, contacts);
   }
 
-  /** each hand on it: how it has been going of late (see scratching) */
-  private readonly ways = new Map<number, { vx: number; vy: number; v: number; scratch: number }>();
+  /** each hand on it: how it has been going of late, and where (see scratching) */
+  private readonly ways = new Map<number, { vx: number; vy: number; v: number; px: number; py: number; scratch: number }>();
 
-  /** how much of a scratch a hand is just now: 0 a stroke (it goes one way) or a hand at rest .. 1
-   *  the fingertips working at one spot, back and forth or round and round, a good few times a
-   *  second (their goings, averaged over a moment, cancel out) */
+  /** how much of a scratch a hand is just now: 0 a stroke (it goes one way), a slow rub to and fro
+   *  or a hand at rest .. 1 the fingertips working at one spot, back and forth or round and round,
+   *  two or three times a second or more (their goings over the last fifth of a second cancel out,
+   *  and they keep about one place) */
   private scratching(c: Contact, dt: number) {
     let w = this.ways.get(c.id);
-    if (!w) this.ways.set(c.id, (w = { vx: 0, vy: 0, v: 0, scratch: 0 }));
-    const k = 1 - Math.exp(-dt / 0.35), sp = Math.hypot(c.vx, c.vy);
+    if (!w) this.ways.set(c.id, (w = { vx: 0, vy: 0, v: 0, px: c.px, py: c.py, scratch: 0 }));
+    const k = 1 - Math.exp(-dt / 0.2), sp = Math.hypot(c.vx, c.vy);
     w.vx += (c.vx - w.vx) * k;
     w.vy += (c.vy - w.vy) * k;
     w.v += (sp - w.v) * k;
+    w.px += (c.px - w.px) * k;
+    w.py += (c.py - w.py) * k;
     const oneWay = w.v > 1e-6 ? Math.hypot(w.vx, w.vy) / w.v : 1;
-    w.scratch += ((w.v > 45 && oneWay < 0.45 ? 1 : 0) - w.scratch) * (1 - Math.exp(-dt * 5));
+    const local = Math.hypot(c.px - w.px, c.py - w.py) < 70;
+    w.scratch += ((w.v > 45 && oneWay < 0.45 && local ? 1 : 0) - w.scratch) * (1 - Math.exp(-dt * 5));
     return w.scratch;
   }
 
