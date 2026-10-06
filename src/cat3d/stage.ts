@@ -94,6 +94,8 @@ uniform float uNear;
 uniform float uFar;
 uniform vec3 uPalEye[${PAL_EYE.length}];
 uniform vec4 uSteam;     // steam off a hot drink: where it rises from (art pixels, view depth), and how much
+uniform float uDetail;   // how much finer the art is than at its coarsest (1), for little things drawn
+                         // pixel by pixel that keep their size in the room (the steam)
 uniform vec4 uGlint;     // a glint of sun on the floor: its middle (art pixels) and its half widths across and up
 uniform vec2 uGlintK;    // ... its view depth, and how bright (0: none)
 uniform vec3 uMotes[16]; // dust in the sunlight: where (art pixels), and how bright (0 for none)
@@ -328,6 +330,18 @@ void main() {
       if (nm[3] >= 0 && nm[4] >= 0) crease = max(crease, (dl + dr - 2.0 * w) * z2);
       if (nm[1] >= 0 && nm[6] >= 0) crease = max(crease, (dd + du - 2.0 * w) * z2);
     }
+    // the room against the bright window by day: a thing's edge where it meets the daylit sky
+    // (the frame and its glazing bars, a leaf, the curtain's edge, a mug on the sill) is lit by it,
+    // a step lighter, as a backlit thing's edges are
+    if (kind == 2 && !glows) {
+      float sky = 0.0;
+      for (int i = 0; i < 4; i++) {
+        ivec2 q = p + (i == 0 ? ivec2(-1, 0) : i == 1 ? ivec2(1, 0) : i == 2 ? ivec2(0, 1) : ivec2(0, -1));
+        vec4 t = texelFetch(uColor, q, 0);
+        if (texelFetch(uDepth, q, 0).r < 0.99999 && t.a > 0.1 && t.a < 0.16) sky = max(sky, dot(t.rgb, vec3(0.3, 0.59, 0.11)));
+      }
+      if (sky > 0.6 && level < 4) level += 1;
+    }
     if ((front > 0.035 * w || crease > 0.018) && w > 0.25) level -= level >= 2 ? 1 : 0;
     // the top edge of a thing against what lies behind it catches the window's light: a line a
     // step lighter, as a pixel artist picks out an edge (not on what glows, nor in the dark)
@@ -387,11 +401,14 @@ void main() {
     // rising, swaying wider the higher they get, coming apart in lengths that drift up, paler as
     // they go; the second shorter, from the other side of the cup)
     ivec2 q = p - ivec2(uSteam.xy);
-    if (q.y >= 2 && q.y < 18 && abs(q.x) < 7) {
+    float sc = uDetail;
+    if (q.y >= 2 && float(q.y) < 18.0 * sc && abs(float(q.x)) < 7.0 * sc) {
       for (int i = 0; i < 2; i++) {
-        float fi = float(i), y = float(q.y), H = 17.0 - fi * 5.0;
+        // (y in the pixels of the coarsest art, so the wisps are as tall and sway as wide over the
+        // cup however fine the art; still a line of single pixels, one to a row)
+        float fi = float(i), y = float(q.y) / sc, H = 17.0 - fi * 5.0;
         if (y >= H) continue;
-        float x = sin(y * 0.5 - uTime * 2.0 + fi * 2.7) * (0.5 + y * 0.09) + sin(y * 0.11 + uTime * 0.6 + fi * 1.3) * 0.7 + (fi - 0.5) * 2.6;
+        float x = (sin(y * 0.5 - uTime * 2.0 + fi * 2.7) * (0.5 + y * 0.09) + sin(y * 0.11 + uTime * 0.6 + fi * 1.3) * 0.7 + (fi - 0.5) * 2.6) * sc;
         float seg = fract(y * 0.12 - uTime * 0.55 + fi * 0.43);
         if (q.x == int(floor(x + 0.5)) && seg > 0.3) {
           float u = y / H;
@@ -669,7 +686,7 @@ export class Stage {
         uExposure: { value: exposure }, uNear: { value: this.camera.near }, uFar: { value: this.camera.far },
         uPalEye: { value: eyePalette() },
         uRampTex: { value: rampTexture() },
-        uSteam: { value: new THREE.Vector4() },
+        uSteam: { value: new THREE.Vector4() }, uDetail: { value: 1 },
         uGlint: { value: new THREE.Vector4() }, uGlintK: { value: new THREE.Vector2() },
         uMotes: { value: Array.from({ length: 16 }, () => new THREE.Vector3()) },
         uNotes: { value: Array.from({ length: 4 }, () => new THREE.Vector3()) },
@@ -742,6 +759,8 @@ export class Stage {
     P.bloomA.setSize(bw, bh);
     P.bloomB.setSize(bw, bh);
     P.mat.uniforms.uSize.value.set(w, h);
+    // (186 across: a phone held upright, drawn at its coarsest)
+    P.mat.uniforms.uDetail.value = Math.min(1.5, Math.max(1, P.width / 186));
     const u = P.present.uniforms;
     u.uArtSize.value.set(w, h);
     u.uK.value = k;

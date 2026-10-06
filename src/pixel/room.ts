@@ -144,11 +144,21 @@ void main() {
     else for (int k = 0; k < 5; k++) {
       if (abs(vLocal.y - (0.04 + 0.0415 * float(k)) - 0.35 * ax) < 0.0022 && ax > 0.006) tone += 0.06;
     }
-  } else if (uPattern == 9) {
+  } else if (uPattern == 9 || uPattern == 12) {
+    // (a pumpkin: the groove between each of its ribs drawn in, a step darker, and the round of
+    // each rib catching the light)
+    if (uPattern == 12) {
+      float rib = cos(atan(vLocal.z, vLocal.x) * 8.0);
+      if (rib < -0.82) tone -= 0.16;
+      else if (rib > 0.55) tone += 0.04;
+    }
     // a thing in the round, painted as a pixel artist paints a column or a dome: a lit band toward
-    // the upper left, then the middle tone, the far edge in shade (the light alone is too even
-    // across something this small to give it form)
-    tone += 0.16 * (dot(N, normalize(vec3(-0.42, 0.55, 0.72))) - 0.55);
+    // the upper left a step up the ramp, then the middle tone, the far side a step down in shade
+    // (the light alone is too even across something this small to give it form; steps of the
+    // ramp, as the curtain's folds are, below, so the form survives the art pass's banding)
+    float d = dot(N, normalize(vec3(-0.42, 0.55, 0.72)));
+    fold = d > 0.79 ? 1 : d < 0.22 ? -1 : 0;
+    tone += 0.05 * (d - 0.55);
   } else if (uPattern == 10) {
     // a curtain hanging in folds, painted as folds are painted: in upright bands, the cloth's own
     // colour with a narrow line of light up the side of each fold that faces the window and a band
@@ -207,10 +217,10 @@ void main() {
     lt = vec3(tot, lt.y * lt.x / max(tot, 1e-4), (lt.z * lt.x + back) / max(tot, 1e-4));
   }
   lt.x = max(lt.x * (1.0 + 1.3 * tone) + 0.25 * tone, 0.0);
-  if (uPattern == 10) {
+  if (uPattern == 10 || uPattern == 9 || uPattern == 12) {
     // (the step of the ramp the cloth's light is on (the art pass's steps), so many steps up or
     // down, and the middle of that step: the light's steps run level across the curtain, the
-    // folds straight down it)
+    // folds straight down it; and so for a thing in the round)
     int lv = 0;
     for (int i = 0; i < 4; i++) if (lt.x >= PIX_STEP[i]) lv = i + 1;
     lv = clamp(lv + fold, 0, 4);
@@ -1055,16 +1065,19 @@ export class Room {
     const skyMesh = add(new THREE.Mesh(new THREE.PlaneGeometry(ww, wh), this.sky), bx, winB + wh / 2, wallZ - 0.06);
     skyMesh.renderOrder = 20;
     this.skyMesh = skyMesh;
-    const paint = this.mat('paint');
-    const bar = (w: number, h: number, d: number, x: number, y: number, z = wallZ - 0.02) => add(shadowy(new THREE.Mesh(new THREE.BoxGeometry(w, h, d), paint)), x, y, z);
+    // (the frame a step darker than the white paint's own light: against the bright sky by day a
+    // window frame is in its own shade, its edges lit by the sky behind them; the sill, lit from
+    // above, keeps the paint's full white)
+    const paint = this.mat('paint'), frame = this.mat('paint', { tone: -0.13 });
+    const bar = (w: number, h: number, d: number, x: number, y: number, z = wallZ - 0.02, m = frame) => add(shadowy(new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m)), x, y, z);
     bar(ww + 0.08, 0.045, 0.08, bx, winT + 0.02);                       // head
     bar(0.045, wh, 0.08, winL - 0.02, winB + wh / 2);                     // jambs
     bar(0.045, wh, 0.08, winR + 0.02, winB + wh / 2);
     bar(0.02, wh, 0.03, bx, winB + wh / 2, wallZ - 0.04);                 // glazing bars
     bar(ww, 0.02, 0.03, bx, winB + wh * 0.62, wallZ - 0.04);
-    bar(ww + 0.14, 0.03, 0.3, bx, winB - 0.015, wallZ + 0.11);            // the sill, deep enough for a cat to sleep on
+    bar(ww + 0.14, 0.03, 0.3, bx, winB - 0.015, wallZ + 0.11, paint);     // the sill, deep enough for a cat to sleep on
     // on the sill: a little succulent in a pot and a candle in a jar
-    add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.028, 0.05, 14), this.mat('paint', { tone: -0.04 }))), winL + 0.11, winB + 0.025, wallZ + 0.02);
+    add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.028, 0.05, 24), this.mat('paint', { tone: -0.04, pattern: 9 }))), winL + 0.11, winB + 0.025, wallZ + 0.02);
     for (let i = 0; i < 7; i++) {
       const a = (i / 7) * Math.PI * 2;
       const l = shadowy(new THREE.Mesh(new THREE.SphereGeometry(0.016, 6, 4), this.mat('leaf', { tone: 0.08 * (i % 2) })));
@@ -1174,7 +1187,7 @@ export class Room {
         pos.setXYZ(i, x * rib * 1.15, y * 0.72, z * rib * 1.15);
       }
       g.computeVertexNormals();
-      pk.add(shadowy(new THREE.Mesh(g, this.mat('ginger', { tone: 0.04 }))));
+      pk.add(shadowy(new THREE.Mesh(g, this.mat('ginger', { tone: 0.04, pattern: 12 }))));
       const stem = shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.006, 0.02, 6), this.mat('leaf', { tone: -0.1 })));
       stem.position.y = 0.033;
       stem.rotation.z = 0.3;
@@ -1323,7 +1336,7 @@ export class Room {
     const ty = 1.4;
     add(shadowy(new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.022, 0.11), this.mat('brown'))), bx, ty, wallZ + 0.055);
     for (const sxp of [-0.3, 0.3]) add(shadowy(new THREE.Mesh(new THREE.BoxGeometry(0.015, 0.05, 0.08), this.mat('metal'))), bx + sxp, ty - 0.035, wallZ + 0.04);
-    const pot = (x: number, r: number, h: number, m: Material) => add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(r, r * 0.8, h, 14), this.mat(m))), x, ty + 0.011 + h / 2, wallZ + 0.055);
+    const pot = (x: number, r: number, h: number, m: Material) => add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(r, r * 0.8, h, 20), this.mat(m, { pattern: 9 }))), x, ty + 0.011 + h / 2, wallZ + 0.055);
     const tuft = (x: number, y: number, n: number, spread: number, size: number, tone = 0) => {
       for (let i = 0; i < n; i++) {
         const a = (i / n) * Math.PI * 2;
@@ -1545,8 +1558,8 @@ export class Room {
     // a monstera in a terracotta pot by the box: big split leaves fanned out toward the room
     const px = bx + 0.43, pz = wallZ + 0.24;
     this.potAt.set(px, 0, pz);
-    add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.085, 0.2, 20), this.mat('pot'))), px, 0.1, pz);
-    add(shadowy(new THREE.Mesh(new THREE.TorusGeometry(0.108, 0.012, 6, 24).rotateX(Math.PI / 2), this.mat('pot', { tone: 0.06 }))), px, 0.2, pz);
+    add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.085, 0.2, 32), this.mat('pot', { pattern: 9 }))), px, 0.1, pz);
+    add(shadowy(new THREE.Mesh(new THREE.TorusGeometry(0.108, 0.012, 8, 32).rotateX(Math.PI / 2), this.mat('pot', { tone: 0.06, pattern: 9 }))), px, 0.2, pz);
     add(new THREE.Mesh(new THREE.CircleGeometry(0.1, 16).rotateX(-Math.PI / 2), this.mat('brown', { tone: -0.1 })), px, 0.19, pz);
     const leafGeo = monsteraLeaf();
     const stems: [number, number, number, number][] = [
@@ -1589,14 +1602,21 @@ export class Room {
       const mug = new THREE.Group();
       // (an oatmeal glaze: white china was the brightest thing in the picture; in pieces on the
       // rug, it shows)
-      const china = this.mat('rugCream', { tone: 0.04 });
-      const body = shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.028, 0.07, 16), china));
+      // (painted in the round: a lit band down it, the far side in shade; open at the top, its
+      // rim catching the light round the dark of the tea in it, seen from a little above; a band
+      // of blue glaze round it near the top)
+      const china = this.mat('rugCream', { tone: 0.04, pattern: 9 });
+      const body = shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.028, 0.07, 32, 1, true), china));
       body.position.y = 0.035;
+      const rim = new THREE.Mesh(new THREE.TorusGeometry(0.0312, 0.0022, 6, 32).rotateX(Math.PI / 2), this.mat('rugCream', { tone: 0.16 }));
+      rim.position.y = 0.0698;
+      const band = new THREE.Mesh(new THREE.CylinderGeometry(0.0318, 0.0313, 0.008, 32, 1, true), this.mat('bookBlue', { tone: 0.1, pattern: 9 }));
+      band.position.y = 0.054;
       const handle = shadowy(new THREE.Mesh(new THREE.TorusGeometry(0.018, 0.006, 6, 12), china));
       handle.position.set(0.035, 0.04, 0);
-      const tea = new THREE.Mesh(new THREE.CircleGeometry(0.028, 14).rotateX(-Math.PI / 2), this.mat('brown'));
-      tea.position.y = 0.066;
-      mug.add(body, handle, tea);
+      const tea = new THREE.Mesh(new THREE.CircleGeometry(0.03, 24).rotateX(-Math.PI / 2), this.mat('brown', { tone: -0.5 }));
+      tea.position.y = 0.06;
+      mug.add(body, rim, band, handle, tea);
       mug.position.set(bx - 0.105, winB, wallZ + 0.13);
       // (the handle toward the window's middle, a little round toward you)
       mug.rotation.y = -0.5;
@@ -1749,6 +1769,7 @@ export class Room {
       onFront(0.07, 0.046, 0.075, H * 0.45, this.mat('paper'));
       const ink = this.mat('ink');
       for (const [w, y] of [[0.05, 0.015], [0.038, 0.004], [0.046, -0.007]] as [number, number][]) onFront(w, 0.0035, 0.075 - (0.05 - w) / 2, H * 0.45 + y, ink, 0.0016);
+
       box.position.set(bx - 0.31, 0, bz + 0.35);
       box.rotation.y = 0.35;
       this.group.add(box);
@@ -1758,7 +1779,7 @@ export class Room {
     // bowls: a red one for food, a white one for water
     const bowl = (m: Material) => {
       const pts = [[0.0, 0.002], [0.05, 0.002], [0.062, 0.032], [0.067, 0.04], [0.058, 0.04], [0.05, 0.012], [0.0, 0.012]].map(([x, y]) => new THREE.Vector2(x, y));
-      return shadowy(new THREE.Mesh(new THREE.LatheGeometry(pts, 28), this.mat(m)));
+      return shadowy(new THREE.Mesh(new THREE.LatheGeometry(pts, 32), this.mat(m, { pattern: 9 })));
     };
     add(bowl('redBowl'), S.food.x, 0, S.food.z);
     add(bowl('paint'), S.water.x, 0, S.water.z);
