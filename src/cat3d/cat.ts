@@ -43,6 +43,15 @@ const CAPS: Cap[] = [
 /** the capsules before the tail's own two */
 const TRUNK_CAPS = CAPS.length - 2;
 
+/** the head on the neck: how fast it turns at most (rad/s), and how quickly it gets up to that or
+ *  pulls up from it (rad/s²) */
+const HEAD_MAX = 10;
+const HEAD_ACC = 110;
+/** and each joint of the neck on the one before it: the head is carried round on the neck, so its
+ *  turns move the head bodily (rad/s, rad/s²) */
+const NECK_MAX = 5;
+const NECK_ACC = 60;
+
 /**
  * The whole 3D cat: furred skinned body, eyes, whiskers, and the motor/body/tail/stepper chain
  * that moves it. Put `group` in a scene, call update(dt) every frame.
@@ -82,6 +91,8 @@ export class Cat3D {
   private readonly drop = { hind: 0, front: 0 };
   private readonly flex = { LF: 0, RF: 0, LH: 0, RH: 0 };
   private readonly ground = { LF: 1, RF: 1, LH: 1, RH: 1 };
+  /** how fast the head is turning on the neck (rad/s, the last frame) */
+  private headVel = 0;
   private first = true;
   /** how fast the body really turns and goes (rad/s, m/s), whatever moves it: the motor's own
    *  steering, or an act that squares it round to something or carries it directly. The legs
@@ -97,6 +108,11 @@ export class Cat3D {
   private breathT = 0;
   /** the head as the chest had it last frame (for its turn to be no quicker than a head's) */
   private headWas: THREE.Quaternion | null = null;
+  /** the two joints of the neck: how each sat on the one before it last frame, and how fast it was
+   *  turning */
+  private neckI: number[] | null = null;
+  private readonly neckWas: (THREE.Quaternion | null)[] = [null, null];
+  private readonly neckVel = [0, 0];
   private headI: number | null = null;
   private chestI: number | null = null;
   /** this breath: how much longer than the mood has it, and how much deeper */
@@ -467,16 +483,43 @@ export class Cat3D {
     // (the head never snaps round faster than a head can go: however the look has it this frame, as
     // the chest has it, it turns at most so far from where it was the last; the thing looked at
     // whisked across close under its chin or round behind it, it follows, not flips)
+    // (and like a weight on the end of the neck: it gathers speed and loses it, never starting off
+    // or pulling up all at once; a flick of the eyes is quicker than any turn of the head)
     {
       const H = this.headI ??= kin.i('head'), C = this.chestI ??= kin.i('chest');
+      // (the neck first: each joint of it turns on the one before no faster than a neck can, the
+      // rest of the neck and the head carried round with it; the head is not swung from one
+      // shoulder to the other in a frame on a neck that whips across)
+      const N = this.neckI ??= [kin.i('neck1'), kin.i('neck2')];
+      for (let j = 0; j < N.length; j++) {
+        const J = N[j], P = kin.parent[J];
+        const rel = tmp.q2.copy(kin.wq[P]).invert().multiply(kin.wq[J]);
+        const was = this.neckWas[j];
+        if (was && dt > 0) {
+          const ang = rel.angleTo(was);
+          const v = Math.min(NECK_MAX, this.neckVel[j] + NECK_ACC * dt, Math.sqrt(2 * NECK_ACC * ang) + NECK_ACC * dt * 0.5);
+          if (ang > v * dt) {
+            rel.copy(was).slerp(tmp.q3.copy(kin.wq[P]).invert().multiply(kin.wq[J]), (v * dt) / ang);
+            kin.setWorld(J, tmp.q3.copy(kin.wq[P]).multiply(rel));
+            kin.fkAll();
+            this.neckVel[j] = v;
+          } else this.neckVel[j] = ang / dt;
+        }
+        (this.neckWas[j] ??= new THREE.Quaternion()).copy(rel);
+      }
       const rel = tmp.q2.copy(kin.wq[C]).invert().multiply(kin.wq[H]);
       if (this.headWas && this.lastYaw !== null && dt > 0) {
-        const ang = rel.angleTo(this.headWas), most = 16 * dt;
+        const ang = rel.angleTo(this.headWas);
+        // (as fast as it can be and still pull up in time: about 10 rad/s at most, got up to in a
+        // tenth of a second)
+        const v = Math.min(HEAD_MAX, this.headVel + HEAD_ACC * dt, Math.sqrt(2 * HEAD_ACC * ang) + HEAD_ACC * dt * 0.5);
+        const most = v * dt;
         if (ang > most) {
           rel.copy(this.headWas).slerp(tmp.q3.copy(kin.wq[C]).invert().multiply(kin.wq[H]), most / ang);
           kin.setWorld(H, tmp.q3.copy(kin.wq[C]).multiply(rel));
           kin.fkAll();
-        }
+          this.headVel = v;
+        } else this.headVel = ang / dt;
       }
       (this.headWas ??= new THREE.Quaternion()).copy(rel);
     }

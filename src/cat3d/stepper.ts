@@ -23,8 +23,13 @@ export const strideAt = (v: number) => Math.min(0.08 + 0.5 * v, 0.3 + 0.22 * v);
 export const swingTimeAt = (v: number) => Math.max(0.17, Math.min(0.3, 0.3 - 0.08 * v));
 
 const ease = (s: number) => s * s * s * (10 + s * (6 * s - 15));
-/** a hump over [0,1] whose top is at `peak` */
-const hump = (s: number, peak: number) => Math.sin(Math.PI * (s < peak ? 0.5 * s / peak : 0.5 + 0.5 * (s - peak) / (1 - peak)));
+/** how far on (s) a paw is aimed at its place under the body, past its landing: half its time on the
+ *  floor, but no more than this (standing about and turning a little, a stance lasts a second or
+ *  more, and so far ahead the least change of the turn swung the place it was going about) */
+const LEAD = 0.22;
+/** a paw's arc over [0,1] whose top is at `peak`: it peels off the floor from rest (no paw is
+ *  up at full speed from the first instant), and comes down onto it still moving */
+const arc = (s: number, peak: number) => (s < peak ? 0.5 - 0.5 * Math.cos(Math.PI * s / peak) : Math.sin(Math.PI * (0.5 + 0.5 * (s - peak) / (1 - peak))));
 
 interface FootState {
   pos: THREE.Vector3;        // world, where the paw is (or is going)
@@ -89,6 +94,12 @@ export class Stepper {
   trot = 0;
   /** bounding (flat out) */
   bound = false;
+  /** how far into the bound the body's swing has come (0 .. 1): the gait changes at a step, the
+   *  body's way of going with it over a stride or so, not from one frame to the next */
+  private boundW = 0;
+  /** how much the stride has the body (0 .. 1): none of it with all four paws off the floor (a
+   *  pounce, a leap), however fast it is going */
+  private bodyW = 0;
   /** in a mad rush (the zoomies): it bounds at any brisk pace, not only flat out */
   eager = false;
   /** strides per second last frame */
@@ -223,17 +234,19 @@ export class Stepper {
         if (!F.settle || this.moving > 0.3) {
           // keep aiming where this paw's stance will be centred under the body, as speed and
           // heading change during the swing (but a stop or a turn all at once moves the place
-          // it is aimed at no faster than a paw in the air can be redirected: not a jump of it)
+          // it is aimed at no faster than a paw in the air can be redirected: not a jump of it;
+          // and less and less as it comes down, till it is put down where it was going, not slid
+          // into its place along the floor)
           const was = this.tmp2.copy(F.to);
-          this.aim(F.to, home[l], vel, yawRate, centre, (1 - s) * F.dur + standT * 0.5);
+          this.aim(F.to, home[l], vel, yawRate, centre, (1 - s) * F.dur + Math.min(standT * 0.5, LEAD));
           this.ownSide(F.to, l, vel, yawRate, centre, (1 - s) * F.dur);
-          const moved = F.to.distanceTo(was), most = 2.5 * dt;
+          const moved = F.to.distanceTo(was), most = (0.4 + 2.1 * (1 - s) * (1 - s)) * dt;
           if (moved > most) F.to.lerpVectors(was, F.to, most / moved);
         }
         F.pos.lerpVectors(F.from, F.to, ease(s));
         // (up and over in an arc from the height it left to the height it lands at: a step up onto
         // the bed's cushion, or down off it, rises or falls through the swing, not at its start)
-        F.pos.y = F.from.y + (F.to.y - F.from.y) * ease(s) + F.height * hump(s, FRONT[l] ? 0.38 : 0.45);
+        F.pos.y = F.from.y + (F.to.y - F.from.y) * ease(s) + F.height * arc(s, FRONT[l] ? 0.38 : 0.45);
         // forepaw: the wrist folds at lift-off (the pads turn to face back), opens through the
         // swing and the toes reach forward to land; hind: the hock folds and the foot comes
         // through low
@@ -259,7 +272,7 @@ export class Stepper {
         const inward = -SIDE[l] * o.dot(this.across);
         if (inward > 0.03 || d > 0.075 + 0.5 * speed * standT || (this.strain[l] > 0.012 && d > 0.02) || (this.cross[l] > 0.015 && d > 0.012)) {
           if (this.moving > 0) F.last = Math.floor(this.clock - off);
-          this.begin(F, home[l], vel, yawRate, centre, Math.min(swingT, 0.2), Math.min(swingT, 0.2) + (this.moving > 0.3 ? standT * 0.5 : 0),
+          this.begin(F, home[l], vel, yawRate, centre, Math.min(swingT, 0.2), Math.min(swingT, 0.2) + (this.moving > 0.3 ? Math.min(standT * 0.5, LEAD) : 0),
             (FRONT[l] ? 0.02 : 0.016) + 0.01 * Math.min(1, speed), false);
           continue;
         }
@@ -280,7 +293,7 @@ export class Stepper {
         const stranded = off2.length() > 0.5 * eff * standT + 0.08;
         if ((due || (behind && !partner.stepping) || stranded) && this.moving > 0.3) {
           F.last = cyc;
-          this.begin(F, home[l], vel, yawRate, centre, swingT, swingT + standT * 0.5,
+          this.begin(F, home[l], vel, yawRate, centre, swingT, swingT + Math.min(standT * 0.5, LEAD),
             (FRONT[l] ? 0.026 : 0.022) + 0.014 * Math.min(1, speed) + (this.bound ? 0.018 : 0), false);
         }
       }
@@ -299,6 +312,11 @@ export class Stepper {
         this.settleCooldown = 0.1;
       }
     }
+    // (in the air, a leap or a pounce, the stride has no say in the body; and from walk to bound
+    // and back the body's swing changes over a stride, not at once)
+    const down = LEGS.some((l) => planted[l] > 0.5);
+    this.bodyW += ((down ? 1 : 0) - this.bodyW) * (1 - Math.exp(-dt * (down ? 6 : 14)));
+    this.boundW += ((this.bound ? 1 : 0) - this.boundW) * (1 - Math.exp(-dt * 7));
     this.body(home);
   }
 
@@ -352,13 +370,16 @@ export class Stepper {
     F.from.copy(F.pos);
     this.aim(F.to, home, vel, yawRate, centre, lead);
     this.ownSide(F.to, this.legOf(F), vel, yawRate, centre, dur);
+    // (a quick patter of a step, round a tight turn, is a low one: up as high in half the time, a
+    // paw would flick up)
+    height *= Math.min(1, Math.max(0.6, dur / 0.2));
     // high enough to clear whatever lies between (a bed's rim)
     if (this.ground) {
       for (let i = 1; i < 10; i++) {
         const s = i / 10, t = ease(s);
         const g = this.ground(F.from.x + (F.to.x - F.from.x) * t, F.from.z + (F.to.z - F.from.z) * t);
         const need = g + home.y - this.lift + 0.012 - (F.from.y + (F.to.y - F.from.y) * t);
-        if (need > 0) height = Math.max(height, need / Math.max(0.3, hump(s, 0.42)));
+        if (need > 0) height = Math.max(height, need / Math.max(0.3, arc(s, 0.42)));
       }
       // (a rim right at the start or the end of the step is brushed past, not leapt: no paw goes up
       // more than a hand's breadth for a step)
@@ -376,7 +397,7 @@ export class Stepper {
    *  forelegs as they take the weight */
   private body(home: Record<Leg, THREE.Vector3>) {
     const g = this.signals, f = this.feet;
-    const w = this.moving;
+    const w = this.moving * this.bodyW;
     const support = (l: Leg) => (f[l].stance >= 0 ? Math.sin(Math.PI * f[l].stance) : 0);
     const swing = (l: Leg) => (f[l].stepping && !f[l].settle ? Math.sin(Math.PI * f[l].s) : 0);
     // how far ahead of its place under the body each paw is, in half-strides
@@ -398,15 +419,17 @@ export class Stepper {
     g.scapL = w * 0.007 * support('LF');
     g.scapR = w * 0.007 * support('RF');
     g.flex = 0;
-    if (this.bound) {
+    const b = this.boundW;
+    if (b > 0.001) {
       // bounding: the whole body rides up in the flight after the hinds push off; the back
       // gathers as the hinds swing through under it and stretches out as the fores reach; little
       // roll or sway
       const ph = this.phase;
-      g.hipHeave = w * 0.012 * Math.cos(tau * (ph - 0.3));
-      g.chestHeave = w * 0.012 * Math.cos(tau * (ph - 0.42));
-      g.flex = w * Math.cos(tau * (ph - 0.92));
-      g.hipRoll *= 0.3; g.chestRoll *= 0.3; g.hipYaw *= 0.3; g.chestYaw *= 0.3;
+      g.hipHeave += (w * 0.012 * Math.cos(tau * (ph - 0.3)) - g.hipHeave) * b;
+      g.chestHeave += (w * 0.012 * Math.cos(tau * (ph - 0.42)) - g.chestHeave) * b;
+      g.flex = b * w * Math.cos(tau * (ph - 0.92));
+      const k = 1 - 0.7 * b;
+      g.hipRoll *= k; g.chestRoll *= k; g.hipYaw *= k; g.chestYaw *= k;
     }
   }
 

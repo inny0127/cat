@@ -24,7 +24,7 @@ export interface LaserDot {
   selfAt?: THREE.Vector3;
 }
 
-type Phase = 'notice' | 'stalk' | 'run' | 'wiggle' | 'pounce' | 'land' | 'hold' | 'rear' | 'leap' | 'search' | 'tired' | 'self'
+type Phase = 'notice' | 'watch' | 'stalk' | 'run' | 'wiggle' | 'pounce' | 'land' | 'hold' | 'rear' | 'leap' | 'search' | 'tired' | 'self'
   | 'gather' | 'up' | 'sill' | 'spring' | 'look' | 'down';
 
 /**
@@ -52,6 +52,15 @@ export class Chase implements Act {
    *  where and on what it was last */
   private readonly was = new THREE.Vector3(NaN, 0, 0);
   private ds = 0;
+  /** which way it is going (m/s, smoothed), that way a tenth of a second ago, and how frantic its
+   *  going is: a dot flicked this way and that faster than anything alive goes is not run after
+   *  but watched, low and still, till it settles or comes near (reversals, a second or so's worth) */
+  private readonly dv = new THREE.Vector3();
+  private readonly dvWas = new THREE.Vector3();
+  private dvT = 0;
+  private frantic = 0;
+  /** watching it, how long it has been down low */
+  private low = 0;
   private gone = 0;
   private readonly last = new THREE.Vector3();
   private lastOn: LaserDot['on'] = 'floor';
@@ -93,6 +102,12 @@ export class Chase implements Act {
   private patK = -1;
   private patted = false;
 
+  /** what it takes the dot to be on, and how long it has seemed to be on something else: run
+   *  along where the floor meets the wall, the dot is on the one and the other a frame at a time,
+   *  and a cat goes by where it has seen it a moment, not by every flicker */
+  private on: LaserDot['on'] | null = null;
+  private onElse = 0;
+
   /** onSill: it is up on the windowsill already (it was sitting there when the dot came) */
   constructor(c: Ctx, onSill = false) {
     this.sill = c.sill();
@@ -122,9 +137,21 @@ export class Chase implements Act {
   private next(phase: Phase, dur = 0) {
     this.phase = phase;
     this.t = 0;
+    this.low = 0;
     this.dur = dur;
     this.best = 1e9;
     this.stuck = 0;
+  }
+
+  /** the dot as it goes by it: on what it has been on a moment (a fifth of a second) */
+  private steady(L: LaserDot | null, dt: number): LaserDot | null {
+    if (!L) { this.on = null; this.onElse = 0; return null; }
+    if (this.on === null || L.on === this.on || L.self || (this.onElse += dt) > 0.2) {
+      this.on = L.on;
+      this.onElse = 0;
+      return L;
+    }
+    return { ...L, on: this.on };
   }
 
   /** keep track of the dot */
@@ -138,6 +165,19 @@ export class Chase implements Act {
     if (Number.isNaN(this.was.x)) this.was.copy(L.p);
     const inst = Math.min(6, L.p.distanceTo(this.was) / Math.max(dt, 1e-3));
     this.ds += (inst - this.ds) * Math.min(1, dt * 10);
+    // (back the way it came, quick, again and again: frantic)
+    const k = Math.min(1, dt * 15), idt = 1 / Math.max(dt, 1e-3);
+    this.dv.x += ((L.p.x - this.was.x) * idt - this.dv.x) * k;
+    this.dv.z += ((L.p.z - this.was.z) * idt - this.dv.z) * k;
+    this.frantic *= Math.exp(-dt / 1.2);
+    if ((this.dvT += dt) >= 0.1) {
+      this.dvT = 0;
+      const a = Math.hypot(this.dv.x, this.dv.z), b = Math.hypot(this.dvWas.x, this.dvWas.z);
+      if (a > 0.6 && b > 0.6 && (this.dv.x * this.dvWas.x + this.dv.z * this.dvWas.z) / (a * b) < -0.35) this.frantic += 1;
+      // (and a flick across faster than a mouse ever went)
+      else if (a > 2.5) this.frantic += 0.35;
+      this.dvWas.copy(this.dv);
+    }
     this.was.copy(L.p);
     this.last.copy(L.p);
     this.lastOn = L.on;
@@ -205,7 +245,7 @@ export class Chase implements Act {
       this.wash = null;
       return false;
     }
-    const L = c.laser();
+    const L = this.steady(c.laser(), dt);
     this.see(L, dt);
     this.fwd.set(Math.sin(m.yaw), 0, Math.cos(m.yaw));
     // up on the sill (or on the way up or down): that first
@@ -301,10 +341,32 @@ export class Chase implements Act {
         if (this.t > this.dur && L) this.decide(c, L);
         return true;
       }
+      case 'watch': {
+        // too quick, this way and that, to be had by running at it: low and still where it is, the
+        // eyes and the head going with it, the tip of the tail flicking, the pupils black; round
+        // on the spot only if it gets right round behind; till it settles, or comes near enough
+        const T = this.target(c, L!), d = Math.hypot(T.x - m.pos.x, T.z - m.pos.z);
+        if (L!.on !== 'floor' && L!.on !== 'bed') { this.decide(c, L!); return true; }
+        if (!this.turnTo(c, L!.p)) m.stop();
+        m.zoom = 0;
+        // (pulled up from a run, down low only once it has stopped)
+        if (m.speed > 0.25 && this.low <= 0) { m.layer = null; return true; }
+        this.low += dt;
+        m.setPosture('crouch');
+        m.layer = {
+          pose: { ...keen, hipY: 0.14, neckPitch: -0.4, headPitch: 0.12, tailLift: -0.4, tailSide: 0.15 * Math.sin(this.t * 5), tailCurl: 0.9 * Math.sin(this.total * 11) },
+          w: Math.min(1, this.low / 0.35),
+        };
+        const err = Math.abs(wrapA(Math.atan2(L!.p.x - m.pos.x, L!.p.z - m.pos.z) - m.yaw));
+        if (d < 0.36 && err < 0.4 && this.t > 0.3) this.next('wiggle', rand(0.1, 0.3));
+        else if ((this.frantic < 0.7 && this.t > 0.6) || this.t > 7) this.decide(c, L!, true);
+        return true;
+      }
       case 'stalk': {
         // low to the floor, creeping up on it, the tip of the tail going
         const T = this.target(c, L!), d = Math.hypot(T.x - m.pos.x, T.z - m.pos.z);
         if (L!.on !== 'floor' && L!.on !== 'bed') { this.decide(c, L!); return true; }
+        if (this.frantic > 1.6 && d > 0.36) { m.stop(); this.next('watch'); return true; }
         if (this.ds > 0.6 || d > 0.95) { this.next('run'); return true; }
         if (d < 0.33 && !this.via) { m.stop(); this.next('wiggle', rand(0.35, 0.9)); return true; }
         m.setPosture('crouch');
@@ -328,6 +390,8 @@ export class Chase implements Act {
           else { this.leaps = 0; this.next('leap', rand(0.5, 1)); }
           return true;
         }
+        // (thrown this way and that faster than it can follow: it pulls up, and watches)
+        if (this.frantic > 2.2 && d > 0.4 && (flat || books)) { m.stop(); m.zoom = 0; m.layer = null; this.next('watch'); return true; }
         // (no nearer for a good while: stopped, and a fresh start at it)
         if (d < this.best - 0.02) { this.best = d; this.stuck = 0; }
         else if ((this.stuck += dt) > 1.6) { m.stop(); m.zoom = 0; this.best = 1e9; this.stuck = 0; this.via = null; this.aim.set(NaN, 0, 0); }
@@ -357,7 +421,10 @@ export class Chase implements Act {
         // spun on a pin)
         m.stop();
         const err = wrapA(Math.atan2(L!.p.x - m.pos.x, L!.p.z - m.pos.z) - m.yaw);
-        m.yaw = wrapA(m.yaw + clamp(err * 4, -1.7, 1.7) * dt);
+        // (gone off round to the side of it: no swivelling round after it crouched; round to it
+        // again with its feet, low)
+        if (Math.abs(err) > 0.7 && this.t > 0.15) { m.layer = null; this.next(this.frantic > 1.6 ? 'watch' : 'stalk'); return true; }
+        m.yaw = wrapA(m.yaw + clamp(err * 3, -0.9, 0.9) * dt);
         m.setPosture('crouch');
         const wg = wiggle(this.t, this.dur);
         m.layer = {
@@ -480,9 +547,11 @@ export class Chase implements Act {
         const up = ease(this.t / 0.35);
         const hit = { planted: 0, frame: 0, x: 0.02 + Math.abs(lx) * 0.5, y: 0.05 + (h + 0.02 * pat - 0.05) * up, z: 0.07 + (out - 0.07 - 0.015 * pat) * up, flex: 0.25 + 0.3 * pat };
         const rest = { planted: 0, frame: 0, x: 0.035, y: 0.05 + (h - 0.08) * up, z: 0.07 + (out - 0.09) * up, flex: 0.5 };
+        // (up onto its haunches, the forepaws coming off the floor, over a third of a second: a
+        // body that weight does not jump up straight)
         m.layer = {
           pose: { ...keen, chestPitch: -1.02 - 0.18 * up, hipY: 0.056 + 0.03 * up, neckPitch: 0.25 * up, headPitch: -0.1, LF: right ? rest : hit, RF: right ? hit : rest, tailSide: 0.5 * Math.sin(this.t * 6) },
-          w: 1,
+          w: smooth(Math.min(1, this.t / 0.3)),
         };
         return true;
       }
@@ -575,7 +644,7 @@ export class Chase implements Act {
   }
 
   /** what to do about the dot where it is now */
-  private decide(c: Ctx, L: LaserDot) {
+  private decide(c: Ctx, L: LaserDot, watched = false) {
     const m = c.m;
     m.layer = null;
     const T = this.target(c, L), d = Math.hypot(T.x - m.pos.x, T.z - m.pos.z);
@@ -583,6 +652,7 @@ export class Chase implements Act {
     this.via = null;
     if (L.on === 'floor' || L.on === 'bed') {
       if (d < 0.36) this.next('wiggle', rand(0.35, 0.8));
+      else if (this.frantic > 1.6 && !watched) { m.stop(); m.zoom = 0; this.next('watch'); }
       else if (this.ds > 0.45 || d > 0.85) this.next('run');
       else this.next('stalk');
       return;
@@ -603,7 +673,7 @@ export class Chase implements Act {
   /** a pounce: how far to carry (the forepaws to come down on the dot, as near as a cat can
    *  judge), the way it faces now, and the longer the leap the longer it takes */
   private pounce(c: Ctx) {
-    const m = c.m, L = c.laser();
+    const m = c.m, L = this.steady(c.laser(), 0);
     m.stop();
     m.zoom = 0;
     // (the run's way on is in the leap now)
