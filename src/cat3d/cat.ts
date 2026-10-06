@@ -205,6 +205,8 @@ export class Cat3D {
   /** one eye opened a little in its sleep (how far, and which: 0 the left, 1 the right) */
   peek = 0;
   peekEye = 0;
+  /** awake (0 .. 1, eased by the avatar): in a posture made for sleep, its eyes open all the same */
+  awake = 1;
 
   /** how upright the head is: 1 level, 0 lying on its side, below 0 upside down */
   headUp() {
@@ -358,9 +360,15 @@ export class Cat3D {
       p.hipY += lift;
       body.trunk(p);
     }
-    if (motor.lookW > 0.01) {
+    // (curled up nose to tail, the head is turned right round on the neck already: it turns little
+    // further to look, the eyes do the looking; turned by the chest's reckoning, it came up off the
+    // tail and round the wrong way, away from what it looked at)
+    let curled = 0;
+    for (const [name, wgt] of motor.postureWeights()) if (name === 'curl' || name === 'curlL') curled += wgt;
+    const lookW = motor.lookW * (1 - 0.8 * curled);
+    if (lookW > 0.01) {
       const target = tmp.a.copy(motor.gaze).applyMatrix4(this.inv);
-      body.look(target, motor.lookW, p.headRoll);
+      body.look(target, lookW, p.headRoll);
     }
     // paws: where the pose wants them, then the stepper's say for planted ones
     for (const l of LEGS) {
@@ -399,7 +407,7 @@ export class Cat3D {
       p.chestPitch -= tip;
       p.neckPitch += tip;
       body.trunk(p);
-      if (motor.lookW > 0.01) body.look(tmp.a.copy(motor.gaze).applyMatrix4(this.inv), motor.lookW, p.headRoll);
+      if (lookW > 0.01) body.look(tmp.a.copy(motor.gaze).applyMatrix4(this.inv), lookW, p.headRoll);
     }
     body.legsTo(p, this.targ, this.flex, this.ground);
     body.face(p, motor.twitch);
@@ -419,7 +427,9 @@ export class Cat3D {
     // shut (asleep) keeps them shut
     const ey = motor.eyes;
     const c01 = (x: number) => Math.max(0, Math.min(1, x));
-    const open = c01(p.eyeOpen + ey.open * Math.min(1, p.eyeOpen / 0.6)) * (1 - motor.blink);
+    // (awake in a posture it sleeps in, curled up or on its back: the eyes open, as awake)
+    const lid = p.eyeOpen + (0.7 - p.eyeOpen) * this.awake * c01(1 - p.eyeOpen / 0.3);
+    const open = c01(lid + ey.open * Math.min(1, lid / 0.6)) * (1 - motor.blink);
     // (narrowed with pleasure, not annoyance: the eyes smile; and a slow blink, a cat's smile at
     // you, closes them in an arch too)
     const md = motor.mood;

@@ -81,7 +81,8 @@ export class PixelApp {
     this.firstWords = new Firsts(() => this.state.hints, this.hintUi);
     this.senses = new Senses3D(cat, this.stage.camera, canvas);
     this.frame3d();
-    this.avatar = new PixelAvatar(cat, { x: 0, z: 0.05, yaw: 0 }, this.halfWidth() + 0.25,
+    // (out of the room: past its ends, beyond where the view can be taken round to)
+    this.avatar = new PixelAvatar(cat, { x: 0, z: 0.05, yaw: 0 }, Math.max(this.halfWidth() + 0.25, 1.35),
       (sx, sy, out) => this.senses.screenToWorld(sx, sy, out), () => this.stage.camera.position);
     this.room = new Room(cat.shared as unknown as Record<string, { value: unknown }>, { bed: new THREE.Vector3(0, 0, 0.05) });
     this.stage.scene.add(this.room.group);
@@ -211,11 +212,20 @@ export class PixelApp {
     this.brain.wake(performance.now() / 1000, firstEver, away / 1000);
     this.avatar.settle();
 
-    this.input = new PointerInput(canvas, {
-      hitCat: (sx, sy, held) => !this.avatar.hidden && !!this.senses.hitNear(sx, sy, held ? 16 : 7),
+    // (what the finger touches: the picture, or on iOS's browsers a see-through layer over it whose
+    // taps can be felt; see Haptic.surface)
+    const surface = this.haptic.surface(canvas);
+    this.input = new PointerInput(surface, {
+      // (a fingertip's width off its edge is on it, the more so close in, where a stroke that came
+      // down just off its back was a finger on the glass; but not where a toy lies under the finger:
+      // that is for the toy, unless the cat itself is right there)
+      hitCat: (sx, sy, held) => !this.avatar.hidden && !!this.senses.hitNear(sx, sy,
+        held ? 16 * (1 + 1.2 * this.focus) : this.toyAt(sx, sy) ? 0 : 7 * (1 + 1.2 * this.focus)),
       toP: (sx, sy) => [sx * this.senses.k, sy * this.senses.k],
       catTouchStart: (c) => { this.anchorTouch(c.sx, c.sy); this.brain.touchStart(c); },
       catTouchEnd: (c, tap) => { this.gestureEnd(); this.brain.touchEnd(c, tap); },
+      lifting: (tap) => { if (tap) this.haptic.lifted(); },
+      stroking: () => this.haptic.stroke(),
       glassTap: (x, y) => {
         this.gestureEnd();
         if (this.creditsOpen) { this.showCredits(false); return; }
@@ -431,8 +441,8 @@ export class PixelApp {
     });
     // (a finger on the glass wipes the mist off it where it goes)
     const wipe = (e: PointerEvent) => { if (e.pointerType !== 'mouse' || e.buttons) this.glassFog.wipe(e.clientX / innerWidth, e.clientY / innerHeight, e.pointerType === 'mouse' ? 0.03 : 0.045); };
-    canvas.addEventListener('pointerdown', (e) => { this.audio.start(); this.awake.touched(); this.inputAt = performance.now() / 1000; wipe(e); });
-    canvas.addEventListener('pointermove', (e) => { this.inputAt = performance.now() / 1000; wipe(e); }, { passive: true });
+    surface.addEventListener('pointerdown', (e) => { this.audio.start(); this.awake.touched(); this.inputAt = performance.now() / 1000; wipe(e); });
+    surface.addEventListener('pointermove', (e) => { this.inputAt = performance.now() / 1000; wipe(e); }, { passive: true });
     this.audio.unlockOn(window);
     this.native();
     this.motion.onShake = (k) => this.brain.kibble(k);
@@ -481,10 +491,21 @@ export class PixelApp {
   private static readonly COARSE_KEY = 'cat-window.coarse';
   /** whether the phone keeps up with the picture (see SlowWatch): if not, the art drawn coarser */
   private readonly slowWatch = new SlowWatch();
+  private coarseDue = false;
   private keepUp(gapMs: number, busy: boolean) {
-    if (!busy || !this.slowWatch.frame(gapMs) || new URLSearchParams(location.search).get('px')) return;
+    if (busy && this.slowWatch.frame(gapMs) && !new URLSearchParams(location.search).get('px')) this.coarseDue = true;
+    // (the art made coarser when nothing is being done with it: not under a finger, nor with the
+    // view close in on the cat, where the whole picture changing at once would be a jolt)
+    if (!this.coarseDue || this.input.touching || this.focus > 0.02) return;
+    this.coarseDue = false;
     this.stage.setArtWidth(PixelApp.artWidth(PixelApp.COARSE));
     try { localStorage.setItem(PixelApp.COARSE_KEY, '1'); } catch { /* not remembered, then */ }
+  }
+
+  /** a toy that can be taken up under a screen point (the laser pointer on the sill, the wand,
+   *  the ball of wool) */
+  private toyAt(x: number, y: number) {
+    return (this.room.pointer.visible && this.hitThing(this.room.pointer, x, y, 24)) || this.hitWand(x, y) || this.hitThing(this.room.yarnBall, x, y, 26);
   }
 
   /** half the width of the room seen at the cat's bed (metres) */
@@ -753,15 +774,28 @@ export class PixelApp {
     if (this.anchor) {
       const a = this.anchor;
       a.bone.updateWorldMatrix(true, false);
-      a.at.lerp(this.tmpA.copy(a.local).applyMatrix4(a.bone.matrixWorld), 1 - Math.exp(-dt * 6));
+      const spot = this.tmpA.copy(a.local).applyMatrix4(a.bone.matrixWorld);
+      // coming in, the spot is followed as the cat shifts, to be under the finger when the view is
+      // in; in close, it is gone after while a hand is on the cat (it sinks under the hand, the
+      // hand goes down with it), but no faster than a hand would, so that the view drifts and
+      // does not jerk after every kick and turn; with no hand on it, the view holds still
+      if (this.focus < 0.98) a.at.lerp(spot, 1 - Math.exp(-dt * 6));
+      else if (touching) {
+        const d = a.at.distanceTo(spot), step = Math.min(d * (1 - Math.exp(-dt * 5)), 0.3 * dt);
+        if (d > 1e-5) a.at.lerp(spot, step / d);
+      }
+      else {
+        const d = a.at.distanceTo(spot);
+        if (d > 0.15) a.at.lerp(spot, Math.min(1, 0.3 * dt / d));
+      }
       if (this.focusT === 0 && this.focus < 0.01) this.anchor = null;
     }
     // (in round a spot on its back or its flank, as near as that leaves its face on the screen:
-    // its face is what answers the hand. Out again at once if the face would go off; in again
-    // slowly as it comes back)
+    // its face is what answers the hand. Out again if the face would go off, and in again as it
+    // comes back, both unhurried: a glance aside is not the view breathing in and out)
     this.cat.body.eyes(this.eyesW).applyMatrix4(this.cat.group.matrixWorld);
     const need = this.anchor ? this.nearest(this.anchor, this.eyesW) : this.closeDist;
-    this.closeNow += (need - this.closeNow) * (1 - Math.exp(-dt * (need > this.closeNow ? 5 : 1.2)));
+    this.closeNow += (need - this.closeNow) * (1 - Math.exp(-dt * (need > this.closeNow ? 1.8 : 0.6)));
     if (this.focus < 0.01) this.closeNow = need;
     // the room view follows as the cat goes off toward an edge, a little ahead of it the way it is
     // walking (not when it is tearing about: it lags behind then, rather than swinging to and fro),

@@ -135,7 +135,7 @@ const report = await page.evaluate(async (minutes) => {
     lastPos.x = m.pos.x; lastPos.z = m.pos.z;
     const wants = (app.avatar.trip && !app.avatar.hidden && (!app.avatar.errand || app.avatar.errand.phase !== 'do'));
     stillFor = wants && !moved ? stillFor + 0.05 : 0;
-    if (stillFor > 12) { issues.push(`stuck on a ${app.avatar.trip.kind} at ${i} (${app.avatar.errand ? app.avatar.errand.phase : ''}; act ${app.avatar.doing}, goal ${!!m.goal}, ${m.posture}, last act started ${lastAct})`); stillFor = -1e9; }
+    if (stillFor > 12) { issues.push(`stuck on a ${app.avatar.trip.kind} at ${i} (${app.avatar.errand ? app.avatar.errand.phase : ''}; act ${app.avatar.doing}, goal ${!!m.goal}, ${m.posture}, mind ${app.brain.mode}/${app.state.where}, last act started ${lastAct})`); stillFor = -1e9; }
     // the room's still things, merged into a few meshes, must never move or change
     if (i % 600 === 599) {
       app.stage.scene.updateMatrixWorld(true);

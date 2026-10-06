@@ -918,6 +918,9 @@ export interface Spots {
   sniff: { to: THREE.Vector3; face: number }[];
   /** upright things to rub a cheek on: the lamp's pole */
   posts: THREE.Vector3[];
+  /** corners to sulk in, at either end of the room (inside what the view can be taken round to):
+   *  where to sit, and which way, its back to you */
+  sulk: { to: THREE.Vector3; face: number }[];
   /** the scratching post: where it stands on the floor, how thick its post is, and how high and
    *  how far across its top is */
   scratcher?: { at: THREE.Vector3; r: number; top: number; topR: number };
@@ -1019,6 +1022,7 @@ export class Room {
       litter: new THREE.Vector3(bx + 0.62, 0, wallZ + 0.2),
       sniff: [],
       posts: [],
+      sulk: [],
     };
     const S = this.spots;
     const add = (m: THREE.Object3D, x: number, y: number, z: number) => {
@@ -1887,6 +1891,9 @@ export class Room {
       S.sniff.push({ to, face: face(to, V(ax, 0, az)) });
     }
     S.posts.push(V(lx, 0, lz));
+    // corners to sulk in: by the scratching post at the left end, and past the litter box at the
+    // right, facing off into the corner, its back to you
+    S.sulk.push({ to: V(PS.x + 0.08, 0, PS.z + 0.32), face: -2.3 }, { to: V(S.litter.x + 0.08, 0, S.litter.z + 0.32), face: 2.3 });
     const O = L.uOcc.value as THREE.Vector4[];
     occ.slice(0, NOCC).forEach(([a, b2, r, k], i) => { O[2 * i].set(a.x, a.y, a.z, r); O[2 * i + 1].set(b2.x, b2.y, b2.z, k); });
     this.batchStill();

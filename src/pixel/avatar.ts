@@ -4,7 +4,7 @@ import { POSES, SIDE_TURN, type Leg, type PoseLayer, type PoseName } from '../ca
 import { NEUTRAL, type Mood } from '../cat3d/mood';
 import type { Avatar } from '../sim/avatar';
 import type { EarMood, TailMood } from '../rig/animator';
-import { boop, byYou, chooseAct, groomChest, groomFlank, knead, restingPose, sneeze, toBed, toWindow, wander, warmUp, washFace, yawn, type Act, type Ctx, sunbathe, Play, Sill, Hunt, Box, Zoomies, Walk, Stare, Rub, scratchEar, wakeUp, stretchSideOn, Greet, Gift, Snub, Beg, PawGlass, TailChase, Claw, Top, Fish, Bat, Trap, isPerching, type Perching, type ScratchPost, type GlassFinger, type SillSpot } from './behave';
+import { boop, byYou, chooseAct, groomChest, groomFlank, knead, restingPose, sneeze, toBed, toWindow, wander, warmUp, washFace, yawn, type Act, type Ctx, sunbathe, Play, Sill, Hunt, Box, Zoomies, Walk, Stare, Rub, scratchEar, wakeUp, stretchSideOn, Greet, Gift, Snub, Beg, PawGlass, TailChase, Claw, Top, Fish, Bat, Trap, Sulk, isPerching, type Perching, type ScratchPost, type GlassFinger, type SillSpot, type SulkSpot } from './behave';
 import { Chase, Startle, type LaserDot } from './chase';
 import { Tease, type Lure } from './tease';
 
@@ -54,10 +54,11 @@ export class PixelAvatar implements Avatar {
   private isHidden = false;
   /** coming or going: the walk is the avatar's until it ends */
   private trip: { kind: 'leave' | 'come' | 'errand'; onDone?: () => void } | null = null;
-  /** an errand in the room: to the bowl, eat or drink there, then off out of the room */
+  /** an errand in the room: to the bowl (or the box), eat or drink there, and then about the room
+   *  again (off: done, and waiting to be called back) */
   private errand: { reason: string; phase: 'go' | 'do' | 'off'; t: number; dur: number; dir: number } | null = null;
   /** the room's places (bowls, box), once there is a room */
-  spots: { food: THREE.Vector3; water: THREE.Vector3; litter: THREE.Vector3; sniff?: { to: THREE.Vector3; face: number }[]; posts?: THREE.Vector3[]; scratcher?: ScratchPost } | null = null;
+  spots: { food: THREE.Vector3; water: THREE.Vector3; litter: THREE.Vector3; sniff?: { to: THREE.Vector3; face: number }[]; posts?: THREE.Vector3[]; scratcher?: ScratchPost; sulk?: SulkSpot[] } | null = null;
   /** a place in the sun on the floor, if there is one now */
   sunSpot: (() => THREE.Vector3 | null) | null = null;
   /** is a circle on the floor clear of the room's things */
@@ -334,8 +335,10 @@ export class PixelAvatar implements Avatar {
     this.cat.motor.jolt(1.3);
     this.cat.motor.flickEar('both', 1.2);
     if (this.sleep > 0.3 || this.errand || this.trip) return false;
-    // (up on the sill, most likely it was the one that sent it over: it only starts, and looks)
+    // (up on the sill, most likely it was the one that sent it over: it only starts, and looks;
+    // sulking in its corner, it only starts, and looks)
     if (this.perched) { this.see(at); return true; }
+    if (this.act instanceof Sulk) { this.see(at); return false; }
     this.stopAct();
     this.act = new Startle(this.ctx, at);
     // (and no games for a little while after)
@@ -667,6 +670,8 @@ export class PixelAvatar implements Avatar {
 
   /** straight into the posture the brain wants, no getting there (opening the app) */
   settle() {
+    // (found away as the window was opened: it is where that put it)
+    if (this.placed) { this.placed = false; return; }
     // (straight into bed, from wherever it was, the sill included)
     if (this.act) this.act.stop(this.ctx);
     this.act = null;
@@ -714,6 +719,7 @@ export class PixelAvatar implements Avatar {
    */
   private lieIn(p: PoseName, atHome: boolean, dt: number) {
     const m = this.cat.motor;
+    if (this.touched) p = this.sameWay(p);
     const b = this.bedSpot(p);
     const e = wrap(b.yaw - m.yaw);
     if (atHome && !this.touched && Math.abs(e) > 0.8) {
@@ -741,6 +747,16 @@ export class PixelAvatar implements Avatar {
       this.scoot = { t: 0, dx: dx / d, dz: dz / d, len: Math.min(d, 0.035) };
     }
     if (Math.abs(e) <= 0.8) m.yaw = wrap(m.yaw + Math.max(-0.3 * dt, Math.min(0.3 * dt, e)));
+  }
+
+  /** p, unless going into it from the posture it is in now would turn it round where it lies:
+   *  curled up nose to tail, its face is the other way from a loaf's, and it would rise and turn
+   *  under the hand, the close view going round with it. Then it stays as it is, and gets up and
+   *  turns round properly (lieIn, toBed) once it is let be */
+  private sameWay(p: PoseName): PoseName {
+    const now = this.cat.motor.targetPosture;
+    if (p === now) return p;
+    return Math.abs(wrap(this.cat.footprint(p).face - this.cat.footprint(now).face)) > 0.7 ? now : p;
   }
 
   /** what it is doing of its own accord, if anything */
@@ -932,7 +948,7 @@ export class PixelAvatar implements Avatar {
       if (this.act && !(this.act.name === 'knead' && this.kneading) && this.act.name !== 'boop') this.stopAct();
       if (!this.act && this.kneading) this.act = knead();
       if (this.act && !this.act.update(dt, c) && this.act.name === 'boop') { this.stopAct(); this.maybeBlep(0.3); }
-      else m.setPosture(this.wanted() === 'sit' ? 'sit' : atHome ? this.rest : 'loaf');
+      else m.setPosture(this.sameWay(this.wanted() === 'sit' ? 'sit' : atHome ? this.rest : 'loaf'));
       this.swatStep(dt);
       return;
     }
@@ -940,7 +956,7 @@ export class PixelAvatar implements Avatar {
     // a hand on it: it stops for it, whatever it was about (short of a game, a hunt, the zoomies
     // or a fright; up on something, it stays up there): not walked out from under the hand
     if (this.hands.length && this.act && !this.perched
-      && !(this.act instanceof Chase || this.act instanceof Tease || this.act instanceof Play || this.act instanceof Hunt || this.act instanceof Zoomies || this.act instanceof Startle || this.act instanceof Trap)) {
+      && !(this.act instanceof Chase || this.act instanceof Tease || this.act instanceof Play || this.act instanceof Hunt || this.act instanceof Zoomies || this.act instanceof Startle || this.act instanceof Trap || this.act instanceof Sulk)) {
       this.stopAct();
       m.stop();
     }
@@ -989,8 +1005,9 @@ export class PixelAvatar implements Avatar {
       if (this.sleep > 0.75 || !this.alive) this.nudge = 0;
     }
     // a finger moving on the glass a while: a cat in the mood comes and pats at it
+    // (not a stroke that came down just off it, the hand on it a moment ago)
     const F = this.fingerNow();
-    if (F && F.still < 0.5 && this.clock - this.glassFinger!.since > 1 && this.pawRest <= 0 && this.mood.sleepy < 0.6
+    if (F && F.still < 0.5 && this.clock - this.glassFinger!.since > 1 && this.pawRest <= 0 && this.mood.sleepy < 0.6 && this.sinceHands > 4
       && (this.mood.arousal > 0.2 || this.mood.trust > 0.3)) {
       this.pawRest = 20;
       this.act = new PawGlass(() => this.fingerNow());
@@ -1145,6 +1162,9 @@ export class PixelAvatar implements Avatar {
       const want = this.alive && this.sleep > 0.5 ? Math.min(0.6, Math.max(this.eyeTarget, this.dazzle > 0.5 ? 0.3 : 0)) : 0;
       this.cat.peek += (want - this.cat.peek) * (1 - Math.exp(-dt * (want > this.cat.peek ? 4 : 6)));
       this.cat.peekEye = m.posture === 'curlL' ? 1 : 0;
+      // (awake where it lay curled up asleep: the eyes open, slowly, as waking)
+      const up = this.alive && this.sleep < 0.3 ? 1 : 0;
+      this.cat.awake += (up - this.cat.awake) * (1 - Math.exp(-dt * (up > this.cat.awake ? 2.5 : 6)));
     }
     // eyes on the finger, or on you (through the window); asleep, dead or busy, nowhere (up on
     // the sill it looks where it likes: out of the window)
@@ -1385,18 +1405,10 @@ export class PixelAvatar implements Avatar {
           this.washAfter.stop(this.ctx);
           this.washAfter = null;
         }
-        // off out of the room, the far way round; from the litter box, as often as not, at a
-        // gallop with the tail up, as cats will
+        // done: up from it, and called back about the room (arrive)
         e.phase = 'off';
         m.layer = null;
         m.setPosture('stand');
-        const rocket = e.reason === 'litter' && Math.random() < 0.5;
-        if (rocket) {
-          m.zoom = 1;
-          m.layer = { pose: { tailLift: 1.25, tailHook: 0.7, earFwd: -0.35, earOut: 0.25, hipY: 0.185 }, w: 1 };
-          this.ctx.sound('scrabble', 0.25);
-        }
-        m.walkTo(new THREE.Vector3(e.dir * (this.offstage + 0.35), 0, m.pos.z - 0.1), rocket ? 1.3 : 0.3);
         return;
       }
       m.setPosture('crouch');
@@ -1416,16 +1428,103 @@ export class PixelAvatar implements Avatar {
       // (drinking, the tongue lapping, curled down to scoop: four or five laps a second)
       const lap = e.reason === 'drink' ? Math.max(0, Math.sin(e.t * 15)) : 0;
       m.layer = { pose: { neckPitch: -0.85, headPitch: -0.25, jaw: chew, tongue: lap, tongueUp: -0.9 }, w: Math.min(1, e.t * 1.5) };
-    } else if (e.phase === 'off' && Math.abs(m.pos.x) > this.offstage) {
-      m.zoom = 0;
-      m.layer = null;
-      this.errand = null;
-      this.trip = null;
-      this.setHidden(true);
+    } else if (e.phase === 'off' && this.mode !== 'away') {
+      // (done, and nobody waiting to call it back: about the room again of itself)
+      this.arrive();
+    }
+  }
+
+  /** the errand done where you can see it (at the bowl, up out of the box), and waiting to be
+   *  called back about the room */
+  get errandDone() {
+    return this.errand?.phase === 'off';
+  }
+
+  /** a body in a room keeps to it: away (an errand, a sulk), the cat is in it all the same */
+  readonly inRoom = true;
+
+  /** a corner to sulk in: the one further from where it is (not: the one it is in) */
+  private corner(not?: SulkSpot): SulkSpot | null {
+    const S = (this.spots?.sulk ?? []).filter((k) => k !== not);
+    if (!S.length) return null;
+    const m = this.cat.motor;
+    return S.reduce((a, b) => (Math.hypot(b.to.x - m.pos.x, b.to.z - m.pos.z) > Math.hypot(a.to.x - m.pos.x, a.to.z - m.pos.z) ? b : a));
+  }
+
+  /** sulking in its corner: a hand on it is shrugged off (again: a hand that will not leave it be,
+   *  it is up and off to the other corner) */
+  sulkTouched(again: boolean) {
+    const k = this.act instanceof Sulk ? this.act : null;
+    if (!k) return;
+    this.cat.motor.flickEar('both', 1.1);
+    if (again && k.phase === 'sit') {
+      const other = this.corner(k.spot);
+      if (other) { k.moveTo(other); return; }
+    }
+    k.rebuff();
+  }
+  /** made up with in its corner: round to you, and a slow blink */
+  sulkOver() {
+    if (this.act instanceof Sulk) this.act.makeUp();
+  }
+
+  /** found away as the window is opened: in the room all the same. At the bowl (or in the box),
+   *  at it a little while yet; sulking, in its corner with its back to you; out and about (a wander
+   *  round the house, as the cat sees it), somewhere about the room, by one of its things */
+  private placed = false;
+  awayAt(reason: string) {
+    const m = this.cat.motor;
+    this.placed = true;
+    // (awake: at it, or sulking, or about)
+    this.sleep = 0;
+    this.setHidden(false);
+    if (this.act) { this.act.stop(this.ctx); this.act = null; }
+    this.errand = null;
+    this.trip = null;
+    this.washAfter = null;
+    this.cat.perch = null;
+    this.cat.liftHold = null;
+    m.layer = null;
+    m.zoom = 0;
+    const spot = !this.spots ? null : reason === 'eat' ? this.spots.food : reason === 'drink' ? this.spots.water : reason === 'litter' ? this.spots.litter : null;
+    if (spot) {
+      const face = Math.atan2(spot.x - this.home.x, spot.z - this.home.z);
+      const reach = reason === 'litter' ? 0 : 0.2;
+      this.cat.place(spot.x - Math.sin(face) * reach, spot.z - Math.cos(face) * reach, face);
+      m.snap('crouch');
+      this.trip = { kind: 'errand' };
+      this.washAfter = null;
+      this.errand = { reason, phase: 'do', t: 0, dur: 5 + Math.random() * 6, dir: spot.x >= 0 ? 1 : -1 };
+      return;
+    }
+    if (reason === 'sulk') {
+      const k = this.corner();
+      if (k) {
+        this.cat.place(k.to.x, k.to.z, k.face);
+        m.snap('loaf');
+        const act = new Sulk(k);
+        act.sat();
+        this.act = act;
+        return;
+      }
+    }
+    // (out and about: by one of its things, nosing at it, and so back to you by its own way)
+    const S = this.spots?.sniff ?? [];
+    const w = S.length ? S[Math.floor(Math.random() * S.length)] : null;
+    if (w) {
+      this.cat.place(w.to.x, w.to.z, w.face);
+      m.snap('stand');
     }
   }
 
   bolt(dir: number, onDone?: () => void, calm = false, reason?: string) {
+    // (still at the bowl from the last errand, the mind on another already: that one is over)
+    if (this.trip?.kind === 'errand') {
+      this.errand = null;
+      this.trip = null;
+      this.washAfter = null;
+      this.cat.motor.layer = null;
+    }
     if (this.trip || this.isHidden) return;
     if (this.perched) {
       // down off the sill first
@@ -1460,6 +1559,13 @@ export class PixelAvatar implements Avatar {
       });
       return;
     }
+    // off into the far corner of the room to sulk, its back to you (in view, or for the view to be
+    // taken round to: never out of the room)
+    const k = this.corner();
+    if (k) {
+      this.act = new Sulk(k, onDone, !calm);
+      return;
+    }
     const x = Math.sign(dir || 1) * (this.offstage + 0.3);
     this.trip = { kind: 'leave', onDone };
     m.setPosture('stand');
@@ -1472,6 +1578,24 @@ export class PixelAvatar implements Avatar {
 
   arrive(onDone?: () => void) {
     const m = this.cat.motor;
+    if (!this.isHidden) {
+      // in the room all along (the bowl, the box, a corner it sulked in): about it again from
+      // there, and back to its bed in its own time, a walk a hand can stop it in; from the litter
+      // box, as often as not, a mad dash round the room first, as cats will
+      const rocket = this.errand?.reason === 'litter' && Math.random() < 0.5;
+      this.errand = null;
+      this.washAfter = null;
+      this.trip = null;
+      if (this.act) { this.act.stop(this.ctx); this.act = null; }
+      m.layer = null;
+      m.zoom = 0;
+      if (rocket) {
+        this.ctx.sound('scrabble', 0.25);
+        this.act = new Zoomies(this.ctx);
+      } else this.act = toBed(this.ctx, this.wanted());
+      onDone?.();
+      return;
+    }
     // (anything left over from before is dropped first: stopping it later would stop this walk too)
     if (this.act) { this.act.stop(this.ctx); this.act = null; }
     this.cat.perch = null;

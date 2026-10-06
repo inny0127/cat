@@ -29,7 +29,9 @@ const HINT = {
   foodScrub: '빈 곳을 좌우로 빠르게 문지르면 사료를 부어 줄 수 있어요',
   water: '빈 곳을 길게 누르고 있으면 물을 따라요',
   litter: '빈 곳을 아래로 쓸어내리면 화장실 모래를 치워요',
-  sulk: '고양이가 기분이 상해서 가 버렸어요. 시간이 지나면 돌아올 거예요',
+  sulk: '고양이가 기분이 상해서 구석으로 가 버렸어요. 조금 내버려 두면 마음이 풀릴 거예요',
+  sulkTouch: '아직 삐져 있어요. 조금 더 기다렸다가 살며시 다가가 보세요',
+  madeUp: '고양이가 마음을 풀었어요. 화해했어요',
   away: '고양이는 잠시 자리를 비웠어요',
   sick: '고양이가 아파요. 밥과 물을 챙겨 주세요',
   dead: '고양이가 더 이상 숨을 쉬지 않아요. 오래 눌러 작별 인사를 할 수 있어요',
@@ -134,9 +136,24 @@ export class Brain {
       return;
     }
     if (s.where === 'away') {
-      this.setMode('away');
-      this.anim.setHidden(true);
-      return;
+      if (!this.anim.awayAt) {
+        this.setMode('away');
+        this.anim.setHidden(true);
+        return;
+      }
+      // a body with a room keeps to it: away, the cat is somewhere in it all the same (at the bowl,
+      // in the box, sulking in a corner); out and about the house, it is about the room, and home
+      // by its own way of it
+      this.anim.setHidden(false);
+      const why = s.awayReason ?? 'wander';
+      this.anim.awayAt(why);
+      if (why !== 'wander') {
+        this.setMode('away');
+        if (why === 'sulk') this.sulkFrom = now - 60;
+        return;
+      }
+      s.where = 'bed';
+      s.awayReason = null;
     }
     this.anim.setHidden(false);
     const n = needs(s);
@@ -202,6 +219,10 @@ export class Brain {
 
   // ------------------------------------------------------------------ input events
   touchStart(c: Contact) {
+    if (this.mode === 'away' && this.anim.inRoom && this.s.alive) {
+      this.awayTouch();
+      return;
+    }
     if (this.inert) return;
     const zone = this.senses.zoneAt(c.px, c.py);
     this.lastTouch = this.time;
@@ -272,6 +293,8 @@ export class Brain {
     }
     const rough = 0.1 + 0.07 * (this.pokes.length - 1) + (zone === 'face' ? 0.12 : 0);
     this.irritation = clamp(this.irritation + rough * (this.s.trust < 0 ? 1.4 : 1));
+    // (the twitch of it under the fingertip, felt)
+    this.haptic.tap('light');
     this.anim.twitchEar(zone === 'ear' ? this.earSide(c) : 'both', 1.2);
     if (zone === 'face') this.anim.doBlink();
     if (zone === 'tail') this.anim.flickTail(1.5);
@@ -327,7 +350,7 @@ export class Brain {
     if (this.mode === 'away' && this.s.alive) {
       if (this.s.awayReason !== 'sulk' || this.s.trust > 0.5) {
         this.s.awayUntil = Math.min(this.s.awayUntil, this.s.lastTick + rand(8, 25) * 1000);
-        if (this.s.trust > 0.2 && chance(0.6)) this.say('meowSoft', { far: true, delay: rand(0.8, 2) });
+        if (this.s.trust > 0.2 && chance(0.6)) this.say('meowSoft', { far: !this.anim.inRoom, delay: rand(0.8, 2) });
       }
       return;
     }
@@ -437,6 +460,8 @@ export class Brain {
       return;
     }
     if (this.mode === 'leaving' || this.mode === 'arriving') {
+      // (a body that never got where it was going: it stays, and is itself again)
+      if (this.modeT > 20) this.toAwake('rest', true);
       this.express(dt, []);
       return;
     }
@@ -610,6 +635,8 @@ export class Brain {
       if (reason === 'sulk') {
         s.where = 'away';
         s.awayReason = 'sulk';
+        this.sulkFrom = this.time;
+        this.sulkPokes = [];
         // (a cat you have only just met, in the first days, sulks a few minutes, not the best part
         // of half an hour: you are still finding out what it will have)
         const newness = clamp(1 - (now - s.born) / (3 * 864e5));
@@ -643,7 +670,7 @@ export class Brain {
   }
 
   private errandSounds(reason: string) {
-    const far = { far: true, pan: rand(-0.8, 0.8) };
+    const far = this.anim.inRoom ? { far: false, pan: reason === 'litter' ? 0.45 : -0.3 } : { far: true, pan: rand(-0.8, 0.8) };
     if (reason === 'eat') {
       this.later(rand(2.5, 4), () => this.audio.series('crunch', Math.floor(rand(10, 18)), 0.62, { ...far, gain: 0.55 }));
     } else if (reason === 'drink') {
@@ -658,6 +685,13 @@ export class Brain {
 
   private updateAway(dt: number, touching: boolean) {
     const s = this.s;
+    if (this.anim.inRoom) {
+      // in the room all along: the errand done where you saw it, or the sulk worn off, and it is
+      // about the room again
+      const done = s.awayReason !== 'sulk' && this.anim.errandDone === true;
+      if ((done || s.lastTick >= s.awayUntil) && !touching) this.backInRoom();
+      return;
+    }
     this.anim.setHidden(true);
     if (this.arrivalCue >= 0) {
       this.arrivalCue -= dt;
@@ -669,6 +703,76 @@ export class Brain {
       this.audio.series('step', 5, 0.28, { gain: 0.35, pan: -0.5 });
       this.arrivalCue = 1.6;
     }
+  }
+
+  /** when the sulk began (brain time), and the hands put on it since in its corner */
+  private sulkFrom = -1e9;
+  private sulkPokes: number[] = [];
+
+  /** a hand on it while it is away in the room. At the bowl or in the box, it flicks an ear and
+   *  gets on with it. Sulking in its corner, it shrugs the hand off (and a hand that will not
+   *  leave it be has it up and off to the other corner, and sulking the longer); but a cat fond
+   *  of you, the worst of it over, makes it up with you */
+  private awayTouch() {
+    const s = this.s;
+    this.lastTouch = this.time;
+    if (s.awayReason !== 'sulk') {
+      this.anim.twitchEar('both', 0.6);
+      this.anim.flickTail(0.5);
+      return;
+    }
+    const since = this.time - this.sulkFrom;
+    if (s.trust > 0.4 && since > 40 + 70 * (1 - s.trust) && chance(0.35 + 0.6 * clamp((s.trust - 0.4) / 0.4))) {
+      this.makeUp();
+      return;
+    }
+    this.sulkPokes = this.sulkPokes.filter((t) => this.time - t < 6);
+    this.sulkPokes.push(this.time);
+    const again = this.sulkPokes.length >= 2;
+    this.anim.sulkTouched?.(again);
+    this.audio.play('growl', { gain: 0.16 + (again ? 0.1 : 0), pan: -0.2 });
+    this.haptic.tap(again ? 'medium' : 'light');
+    // (pestered, it sulks the longer)
+    s.awayUntil += (again ? 25 : 10) * 1000;
+    s.grudgeUntil = Math.max(s.grudgeUntil, s.awayUntil);
+    if (!s.hints.sulkTouch) {
+      s.hints.sulkTouch = 1;
+      this.later(1.2, () => this.hint.show(HINT.sulkTouch, 6000));
+    }
+  }
+
+  /** made up: round to you in its corner, a slow blink and a trill, and itself again (not back to
+   *  its bed at once: it is where it is, and a hand is welcome there now) */
+  private makeUp() {
+    const s = this.s;
+    s.where = 'bed';
+    s.awayReason = null;
+    s.grudgeUntil = s.lastTick;
+    this.irritation = Math.min(this.irritation, 0.1);
+    this.toAwake('rest', true);
+    this.anim.sulkOver?.();
+    this.later(0.7, () => this.say('trill'));
+    this.haptic.tap('light');
+    if (!s.hints.madeUp) {
+      s.hints.madeUp = 1;
+      this.later(1.4, () => this.hint.show(HINT.madeUp, 5000));
+    }
+  }
+
+  /** back from away, in the room all along: about it again from where it is (the avatar takes it
+   *  home in its own time) */
+  private backInRoom() {
+    const s = this.s;
+    const sulked = s.awayReason === 'sulk';
+    s.where = 'bed';
+    s.awayReason = null;
+    this.arrivalCue = -1;
+    // (sulked it out: over it)
+    if (sulked) this.irritation *= 0.3;
+    this.toAwake('rest', true);
+    this.anim.arrive();
+    if (s.trust > 0.35 && chance(sulked ? 0.4 : 0.7)) this.later(0.8, () => this.say('trill'));
+    this.wantSleepIn = rand(20, 60);
   }
 
   private arrive() {
@@ -899,7 +1003,8 @@ export class Brain {
     if (this.attention && this.time < this.attention.until) gaze = this.attention;
     else this.attention = null;
     if (!gaze && touching && (m === 'alert' || m === 'annoyed' || m === 'angry')) gaze = { x: contacts[0].sx, y: contacts[0].sy };
-    if (!gaze && m === 'rest') {
+    // (now and then a glance aside; not under a hand: then it is you, or the eyes half shut)
+    if (!gaze && m === 'rest' && !touching) {
       if (this.glance && this.time < this.glance.until) gaze = this.glance;
       else if (chance(dt * 0.08)) {
         const W = this.senses.viewW();

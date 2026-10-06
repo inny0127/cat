@@ -155,6 +155,11 @@ export class Body {
       // a cat turns its head about so far before it would have to turn its body
       let yaw = Math.atan2(D.x, D.z) - chestYaw;
       yaw = Math.atan2(Math.sin(yaw), Math.cos(yaw));
+      // (a point behind it, past where it can turn its head to: less and less of a turn to it, and
+      // none straight behind, rather than the head whipped from one shoulder to the other as the
+      // point goes across behind it)
+      const behind = Math.max(0, Math.min(1, (Math.abs(yaw) - 2) / (Math.PI - 2)));
+      const w = weight * (1 - behind * behind * (3 - 2 * behind));
       yaw = Math.max(-1.5, Math.min(1.5, yaw)) + chestYaw;
       const pitch = Math.max(-0.9, Math.min(0.9, Math.asin(Math.max(-1, Math.min(1, D.y)))));
       // this joint's share of the yaw and of the pitch, from where the head points now
@@ -171,7 +176,7 @@ export class Body {
       if (roll) Qt.multiply(Dq.setFromAxisAngle(AZ, roll));
       Qh.copy(kin.wq[I.head]);
       this.t.q4.copy(Qt);
-      Qt.copy(Qh).slerp(this.t.q4, weight);
+      Qt.copy(Qh).slerp(this.t.q4, w);
       // the turn this joint makes, applied in the world frame
       Dq.copy(Qt).multiply(Qh.invert());
       kin.setWorld(b, this.t.q4.copy(Dq).multiply(kin.wq[b]));

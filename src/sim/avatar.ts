@@ -72,6 +72,19 @@ export interface Avatar {
   /** leave: dir -1 left, 1 right; calm walks off rather than bolting; reason: the errand, if one
    *  (a body with a room to show it in goes to the bowl or the box) */
   bolt(dir: number, onDone?: () => void, calm?: boolean, reason?: string): void;
+  /** a body with a room to show it in keeps to it, away or not: off on an errand it is at the bowl
+   *  or the box, sulking it is in a corner of the room (never out of it, never hidden) */
+  readonly inRoom?: boolean;
+  /** (in the room) the errand done in view, and the cat waiting to be called back about the room */
+  readonly errandDone?: boolean;
+  /** (in the room) found away as the window is opened: where in the room it is, at what (the
+   *  bowl, the box, a corner to sulk in, somewhere about the room) */
+  awayAt?(reason: string): void;
+  /** (in the room) a hand on it as it sulks in its corner: shrugged off (again: up and off to the
+   *  other corner) */
+  sulkTouched?(again: boolean): void;
+  /** (in the room) made up with, in its corner: round to you */
+  sulkOver?(): void;
   /** a body that slowly isn't there any more */
   fadeAway(onDone?: () => void): void;
   /** come back into view */

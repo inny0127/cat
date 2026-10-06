@@ -906,6 +906,118 @@ export class Snub implements Act {
   }
 }
 
+/** a corner of the room to sulk in: where to sit, and which way (away from you) */
+export interface SulkSpot { to: THREE.Vector3; face: number }
+
+/**
+ * Sulking, and in the room still: off to a far corner of it at a stiff quick walk, the ears back,
+ * and sat down there with its back to you, the end of its tail lashing now and then, and a look
+ * back over its shoulder at you now and then, and away again. A hand on it there is shrugged off:
+ * the ears flat, the tail lashed, the head round at the hand a moment. Made up with, it turns round
+ * to you, sits, and gives you a slow blink: no hard feelings.
+ */
+export class Sulk implements Act {
+  readonly name = 'sulk';
+  phase: 'go' | 'sit' | 'round' = 'go';
+  private t = 0;
+  private going = false;
+  private glance = -1;
+  private glanceIn = rand(4, 9);
+  private lashIn = rand(1.5, 4);
+  private shrug = 0;
+  private faceYou = 0;
+  constructor(public spot: SulkSpot, private onThere?: () => void, private hurry = true) {}
+  /** its eyes are its own business */
+  get ownGaze() {
+    return true;
+  }
+  /** sat down in its corner already (found sulking there when the window is opened) */
+  sat() {
+    this.phase = 'sit';
+    this.t = 0;
+    this.there();
+  }
+  /** a hand on it: shrugged off */
+  rebuff() {
+    this.shrug = 1;
+    this.lashIn = 0;
+  }
+  /** a hand that will not leave it be: up and off to another corner */
+  moveTo(spot: SulkSpot) {
+    this.spot = spot;
+    this.phase = 'go';
+    this.going = false;
+    this.hurry = true;
+    this.t = 0;
+  }
+  /** made up with: round to you, and over */
+  makeUp() {
+    if (this.phase === 'round') return;
+    this.phase = 'round';
+    this.t = 0;
+    this.going = false;
+  }
+  private there() {
+    const cb = this.onThere;
+    this.onThere = undefined;
+    cb?.();
+  }
+  update(dt: number, c: Ctx) {
+    const m = c.m;
+    this.t += dt;
+    this.shrug = Math.max(0, this.shrug - dt * 0.8);
+    // (the sulk over by the mind's say, whatever way it ended: round to you, and done)
+    if (this.phase !== 'round' && c.mode !== 'away' && c.mode !== 'leaving') this.makeUp();
+    if (this.phase === 'go') {
+      if (!this.going) {
+        this.going = true;
+        m.layer = null;
+        m.setPosture('stand');
+        m.walkTo(this.spot.to.clone(), this.hurry ? 0.75 : 0.35, this.spot.face, () => { this.phase = 'sit'; this.t = 0; this.there(); });
+      }
+      m.lookAt(null);
+      m.layer = { pose: { earFwd: -0.55, earOut: 0.35, tailLift: -0.2 }, w: ease(this.t / 0.3) };
+      // (if it cannot get there, it sulks where it is)
+      if (this.t > 12) { m.stop(); this.phase = 'sit'; this.t = 0; this.there(); }
+      return true;
+    }
+    if (this.phase === 'round') {
+      // round on the spot to you, sat down, a slow blink, and that is that
+      const v = c.viewer();
+      if (!this.going) {
+        this.going = true;
+        m.setPosture('stand');
+        m.walkTo(m.pos.clone(), 0.2, Math.atan2(v.x - m.pos.x, v.z - m.pos.z), () => { this.faceYou = this.t; m.slowBlink(); });
+      }
+      if (this.faceYou > 0) m.setPosture('sit');
+      m.lookAt(v, this.faceYou > 0 ? 0.9 : 0.4);
+      m.layer = { pose: { earFwd: 0.1 }, w: ease(this.t / 0.6) };
+      return this.faceYou === 0 ? this.t < 5 : this.t - this.faceYou < 1.6;
+    }
+    // sat with its back to you
+    m.setPosture('loaf');
+    if ((this.lashIn -= dt) <= 0) {
+      this.lashIn = rand(1.8, 4.5);
+      m.flickTail(0.9 + 0.6 * this.shrug + 0.3 * Math.random());
+    }
+    // the look back over its shoulder at you, a moment, now and then (and at a hand on it, at once)
+    if (this.glance < 0 && ((this.glanceIn -= dt) <= 0 || this.shrug > 0.95)) { this.glance = 0; this.glanceIn = rand(6, 12); }
+    let look = 0;
+    if (this.glance >= 0) {
+      this.glance += dt;
+      look = hump(this.glance, 1.6, 0.35);
+      if (this.glance > 1.6) this.glance = -1;
+    }
+    m.lookAt(look > 0.05 ? c.viewer() : null, look);
+    m.layer = { pose: { earFwd: -0.4 - 0.5 * this.shrug, earOut: 0.3 + 0.3 * this.shrug, earFlat: 0.8 * this.shrug, squint: 0.2 + 0.3 * this.shrug }, w: ease(this.t / 0.5) };
+    return true;
+  }
+  stop(c: Ctx) {
+    c.m.layer = null;
+    c.m.lookAt(null);
+  }
+}
+
 /**
  * Hungry (or thirsty) and the bowl empty: over to it, a sniff down into it, nothing there; then
  * round to you, sat by it looking up at you, and a meow, a plaintive one if it has waited long, as

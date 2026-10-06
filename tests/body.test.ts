@@ -39,3 +39,37 @@ describe.each(['cat.bin', 'fri.bin'])('body solver (%s)', (file) => {
     });
   }
 });
+
+// looking at something as it goes round behind the cat: the head turns to it as far as it can
+// over one shoulder, less and less as it goes behind, and so comes round to the other side without
+// being whipped from one shoulder to the other
+describe('the head turned to look', () => {
+  const kin = new Kin(bones('fri.bin'));
+  const body = new Body(kin);
+  const headYaw = () => {
+    const f = new THREE.Vector3(0, 0, 1).applyQuaternion(kin.wq[body.I.head]);
+    return Math.atan2(f.x, f.z);
+  };
+  const lookAt = (a: number) => {
+    body.trunk(POSES.loaf);
+    const eye = body.eyes(new THREE.Vector3());
+    body.look(new THREE.Vector3(eye.x + 1.5 * Math.sin(a), eye.y + 0.4, eye.z + 1.5 * Math.cos(a)), 1);
+    return headYaw();
+  };
+  it('a thing round behind it, going across: no whip of the head', () => {
+    let last = lookAt(-Math.PI / 2), most = 0;
+    for (let a = -Math.PI / 2 - 0.02; a > -3 * Math.PI / 2; a -= 0.02) {
+      const y = lookAt(a);
+      most = Math.max(most, Math.abs(Math.atan2(Math.sin(y - last), Math.cos(y - last))));
+      last = y;
+    }
+    expect(most).toBeLessThan(0.1);
+  });
+  it('straight behind it: the head as the pose has it; off to one side, turned to it', () => {
+    body.trunk(POSES.loaf);
+    const own = headYaw();
+    expect(Math.abs(lookAt(Math.PI) - own)).toBeLessThan(0.05);
+    expect(lookAt(1) - own).toBeGreaterThan(0.8);
+    expect(lookAt(-1) - own).toBeLessThan(-0.8);
+  });
+});

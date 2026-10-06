@@ -56,6 +56,10 @@ export interface InputHandlers {
   lookStart?(): boolean;
   lookMove?(dx: number): void;
   lookEnd?(v: number, cancelled: boolean): void;
+  /** a finger lifted, before anything is made of it (tap: it barely moved, as a tap does) */
+  lifting?(tap: boolean): void;
+  /** a finger that came down on the cat moved (from inside the touch) */
+  stroking?(): void;
 }
 
 interface GlassTrack {
@@ -161,6 +165,7 @@ export class PointerInput {
     c.press = this.pressOf(e);
     c.maxSpeed = Math.max(c.maxSpeed, Math.hypot(c.vx, c.vy));
     c.onCat = c.startedOnCat && this.h.hitCat(e.clientX, e.clientY, true);
+    if (c.startedOnCat) this.h.stroking?.();
 
     const g = this.glass.get(e.pointerId);
     if (!g || c.startedOnCat) return;
@@ -225,6 +230,7 @@ export class PointerInput {
     }
     const dur = e.timeStamp - c.t0;
     const tap = !cancelled && dur < 300 && c.travel < 14;
+    this.h.lifting?.(!cancelled && dur < 700 && c.travel < 14);
     if (c.startedOnCat) {
       this.h.catTouchEnd(c, tap);
       return;

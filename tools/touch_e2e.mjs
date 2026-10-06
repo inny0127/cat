@@ -3,10 +3,16 @@
 // phone): the radio, the print (credits), a long press (water), petting the cat (does it stay under
 // the finger as the view comes in close), the laser pointer (taken off the sill, shone, lifted, put
 // down with a tap on it in hand) and the feather wand (taken up, dangled, let go). Prints what
-// happened and exits non-zero if anything did not. REEL_BASE=http://localhost:4173/ for a build.
+// happened and exits non-zero if anything did not. REEL_BASE=http://localhost:4173/ for a build;
+// IOS=1 for an iPhone's browser.
 import { chromium } from 'playwright-core';
 const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
-const ctx = await b.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, isMobile: true, hasTouch: true });
+// (IOS=1: as iOS's browsers are, without vibrate(): every touch lands on the see-through label over
+// the picture whose taps can be felt, and must work as on the picture itself)
+const IOS = process.env.IOS === '1';
+const ctx = await b.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, isMobile: true, hasTouch: true,
+  userAgent: IOS ? 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1' : undefined });
+if (IOS) await ctx.addInitScript(() => { delete Navigator.prototype.vibrate; });
 const page = await ctx.newPage();
 const errs = [];
 page.on('pageerror', (e) => errs.push(e.message));
@@ -148,6 +154,7 @@ await page.waitForTimeout(800);
 const pan2 = await get(() => window.__pcat.panX);
 check('a swipe to the right looks back to the left', pan2 < pan1 - 0.2, `${pan1.toFixed(2)} -> ${pan2.toFixed(2)}`);
 
+if (IOS) check('the finger lands on the label over the picture', await page.evaluate(() => document.elementFromPoint(195, 400)?.tagName === 'LABEL'));
 check('no errors on the page', errs.length === 0, errs.join(' | ').slice(0, 300));
 for (const [what, ok, detail] of results) console.log(ok ? 'ok  ' : 'FAIL', what.padEnd(46), detail);
 await b.close();
