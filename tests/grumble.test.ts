@@ -52,3 +52,33 @@ describe('a grumble before a hiss', () => {
     expect(warned).toBeGreaterThanOrEqual(5);
   });
 });
+
+describe('woken by a hand', () => {
+  it('out of a deep sleep, now and then a sleepy grumble about it', () => {
+    let grumbled = 0;
+    for (let seed = 1; seed <= 12; seed++) {
+      let r = seed;
+      const rnd = Math.random;
+      Math.random = () => ((r = (r * 16807) % 2147483647) / 2147483647);
+      const now = Date.now();
+      const s = newCat(now - 30 * 864e5);
+      s.trust = 0.3;
+      s.lastTick = now;
+      const quiet = (own: object = {}) =>
+        new Proxy(own as Record<string, unknown>, { get: (t, k) => (k in t ? t[k as string] : () => {}), set: () => true });
+      const said: string[] = [];
+      const b = new Brain(s, quiet({ inRoom: true }) as never, quiet({ play: (n: string) => { said.push(n); return 0.4; } }) as never, quiet() as never, quiet() as never, quiet({ zoneAt: () => 'back', grainAt: () => [1, 0], headScreen: () => ({ x: 0, y: 0 }) }) as never);
+      b.toSleep(0.9);
+      let t = 0;
+      for (; t < 3; t += 0.05) { s.lastTick += 50; b.update(0.05, t, []); }
+      const c: Contact = { id: 3, sx: 100, sy: 100, x0: 100, y0: 100, px: 100, py: 100, vx: 0, vy: 0, t0: t, last: t, onCat: true, startedOnCat: true, travel: 0, press: 0.4, maxSpeed: 0 };
+      b.touchStart(c);
+      b.touchEnd(c, false);
+      for (const end = t + 3; t < end; t += 0.05) { s.lastTick += 50; b.update(0.05, t, []); }
+      Math.random = rnd;
+      if (said.includes('grumble')) grumbled++;
+    }
+    expect(grumbled).toBeGreaterThanOrEqual(2);
+    expect(grumbled).toBeLessThanOrEqual(10);
+  });
+});

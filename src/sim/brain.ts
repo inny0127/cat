@@ -275,6 +275,13 @@ export class Brain {
       else this.anim.twitchEar('both', 0.8);
       this.toAwake(this.s.trust > 0.4 && zone !== 'tail' && zone !== 'paw' ? 'rest' : 'alert');
       this.peekEye = 0;
+      // (woken out of a deep sleep, and not a hand it trusts enough to sleep on under: now and then
+      // a sleepy grumble about it, once it has its wits about it)
+      if (deep > 0.6 && startle < 0.45 && this.s.trust > -0.2 && chance(0.45)) {
+        this.grumbleAt = this.time;
+        this.grumbled = true;
+        this.say('grumble', { delay: rand(0.6, 1.1) });
+      }
     } else if (this.mode !== 'angry' && this.anim.unseen) {
       // awake, and a hand on it it never saw coming (round behind it, its head turned away): a
       // start, the ears flicked, and round to see whose it is; less of one, the surer of you it is.
