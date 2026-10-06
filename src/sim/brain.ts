@@ -265,7 +265,7 @@ export class Brain {
     } else if (this.mode === 'sleep' || this.mode === 'doze') {
       const deep = this.sleepDepth;
       // a hand out of nowhere: startle, harder when deeply asleep or not trusting
-      const startle = deep * (0.35 + 0.45 * clamp(0.5 - this.s.trust));
+      const startle = deep * (0.35 + 0.45 * clamp(0.5 - this.s.trust)) * (1 - 0.35 * (this.s.personality.bold ?? 0));
       this.fear = clamp(this.fear + startle * (this.s.trust < 0.2 ? 1.2 : 0.6));
       this.irritation = clamp(this.irritation + startle * 0.15);
       if (startle > 0.25) this.anim.jolt(startle * 1.4);
@@ -277,7 +277,7 @@ export class Brain {
       // start, the ears flicked, and round to see whose it is; less of one, the surer of you it is.
       // Seen coming, it takes it as it comes
       const u = this.anim.unseen(c.sx, c.sy);
-      const k = clamp((u - 0.5) * 2) * (1 - 0.6 * clamp(this.s.trust));
+      const k = clamp((u - 0.5) * 2) * (1 - 0.6 * clamp(this.s.trust)) * (1 - 0.4 * (this.s.personality.bold ?? 0));
       if (k > 0.12) {
         this.anim.jolt(0.25 + 0.6 * k);
         this.anim.twitchEar('both', 0.5 + 0.4 * k);
@@ -375,7 +375,8 @@ export class Brain {
       this.toAwake('alert');
     }
     // (never enough on its own to send it off sulking)
-    this.fear = Math.max(this.fear, Math.min(0.7, this.fear + 0.5 * loud));
+    // (a bold cat is less put out by it, a timid one more)
+    this.fear = Math.max(this.fear, Math.min(0.7, this.fear + 0.5 * loud * (1 - 0.4 * (this.s.personality.bold ?? 0))));
     this.arousal = clamp(this.arousal + 0.3 * loud);
     if (loud > 0.45) this.anim.jolt(loud);
   }

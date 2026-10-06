@@ -38,6 +38,8 @@ export class Whim {
   private easy = 0;
   private opts: Option[] = [];
   private optsIn = 0;
+  /** how much more an urge comes on while its eyes are on its thing (a curious cat, more) */
+  gain = 6;
 
   constructor(private readonly rnd: () => number = Math.random) {}
 
@@ -93,7 +95,7 @@ export class Whim {
     for (const o of this.opts) {
       // (its eyes on the thing it is about: the urge many times stronger while they are)
       const on = o.about && A?.id === o.about ? A.a : 0;
-      const rate = (o.w / (W * EVERY)) * (1 + 6 * on) * ramp;
+      const rate = (o.w / (W * EVERY)) * (1 + this.gain * on) * ramp;
       if (this.rnd() >= rate * dt) continue;
       const act = o.make();
       // (nothing to be had there after all, the sun gone off the floor: as if it never came into

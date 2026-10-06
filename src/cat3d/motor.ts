@@ -144,6 +144,8 @@ export class Motor {
    *  pants a moment, the mouth open and the tip of the tongue showing */
   exertion = 0;
   private pantT = 0;
+  /** its temperament's laziness (-1 .. 1): slow about getting up and lying down, a dawdle of a walk */
+  lazy = 0;
 
   // gaze (world point) and how much the head follows it
   readonly look = new THREE.Vector3(0, 0.2, 1);
@@ -287,7 +289,7 @@ export class Motor {
     // (in its own time: languid when drowsy, quick when keyed up or frightened, quicker still in a
     // mad rush; and never twice quite the same)
     const md = this.mood;
-    const tempo = clamp(1 + 0.45 * md.sleepy - 0.3 * md.arousal - 0.35 * md.fear - 0.25 * this.zoom, 0.6, 1.5);
+    const tempo = clamp(1 + 0.45 * md.sleepy - 0.3 * md.arousal - 0.35 * md.fear - 0.25 * this.zoom + 0.15 * this.lazy, 0.6, 1.5);
     this.tdur = edgeTime(this.posture, next) * (0.85 + Math.random() * 0.3) * tempo;
     this.sched = (LOW[next] ?? 2) > (LOW[this.posture] ?? 2) ? RISE : SCHEDULE;
     this.posture = next;
@@ -571,7 +573,7 @@ export class Motor {
         // (an easy walk at its own pace, and its mood's: dawdling drowsy, brisk keyed up; a run is
         // as fast as it is asked)
         const md = this.mood;
-        const pace = this.goalSpeed <= 0.35 ? this.goalPace * clamp(1 - 0.25 * md.sleepy + 0.2 * md.arousal, 0.7, 1.25) : 1;
+        const pace = this.goalSpeed <= 0.35 ? this.goalPace * clamp(1 - 0.25 * md.sleepy + 0.2 * md.arousal - 0.1 * this.lazy, 0.7, 1.25) : 1;
         want = this.goalSpeed * pace * steer * (this.goalPass ? 1 : clamp(dist / 0.14, 0.3, 1));
         if (dist < 0.025 || stuck) want = 0;
       }

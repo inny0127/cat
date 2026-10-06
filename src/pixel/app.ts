@@ -1570,6 +1570,7 @@ export class PixelApp {
     this.cat.motor.setMood(mood, true);
     this.avatar.mode = this.brain.mode;
     this.avatar.mood = mood;
+    this.avatar.temper = s.personality;
     if (contacts.length) this.touchedAt = now;
     this.avatar.hands = contacts;
     // (a finger on the screen anywhere is your hand at the front of the room, to the cat's eyes;

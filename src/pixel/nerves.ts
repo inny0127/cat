@@ -231,6 +231,8 @@ export class Nerves {
   awake = 1;
   playful = 0.6;
   fond = 0.5;
+  /** how restless its eyes are of themselves (1: a cat like most; a curious one's, more) */
+  restless = 1;
   /** what it can see of the room: upright things that hide what is behind them */
   blockers: () => readonly Blocker[] = () => [];
   time = 0;
@@ -310,7 +312,7 @@ export class Nerves {
       u.hab = Math.min(1, Math.max(0, u.hab + dt * (0.09 * u.vis * (1 - u.motion) * (u === this.attending ? 1.3 : 0.6) - 0.05 * u.hab - 0.4 * u.onset * u.hab)));
       const rest = total - u.a;
       // (its wandering: a slow drift, a few seconds long, about nothing in particular)
-      u.wander += -u.wander * dt / 2.5 + 0.16 * Math.sqrt(2 * dt / 2.5) * (this.noise() + this.noise()) * 1.7;
+      u.wander += -u.wander * dt / 2.5 + 0.16 * this.restless * Math.sqrt(2 * dt / 2.5) * (this.noise() + this.noise()) * 1.7;
       const input = drive + (u.vis > 0.2 ? u.wander : 0) + 0.32 * u.a - 0.62 * rest + 0.05 * this.noise();
       u.u += (input - u.u) * Math.min(1, dt / tau);
       u.a = 1 / (1 + Math.exp(-(u.u - 0.42) * 10));

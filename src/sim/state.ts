@@ -10,6 +10,20 @@ export interface Personality {
   /** how vocal (meows, trills) */
   voice: number;
   coat: 'ginger' | 'cream' | 'silver' | 'smoke';
+  /** its temperament, each -1 .. 1 (most cats somewhere near the middle): bold (to go up and
+   *  over and into things, and not much put out by a start) or timid; playful or staid; lazy (a
+   *  long lie in the sun, and slow about getting up) or busy; curious (its eyes everywhere, and off
+   *  to see about anything new) or incurious */
+  bold: number;
+  playful: number;
+  lazy: number;
+  curious: number;
+}
+
+/** a temperament: most cats near the middle, now and then one well to one side */
+export function temperament(): Pick<Personality, 'bold' | 'playful' | 'lazy' | 'curious'> {
+  const t = () => Math.max(-1, Math.min(1, (Math.random() + Math.random() + Math.random() - 1.5) * 1.15));
+  return { bold: t(), playful: t(), lazy: t(), curious: t() };
 }
 
 export interface CatState {
@@ -58,6 +72,7 @@ export function newPersonality(generation: number): Personality {
     warmth: 0.7 + Math.random() * 0.6,
     voice: 0.5 + Math.random() * 0.7,
     coat: generation === 1 ? 'ginger' : coats[Math.floor(Math.random() * coats.length)],
+    ...temperament(),
   };
 }
 
@@ -98,7 +113,8 @@ export function loadState(now: number): CatState {
     const raw = localStorage.getItem(KEY);
     if (raw) {
       const s = JSON.parse(raw) as CatState;
-      if (s && s.v === 1) return { ...newCat(now), ...s };
+      // (a cat from before cats had a temperament: given one now, kept from here on)
+      if (s && s.v === 1) return { ...newCat(now), ...s, personality: { ...temperament(), ...s.personality } };
     }
   } catch {
     /* private mode or corrupt: start fresh */

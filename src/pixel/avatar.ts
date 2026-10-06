@@ -557,7 +557,8 @@ export class PixelAvatar implements Avatar {
     if (head) this.headF.set(0, 0, 1).applyQuaternion(head.getWorldQuaternion(this.headQ));
     else this.headF.set(Math.sin(m.yaw), 0, Math.cos(m.yaw));
     N.awake = this.alive && !this.isHidden ? Math.max(0, Math.min(1, 1 - this.sleep)) : 0;
-    N.playful = Math.max(0, Math.min(1, 0.45 + 0.5 * mood.arousal - 0.5 * mood.sleepy - 0.4 * mood.fear));
+    N.playful = Math.max(0, Math.min(1, 0.45 + 0.15 * this.temper.playful + 0.5 * mood.arousal - 0.5 * mood.sleepy - 0.4 * mood.fear));
+    N.restless = 1 + 0.3 * this.temper.curious;
     N.fond = Math.max(0, Math.min(1, 0.2 + 0.8 * mood.trust));
     N.blockers = this.blockers ?? (() => []);
     // (what it is about colours what it watches: after the dot, the dot)
@@ -843,6 +844,8 @@ export class PixelAvatar implements Avatar {
   private act: Act | null = null;
   readonly whim = new Whim();
   private easyNow = false;
+  /** its temperament (state.ts: bold, playful, lazy, curious, each -1 .. 1; set by the app) */
+  temper = { bold: 0, playful: 0, lazy: 0, curious: 0 };
   private dreamIn = 20;
   private scoot: { t: number; dx: number; dz: number; len: number } | null = null;
   private scootIn = 0.4;
@@ -1150,6 +1153,9 @@ export class PixelAvatar implements Avatar {
     const m = this.cat.motor, c = this.ctx;
     c.mode = this.mode;
     c.mood = this.mood;
+    c.temper = this.temper;
+    this.whim.gain = 6 * (1 + 0.4 * this.temper.curious);
+    m.lazy = this.temper.lazy;
     c.kneading = this.kneading;
     // at home: on the bed, wherever on it the body has settled
     const atHome = Math.hypot(m.pos.x - c.home.x, m.pos.z - c.home.z) < 0.2;

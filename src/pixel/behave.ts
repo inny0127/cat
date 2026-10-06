@@ -98,6 +98,8 @@ export interface Ctx {
    *  sight of), if it has a fair idea; what it goes for and aims at (a paw lands where the thing
    *  really is, or misses) */
   seen?: (id: string) => THREE.Vector3 | null;
+  /** its temperament (state.ts: bold, playful, lazy, curious, each -1 .. 1) */
+  temper?: { bold: number; playful: number; lazy: number; curious: number };
   /** one of its things moved while it was not looking, and where it is now: something to go and
    *  see about (how much: 0 .. 1) */
   curious?: () => { id: string; at: THREE.Vector3; k: number } | null;
@@ -3742,7 +3744,18 @@ export interface Option {
 export function idleOptions(c: Ctx, atHome: boolean, posture: PoseName): Option[] {
   const m = c.mood;
   const opts: Option[] = [];
+  // (its temperament weighs everything it might do: a playful cat's games, a lazy one's long lies,
+  // a bold one's ups and overs and intos, a curious one's going to see)
+  const T = c.temper ?? { bold: 0, playful: 0, lazy: 0, curious: 0 };
+  const GAME = new Set(['play', 'tease', 'pompom', 'tail', 'zoomies', 'ask', 'gift', 'fish']);
+  const REST = new Set(['sun', 'warm', 'by you', 'still', 'yawn']);
+  const OUT = new Set(['wander', 'sill', 'top', 'box', 'claw', 'rub', 'window']);
+  const tempered = (key: string) => GAME.has(key) ? (1 + 0.5 * T.playful) * (1 - 0.3 * T.lazy)
+    : REST.has(key) ? 1 + 0.4 * T.lazy
+    : OUT.has(key) ? (1 + 0.35 * T.bold) * (1 + 0.2 * T.curious) * (1 - 0.2 * T.lazy)
+    : key === 'investigate' ? (1 + 0.6 * T.curious) * (1 + 0.3 * T.bold) : 1;
   const add = (key: string, w: number, make: () => Act | null, about?: string, at?: THREE.Vector3 | null) => {
+    w *= tempered(key);
     if (w > 0) opts.push({ key, w, make, about, at });
   };
   const lying = posture === 'loaf' || posture === 'sphinx' || posture === 'side' || posture === 'sit';
