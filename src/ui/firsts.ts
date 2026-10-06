@@ -23,6 +23,10 @@ export const FIRSTS: Record<string, string> = {
   blep: '혀끝이 쏙 나왔어요. 넣는 걸 깜빡했나 봐요',
   loaf: '식빵을 굽고 있어요. 앞발을 쏙 넣고 느긋하게 쉬는 중이에요',
   seewith: '당신이 보는 곳이 궁금했나 봐요. 따라와서 같이 봐요',
+  sniff: '코앞까지 온 당신 냄새를 킁킁 맡아요. 아는 냄새인지 확인하는 중이에요',
+  shy: '빤히 보니 눈을 피해요. 고양이끼리는 빤히 보는 게 실례래요',
+  ambush: '상자에 몸을 숨기고 노려요. 곧 튀어나올 거예요!',
+  glance: '그루밍하다 멈칫! 뭔가 눈에 띄었나 봐요',
 };
 
 /** the line at the foot of the screen, as far as the first words need it */

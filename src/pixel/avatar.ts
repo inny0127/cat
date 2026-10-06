@@ -197,6 +197,13 @@ export class PixelAvatar implements Avatar {
   /** how close you are looking at its face (0 .. 1; set by the app): the view taken right in on
    *  it by two fingers */
   lean = 0;
+  /** your face up close just now, as it answers it: sniffing at it, looking away from it, or
+   *  neither */
+  get closeLooking(): 'sniff' | 'shy' | null {
+    if (this.closeT < 0) return null;
+    if (this.avertT > 0) return 'shy';
+    return this.cat.motor.nose > 0.5 ? 'sniff' : null;
+  }
   /** you up close in front of it: since when, as it has it (s; less than nothing: not); whether
    *  it has blinked at you (or looked away) yet; and how long yet its eyes keep off you */
   private closeT = -1;
@@ -805,6 +812,10 @@ export class PixelAvatar implements Avatar {
     let best: string | null = null, most = 3;
     for (const [id, s] of this.onMind) if (id !== 'goal' && s > most) { most = s; best = id; }
     return best;
+  }
+  /** looking up from its coat at something just now */
+  get glancing() {
+    return canGlance(this.act) && this.act.glancing && /^(groom|wash|scratch)/.test(this.act.name);
   }
   get dreaming() {
     return this.dreamT > 0 && this.sleep > 0.5 ? this.dreamOf : null;

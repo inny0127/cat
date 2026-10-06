@@ -1772,6 +1772,8 @@ export class PixelApp {
   private radioHintIn = 25;
   private lookHintIn = 60;
   private zoomHintIn = 150;
+  private faceHintIn = 240;
+  private mindHintIn = 420;
   private lampHintIn = 40;
 
   private hints(dt: number, touching: boolean) {
@@ -1824,6 +1826,20 @@ export class PixelApp {
       this.hintUi.show('두 손가락을 벌리면 가까이, 오므리면 멀리 볼 수 있어요', 5500);
       return;
     }
+    // a good while after that, the cat awake: that it answers a face come close (not if you have
+    // found that out already); and a while after that, the window on its mind
+    const up = this.brain.mode === 'rest' || this.brain.mode === 'alert';
+    if (s.hints.zoom && !s.hints.face && up && !this.avatar.hidden && !touching && !this.input.touching && (this.faceHintIn -= dt) < 0) {
+      s.hints.face = 1;
+      this.hintUi.show('고양이 얼굴을 두 손가락으로 크게 확대해 보세요. 코앞에 온 당신에게 반응해요', 6000);
+      return;
+    }
+    if (s.hints.face && !s.hints.mind && !this.mind.open && !touching && !this.input.touching && (this.mindHintIn -= dt) < 0) {
+      s.hints.mind = 1;
+      this.hintUi.show('세 손가락으로 화면을 누르면 고양이가 보고 생각하는 것이 보여요', 6000);
+      return;
+    }
+    if (this.mind.open) s.hints.mind = 1;
     if (touching || this.input.touching) {
       this.idleHintAt = 1e9;
       return;
@@ -1882,6 +1898,10 @@ export class PixelApp {
     if (doing === 'trap') now.add('trap');
     if (Math.abs(m.tilt) > 0.25) now.add('tilt');
     if (m.blep > 0.9 && !asleep) now.add('blep');
+    const close = a.closeLooking;
+    if (close) { now.add(close); this.state.hints.face = 1; }
+    if (doing === 'box' && phase === 'duck') now.add('ambush');
+    if (a.glancing) now.add('glance');
     // (a loaf: lying with its paws tucked under, awake and easy, a good while)
     this.loafFor = m.posture === 'loaf' && !asleep && !doing && m.speed < 0.02 ? this.loafFor + dt : 0;
     if (this.loafFor > 20) now.add('loaf');
