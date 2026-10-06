@@ -85,6 +85,8 @@ export interface Avatar {
   /** a body with a room to show it in keeps to it, away or not: off on an errand it is at the bowl
    *  or the box, sulking it is in a corner of the room (never out of it, never hidden) */
   readonly inRoom?: boolean;
+  /** lying down as near you as it can get, there now (a nap by you: content just to be there) */
+  readonly byYouNow?: boolean;
   /** (in the room) the errand done in view, and the cat waiting to be called back about the room */
   readonly errandDone?: boolean;
   /** (in the room) found away as the window is opened: where in the room it is, at what (the

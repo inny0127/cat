@@ -1090,7 +1090,10 @@ export class Brain {
     // purr in its sleep; the hand long gone, that is over)
     if (this.drowsy && !touching && this.time - this.lastTouch > 25) this.drowsy = false;
     const sleepPurr = asleepNow(m) && this.drowsy ? 0.75 * smoothstep(0.12, 0.6, this.pleasure) : 0;
-    const wantPurr = Math.max(sleepPurr, (m === 'enjoy' || (m === 'rest' && this.pleasure > 0.3)) ? smoothstep(0.28, 0.75, this.pleasure) : 0) * (1 - sick * 0.5);
+    // (and lying as near you as it can get, very fond of you: a soft purr of its own, untouched,
+    // just for being there)
+    const near = a.byYouNow && (m === 'rest' || asleepNow(m)) ? 0.32 * smoothstep(0.55, 0.85, s.trust) : 0;
+    const wantPurr = Math.max(sleepPurr, near, (m === 'enjoy' || (m === 'rest' && this.pleasure > 0.3)) ? smoothstep(0.28, 0.75, this.pleasure) : 0) * (1 - sick * 0.5);
     this.purr += (wantPurr - this.purr) * Math.min(1, dt * (wantPurr > this.purr ? 0.5 : 0.35));
     if (this.purr > 0.3) this.hadPurred = true;
     a.purr = this.purr;
