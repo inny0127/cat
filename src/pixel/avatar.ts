@@ -194,6 +194,16 @@ export class PixelAvatar implements Avatar {
   /** the radio playing (set by the app); keeping time with it now and then, the tail tip to the
    *  beat: how far into it (0 .. 1, read by the app), how long it goes on yet, how long till next */
   music = false;
+  /** how close you are looking at its face (0 .. 1; set by the app): the view taken right in on
+   *  it by two fingers */
+  lean = 0;
+  /** you up close in front of it: since when, as it has it (s; less than nothing: not); whether
+   *  it has blinked at you (or looked away) yet; and how long yet its eyes keep off you */
+  private closeT = -1;
+  private farT = 0;
+  private closeDone = false;
+  private avertT = 0;
+  private readonly lookAway = new THREE.Vector3();
   groove = 0;
   private grooveFor = 0;
   private grooveIn = 15 + Math.random() * 30;
@@ -579,6 +589,10 @@ export class PixelAvatar implements Avatar {
     else if (this.act?.name === 'pompom') N.bias.set('pompom', 0.35);
     if (I) N.bias.set(I.id, (N.bias.get(I.id) ?? 0) + this.whim.pull);
     for (const [id, k] of this.wonder) N.bias.set(id, (N.bias.get(id) ?? 0) + 0.3 * k);
+    // (a face up close: hard to look away from; one it is not sure of, its eyes kept off it a
+    // while once they have been on it, as between cats)
+    if (this.avertT > 0) N.bias.set('you', -0.9);
+    else if (this.closeT >= 0) N.bias.set('you', 0.4);
     this.headYaw = Math.atan2(this.headF.x, this.headF.z);
     this.headPitch = Math.asin(Math.max(-1, Math.min(1, this.headF.y)));
     N.update(dt, this.eyeW, this.headYaw, this.headPitch, T);
@@ -612,6 +626,59 @@ export class PixelAvatar implements Avatar {
       E.R = k * (az > 0 ? -far : near);
     } else { E.L = 0; E.R = 0; }
     this.listen(dt, A && A.kind !== 'you' ? A.a : 0);
+  }
+
+  /**
+   * Your face come up close in front of it (the view taken right in on it): its eyes go to you;
+   * a cat that knows you puts its nose out at you, the whiskers forward, the ears up, the nose
+   * working, a good sniff and then less (it is only you), and before long a slow blink, and now
+   * and then a little trill; one that does not draws its head back, the ears going back, the eyes
+   * wide, and after a moment looks away from you (as a cat does from another's stare).
+   */
+  private closeLook(dt: number) {
+    const N = this.nerves, m = this.cat.motor;
+    this.avertT = Math.max(0, this.avertT - dt);
+    const free = this.alive && !this.isHidden && !this.trip && !this.errand && !this.hands.length && N.awake > 0.6 && N.hunt < 0.5
+      && (!this.act || /^(window|greet|gift|knead|by you|sun|warm|stare|look with you)/.test(this.act.name));
+    // (once it has you close, a little further off is close still; and gone a moment, you are
+    // still there to it)
+    if (!free || this.lean < (this.closeT >= 0 ? 0.2 : 0.6)) {
+      m.nose = m.shy = 0;
+      if (!free || (this.farT += dt) > 1.5) this.closeT = -1;
+      return;
+    }
+    this.farT = 0;
+    if (this.closeT < 0) {
+      this.closeT = 0;
+      this.closeDone = false;
+      N.cue('you', 1.2);
+    }
+    this.closeT += dt;
+    const trust = this.mood.trust, t = this.closeT;
+    if (trust >= 0.2) {
+      m.nose = Math.max(0.2, Math.min(1, 1 - (t - 4) / 5));
+      m.shy = 0;
+      // (a slow blink at you, once its eyes are on you; and now and then a trill with it)
+      if (!this.closeDone && t > 1.8 && trust > 0.45 && N.attending?.id === 'you') {
+        this.closeDone = true;
+        m.slowBlink();
+        if (Math.random() < 0.25 + 0.3 * trust) this.ctx.say('trill');
+      }
+    } else {
+      m.nose = 0;
+      m.shy = Math.min(1, this.lean * (1.2 - trust));
+      if (!this.closeDone && t > 1.2 + 0.8 * Math.max(0, trust)) {
+        this.closeDone = true;
+        this.avertT = 3 + Math.random() * 3;
+        m.blinkNow();
+        // (somewhere off to one side and down: anywhere but at you)
+        const to = this.headLocal.copy(this.viewer()).sub(this.eyeW);
+        const a = Math.atan2(to.x, to.z) + (Math.random() < 0.5 ? -1 : 1) * (0.9 + 0.5 * Math.random());
+        this.lookAway.set(this.eyeW.x + 0.8 * Math.sin(a), Math.max(0.02, this.eyeW.y - 0.25), this.eyeW.z + 0.8 * Math.cos(a));
+      }
+      // (and you there still, a good while after: it turns its back on you)
+      if (this.closeDone && t > 6 && !this.act && !this.perched && Math.random() < dt / 2) this.act = new Snub();
+    }
   }
 
   /** where the radio stands (set by the app), for its ears */
@@ -1403,6 +1470,8 @@ export class PixelAvatar implements Avatar {
     // (a cat at its ease mostly just sits there: something now and then, not one thing after
     // another; and what it does, it looks at first)
     this.easyNow = true;
+    // (your face up close: nothing else comes into its head a while)
+    if (this.closeT >= 0 && this.closeT < 6) return;
     const w = this.whim.update(dt, () => idleOptions(c, atHome, m.posture), this.nerves);
     if (w?.act) {
       this.act = w.act;
@@ -1474,6 +1543,7 @@ export class PixelAvatar implements Avatar {
     this.huntRest = Math.max(0, this.huntRest - dt);
     this.pawRest = Math.max(0, this.pawRest - dt);
     this.clock += dt;
+    this.closeLook(dt);
     this.sense(dt);
     // under cover from the storm a while: out, and over to lie by the glass, near you (out of the
     // box first if it is in it)
@@ -1581,6 +1651,7 @@ export class PixelAvatar implements Avatar {
     }
     else if (this.gazeTarget && this.screenToWorld(this.gazeTarget.x, this.gazeTarget.y, this.look)) m.lookAt(this.look, 0.9);
     else if (seen) { m.lookAt(N.gazePoint, this.trip ? 0.3 : 0.85); m.eyeAt = N.gazePoint; }
+    else if (this.avertT > 0) m.lookAt(this.lookAway, 0.7);
     else m.lookAt(this.viewer(), this.trip ? 0.3 : 0.85);
     if (this.puzzledFor > 0) {
       this.puzzledFor -= dt;

@@ -146,6 +146,12 @@ export class Motor {
   private pantT = 0;
   /** its temperament's laziness (-1 .. 1): slow about getting up and lying down, a dawdle of a walk */
   lazy = 0;
+  /** a face close in front of it (0 .. 1): sniffing at it, the whiskers forward, the nose working,
+   *  the ears up; and unsure of it (0 .. 1): the head drawn back, the ears turned back and down */
+  nose = 0;
+  shy = 0;
+  private noseNow = 0;
+  private shyNow = 0;
 
   // gaze (world point) and how much the head follows it
   readonly look = new THREE.Vector3(0, 0.2, 1);
@@ -811,6 +817,24 @@ export class Motor {
       if (this.posture === 'stand' || this.posture === 'sit' || this.posture === 'crouch') p.hipY += 0.018 * P.rump;
       p.hipPitch -= 0.12 * P.rump;
       p.tailLift += 0.6 * P.rump;
+    }
+    // a face close in front of it
+    this.noseNow += (this.nose - this.noseNow) * (1 - Math.exp(-dt * 3));
+    this.shyNow += (this.shy - this.shyNow) * (1 - Math.exp(-dt * 4));
+    if (this.noseNow > 0.01 || this.shyNow > 0.01) {
+      const n = this.noseNow, s = this.shyNow;
+      p.whisker = clamp(p.whisker + 0.7 * n - 0.5 * s, -1, 1);
+      p.earFwd += 0.45 * n - 0.7 * s;
+      p.earFlat = clamp(p.earFlat + 0.55 * s);
+      // (the head put out to it, and the nose working: quick little lifts of the muzzle, in runs
+      // of a few with a breath between)
+      const run = Math.max(0, Math.sin(this.time * 2.3));
+      p.neckPitch -= 0.06 * n;
+      p.headPitch += 0.04 * n * Math.sin(this.time * 40) * run * run;
+      // (unsure of it: the head drawn back, the chin in, the eyes wide)
+      p.neckPitch += 0.12 * s;
+      p.headPitch -= 0.14 * s;
+      p.pupil = clamp(p.pupil + 0.35 * s);
     }
     // the puzzled tilt: over quickly, back slowly, the ears pricked while it lasts
     this.tiltNow += (this.tilt - this.tiltNow) * (1 - Math.exp(-dt * (this.tilt !== 0 ? 7 : 3.5)));

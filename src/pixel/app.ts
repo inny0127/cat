@@ -15,7 +15,7 @@ import { Brain } from '../sim/brain';
 import { loadState, newCat, saveState, type CatState } from '../sim/state';
 import { HABITS, expectation, note, type Habit } from '../sim/habits';
 import { stepLife, THRESH } from '../sim/life';
-import { clamp } from '../util/math';
+import { clamp, smoothstep } from '../util/math';
 import { PixelAvatar } from './avatar';
 import { Mind } from './mind';
 import { Senses3D } from './senses';
@@ -954,6 +954,22 @@ export class PixelApp {
   }
   /** where the cat's eyes are (world), for the close view */
   private readonly eyesW = new THREE.Vector3();
+  private readonly leanP = new THREE.Vector3();
+
+  /** how close you are looking at its face (0 .. 1): two fingers taking the view in on it till
+   *  its face is big on the glass, and in the middle of it (the view in close for a hand on it is
+   *  the hand's, not a look at its face) */
+  private leanIn() {
+    const head = this.cat.byName.get('head');
+    if (this.focus > 0.05 || this.avatar.hidden || !head) return 0;
+    const cam = this.stage.camera;
+    // (as near its eyes as a face bent over it: the view comes no nearer the room than this)
+    const d = cam.position.distanceTo(this.cat.body.eyes(this.leanP).applyMatrix4(this.cat.group.matrixWorld));
+    // (and its head toward the middle of the glass, wherever it turns it)
+    const q = head.getWorldPosition(this.leanP).project(cam);
+    if (q.z > 1) return 0;
+    return smoothstep(1.15, 0.85, d) * (1 - smoothstep(0.6, 0.95, Math.max(Math.abs(q.x), Math.abs(q.y))));
+  }
 
   private moveCamera(dt: number, touching: boolean) {
     if (touching) { this.focusT = 1; this.focusHold = 9; }
@@ -1639,6 +1655,7 @@ export class PixelApp {
     const resting = this.input.onGlass();
     if (resting.length) this.fingerOnGlass(resting[0].sx, resting[0].sy);
     this.avatar.music = this.audio.musicPlaying;
+    this.avatar.lean = this.leanIn();
     this.learnHabits(clock.getTime(), dt, contacts.length > 0);
     this.avatar.update(dt);
     this.seeMind();

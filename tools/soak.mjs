@@ -15,6 +15,7 @@ const report = await page.evaluate(async (minutes) => {
   const acts = ['wander', 'sun', 'warm', 'play', 'sill', 'box', 'wash', 'zoomies', 'stare', 'sneeze', 'rub', 'scratch', 'window', 'groom', 'yawn', 'stretch', 'bed', 'greet', 'gift', 'ask', 'tail', 'by you', 'claw', 'top', 'fish', 'pompom'];
   const issues = [];
   let t = 1, seen = {}, drag = null, drags = 0, errands = 0, laser = null, wand = null, laserUses = 0, wandUses = 0, returns = 0, tosses = 0, glass = null, glasses = 0;
+  let lean = null, leans = 0, leanEnd = -1;
   // a cat that wants to go somewhere and does not move
   let stillFor = 0, lastAct = '', legIssues = 0;
   const lastPos = { x: 0, z: 0 };
@@ -54,6 +55,20 @@ const report = await page.evaluate(async (minutes) => {
       glass.k += 0.05;
       app.input.move(ev(glass.x + 22 * Math.sin(glass.k * 2.3), glass.y + 5 * Math.sin(glass.k * 3.9), t));
       if (i >= glass.until) { app.input.up(ev(glass.x, glass.y, t), false); glass = null; }
+    }
+    // now and then two fingers take the view right in on its face a few seconds, and out again
+    // (and once out, nothing of the close look left on its face)
+    if (i % 1700 === 1100 && !lean && !drag && !laser && !wand && !glass && Math.random() < 0.6) { lean = { i0: i, hold: 80 + Math.floor(Math.random() * 120) }; leans++; }
+    else if (lean) {
+      const k = i - lean.i0, cam = app.stage.camera;
+      const e = app.cat.body.eyes(cam.position.clone()).applyMatrix4(app.cat.group.matrixWorld).project(cam);
+      if (k < 20) app.zoomAbout(Math.pow(3, 1 / 20), (e.x * 0.5 + 0.5) * innerWidth, (-e.y * 0.5 + 0.5) * innerHeight, 0, 0);
+      else if (k >= 20 + lean.hold && k < 40 + lean.hold) app.zoomAbout(Math.pow(3, -1 / 20), innerWidth / 2, innerHeight / 2, 0, 0);
+      else if (k >= 40 + lean.hold) { lean = null; leanEnd = i; }
+    }
+    if (leanEnd >= 0 && i === leanEnd + 60) {
+      const m = app.cat.motor;
+      if (app.avatar.lean < 0.2 && (m.nose > 0 || m.shy > 0)) issues.push(`a close look left on its face at ${i} (nose ${m.nose}, shy ${m.shy})`);
     }
     // now and then a finger takes the ball of wool and drags it about a few seconds
     if (i % 300 === 0 && !drag && !laser && !wand && !glass && Math.random() < 0.4) {
@@ -172,7 +187,7 @@ const report = await page.evaluate(async (minutes) => {
     if (i % 2400 === 0) await new Promise((r) => setTimeout(r, 0));
   }
   app.stage.render();
-  return { issues: issues.slice(0, 20), batch: app.room.batchCount, seen, drags, errands, laserUses, wandUses, returns, tosses, glasses, mug: app.room.mugUp ? 'up' : 'down', mode: app.brain.mode, doing: app.avatar.doing };
+  return { issues: issues.slice(0, 20), batch: app.room.batchCount, seen, drags, errands, laserUses, wandUses, returns, tosses, glasses, leans, mug: app.room.mugUp ? 'up' : 'down', mode: app.brain.mode, doing: app.avatar.doing };
 }, minutes);
 console.log(JSON.stringify(report), 'errors:', errs.slice(0, 10));
 await b.close();
