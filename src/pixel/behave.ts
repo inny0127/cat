@@ -3870,7 +3870,10 @@ export const toBed = (c: Ctx, settle: PoseName) => {
 export function restingPose(mood: Mood, mode: string): PoseName {
   if (mode === 'alert') return 'sit';
   const r = Math.random();
-  if (mood.pleasure > 0.4 || mood.sleepy > 0.4) return r < 0.4 ? 'side' : r < 0.75 ? 'sphinx' : 'loaf';
+  // (uneasy, it does not lie out: the paws kept under it, or sat up, ready to be off)
+  if (mood.fear > 0.3) return r < 0.6 ? 'loaf' : 'sit';
+  // (stretched out on its side is for a cat at its ease with you; not yet sure of you, on its chest)
+  if (mood.pleasure > 0.4 || mood.sleepy > 0.4) return r < 0.4 ? (mood.trust > 0.25 ? 'side' : 'sphinx') : r < 0.75 ? 'sphinx' : 'loaf';
   return r < 0.35 ? 'loaf' : r < 0.65 ? 'sphinx' : 'sit';
 }
 
