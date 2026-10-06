@@ -68,3 +68,20 @@ export function seasonAt(d: Date, rain = 0): Season {
     petals: day < 200,
   };
 }
+
+/**
+ * How warm the room is (0 cold .. 1 hot), by the time of year and of day: coldest in late January,
+ * hottest in late July and early August, mild between; warmest in the middle of the afternoon,
+ * coolest before dawn. The heating, on from late October to early April, takes the edge off the
+ * cold. A cat feels it: curled up tight in the cold, flat out in the heat.
+ */
+export function roomWarmth(d: Date): number {
+  const start = Date.UTC(d.getFullYear(), 0, 1);
+  const day = (Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) - start) / 864e5;
+  const year = 0.5 - 0.5 * Math.cos((2 * Math.PI * (day - 22)) / 365);
+  const h = d.getHours() + d.getMinutes() / 60;
+  const daily = 0.08 * Math.cos((2 * Math.PI * (h - 15)) / 24);
+  const md = d.getMonth() * 100 + d.getDate();
+  const heated = md >= 925 || md <= 310 ? 0.15 * (1 - year) : 0;
+  return Math.max(0, Math.min(1, 0.1 + 0.85 * year + daily + heated));
+}

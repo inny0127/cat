@@ -70,6 +70,8 @@ export interface Ctx {
   snow: boolean;
   /** how dark it is outside (0 day .. 1 night): the lit town is for watching too */
   night: number;
+  /** how warm the room is (season.ts: 0 cold .. 1 hot); not given, mild */
+  warmth?: number;
   /** birds going by outside the window (where, on the glass), if any; a chirp at them */
   birds: () => THREE.Vector3 | null;
   chirp: () => void;
@@ -2648,6 +2650,29 @@ export const warmUp = (c: Ctx) => {
   ]);
 };
 
+/** on a hot day, a good long while flat out on its side on the floor, out of the sun and off the
+ *  fleece of its bed, where it is cool (out in front of the bed, between it and you: not back by
+ *  the bowls or its box); then back to bed */
+export const coolOff = (c: Ctx) => {
+  for (let k = 0; k < 14; k++) {
+    const a = rand(0.25, Math.PI - 0.25), r = rand(0.36, 0.62);
+    const at = c.keepClear(new THREE.Vector3(c.home.x + r * Math.cos(a), 0, c.home.z + r * Math.sin(a) * 0.8), 0.16);
+    if (c.sunlit(at) || Math.hypot(at.x - c.home.x, at.z - c.home.z) < 0.3 || at.z < c.home.z + 0.08) continue;
+    // (side on to you, head one way and tail the other, and all of it clear of things and in shade)
+    for (const f of [1.25, 1.55, 1.85, -1.25, -1.55, -1.85].sort(() => Math.random() - 0.5)) {
+      const end = (d: number) => new THREE.Vector3(at.x + Math.sin(f) * d, 0, at.z + Math.cos(f) * d);
+      if (!c.clear(end(0.25), 0.06) || !c.clear(end(-0.25), 0.06) || c.sunlit(end(0.25)) || c.sunlit(end(-0.25))) continue;
+      const place = c.lieAt('side', at, f);
+      const bed = c.bed('loaf');
+      return new Walk('cool', [
+        { to: place.to, face: place.yaw, stay: rand(60, 150), posture: 'side', nap: true },
+        { to: bed.to, face: bed.yaw, stay: 0.1, posture: 'loaf', home: true },
+      ]);
+    }
+  }
+  return null;
+};
+
 const wrapA = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
 
 /**
@@ -3866,12 +3891,23 @@ export const toBed = (c: Ctx, settle: PoseName) => {
   ], 0.22);
 };
 
+/** how hot (0 .. 1: from a warm room up to a hot one) and how cold (from a cool one down) the
+ *  room is, for a warmth (season.ts) */
+export function feel(warmth: number) {
+  return { hot: Math.max(0, Math.min(1, (warmth - 0.7) / 0.25)), cold: Math.max(0, Math.min(1, (0.4 - warmth) / 0.25)) };
+}
+
 /** how it would like to lie or sit about, given how it feels */
-export function restingPose(mood: Mood, mode: string): PoseName {
+export function restingPose(mood: Mood, mode: string, warmth = 0.5): PoseName {
   if (mode === 'alert') return 'sit';
   const r = Math.random();
   // (uneasy, it does not lie out: the paws kept under it, or sat up, ready to be off)
   if (mood.fear > 0.3) return r < 0.6 ? 'loaf' : 'sit';
+  // (a hot day: flat out on its side, a cat at its ease with you; a cold one: the paws tucked in
+  // under it, a loaf)
+  const { hot, cold } = feel(warmth);
+  if (mood.trust > 0.25 && Math.random() < 0.5 * hot) return 'side';
+  if (Math.random() < 0.5 * cold) return 'loaf';
   // (stretched out on its side is for a cat at its ease with you; not yet sure of you, on its chest)
   if (mood.pleasure > 0.4 || mood.sleepy > 0.4) return r < 0.4 ? (mood.trust > 0.25 ? 'side' : 'sphinx') : r < 0.75 ? 'sphinx' : 'loaf';
   return r < 0.35 ? 'loaf' : r < 0.65 ? 'sphinx' : 'sit';
@@ -3896,7 +3932,7 @@ export function idleOptions(c: Ctx, atHome: boolean, posture: PoseName): Option[
   // a bold one's ups and overs and intos, a curious one's going to see)
   const T = c.temper ?? { bold: 0, playful: 0, lazy: 0, curious: 0 };
   const GAME = new Set(['play', 'tease', 'pompom', 'tail', 'zoomies', 'ask', 'gift', 'fish']);
-  const REST = new Set(['sun', 'warm', 'by you', 'still', 'yawn']);
+  const REST = new Set(['sun', 'warm', 'cool', 'by you', 'still', 'yawn']);
   const OUT = new Set(['wander', 'sill', 'top', 'box', 'claw', 'rub', 'window']);
   const tempered = (key: string) => GAME.has(key) ? (1 + 0.5 * T.playful) * (1 - 0.3 * T.lazy)
     : REST.has(key) ? 1 + 0.4 * T.lazy
@@ -3935,9 +3971,13 @@ export function idleOptions(c: Ctx, atHome: boolean, posture: PoseName): Option[
     if (post && c.pompom?.()) add('pompom', 0.3 * (0.4 + m.arousal) * (1 - m.sleepy), () => new Bat(), 'pompom');
     // ... and up on top of it for a while, to look down on the room (or doze up there)
     if (post && c.mode === 'rest') add('top', 0.35 * (0.6 + 0.6 * m.trust) * (1 + 0.6 * c.night) * (1 - 0.5 * m.sleepy), () => new Top(post), undefined, new THREE.Vector3(post.at.x, post.top, post.at.z));
-    if (c.mode === 'rest') add('sun', 0.7 + 0.8 * m.sleepy, () => sunbathe(c), undefined, c.sun());
+    // (in the sun, in its warmth, the colder the day the better; a hot one, out of it, flat out on
+    // the cool floor in the shade)
+    const { hot, cold } = feel(c.warmth ?? 0.5);
+    if (c.mode === 'rest') add('sun', (0.7 + 0.8 * m.sleepy) * (1 + 0.4 * cold) * (1 - 0.6 * hot), () => sunbathe(c), undefined, c.sun());
     const warm = c.warm();
-    if (c.mode === 'rest' && warm) add('warm', 0.8 + 0.8 * m.sleepy, () => warmUp(c), undefined, warm.at);
+    if (c.mode === 'rest' && warm) add('warm', (0.8 + 0.8 * m.sleepy) * (1 + 0.6 * cold), () => warmUp(c), undefined, warm.at);
+    if (c.mode === 'rest' && hot > 0) add('cool', 1.4 * hot * (0.4 + m.sleepy), () => coolOff(c));
     // very fond of you and drowsy: a nap as near you as it can get
     if (c.mode === 'rest' && m.trust > 0.55) add('by you', 1.2 * (m.trust - 0.5) * (0.3 + m.sleepy) * (1 + 1.5 * strokes), () => byYou(c), 'you');
     if (c.yarn()) add('play', 0.6 * (0.4 + m.arousal) * (1 - m.sleepy) * (c.mode === 'rest' ? 1 : 0.4), () => new Play(), 'yarn');

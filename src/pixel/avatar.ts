@@ -4,7 +4,7 @@ import { POSES, SIDE_TURN, type Leg, type PoseLayer, type PoseName } from '../ca
 import { NEUTRAL, type Mood } from '../cat3d/mood';
 import type { Avatar } from '../sim/avatar';
 import type { EarMood, TailMood } from '../rig/animator';
-import { boop, byYou, canGlance, idleOptions, groomChest, groomFlank, knead, lookWith, restingPose, sneeze, toBed, toWindow, wander, warmUp, washFace, yawn, type Act, type Ctx, sunbathe, Play, Sill, Hunt, Box, Zoomies, Walk, Stare, Rub, scratchEar, wakeUp, stretchSideOn, Greet, Gift, Snub, Beg, PawGlass, TailChase, Claw, Top, Fish, Bat, Trap, Sulk, isPerching, type Perching, type ScratchPost, type GlassFinger, type SillSpot, type SulkSpot } from './behave';
+import { boop, byYou, canGlance, coolOff, feel, idleOptions, groomChest, groomFlank, knead, lookWith, restingPose, sneeze, toBed, toWindow, wander, warmUp, washFace, yawn, type Act, type Ctx, sunbathe, Play, Sill, Hunt, Box, Zoomies, Walk, Stare, Rub, scratchEar, wakeUp, stretchSideOn, Greet, Gift, Snub, Beg, PawGlass, TailChase, Claw, Top, Fish, Bat, Trap, Sulk, isPerching, type Perching, type ScratchPost, type GlassFinger, type SillSpot, type SulkSpot } from './behave';
 import { Chase, Startle, type LaserDot } from './chase';
 import { Tease, type Lure } from './tease';
 import { GOAL, Whim } from './whim';
@@ -161,6 +161,13 @@ export class PixelAvatar implements Avatar {
   /** snow falling outside */
   set snow(s: boolean) {
     this.ctx.snow = s;
+  }
+  /** how warm the room is (0 cold .. 1 hot): the way it sleeps, and where */
+  set warmth(w: number) {
+    this.ctx.warmth = w;
+  }
+  get warmth() {
+    return this.ctx.warmth ?? 0.5;
   }
   /** what goes by outside the window, and the chirp it gets */
   outside: {
@@ -1288,7 +1295,7 @@ export class PixelAvatar implements Avatar {
   }
 
   /** start one of its acts now (for the lab and tests) */
-  startAct(name: 'yawn' | 'groom' | 'groom chest' | 'wash' | 'stretch' | 'window' | 'wander' | 'knead' | 'bed' | 'sun' | 'play' | 'sill' | 'box' | 'zoomies' | 'warm' | 'sneeze' | 'stare' | 'rub' | 'scratch' | 'greet' | 'gift' | 'ask' | 'tail' | 'by you' | 'claw' | 'top' | 'fish' | 'pompom') {
+  startAct(name: 'yawn' | 'groom' | 'groom chest' | 'wash' | 'stretch' | 'window' | 'wander' | 'knead' | 'bed' | 'sun' | 'play' | 'sill' | 'box' | 'zoomies' | 'warm' | 'sneeze' | 'stare' | 'rub' | 'scratch' | 'greet' | 'gift' | 'ask' | 'tail' | 'by you' | 'claw' | 'top' | 'fish' | 'pompom' | 'cool') {
     // (not on its way somewhere, to the bowls or out of the room: the walk there is its business)
     if (this.perched || this.trip) return;
     this.stopAct();
@@ -1297,7 +1304,7 @@ export class PixelAvatar implements Avatar {
       : name === 'stretch' ? stretchSideOn(c, 'loaf') : name === 'window' ? toWindow(c) : name === 'wander' ? wander(c)
         : name === 'knead' ? knead() : name === 'sun' ? sunbathe(c) : name === 'play' ? new Play()
           : name === 'sill' && this.sillSpot ? new Sill(this.sillSpot())
-            : name === 'box' && this.boxSpot?.() ? new Box(this.boxSpot()!) : name === 'zoomies' ? new Zoomies(c) : name === 'warm' ? warmUp(c) ?? toBed(c, 'loaf') : name === 'sneeze' ? sneeze(c) : name === 'stare' ? new Stare(c)
+            : name === 'box' && this.boxSpot?.() ? new Box(this.boxSpot()!) : name === 'zoomies' ? new Zoomies(c) : name === 'warm' ? warmUp(c) ?? toBed(c, 'loaf') : name === 'cool' ? coolOff(c) ?? toBed(c, 'loaf') : name === 'sneeze' ? sneeze(c) : name === 'stare' ? new Stare(c)
               : name === 'rub' && c.posts().length ? new Rub(c, c.posts()[0]) : name === 'scratch' ? scratchEar() : name === 'greet' ? new Greet(0.9) : name === 'gift' ? new Gift() : name === 'ask' ? new PawGlass(c.finger, true) : name === 'tail' ? new TailChase() : name === 'by you' ? byYou(c) : name === 'claw' && c.scratcher() ? new Claw(c.scratcher()!) : name === 'top' && c.scratcher() ? new Top(c.scratcher()!) : name === 'fish' && c.mouse()?.under ? new Fish() : name === 'pompom' && c.pompom() ? new Bat() : toBed(c, 'loaf');
   }
 
@@ -1589,7 +1596,7 @@ export class PixelAvatar implements Avatar {
       this.tried.push({ key: w.o.key, t: this.clock, paid: false, rued: false });
       if (w.o.key === 'investigate' && w.o.about) this.wonder.delete(w.o.about);
     }
-    else if (w && Math.random() < 0.5) this.rest = restingPose(this.mood, this.mode);
+    else if (w && Math.random() < 0.5) this.rest = restingPose(this.mood, this.mode, this.warmth);
   }
 
   get hidden() {
@@ -1600,6 +1607,16 @@ export class PixelAvatar implements Avatar {
   private curlPose: PoseName = Math.random() < 0.5 ? 'curl' : 'curlL';
   private deep = false;
 
+  /** the shape it sleeps in this time: curled up, as a rule, one way or the other; now and then,
+   *  a cat quite sure of you, belly up; and as the room warms up, the hotter the oftener flat out on
+   *  its side (or its back), and in the cold all but always curled up tight */
+  private sleepShape(): PoseName {
+    const { hot, cold } = feel(this.warmth), trust = this.mood.trust;
+    if (Math.random() < 0.6 * hot) return trust > 0.45 && Math.random() < 0.35 ? 'back' : 'side';
+    if (trust > 0.7 && Math.random() < 0.18 * (1 - cold)) return 'back';
+    return Math.random() < 0.5 ? 'curl' : 'curlL';
+  }
+
   /** the brain's wish for a posture right now */
   private wanted(): PoseName {
     if (!this.alive) return 'side';
@@ -1608,8 +1625,7 @@ export class PixelAvatar implements Avatar {
     if (this.sleep > 0.75 || (this.deep && this.sleep >= 0.5)) {
       if (!this.deep) {
         this.deep = true;
-        // (now and then, a cat quite sure of you, belly up)
-        this.curlPose = this.mood.trust > 0.7 && Math.random() < 0.18 ? 'back' : Math.random() < 0.5 ? 'curl' : 'curlL';
+        this.curlPose = this.sleepShape();
       }
       return this.curlPose;
     }
@@ -1870,9 +1886,11 @@ export class PixelAvatar implements Avatar {
     if ((this.settleIn -= dt) > 0) return;
     this.settleIn = 480 + Math.random() * 720;
     const was = this.curlPose, r = Math.random();
-    let next: PoseName = was === 'curl' ? 'curlL' : was === 'curlL' ? 'curl' : Math.random() < 0.5 ? 'curl' : 'curlL';
-    if (was !== 'side' && r < 0.25) next = 'side';
-    else if (was !== 'back' && this.mood.trust > 0.7 && r < 0.4) next = 'back';
+    // (flat out the more, the hotter it is; in the cold, from one curl into the other)
+    const { hot, cold } = feel(this.warmth), flat = 0.25 * (1 - 0.8 * cold) + 0.4 * hot;
+    let next: PoseName = was === 'curl' ? 'curlL' : was === 'curlL' ? 'curl' : Math.random() < 1 - hot ? (Math.random() < 0.5 ? 'curl' : 'curlL') : was === 'side' && this.mood.trust > 0.45 ? 'back' : 'side';
+    if (was !== 'side' && r < flat) next = 'side';
+    else if (was !== 'back' && this.mood.trust > 0.7 && r < flat + 0.15 * (1 - cold)) next = 'back';
     this.curlPose = next;
     this.sighIn = 6 + Math.random() * 4;
   }

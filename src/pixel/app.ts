@@ -16,6 +16,7 @@ import { loadState, newCat, saveState, type CatState } from '../sim/state';
 import { HABITS, expectation, note, type Habit } from '../sim/habits';
 import { learn, lessons, worth } from '../sim/learn';
 import { crepuscular, stepLife, THRESH } from '../sim/life';
+import { roomWarmth } from './season';
 import { clamp, smoothstep } from '../util/math';
 import { PixelAvatar } from './avatar';
 import { Mind } from './mind';
@@ -1740,6 +1741,7 @@ export class PixelApp {
     this.avatar.snow = this.room.snowing;
     this.avatar.night = dark;
     this.avatar.dusk = crepuscular(hour);
+    this.avatar.warmth = roomWarmth(clock);
     // (the moon's light is never strong enough to hide from)
     this.avatar.glare = dark > 0.5 ? 0 : dl.sun;
     // the phone's bar the colour of the wall at the top of the room
