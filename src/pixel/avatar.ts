@@ -4,7 +4,7 @@ import { POSES, SIDE_TURN, type Leg, type PoseLayer, type PoseName } from '../ca
 import { NEUTRAL, type Mood } from '../cat3d/mood';
 import type { Avatar } from '../sim/avatar';
 import type { EarMood, TailMood } from '../rig/animator';
-import { boop, byYou, idleOptions, groomChest, groomFlank, knead, lookWith, restingPose, sneeze, toBed, toWindow, wander, warmUp, washFace, yawn, type Act, type Ctx, sunbathe, Play, Sill, Hunt, Box, Zoomies, Walk, Stare, Rub, scratchEar, wakeUp, stretchSideOn, Greet, Gift, Snub, Beg, PawGlass, TailChase, Claw, Top, Fish, Bat, Trap, Sulk, isPerching, type Perching, type ScratchPost, type GlassFinger, type SillSpot, type SulkSpot } from './behave';
+import { boop, byYou, canGlance, idleOptions, groomChest, groomFlank, knead, lookWith, restingPose, sneeze, toBed, toWindow, wander, warmUp, washFace, yawn, type Act, type Ctx, sunbathe, Play, Sill, Hunt, Box, Zoomies, Walk, Stare, Rub, scratchEar, wakeUp, stretchSideOn, Greet, Gift, Snub, Beg, PawGlass, TailChase, Claw, Top, Fish, Bat, Trap, Sulk, isPerching, type Perching, type ScratchPost, type GlassFinger, type SillSpot, type SulkSpot } from './behave';
 import { Chase, Startle, type LaserDot } from './chase';
 import { Tease, type Lure } from './tease';
 import { GOAL, Whim } from './whim';
@@ -637,6 +637,16 @@ export class PixelAvatar implements Avatar {
     if (this.handCue > 0 && N.unit('hand')) { N.cue('hand', this.handCue); this.handCue = 0; }
     // (a start, a moment ago: a look at you)
     if (this.referIn > 0 && (this.referIn -= dt) <= 0 && N.awake > 0.6) N.cue('you', 1.3);
+    // (busy with its coat, and something moving or new catches its eye: it looks up from it a
+    // moment, stopped as it was, caught with the tip of its tongue out as like as not; then back to
+    // it)
+    this.glanceRest = Math.max(0, this.glanceRest - dt);
+    const G = this.act, B = N.attending;
+    if (canGlance(G) && /^(groom|wash|scratch)/.test(G.name) && B && N.jump > 0.35 && N.awake > 0.6 && this.glanceRest <= 0
+      && (B.motion > 0.25 || B.onset > 0.3 || B.cue > 0.3)) {
+      this.glanceRest = 3 + Math.random() * 3;
+      G.glance(0.7 + Math.random() * 1.4);
+    }
     this.remember(dt);
     // (what its eyes are on, kept a while: an hour on, mostly gone)
     const k = Math.exp(-dt / 3600);
@@ -818,6 +828,8 @@ export class PixelAvatar implements Avatar {
   private headYaw = 0;
   private headPitch = 0;
   private handCue = 0;
+  /** not looking up from its coat again till this has gone by (s) */
+  private glanceRest = 0;
   private readonly comeIn = new THREE.Vector3();
 
   /** a hand come down on it at a point on the screen: how far out of its sight that was (0: it saw
@@ -1676,7 +1688,8 @@ export class PixelAvatar implements Avatar {
     }
     // eyes on the finger, or on you (through the window); asleep, dead or busy, nowhere (up on
     // the sill it looks where it likes: out of the window)
-    const busy = this.errand || (this.act && this.act.name !== 'window' && this.act.name !== 'knead' && this.act.name !== 'greet' && this.act.name !== 'gift');
+    const busy = this.errand || (this.act && this.act.name !== 'window' && this.act.name !== 'knead' && this.act.name !== 'greet' && this.act.name !== 'gift'
+      && !(canGlance(this.act) && this.act.glancing));
     const N = this.nerves, seen = this.alive && this.sleep <= 0.5 ? N.attending : null;
     // (the eyes their own, ahead of the head, only while what it sees is what it looks at)
     m.eyeAt = this.act instanceof Chase && seen?.id === 'dot' ? N.gazePoint : null;

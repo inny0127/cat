@@ -185,21 +185,44 @@ const hump = (t: number, d: number, r: number) => ease(t / r) * ease((d - t) / r
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
 const pick = <T>(xs: T[]) => xs[Math.floor(Math.random() * xs.length)];
 
+/** an act it can look up from a moment (a wash, a scratch): its own time stopped while it looks,
+ *  and on again where it left off */
+export interface Glancing {
+  glance(s: number): void;
+  readonly glancing: boolean;
+}
+export const canGlance = (a: Act | null): a is Act & Glancing => !!a && typeof (a as Partial<Glancing>).glance === 'function';
+
 /** a motion laid over the pose for a while, shaped by a function of time (and a sound with it, at
- *  a time into it) */
-class Layered implements Act {
+ *  a time into it). It can be looked up from: the motion let go of (as much as `letGo`), its time
+ *  stopped, the head free to turn to whatever it was; then back to it */
+class Layered implements Act, Glancing {
   private t = 0;
+  /** looking up from it: for how long yet, and how far it has let go of it (0 .. 1) */
+  private upFor = 0;
+  private up = 0;
+  letGo = 0.8;
   constructor(readonly name: string, private readonly dur: number, private readonly ramp: number,
     private readonly shape: (t: number) => PoseLayer, private readonly posture: PoseName | null = null,
     private cue: { at: number; sound: string; gain: number } | null = null) {}
+  glance(s: number) {
+    this.upFor = Math.max(this.upFor, s);
+  }
+  get glancing() {
+    return this.up > 0.05;
+  }
   update(dt: number, c: Ctx) {
-    this.t += dt;
+    const looking = this.upFor > 0;
+    this.upFor = Math.max(0, this.upFor - dt);
+    this.up += ((looking ? 1 : 0) - this.up) * (1 - Math.exp(-dt * (looking ? 9 : 4)));
+    // (its own time goes on only as it gets back to it)
+    this.t += dt * Math.max(0, 1 - 2 * this.up);
     if (this.cue && this.t >= this.cue.at) {
       c.sound(this.cue.sound, this.cue.gain);
       this.cue = null;
     }
     if (this.posture) c.m.setPosture(this.posture);
-    c.m.layer = { pose: this.shape(this.t), w: hump(this.t, this.dur, this.ramp) };
+    c.m.layer = { pose: this.shape(this.t), w: hump(this.t, this.dur, this.ramp) * (1 - this.letGo * this.up) };
     return this.t < this.dur;
   }
   stop(c: Ctx) {
@@ -209,12 +232,18 @@ class Layered implements Act {
 
 /** an act that needs the cat in a posture first (a hind foot up to an ear wants it sitting, not
  *  still halfway up from lying): into it, settled, and only then the act */
-class Settled implements Act {
+class Settled implements Act, Glancing {
   private ready = false;
   private wait = 0;
   constructor(private readonly inner: Act, private readonly posture: PoseName) {}
   get name() {
     return this.inner.name;
+  }
+  glance(s: number) {
+    if (this.ready && canGlance(this.inner)) this.inner.glance(s);
+  }
+  get glancing() {
+    return canGlance(this.inner) && this.inner.glancing;
   }
   update(dt: number, c: Ctx) {
     if (!this.ready) {
@@ -356,7 +385,8 @@ export const scratchEar = () => {
   const paw = s > 0 ? 'LH' : 'RH';
   const bouts = Math.random() < 0.5 ? 2 : 1, bout = rand(1.1, 1.8), gap = 0.45;
   const down = 0.4 + bouts * bout + (bouts - 1) * gap;
-  return new Settled(new Layered('scratch', down + 1.0, 0.35, (t) => {
+  // (looking up from it, the foot stays up, as a cat stops dead with its foot in the air)
+  const L = new Layered('scratch', down + 1.0, 0.35, (t) => {
     // the foot up (and down again after), the strokes about seven a second while it goes at it
     const up = ease(t / 0.4) * (1 - ease((t - down) / 0.3));
     const tb = t - 0.4, k = Math.floor(tb / (bout + gap)), u = tb - k * (bout + gap);
@@ -373,7 +403,9 @@ export const scratchEar = () => {
       neckYaw: s * 0.6 * up, headRoll: (-s * 0.55 + 0.05 * st) * up + 0.45 * sh, neckPitch: -0.15 * up, headPitch: -0.1 * up,
       hipRoll: s * 0.12 * up, eyeOpen: 1 - 0.7 * up - 0.3 * Math.abs(sh), squint: 0.6 * up, earOut: 0.3 * up + 0.4 * Math.abs(sh), earFwd: -0.2 * up,
     };
-  }, 'sit'), 'sit');
+  }, 'sit');
+  L.letGo = 0.45;
+  return new Settled(L, 'sit');
 };
 
 /** kneading: the front paws treading in turn, as kittens do at their mother */
