@@ -66,6 +66,9 @@ export interface Avatar {
   tidy?(where: 'face' | 'flank' | 'chest'): void;
   /** a love bite on the finger stroking it, gently, and a lick (true if it did) */
   loveBite?(): boolean;
+  /** the hand gone before it had had enough: the head pushed out after it, a look at you (true if
+   *  it does) */
+  askMore?(): boolean;
   /** a hand on its belly: trapped (hugged, bitten at, kicked) if the belly is offered just now
    *  (rolled over, flat out, on its back); false if not */
   bellyTrap?(): boolean;

@@ -10,14 +10,13 @@ function room() {
   m.snap('sit');
   m.pos.set(0, 0, 0.3);
   const said: string[] = [];
-  const breaths: THREE.Vector3[] = [];
   const c = {
     m, home: new THREE.Vector3(), window: new THREE.Vector3(0, 0, 0.3),
     room: { minX: -1, maxX: 1, minZ: -1, maxZ: 1 }, mode: 'rest', mood: { ...NEUTRAL, trust: 0.8 }, kneading: false,
     keepClear: (p: THREE.Vector3) => p, sound: () => {}, say: (k: string) => said.push(k), viewer: () => new THREE.Vector3(0, 1.4, 3),
-    mouthAt: () => m.pos.clone().setY(0.2), breathe: (at: THREE.Vector3) => breaths.push(at.clone()),
+    mouthAt: () => m.pos.clone().setY(0.2),
   } as unknown as Ctx;
-  return { c, m, said, breaths };
+  return { c, m, said };
 }
 
 /** play the game with a finger on the glass (null: lifted) for so long; the paws that met the glass */
@@ -67,22 +66,23 @@ describe('a finger on the glass', () => {
     expect(r.going).toBe(false);
   });
 
-  it('as often as not, a sniff at it first: a breath on the glass before the first pat', () => {
+  it('as often as not, a sniff at the finger first, before the first pat', () => {
     let sniffed = 0;
     for (const seed0 of [12345, 67890, 13579, 24680, 11111, 99999, 31337, 8675309]) {
       let seed = seed0;
       vi.spyOn(Math, 'random').mockImplementation(() => (seed = (seed * 16807) % 2147483647) / 2147483647);
-      const { c, m, breaths } = room();
+      const { c, m } = room();
       const at = new THREE.Vector3(0.05, 0.1, 0.5);
       const act = new PawGlass(() => ({ at, still: 0 }));
-      let firstPat = -1, firstBreath = -1;
+      let firstPat = -1, firstSniff = -1;
       for (let t = 0; t < 6; t += 0.02) {
         act.update(0.02, c);
         m.update(0.02);
         if (act.landed && firstPat < 0) firstPat = t;
-        if (breaths.length && firstBreath < 0) firstBreath = t;
+        // (sniffing: leant in, the whiskers forward)
+        if ((m.layer?.pose as { whisker?: number } | undefined)?.whisker === 1 && firstSniff < 0) firstSniff = t;
       }
-      if (firstBreath >= 0) { sniffed++; expect(firstBreath).toBeLessThan(firstPat); }
+      if (firstSniff >= 0) { sniffed++; expect(firstSniff).toBeLessThan(firstPat); }
       vi.restoreAllMocks();
     }
     expect(sniffed).toBeGreaterThan(1);
@@ -104,9 +104,9 @@ describe('a finger on the glass', () => {
     expect(r.t).toBeLessThan(8);
   });
 
-  it('a cat that loves you, the finger held still at its head: its cheek rubbed on the glass there, then a slow blink', () => {
+  it('a cat that loves you, the finger held still at its head: its cheek rubbed on the finger, then a slow blink', () => {
     vi.spyOn(Math, 'random').mockReturnValue(0.2);
-    const { c, m, said, breaths } = room();
+    const { c, m, said } = room();
     const at = new THREE.Vector3(0.03, 0.24, 0.5);
     const act = new PawGlass(() => ({ at, still: 0 }));
     let nuzzles = 0, turn = 0, eyes = 1;
@@ -123,8 +123,7 @@ describe('a finger on the glass', () => {
     expect(phases.has('nuzzle')).toBe(true);
     expect(phases.has('blink')).toBe(true);
     expect(nuzzles).toBeGreaterThanOrEqual(2);
-    expect(breaths.length).toBeGreaterThanOrEqual(2);
-    // (the face turned to put the cheek to the glass)
+    // (the face turned to put the cheek to the finger)
     expect(turn).toBeGreaterThan(0.35);
     expect(eyes).toBeLessThan(0.4);
     // (no pats: it was not a game)

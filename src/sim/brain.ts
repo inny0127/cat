@@ -75,6 +75,13 @@ export class Brain {
   private napLeft = rand(600, 1500);
   private peekIn = rand(40, 160);
   private lastTouch = -1e9;
+  /** when it last asked for more (see tidyUp), and till when it is asking */
+  private askedAt = -1e9;
+  private askingUntil = 0;
+  /** asking for more now: eyes open on you, ears up (mood.ts) */
+  get asking() {
+    return this.time < this.askingUntil && this.mode === 'enjoy' && this.time - this.lastTouch > 0.3;
+  }
   /** the hands on it this time: how long all told, how long against the lie of its fur, and
    *  where (seconds by zone); when they have been gone a moment, a cat often puts its coat to
    *  rights where it was touched */
@@ -220,13 +227,30 @@ export class Brain {
   // ------------------------------------------------------------------ input events
   touchStart(c: Contact) {
     if (this.mode === 'away' && this.anim.inRoom && this.s.alive) {
-      this.awayTouch();
-      return;
+      // (sulking in its corner: that is another thing)
+      if (this.s.awayReason === 'sulk') {
+        this.awayTouch();
+        return;
+      }
+      // at the bowl, the water, the tray: a hand on it there is a hand on it like any other (it
+      // gets on with what it was doing under it, and is about the room again after)
+      this.s.where = 'bed';
+      this.s.awayReason = null;
+      this.toAwake('rest', true);
     }
     if (this.inert) return;
     const zone = this.senses.zoneAt(c.px, c.py);
     this.lastTouch = this.time;
     this.touchCount++;
+    // (asked for more, and a hand back on it before long: glad of it, the purr straight up again,
+    // and as often as not a slow blink)
+    if (this.time - this.askedAt < 8 && this.mode === 'enjoy' && zone !== 'tail' && zone !== 'paw' && zone !== 'belly') {
+      this.askedAt = -1e9;
+      this.askingUntil = 0;
+      this.pleasure = clamp(this.pleasure + 0.25);
+      this.purr = Math.max(this.purr, 0.5);
+      if (chance(0.6)) this.later(rand(0.6, 1.2), () => { if (this.mode === 'enjoy') this.anim.doBlink(true); });
+    }
     if ((this.mode === 'sleep' || this.mode === 'doze') && this.s.trust > 0.65 && this.irritation < 0.2
       && zone !== 'tail' && zone !== 'paw' && zone !== 'belly' && zone !== 'none') {
       // so sure of the hand that it is not worth waking for: an ear turned to it, an eye opened a
@@ -687,6 +711,20 @@ export class Brain {
   private updateAway(dt: number, touching: boolean) {
     const s = this.s;
     if (this.anim.inRoom) {
+      // sulking, and a hand kept on it a while, gently, not taken off and put back: shrugged off at
+      // first, and then the sulk melts under it (a cat that hardly knows you only gets up and
+      // goes to the other corner)
+      if (s.awayReason === 'sulk' && s.alive) {
+        if (touching) {
+          this.sulkHand += dt;
+          if (this.sulkHand > 2.5 + 4 * (1 - clamp(s.trust))) {
+            this.sulkHand = 0;
+            if (s.trust > 0.1) { this.makeUp(); return; }
+            this.anim.sulkTouched?.(true);
+            s.awayUntil += 25_000;
+          }
+        } else this.sulkHand = Math.max(0, this.sulkHand - dt * 0.5);
+      }
       // in the room all along: the errand done where you saw it, or the sulk worn off, and it is
       // about the room again
       const done = s.awayReason !== 'sulk' && this.anim.errandDone === true;
@@ -706,9 +744,11 @@ export class Brain {
     }
   }
 
-  /** when the sulk began (brain time), and the hands put on it since in its corner */
+  /** when the sulk began (brain time), and the hands put on it since in its corner; how long a
+   *  hand has been kept on it there, gently */
   private sulkFrom = -1e9;
   private sulkPokes: number[] = [];
+  private sulkHand = 0;
 
   /** a hand on it while it is away in the room. At the bowl or in the box, it flicks an ear and
    *  gets on with it. Sulking in its corner, it shrugs the hand off (and a hand that will not
@@ -899,9 +939,19 @@ export class Brain {
   private tidyUp(now: number) {
     const S = this.session;
     if (S.endedAt < 0 || now - S.endedAt < 1.6) return;
-    const { t, against, zones } = S;
+    const { t, against, zones, bit } = S;
     this.session = { t: 0, against: 0, zones: {}, endedAt: -1, bit: false };
     if (t < 2.5 || this.mode === 'sleep' || this.mode === 'doze' || this.mode === 'angry') return;
+    // (a good stroke over before it had had enough, from a hand it is fond of: it asks for more,
+    // the head pushed out after the hand, a look at you and a word; not every time)
+    const s = this.s, tol = (22 + 75 * clamp(s.trust)) * s.personality.tolerance;
+    if (this.mode === 'enjoy' && t >= 3 && !bit && against < 0.6 && s.trust > 0.3 && this.pleasure > 0.4 && this.irritation < 0.15
+      && this.stim < tol * 0.6 && !this.drowsy && now - this.askedAt > 25 && chance(0.4 + 0.4 * clamp(s.trust)) && this.anim.askMore?.()) {
+      this.askedAt = now;
+      this.askingUntil = now + 3.4;
+      this.say(chance(0.65) ? 'trill' : 'meowSoft', { delay: 0.6 });
+      return;
+    }
     if (!chance(0.35 + 0.45 * clamp(against / 1.5) + 0.15 * clamp(t / 15))) return;
     let most: Zone = 'back', mt = 0;
     for (const [z, zt] of Object.entries(zones) as [Zone, number][]) if (zt > mt) { mt = zt; most = z; }
@@ -994,6 +1044,8 @@ export class Brain {
       case 'arriving': case 'leaving': eye = 0.85; break;
     }
     pupil += this.fear * 0.6 + this.arousal * 0.2;
+    const asking = this.time < this.askingUntil && !touching && m === 'enjoy';
+    if (asking) { eye = 0.88; squint = 0.04; pupil += 0.12; }
     if (asleep) eye = this.peekEye;
     a.eyeTarget = eye;
     a.squintTarget = squint;
@@ -1020,6 +1072,7 @@ export class Brain {
     else if (m === 'annoyed') a.earMood = this.irritation > 0.5 ? 'back' : 'side';
     else if (asleep) a.earMood = 'sleep';
     else if (m === 'alert') a.earMood = 'forward';
+    else if (asking) a.earMood = 'forward';
     else if (m === 'enjoy') a.earMood = this.pleasure > 0.7 ? 'side' : 'relaxed';
     else a.earMood = 'relaxed';
 
@@ -1036,7 +1089,7 @@ export class Brain {
       case 'rest': lift = 0.3; break;
       case 'annoyed': lift = 0.45; break;
       case 'angry': lift = 0.5; break;
-      case 'enjoy': lift = 0.2; break;
+      case 'enjoy': lift = asking ? 0.55 : 0.2; break;
       case 'leaving': lift = 1; break;
       case 'arriving': lift = 0.4; break;
     }

@@ -157,15 +157,17 @@ export function bodyFor(m: Mood): BodyLook {
  * much it trusts you) as a Mood. `sick` is 0..1 as the brain works it out; `night` 0 day .. 1 night.
  */
 export function moodFromBrain(
-  b: { mode: string; pleasure: number; irritation: number; fear: number; arousal: number; sleepDepth: number },
+  b: { mode: string; pleasure: number; irritation: number; fear: number; arousal: number; sleepDepth: number; asking?: boolean },
   sick: number, trust: number, night: number,
 ): Mood {
   const dozy = b.mode === 'sleep' || b.mode === 'doze' ? Math.max(0.5, b.sleepDepth) : b.mode === 'rest' ? 0.25 : 0;
+  // (asking for more, the hand gone: the bliss off its face, the eyes open on you, the ears up)
+  const ask = b.asking ? 1 : 0;
   return {
-    pleasure: clamp01(b.pleasure + (b.mode === 'enjoy' ? 0.2 : 0)),
+    pleasure: clamp01((b.pleasure + (b.mode === 'enjoy' ? 0.2 : 0)) * (1 - 0.65 * ask)),
     irritation: clamp01(b.irritation + (b.mode === 'angry' ? 0.4 : b.mode === 'annoyed' ? 0.15 : 0)),
     fear: clamp01(b.fear),
-    arousal: clamp01(b.arousal + (b.mode === 'alert' ? 0.25 : 0)),
+    arousal: clamp01(Math.max(b.arousal + (b.mode === 'alert' ? 0.25 : 0), 0.45 * ask)),
     sleepy: clamp01(dozy),
     sick: clamp01(sick),
     trust,

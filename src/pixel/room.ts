@@ -1037,6 +1037,25 @@ export class Room {
   }
   /** the pompom batted (how hard, 0 .. 1) */
   onPompom: ((k: number) => void) | null = null;
+  /** a finger holding the pompom: where it pulls it to (the swing it is held at, out toward +x and
+   *  toward +z, radians; null: let go) */
+  pompomHeld: THREE.Vector2 | null = null;
+  /** a finger has the pompom: drawn after the finger, to a point on the screen's plane through
+   *  where its string hangs from (null: let go, and it swings) */
+  holdPompom(at: THREE.Vector3 | null) {
+    const P = this.postSway;
+    if (!at) {
+      if (this.pompomHeld) this.onPompom?.(Math.min(1, Math.hypot(P.pvx, P.pvz) * P.len / 1.2));
+      this.pompomHeld = null;
+      return;
+    }
+    P.pom.updateWorldMatrix(true, false);
+    const top = P.pom.getWorldPosition(new THREE.Vector3());
+    // (sideways as the finger goes; down below where it hangs, toward you)
+    const sx = Math.max(-0.95, Math.min(0.95, (at.x - top.x) / P.len));
+    const sz = Math.max(-0.6, Math.min(0.6, ((top.y - P.len) - at.y) / P.len * 0.8));
+    this.pompomHeld = (this.pompomHeld ?? new THREE.Vector2()).set(sx, sz);
+  }
 
   /** a cat knocks against something, at a point, so hard (0 .. 1): the monstera's pot, and its
    *  leaves shake and rustle; a curtain, and it swings */
@@ -2347,8 +2366,10 @@ export class Room {
 
   /** the floor the ball can roll over: from the room's one end to the other, from the wall under
    *  the window to the front of the room */
+  /** the floor a ball can roll on and a cat get to: from end to end of the room as the view goes
+   *  along it (to the scratching post's side on the left, past the litter tray on the right) */
   get yarnBounds() {
-    return { minX: -0.7, maxX: 0.8, minZ: this.win.z + 0.08, maxZ: this.spots.bed.z + 0.55 };
+    return { minX: -0.97, maxX: 0.93, minZ: this.win.z + 0.08, maxZ: this.spots.bed.z + 0.55 };
   }
 
   /** a finger has the ball; a paw has it pinned */
@@ -2839,7 +2860,8 @@ export class Room {
       else if (Math.hypot(p.x - this.books.x, p.z - this.books.z) < 0.16 && p.y < 0.17 && p.y > 0.004) on = 'books';
       else if (p.y >= b - 0.006 && p.y < b + 0.2 && p.z > z - 0.05 && p.z < z + 0.27 && p.x > l - 0.08 && p.x < r + 0.08) on = 'sill';
       else if (Math.hypot(p.x - this.spots.bed.x, p.z - this.spots.bed.z) < 0.22 && p.y < 0.1) on = 'bed';
-      else if (p.y < 0.04 && n.y > 0.5) on = 'floor';
+      // (the floor, or no higher than the rug's edge: the floor all the same)
+      else if ((p.y < 0.04 && n.y > 0.5) || p.y < 0.025) on = 'floor';
       return { p, n, on, mug };
     }
     return null;
@@ -3665,6 +3687,12 @@ export class Room {
       const k = 0.6 / P.len, g = 9.8 / P.len;
       P.pvx += (P.vx - ox) * k + (-g * P.px - 0.7 * P.pvx) * h;
       P.pvz += (P.vz - oz) * k + (-g * P.pz - 0.7 * P.pvz) * h;
+      // (held by a finger: drawn after it, as on a spring, quick and not overshooting much)
+      const H = this.pompomHeld;
+      if (H) {
+        P.pvz += (60 * (H.x - P.pz) - 10 * P.pvz) * h;
+        P.pvx += (60 * (-H.y - P.px) - 10 * P.pvx) * h;
+      }
       P.px += P.pvx * h;
       P.pz += P.pvz * h;
       if (Math.abs(P.px) + Math.abs(P.pz) < 1e-4 && Math.abs(P.pvx) + Math.abs(P.pvz) < 1e-3) P.px = P.pz = P.pvx = P.pvz = 0;

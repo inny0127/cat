@@ -121,8 +121,6 @@ export interface Ctx {
   mouthAt: () => THREE.Vector3;
   /** a finger on the glass, if there is one (GlassFinger) */
   finger: () => GlassFinger | null;
-  /** its breath on the glass, from its nose at a point: a little mist there */
-  breathe: (at: THREE.Vector3) => void;
 }
 
 export interface ScratchPost {
@@ -824,8 +822,6 @@ export class Greet implements Act {
       },
       w: 1,
     };
-    // (its nose to the glass at the push: a breath on it)
-    if (this.t >= 0.36 && this.t - dt < 0.36) c.breathe(c.mouthAt());
     if (u >= 1) {
       this.t = 0;
       this.side = -this.side;
@@ -1289,11 +1285,10 @@ export class PawGlass implements Act {
         return true;
       }
       // first, as often as not, a sniff at it: leant in to it, the head pushed out, the whiskers
-      // forward and the nose working (a breath or two misting the glass there)
+      // forward and the nose working
       if (this.sniff && this.goes === 0 && this.t > 0.3) {
         const u = this.t - 0.3, k = hump(u, 1.5, 0.35);
         m.layer = { pose: { ...keen, chestPitch: -1.02 + 0.16 * k, neckPitch: 0.06 - 0.1 * k, headPitch: 0.05 * Math.sin(u * 40) * k, whisker: 1, earFwd: 1 }, w: 1 };
-        for (const at of [0.6, 1.05]) if (u >= at && u - dt < at) c.breathe(c.mouthAt());
         if (u > 1.5) { this.sniff = false; this.t = 0; this.wait = 0.35 + Math.random() * 0.4; }
         return true;
       }
@@ -1328,7 +1323,7 @@ export class PawGlass implements Act {
   /** its head rubbed on the glass where the finger is: in close to the glass under it, then leant
    *  in, the cheek put to the glass and drawn along it and back, two or three times, the eyes
    *  shut and the ears laid back a little, the tail up (a trill first, now and then); each time
-   *  the cheek meets the glass it is felt, and its breath mists it there; then sat back */
+   *  the cheek meets the finger it is felt; then sat back */
   private nuzzle(dt: number, c: Ctx, f: GlassFinger | null) {
     const m = c.m;
     if (!this.closeIn) {
@@ -1352,10 +1347,7 @@ export class PawGlass implements Act {
     const ph = Math.max(0, t - 0.6) / 0.8, k = Math.floor(ph), u = ph - k;
     const stroke = t > 0.6 && k < n ? Math.sin(Math.PI * 2 * u) : 0;
     // (the cheek meets the glass at the start of each stroke)
-    if (t > 0.6 && k < n && Math.floor((t - dt - 0.6) / 0.8) < k) {
-      this.nuzzled = true;
-      c.breathe(c.mouthAt());
-    }
+    if (t > 0.6 && k < n && Math.floor((t - dt - 0.6) / 0.8) < k) this.nuzzled = true;
     m.layer = {
       pose: {
         // (the face up to the glass and turned to put the cheek to it, drawn along it and back;

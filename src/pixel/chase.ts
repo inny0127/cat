@@ -81,6 +81,8 @@ export class Chase implements Act {
   /** the dot on its own body: which part of it, and a moment between goes after it there */
   private part: NonNullable<LaserDot['self']> = 'rear';
   private selfRest = 0;
+  /** how long the dot has been on its own coat (a beam it has only walked through is nothing) */
+  private selfOn = 0;
   /** the last pat that knocked at the wall, and whether this leap has */
   private patK = -1;
   private patted = false;
@@ -222,7 +224,10 @@ export class Chase implements Act {
     }
     // the dot on its own body: that has to be had too (not in the middle of a spring)
     this.selfRest = Math.max(0, this.selfRest - dt);
-    if (L?.self && this.selfRest <= 0 && (this.phase === 'notice' || this.phase === 'stalk' || this.phase === 'run' || this.phase === 'wiggle' || this.phase === 'hold' || this.phase === 'search')) {
+    this.selfOn = L?.self ? this.selfOn + dt : 0;
+    // (not on the run after it, nor with it under its paws: then the dot on its coat is only the
+    // beam crossing it on the way to the floor; and not again and again)
+    if (L?.self && this.selfOn > 0.45 && this.selfRest <= 0 && (this.phase === 'notice' || this.phase === 'stalk' || this.phase === 'wiggle' || this.phase === 'search')) {
       m.stop();
       m.zoom = 0;
       this.part = L.self;
@@ -275,7 +280,7 @@ export class Chase implements Act {
         m.layer = { pose, w: Math.min(1, this.t / 0.15) * Math.min(1, (this.dur - this.t) / 0.2 + 0.001) };
         if (this.t >= this.dur) {
           m.layer = null;
-          this.selfRest = rand(0.6, 1.4);
+          this.selfRest = rand(6, 12);
           if (L) this.decide(c, L);
           else { this.asked = false; this.next('search'); }
         }

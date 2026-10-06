@@ -2,7 +2,8 @@
 // emulating browser (CDP touch events, so the page sees pointerType 'touch' pointer events as on a
 // phone): the radio, the print (credits), a long press (water), petting the cat (does it stay under
 // the finger as the view comes in close), the laser pointer (taken off the sill, shone, lifted, put
-// down with a tap on it in hand) and the feather wand (taken up, dangled, let go). Prints what
+// down with a tap on it in hand), the feather wand (taken up, dangled, let go), looking round and
+// two fingers pinching the view in and out. Prints what
 // happened and exits non-zero if anything did not. REEL_BASE=http://localhost:4173/ for a build;
 // IOS=1 for an iPhone's browser.
 import { chromium } from 'playwright-core';
@@ -153,6 +154,27 @@ await touch('touchEnd', 310, 306, 0.05);
 await page.waitForTimeout(800);
 const pan2 = await get(() => window.__pcat.panX);
 check('a swipe to the right looks back to the left', pan2 < pan1 - 0.2, `${pan1.toFixed(2)} -> ${pan2.toFixed(2)}`);
+
+// two fingers spread apart: the view goes in; pinched together again: back out
+const pinch = async (a0, b0, a1, b1, steps = 8) => {
+  clock = Date.now() / 1000;
+  const pts = (a, b) => [{ x: a[0], y: a[1], id: 1, radiusX: 8, radiusY: 8, force: 0.5 }, { x: b[0], y: b[1], id: 2, radiusX: 8, radiusY: 8, force: 0.5 }];
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', timestamp: (clock += 0.05), touchPoints: pts(a0, b0) });
+  for (let i = 1; i <= steps; i++) {
+    const u = i / steps, a = [a0[0] + (a1[0] - a0[0]) * u, a0[1] + (a1[1] - a0[1]) * u], bb = [b0[0] + (b1[0] - b0[0]) * u, b0[1] + (b1[1] - b0[1]) * u];
+    await page.waitForTimeout(50);
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', timestamp: (clock += 0.05), touchPoints: pts(a, bb) });
+  }
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', timestamp: (clock += 0.05), touchPoints: [] });
+  await page.waitForTimeout(600);
+};
+const z0 = await page.evaluate(() => window.__pcat.userZoom);
+await pinch([170, 300], [220, 300], [70, 300], [320, 300]);
+const z1 = await page.evaluate(() => window.__pcat.userZoom);
+check('two fingers spread: the view goes in', z1 > z0 * 1.8, `${z0.toFixed(2)} -> ${z1.toFixed(2)}`);
+await pinch([60, 300], [330, 300], [170, 300], [220, 300]);
+const z2 = await page.evaluate(() => window.__pcat.userZoom);
+check('pinched together: back out', z2 < z1 * 0.6, `${z1.toFixed(2)} -> ${z2.toFixed(2)}`);
 
 if (IOS) check('the finger lands on the label over the picture', await page.evaluate(() => document.elementFromPoint(195, 400)?.tagName === 'LABEL'));
 check('no errors on the page', errs.length === 0, errs.join(' | ').slice(0, 300));

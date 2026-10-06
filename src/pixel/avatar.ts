@@ -190,6 +190,7 @@ export class PixelAvatar implements Avatar {
     const m = this.cat.motor, T = m.petTarget;
     T.roll = T.yaw = T.pitch = T.rump = 0;
     const h = this.hands[0];
+    if (!h && this.lastHand) this.lastHand.t += dt;
     const keen = !this.alive || this.sleep > 0.5 ? 0 : this.mode === 'enjoy' ? 1 : this.mode === 'rest' || this.mode === 'alert' ? 0.45 : 0;
     if (!h || keen <= 0 || !this.feel) return;
     const hit = this.feel(h.sx, h.sy);
@@ -204,11 +205,52 @@ export class PixelAvatar implements Avatar {
     if (Math.abs(lx) > 0.008) this.rubSide = Math.sign(lx);
     const side = this.rubSide;
     const chin = b === 'jaw' || (b === 'head' && hit.point.y < E.y - 0.02);
+    this.lastHand = { bone: b, side, chin, t: 0 };
     const rubbing = 0.08 * Math.sin(this.rub * 5);
     if (chin) { T.pitch = 0.35 * keen; T.roll = side * 0.08 * keen; }
     else if (b === 'head' || b.startsWith('ear')) { T.roll = side * (0.3 + rubbing) * keen; T.yaw = side * 0.22 * keen; }
     else if (b === 'neck1' || b === 'neck2') { T.pitch = 0.2 * keen; T.roll = side * 0.15 * keen; }
     else if (b === 'hips' || b === 'tail0' || b === 'tail1') T.rump = keen;
+  }
+
+  /** the last of a hand on it: the bone, which side of the head, under the chin; how long since */
+  private lastHand: { bone: string; side: number; chin: boolean; t: number } | null = null;
+  /** asking for more (see askMore): how long it has been at it, and where the hand had been */
+  private more: { t: number; bone: string; side: number; chin: boolean } | null = null;
+  /** at it now: the head pushed out after the hand that left (the first words, the brain) */
+  get askingNow() {
+    return !!this.more && this.more.t > 0.3 && this.more.t < 2.6;
+  }
+
+  /** the hand gone before it had had enough: up comes the head after it, the cheek (or the chin,
+   *  or the small of the back) rubbed on the air where the hand was, twice, and a look at you
+   *  while it waits; true if it does (the brain has it say so, and minds what you do next) */
+  askMore() {
+    const L = this.lastHand;
+    if (!L || L.t > 4 || this.hands.length || !this.alive || this.sleep > 0.3 || this.errand || this.trip
+      || this.cat.motor.licking || (this.act && this.act.name !== 'knead') || isPerching(this.act)) return false;
+    // (the treading stops: the head comes up off it)
+    if (this.act) this.stopAct();
+    this.more = { t: 0, bone: L.bone, side: L.side, chin: L.chin };
+    return true;
+  }
+
+  private askAfter(dt: number) {
+    const A = this.more;
+    if (!A) return;
+    const T = this.cat.motor.petTarget;
+    if (this.hands.length || !this.alive || this.sleep > 0.3 || this.act || this.errand || this.trip || (A.t += dt) > 3.4) {
+      this.more = null;
+      return;
+    }
+    const t = A.t;
+    const push = ease((t - 0.3) / 0.45) * (1 - ease((t - 1.9) / 0.6));
+    const rub = 0.1 * Math.sin((t - 0.3) * 6.5);
+    if (A.chin) { T.pitch = 0.45 * push; T.roll = A.side * 0.1 * push; }
+    else if (A.bone === 'head' || A.bone.startsWith('ear')) { T.roll = A.side * (0.32 + rub) * push; T.yaw = A.side * 0.22 * push; T.pitch = 0.12 * push; }
+    else if (A.bone === 'neck1' || A.bone === 'neck2') { T.pitch = 0.3 * push; T.roll = A.side * (0.15 + rub) * push; }
+    else if (/^(hips|tail0|tail1|spine)/.test(A.bone)) T.rump = push;
+    else { T.pitch = 0.25 * push; T.roll = A.side * (0.18 + rub) * push; }
   }
 
   /**
@@ -442,13 +484,6 @@ export class PixelAvatar implements Avatar {
   get nuzzled() {
     return this.act instanceof PawGlass && this.act.nuzzled;
   }
-  /** its breath on the glass since last asked: where its nose was (null: none) */
-  private breath: THREE.Vector3 | null = null;
-  takeBreath() {
-    const b = this.breath;
-    this.breath = null;
-    return b;
-  }
   /** the finger on the glass now (null: gone) */
   private fingerNow(): GlassFinger | null {
     const F = this.glassFinger;
@@ -552,6 +587,21 @@ export class PixelAvatar implements Avatar {
       const k = Math.random() < 0.6 ? 'trill' : 'chirp';
       this.outside?.sound(k, 0.5);
       this.vocalize(k, k === 'trill' ? 0.29 : 0.11, 0.2);
+    }
+  }
+
+  /** the pompom on the scratching post swung about by your finger: watched; and, in the mood for
+   *  it, gone over to and batted at */
+  pompomTeased() {
+    const B = this.ctx.pompom();
+    if (!B || !this.alive || this.isHidden || this.sleep > 0.3 || this.errand || this.trip || this.perched || this.hands.length) return;
+    if (this.act instanceof Bat) return;
+    this.heard = { at: B.clone(), t: 1.6 + Math.random() * 0.8, tilt: 0 };
+    if (this.act && !/^(wander|yawn|groom|wash|to bed|by you|look with you|greet|window|stare)/.test(this.act.name)) return;
+    const keen = 0.35 + 0.5 * this.mood.arousal + 0.3 * Math.max(0, this.mood.trust) - 0.6 * this.mood.sleepy;
+    if (Math.random() < keen) {
+      this.stopAct();
+      this.act = new Bat();
     }
   }
 
@@ -665,7 +715,6 @@ export class PixelAvatar implements Avatar {
       carry: (at, yaw) => this.ground?.carry(at, yaw),
       mouthAt: () => this.mouthAt(),
       finger: () => this.fingerNow(),
-      breathe: (at) => { this.breath = at.clone(); },
     };
   }
 
@@ -938,6 +987,8 @@ export class PixelAvatar implements Avatar {
       // in somebody's hands: stop and stay; tread with the front paws when it is happy there
       // (the hands gone, it may be putting its coat to rights)
       if (this.perched) { this.act!.update(dt, c); return; }
+      // (its head in the bowl, or at the tray: it gets on with that under the hand)
+      if (this.errand?.phase === 'do') return;
       // annoyed by them, the hands gone a moment, as often as not it turns its back on you
       if (this.mode === 'annoyed' && !this.snubbed && this.sinceHands > 1.2 && !this.act) {
         this.snubbed = true;
@@ -966,7 +1017,7 @@ export class PixelAvatar implements Avatar {
       if (this.act && !(this.act.name === 'knead' && this.kneading) && this.act.name !== 'boop') this.stopAct();
       // (treading with the front paws: in a sphinx, the elbows out; not from curled up nose to tail,
       // which would turn it round under the hand)
-      if (!this.act && this.kneading && this.sameWay('sphinx') === 'sphinx') this.act = knead();
+      if (!this.act && this.kneading && !this.more && this.sameWay('sphinx') === 'sphinx') this.act = knead();
       if (this.act && !this.act.update(dt, c) && this.act.name === 'boop') { this.stopAct(); this.maybeBlep(0.3); }
       // (the kneading has the posture it treads in; anything else, the one it would rest in: never
       // both, or the body is pulled from one to the other and back, rising and sinking)
@@ -1103,6 +1154,7 @@ export class PixelAvatar implements Avatar {
     }
     if (this.errand) this.doErrand(dt);
     this.leanIntoHand(dt);
+    this.askAfter(dt);
     this.lickHand(dt);
     this.blepNow(dt);
     this.keepTime(dt);

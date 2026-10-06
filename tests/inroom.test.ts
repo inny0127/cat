@@ -29,7 +29,7 @@ function world(trust: number, seed = 7) {
     setHidden: (h: boolean) => { if (h) did.push('HIDDEN'); },
   });
   const audio = quiet({ play: (n: string) => { did.push('sound ' + n); return 0.5; } });
-  const b = new Brain(s, anim as never, audio as never, quiet() as never, quiet() as never, quiet({ zoneAt: () => 'back' }) as never);
+  const b = new Brain(s, anim as never, audio as never, quiet() as never, quiet() as never, quiet({ zoneAt: () => 'back', grainAt: () => [1, 0], headScreen: () => ({ x: 0, y: 0 }) }) as never);
   let t = 0;
   const step = (sec: number) => { for (const end = t + sec; t < end; t += 0.05) { s.lastTick += 50; b.update(0.05, t, []); } };
   const touch = () => {
@@ -37,8 +37,21 @@ function world(trust: number, seed = 7) {
     b.touchStart(c);
     b.touchEnd(c, false);
   };
+  /** a hand kept on it, stroking gently along its back, so long (s) */
+  const hold = (sec: number) => {
+    const c: Contact = { id: 2, sx: 100, sy: 100, x0: 100, y0: 100, px: 100, py: 100, vx: 0, vy: 0, t0: t, last: t, onCat: true, startedOnCat: true, travel: 0, press: 0.4, maxSpeed: 0 };
+    b.touchStart(c);
+    for (const end = t + sec; t < end; t += 0.05) {
+      s.lastTick += 50;
+      c.sx = c.px = 100 + 30 * Math.sin(t * 3);
+      c.vx = 90 * Math.cos(t * 3);
+      c.last = t;
+      b.update(0.05, t, [c]);
+    }
+    b.touchEnd(c, false);
+  };
   return {
-    s, b, did, step, touch,
+    s, b, did, step, touch, hold,
     get mode() { return b.mode; },
     there: () => there?.(),
     errandDone: () => { done = true; },
@@ -125,15 +138,46 @@ describe('away, and in the room all the same', () => {
       expect(w.mode).toBe('away');
       w.step(5);
       expect(w.mode).toBe('away');
-      // (a hand on it at the bowl: it gets on with it)
-      w.touch();
-      expect(w.mode).toBe('away');
       w.errandDone();
       w.step(0.2);
       expect(w.did).toContain('about the room');
       expect(w.mode).toBe('rest');
       expect(w.did).not.toContain('HIDDEN');
     } finally { w.done(); }
+  });
+  it('a hand on it at the bowl is a hand on it like any other: it is yours to stroke there (and it eats on)', () => {
+    const w = world(0.5);
+    try {
+      w.b.wake(0, false, 0);
+      w.step(1);
+      (w.b as unknown as { leave: (r: string) => void }).leave('eat');
+      w.step(1.5);
+      w.there();
+      w.step(3);
+      expect(w.mode).toBe('away');
+      w.touch();
+      expect(w.mode).not.toBe('away');
+      expect(w.s.where).toBe('bed');
+      expect(w.did).not.toContain('HIDDEN');
+    } finally { w.done(); }
+  });
+  it('sulking, and a hand kept on it gently: shrugged off at first, then the sulk melts under it', () => {
+    for (const [trust, makes] of [[0.6, true], [0.3, true], [0.05, false]] as const) {
+      const w = world(trust);
+      try {
+        w.b.wake(0, false, 0);
+        w.step(1);
+        (w.b as unknown as { irritation: number }).irritation = 0.95;
+        (w.b as unknown as { leave: (r: string) => void }).leave('sulk');
+        w.there();
+        w.step(3);
+        w.hold(8);
+        expect(w.did).toContain('shrugs');
+        expect(w.did.includes('turns round to you')).toBe(makes);
+        expect(w.mode !== 'away').toBe(makes);
+        if (!makes) expect(w.did).toContain('shrugs, and moves off');
+      } finally { w.done(); }
+    }
   });
   it('found away as the window is opened: in the room, where it was away to', () => {
     for (const [why, stays] of [['wander', false], ['sulk', true], ['drink', true]] as const) {

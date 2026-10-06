@@ -7,7 +7,6 @@ import { MotionInput } from '../input/motion';
 import { CatAudio } from '../audio/audio';
 import { Haptic } from '../platform/haptics';
 import { KeepAwake } from '../platform/awake';
-import { GlassFog, fogOnGlass } from './glassfog';
 import { Notifier, forecast } from '../platform/notify';
 import { Hint } from '../ui/hint';
 import { Firsts } from '../ui/firsts';
@@ -339,6 +338,14 @@ export class PixelApp {
           Object.assign(this.laser, { taking: id, x0: x, y0: y, lift: kind === 'mouse' ? 0 : kind === 'pen' ? 10 : 34 });
           return true;
         }
+        // the pompom on the scratching post: taken by a finger, to swing it (or flick it, a tap)
+        if (this.hitPompom(x, y)) {
+          this.pomFinger = { id, x, y, moved: false };
+          this.holdPompomAt(x, y);
+          this.avatar.pompomTeased();
+          surface.style.cursor = 'grabbing';
+          return true;
+        }
         // the feather wand: taken up by its feathers or its cane
         if (!this.hitThing(this.room.yarnBall, x, y, 26) && this.hitWand(x, y)) {
           this.wandFinger = { x, y, id };
@@ -381,6 +388,14 @@ export class PixelApp {
           wf.y = y;
           return;
         }
+        const pf = this.pomFinger;
+        if (pf && pf.id === id) {
+          if (Math.hypot(x - pf.x, y - pf.y) > 4) pf.moved = true;
+          pf.x = x;
+          pf.y = y;
+          this.holdPompomAt(x, y);
+          return;
+        }
         const f = this.toyFinger;
         const at = f && this.floorPoint(x, y);
         if (!f || !at) return;
@@ -389,8 +404,20 @@ export class PixelApp {
         this.room.holdYarn(at.add(f.off));
       },
       lookStart: () => this.lookStart(),
-      lookMove: (dx) => this.lookMove(dx),
-      lookEnd: (v, cancelled) => this.lookEnd(v, cancelled),
+      lookMove: (dx, dy) => this.lookMove(dx, dy),
+      lookEnd: (v, cancelled, vy) => this.lookEnd(v, cancelled, vy),
+      lookFree: () => this.userZoom > 1.02,
+      // two fingers: the view in or out, and along
+      pinchStart: () => {
+        if (this.creditsOpen) return false;
+        this.holdView();
+        this.look.on = false;
+        this.look.v = this.look.vy = 0;
+        this.look.until = this.tickNow + 25;
+        return true;
+      },
+      pinch: (k, mx, my, dx, dy) => { this.zoomAbout(k, mx, my, dx, dy); this.look.until = this.tickNow + 25; },
+      pinchEnd: () => { this.look.until = this.tickNow + 25; this.state.hints.zoom = 1; },
       releaseToy: (tap, id) => {
         const L = this.laser;
         if (L.held) {
@@ -423,6 +450,19 @@ export class PixelApp {
           this.gestureEnd();
           return;
         }
+        const pf = this.pomFinger;
+        if (pf && pf.id === id) {
+          this.pomFinger = null;
+          surface.style.cursor = '';
+          // (a tap: flicked, off it swings; drawn about and let go: it swings from where it was)
+          if (!pf.moved) {
+            this.room.holdPompom(null);
+            this.room.batPompom(new THREE.Vector3((Math.random() < 0.5 ? -1 : 1) * (0.6 + 0.3 * Math.random()), 0, 0.25));
+          } else this.room.holdPompom(null);
+          this.haptic.tap?.('light');
+          this.avatar.pompomTeased();
+          return;
+        }
         const wf = this.wandFinger;
         if (wf && wf.id === id) {
           // let go: the wand falls where it is, its cane along the floor the way the hand was
@@ -443,10 +483,18 @@ export class PixelApp {
         if (tap && f) this.flickYarn(f.x, f.y);
       },
     });
-    // (a finger on the glass wipes the mist off it where it goes)
-    const wipe = (e: PointerEvent) => { if (e.pointerType !== 'mouse' || e.buttons) this.glassFog.wipe(e.clientX / innerWidth, e.clientY / innerHeight, e.pointerType === 'mouse' ? 0.03 : 0.045); };
-    surface.addEventListener('pointerdown', (e) => { this.audio.start(); this.awake.touched(); this.inputAt = performance.now() / 1000; wipe(e); });
-    surface.addEventListener('pointermove', (e) => { this.inputAt = performance.now() / 1000; wipe(e); }, { passive: true });
+    surface.addEventListener('pointerdown', () => { this.audio.start(); this.awake.touched(); this.inputAt = performance.now() / 1000; });
+    surface.addEventListener('pointermove', () => { this.inputAt = performance.now() / 1000; }, { passive: true });
+    // the wheel (and a trackpad's pinch, which comes as the wheel with ctrl held): the view in or
+    // out about the pointer
+    surface.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const d = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
+      this.zoomAbout(Math.exp(-d * (e.ctrlKey ? 0.01 : 0.0015)), e.clientX, e.clientY, 0, 0);
+      this.look.until = this.tickNow + 25;
+    }, { passive: false });
+    // (Safari's own pinch would zoom the page: the fingers are the room's)
+    for (const ev of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(ev, (e) => e.preventDefault(), { passive: false });
     this.audio.unlockOn(window);
     this.native();
     this.motion.onShake = (k) => this.brain.kibble(k);
@@ -507,9 +555,34 @@ export class PixelApp {
   }
 
   /** a toy that can be taken up under a screen point (the laser pointer on the sill, the wand,
-   *  the ball of wool) */
+   *  the ball of wool, the pompom on the post) */
   private toyAt(x: number, y: number) {
-    return (this.room.pointer.visible && this.hitThing(this.room.pointer, x, y, 24)) || this.hitWand(x, y) || this.hitThing(this.room.yarnBall, x, y, 26);
+    return (this.room.pointer.visible && this.hitThing(this.room.pointer, x, y, 24)) || this.hitWand(x, y) || this.hitThing(this.room.yarnBall, x, y, 26) || this.hitPompom(x, y);
+  }
+
+  /** a finger holding the pompom on the scratching post (which, where, whether it has moved it) */
+  private pomFinger: { id: number; x: number; y: number; moved: boolean } | null = null;
+  /** is the pompom (or its string) under a screen point */
+  private hitPompom(x: number, y: number) {
+    if (!this.room) return false;
+    const cam = this.stage.camera;
+    const b = this.room.pompom().project(cam);
+    const bx = (b.x * 0.5 + 0.5) * innerWidth, by = (-b.y * 0.5 + 0.5) * innerHeight;
+    if (b.z > 1 || bx < -30 || bx > innerWidth + 30) return false;
+    if (Math.hypot(x - bx, y - by) < 26) return true;
+    // (the string, up to the top it hangs from)
+    const up = this.room.pompom().setY(this.room.pompom().y + 0.28).project(cam);
+    const ux = (up.x * 0.5 + 0.5) * innerWidth, uy = (-up.y * 0.5 + 0.5) * innerHeight;
+    const dx = ux - bx, dy = uy - by, t = Math.max(0, Math.min(1, ((x - bx) * dx + (y - by) * dy) / (dx * dx + dy * dy || 1)));
+    return Math.hypot(bx + dx * t - x, by + dy * t - y) < 14;
+  }
+  /** the pompom drawn after a finger: to where the finger is, on the upright plane it hangs in */
+  private holdPompomAt(x: number, y: number) {
+    const ray = this.floorRay;
+    ray.setFromCamera(new THREE.Vector2((x / innerWidth) * 2 - 1, -(y / innerHeight) * 2 + 1), this.stage.camera);
+    const z = this.room.pompom().z, o = ray.ray.origin, d = ray.ray.direction;
+    if (Math.abs(d.z) < 1e-4) return;
+    this.room.holdPompom(ray.ray.at((z - o.z) / d.z, new THREE.Vector3()));
   }
 
   /** half the width of the room seen at the cat's bed (metres) */
@@ -562,11 +635,17 @@ export class PixelApp {
 
   /** the room view drifts sideways after the cat, so wherever it goes it stays in view */
   private panX = 0;
+  /** how far in two fingers have taken the view (1: the room as it is framed; more: closer), and
+   *  how far up or down they have taken it (m) */
+  private userZoom = 1;
+  private panY = 0;
+  /** how long a finger with a toy in hand has been held right at an edge of the screen */
+  private edgeDwell = 0;
   /** looking round the room, a finger drawn sideways across the glass: whether the finger has the
    *  view now, where the view was when it took it, how fast the view glides on after the finger
    *  let go (m/s), and till when it stays where it was taken (the app's clock, s) before it goes
    *  back after the cat */
-  private readonly look = { on: false, from: 0, v: 0, until: 0 };
+  private readonly look = { on: false, from: 0, v: 0, vy: 0, until: 0 };
   /** the app's clock at the last step of the cat's life (s) */
   private tickNow = 0;
   /** how far the view can go either way along the room (m): to its things at either end (the
@@ -576,38 +655,53 @@ export class PixelApp {
     const half = this.viewHalf();
     return [Math.min(0, half - 1.03), Math.max(0, 0.97 - half)];
   }
-  /** half the width of the room view where it looks (m) */
+  /** half the width of the room view where it looks (m), as far in as the view has been taken */
   private viewHalf() {
     const cam = this.stage.camera;
-    return Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2) * cam.aspect * this.roomView.dist;
+    return Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2) * cam.aspect * this.roomView.dist / this.userZoom;
+  }
+  /** half the height of it */
+  private viewHalfV() {
+    return Math.tan(THREE.MathUtils.degToRad(this.stage.camera.fov) / 2) * this.roomView.dist / this.userZoom;
+  }
+  /** how far the view can go up or down (m): in close, as far as the room's own frame shows */
+  private panRangeY(): [number, number] {
+    const h0 = Math.tan(THREE.MathUtils.degToRad(this.stage.camera.fov) / 2) * this.roomView.dist;
+    const r = Math.max(0, h0 - h0 / this.userZoom);
+    return [-r, r];
   }
   private lookStart() {
-    const [lo, hi] = this.panRange();
+    const [lo, hi] = this.panRange(), [ylo, yhi] = this.panRangeY();
     // (not close in on the cat, nor where there is nowhere to go)
-    if (hi - lo < 0.05 || this.focusT > 0 || this.focus > 0.05) return false;
+    if ((hi - lo < 0.05 && yhi - ylo < 0.05) || this.focusT > 0 || this.focus > 0.05) return false;
     Object.assign(this.look, { on: true, from: this.panX, v: 0 });
     this.look.until = this.tickNow + 25;
     return true;
   }
-  private lookMove(dx: number) {
+  private lookMove(dx: number, dy = 0) {
     if (!this.look.on) return;
     // the room goes with the finger (drawn to the left, it takes the view to the right), heavier
-    // past the room's ends, and only so far past them
+    // past the room's ends, and only so far past them; in close, up and down too
     const [lo, hi] = this.panRange();
     let d = -dx * (2 * this.viewHalf()) / Math.max(1, innerWidth);
     if ((this.panX < lo && d < 0) || (this.panX > hi && d > 0)) d *= 0.3;
     this.panX = Math.max(lo - 0.06, Math.min(hi + 0.06, this.panX + d));
+    if (dy) {
+      const [ylo, yhi] = this.panRangeY();
+      this.panY = Math.max(ylo, Math.min(yhi, this.panY + dy * (2 * this.viewHalfV()) / Math.max(1, innerHeight)));
+    }
     this.look.until = this.tickNow + 25;
   }
-  private lookEnd(v: number, cancelled: boolean) {
+  private lookEnd(v: number, cancelled: boolean, vy = 0) {
     if (!this.look.on) return;
     this.look.on = false;
     if (cancelled) {
-      // (it was scrubbing the glass: the view back where it was)
+      // (it was scrubbing the floor: the view back where it was)
       this.panX = this.look.from;
-      this.look.v = 0;
+      this.look.v = this.look.vy = 0;
       return;
     }
+    this.look.vy = Math.max(-1.2, Math.min(1.2, vy * (2 * this.viewHalfV()) / Math.max(1, innerHeight)));
     this.look.v = Math.max(-1.6, Math.min(1.6, -v * (2 * this.viewHalf()) / Math.max(1, innerWidth)));
     this.look.until = this.tickNow + 25;
     this.state.hints.look = 1;
@@ -635,14 +729,72 @@ export class PixelApp {
   private readonly tmpA = new THREE.Vector3();
   private readonly tmpU = new THREE.Vector3();
 
+  /** the view taken in or out by k about a screen point that went (dx, dy) on the while (two
+   *  fingers, a wheel): what was under the point before is under it after */
+  private zoomAbout(k: number, mx: number, my: number, dx: number, dy: number) {
+    if (!this.room || !Number.isFinite(k) || k <= 0) return;
+    const cam = this.stage.camera;
+    const P = this.underPoint(mx - dx, my - dy);
+    this.userZoom = Math.max(PixelApp.ZOOM_MIN, Math.min(PixelApp.ZOOM_MAX, this.userZoom * k));
+    this.placeCamera();
+    for (let i = 0; i < 2; i++) {
+      const q = P.clone().project(cam);
+      const sx = (q.x * 0.5 + 0.5) * innerWidth, sy = (-q.y * 0.5 + 0.5) * innerHeight;
+      const wpp = (2 * Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2) * Math.max(0.2, cam.position.z - P.z)) / Math.max(1, innerHeight);
+      const [lo, hi] = this.panRange(), [ylo, yhi] = this.panRangeY();
+      this.panX = Math.max(lo, Math.min(hi, this.panX - (mx - sx) * wpp));
+      this.panY = Math.max(ylo, Math.min(yhi, this.panY + (my - sy) * wpp));
+      this.placeCamera();
+    }
+  }
+  static readonly ZOOM_MIN = 0.6;
+  static readonly ZOOM_MAX = 3;
+
+  /** what is under a screen point: the cat, or whatever of the room is there (the sky: the window) */
+  private underPoint(sx: number, sy: number) {
+    const cam = this.stage.camera;
+    const hit = this.room!.laserHit(new THREE.Vector2((sx / innerWidth) * 2 - 1, -(sy / innerHeight) * 2 + 1), cam);
+    const ray = this.room!.laserRay.ray;
+    let p = hit && hit.on !== 'out' ? hit.p.clone() : null;
+    if (!this.avatar.hidden) {
+      const t = this.rayCat(ray, 1.2);
+      if (t > 0 && (!p || t < ray.origin.distanceTo(p))) p = ray.at(t, new THREE.Vector3());
+    }
+    if (p) return p;
+    const wz = this.room!.skyZ + 0.06, d = ray.direction, o = ray.origin;
+    return ray.at(Math.abs(d.z) > 1e-4 ? (wz - o.z) / d.z : 2, new THREE.Vector3());
+  }
+
+  /** the view close in on the cat (a hand on it) made the view as two fingers would have it, where
+   *  it is: in as far, along and up as far, and no longer on the cat */
+  private holdView() {
+    if (this.focus < 0.01) return;
+    const cam = this.stage.camera, rv = this.roomView;
+    const el = Math.atan2(rv.dir.y, rv.dir.z), along = rv.dir.z / Math.cos(el);
+    const D = Math.max(0.2, (cam.position.z - rv.target.z) / along);
+    this.userZoom = Math.max(PixelApp.ZOOM_MIN, Math.min(PixelApp.ZOOM_MAX, rv.dist / D));
+    const D2 = rv.dist / this.userZoom;
+    this.panX = cam.position.x - rv.target.x - rv.dir.x * D2 / Math.cos(el);
+    this.panY = cam.position.y - rv.target.y - rv.dir.y * D2 / Math.cos(el);
+    const [lo, hi] = this.panRange(), [ylo, yhi] = this.panRangeY();
+    this.panX = Math.max(lo, Math.min(hi, this.panX));
+    this.panY = Math.max(ylo, Math.min(yhi, this.panY));
+    this.focus = this.focusT = 0;
+    this.focusHold = 0;
+    this.anchor = null;
+  }
+
   private placeCamera() {
     const cam = this.stage.camera;
     const f = this.focus * this.focus * (3 - 2 * this.focus);
     const rv = this.roomView;
     const target = rv.target.clone();
     target.x += this.panX;
+    target.y += this.panY;
     target.lerp(this.catAim, f);
-    const dist = rv.dist + (this.closeNow - rv.dist) * f;
+    // (taken in close by two fingers: no further out for a hand on the cat)
+    const roomDist = rv.dist / this.userZoom;
+    const dist = roomDist + (Math.min(this.closeNow, roomDist) - roomDist) * f;
     const dir = rv.dir.clone().lerp(new THREE.Vector3(0, Math.sin(0.27), Math.cos(0.27)), f).normalize();
     // (from a little above, but with the camera level and the picture slid down to what it looks
     // at (stage.ts setShift): upright things stay upright, as pixel art draws them; as far off,
@@ -833,7 +985,6 @@ export class PixelApp {
     const off = lead - this.panX, dead = 0.07;
     const goal = Math.max(lo, Math.min(hi, off > dead ? lead - dead : off < -dead ? lead + dead : this.panX));
     const L = this.laser, wf = this.wandFinger;
-    const playing = this.avatar.doing === 'chase' || this.avatar.doing === 'tease';
     const tool = L.held && L.id >= 0 ? L.sx : wf ? wf.x : null;
     // looking round the room: a hand on the cat, or a toy taken up, and the view goes back to it
     const Lk = this.look;
@@ -849,17 +1000,34 @@ export class PixelApp {
           Lk.v *= Math.exp(-dt * 12);
           this.panX += ((this.panX < lo ? lo : hi) - this.panX) * (1 - Math.exp(-dt * 9));
         }
+        const [ylo, yhi] = this.panRangeY();
+        this.panY = Math.max(ylo, Math.min(yhi, this.panY + Lk.vy * dt));
+        Lk.vy *= Math.exp(-dt * 3.2);
       }
     }
-    else if (tool !== null && playing) {
-      // the red dot on: the room holds still under the finger (else the dot would slide off with
-      // it as the view went after the cat), unless the dot is held out near an edge, which takes
-      // the view on that way
-      const ex = (tool / innerWidth) * 2 - 1, edge = 0.7;
-      if (Math.abs(ex) > edge) this.panX = Math.max(lo, Math.min(hi, this.panX + Math.sign(ex) * ((Math.abs(ex) - edge) / (1 - edge)) * 0.45 * dt));
+    else if (tool !== null) {
+      // a toy in hand (the red dot on, the wand up): the room holds still under the finger (else
+      // what it points at would slide off with the view as it went after the cat), unless the
+      // finger is held a moment right at an edge, which takes the view on that way, gently
+      const ex = (tool / innerWidth) * 2 - 1, edge = 0.82;
+      this.edgeDwell = Math.abs(ex) > edge ? this.edgeDwell + dt : 0;
+      if (this.edgeDwell > 0.5) this.panX = Math.max(lo, Math.min(hi, this.panX + Math.sign(ex) * Math.min(1, (Math.abs(ex) - edge) / (1 - edge)) * 0.3 * dt));
     }
     // (a little quicker after it when it is tearing about, so that it is not lost off the side)
-    else this.panX += (goal - this.panX) * (1 - Math.exp(-dt * (1.8 + 1.2 * m.zoom)));
+    else {
+      this.panX += (goal - this.panX) * (1 - Math.exp(-dt * (1.8 + 1.2 * m.zoom)));
+      // (in close: up and down after it too, its middle kept in the middle of the view)
+      const [ylo, yhi] = this.panRangeY(), hv = this.viewHalfV();
+      const offY = aimAt.y - (this.roomView.target.y + this.panY), deadY = 0.35 * hv;
+      const goalY = Math.max(ylo, Math.min(yhi, offY > deadY ? this.panY + offY - deadY : offY < -deadY ? this.panY + offY + deadY : this.panY));
+      this.panY += (goalY - this.panY) * (1 - Math.exp(-dt * 2));
+    }
+    // (never outside the room's frame, wherever the view was taken: taken back out, it comes back)
+    {
+      const [ylo, yhi] = this.panRangeY();
+      if (this.panY < ylo || this.panY > yhi) this.panY += (Math.max(ylo, Math.min(yhi, this.panY)) - this.panY) * (1 - Math.exp(-dt * 8));
+      if (!Lk.on && (this.panX < lo - 0.001 || this.panX > hi + 0.001) && !looking) this.panX += (Math.max(lo, Math.min(hi, this.panX)) - this.panX) * (1 - Math.exp(-dt * 8));
+    }
     const rate = this.focusT > this.focus ? 1.6 : 0.8;
     this.focus += Math.max(-rate * dt, Math.min(rate * dt, this.focusT - this.focus));
     // (the right edge tipped away from you is the eye gone off to the left of the glass; the top
@@ -1143,8 +1311,6 @@ export class PixelApp {
   private toyWasPinned = false;
   /** the hint given for this time it is asking you for a game */
   private askHinted = false;
-  /** the prints of a paw on the glass, drying (fresh 1 .. 0), and the mist of a breath on it */
-  private prints: { at: THREE.Vector3; age: number; fresh: number; mist?: boolean }[] = [];
   private readonly bugLight = new THREE.Vector3();
 
   /** a paw walking into the ball of wool sends it rolling on a little, the way the cat is going
@@ -1317,11 +1483,6 @@ export class PixelApp {
   private readonly hourOverride = new URLSearchParams(location.search).get('hour');
   /** ?rain=1: rain now (0: none) */
   private readonly rainOverride = new URLSearchParams(location.search).get('rain');
-  /** your side of the glass misted over (a cold morning, a wet day; or as asked, ?mist=0.8), and
-   *  whether it has been settled to the hour yet */
-  private readonly mistOverride = new URLSearchParams(location.search).get('mist');
-  readonly glassFog = new GlassFog();
-  private fogSettled = false;
 
   /** ?date=2027-01-15: the room's day of the year, for looking at another season */
   private readonly dateOverride = new URLSearchParams(location.search).get('date');
@@ -1436,39 +1597,14 @@ export class PixelApp {
       this.haptic.tapSoon('light');
       this.audio.play('lick', { gain: 0.16, pan: this.catPan() });
     }
-    // (a paw patted at the glass where your finger is: felt under it, heard, softly, and its print
-    // left on the glass where the paw is, to dry)
+    // (a paw patted at your fingertip: felt under it, and heard, softly)
     if (landed) {
       this.haptic.tapSoon('light');
       this.audio.play('thump', { gain: 0.2, pan: this.catPan() });
-      this.cat.group.updateMatrixWorld();
-      this.prints.push({ at: this.cat.body.reached[landed].clone().applyMatrix4(this.cat.group.matrixWorld), age: 0, fresh: 1 });
-      if (this.prints.length > 4) this.prints.shift();
-    }
-    // (its nose to the glass: a breath of mist there, gone in a moment)
-    const breath = this.avatar.takeBreath();
-    if (breath) {
-      // (where the breath meets the glass: a little below the mouth)
-      this.prints.push({ at: breath.setY(breath.y - 0.012), age: 0, fresh: 0, mist: true });
-      if (this.prints.length > 4) this.prints.shift();
-    }
-    if (this.prints.length) {
-      for (const P of this.prints) {
-        P.age += dt;
-        P.fresh = P.mist ? Math.min(1, P.age / 0.2) * Math.sqrt(1 - Math.min(1, P.age / 2.2)) : P.age < 2.5 ? 1 : 1 - (P.age - 2.5) / 5;
-      }
-      this.prints = this.prints.filter((P) => P.fresh > 0);
-      this.stage.setPrints(this.prints);
     }
     this.brushYarn(dt);
     // the weather: now and then a few hours of rain (or as asked, ?rain=1)
     const rain = this.rainOverride !== null ? +this.rainOverride : rainAt(clock);
-    // (the glass misting on your side: settled to the hour at once the first time, after that
-    // creeping back over where a finger wiped it)
-    this.glassFog.level = this.mistOverride !== null ? +this.mistOverride : fogOnGlass(clock, rain);
-    if (!this.fogSettled) { this.glassFog.settle(); this.fogSettled = true; }
-    this.glassFog.update(dt);
-    this.stage.setFog(this.glassFog);
     const dl = this.room.update(s, hour, dt, rain, clock);
     this.stage.setDayLight(dl);
     // the whiskers in the light the face is in: dimmer after dark, warm while the lamp is lit;
@@ -1520,6 +1656,8 @@ export class PixelApp {
     this.stage.setString(sl.a, sl.b, sl.sag * 0.6);
     this.avatar.wand = { p: this.room.lureAt(), v: this.room.lureVel, held: this.room.wandHeld, pinned: this.room.lurePinned };
     if (wf && this.room.lureVel.length() > 0.08) this.brain.toy(wf.x, wf.y, dt);
+    const pf = this.pomFinger;
+    if (pf && this.room.pompomSpeed > 0.08) this.brain.toy(pf.x, pf.y, dt);
     if ((this.saveIn -= dt) < 0) {
       this.saveIn = 10;
       this.persist(false);
@@ -1528,7 +1666,7 @@ export class PixelApp {
 
   private radioHintIn = 25;
   private lookHintIn = 60;
-  private mistHintIn = 8;
+  private zoomHintIn = 150;
   private lampHintIn = 40;
 
   private hints(dt: number, touching: boolean) {
@@ -1544,7 +1682,7 @@ export class PixelApp {
     if (asking && !this.askHinted && (s.hints.ask ?? 0) < 2 && !touching && !this.input.touching) {
       this.askHinted = true;
       s.hints.ask = (s.hints.ask ?? 0) + 1;
-      this.hintUi.show('고양이가 놀자고 해요. 유리에 손가락을 대고 천천히 움직여 보세요', 6000);
+      this.hintUi.show('고양이가 놀자고 해요. 화면에 손가락을 대고 천천히 움직여 보세요', 6000);
       return;
     }
     if (!asking) this.askHinted = false;
@@ -1552,12 +1690,6 @@ export class PixelApp {
     if (this.avatar.doing === 'play' && !s.hints.yarnDrag && !touching && !this.toyFinger) {
       s.hints.yarnDrag = 1;
       this.hintUi.show('털실 공을 손가락으로 끌어 보세요. 고양이가 쫓아올 거예요', 5000);
-      return;
-    }
-    // the first time the glass mists over well enough to draw on: that you can
-    if (this.glassFog.level > 0.35 && !s.hints.mist && !touching && !this.input.touching && (this.mistHintIn -= dt) < 0) {
-      s.hints.mist = 1;
-      this.hintUi.show('유리에 김이 서렸어요. 손가락으로 그림을 그려 보세요', 5500);
       return;
     }
     // once the radio has played a while: how to switch it off
@@ -1578,6 +1710,13 @@ export class PixelApp {
     if (!s.hints.look && hi - lo > 0.3 && (s.hints.pet || s.stats.petSeconds > 4) && !touching && !this.input.touching && (this.lookHintIn -= dt) < 0) {
       s.hints.look = 1;
       this.hintUi.show('화면을 옆으로 밀면 방의 다른 곳을 둘러볼 수 있어요', 5500);
+      return;
+    }
+    // a good while after that (and not if two fingers have done it already): that the view goes in
+    // and out
+    if (s.hints.look && !s.hints.zoom && !touching && !this.input.touching && (this.zoomHintIn -= dt) < 0) {
+      s.hints.zoom = 1;
+      this.hintUi.show('두 손가락을 벌리면 가까이, 오므리면 멀리 볼 수 있어요', 5500);
       return;
     }
     if (touching || this.input.touching) {
@@ -1624,6 +1763,7 @@ export class PixelApp {
     if (this.brain.purr > 0.3 && asleep) now.add('sleeppurr');
     if (a.kneading || doing === 'knead') now.add('knead');
     if (a.nuzzled) now.add('rub');
+    if (a.askingNow) now.add('more');
     if (m.posture === 'back' && asleep) now.add('back');
     if (doing === 'greet') now.add('greet');
     if (m.lipUpNow > 0.7) now.add('flehmen');
