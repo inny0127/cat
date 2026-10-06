@@ -2404,8 +2404,10 @@ export class Gift implements Act {
         this.aimIn = 0.3;
         const away = d > 1e-3 ? 0.15 / d : 0;
         const stand = new THREE.Vector3(M.p.x + (m.pos.x - M.p.x) * away, 0, M.p.z + (m.pos.z - M.p.z) * away);
+        // (from where the whole of it is clear of things, if there is such a place near)
+        const spot = standTo(c, M.p, m.pos, 0.15);
         m.setPosture('stand');
-        m.walkTo(c.keepClear(stand, 0.08), this.fetch ? 0.7 : 0.26, toward(M.p), () => {
+        m.walkTo(spot ? spot.to : c.keepClear(stand, 0.08), this.fetch ? 0.7 : 0.26, spot ? spot.face : toward(M.p), () => {
           this.phase = this.fetch && !M.moving ? 'pounce' : 'take';
           this.t = 0;
         });
@@ -2781,6 +2783,29 @@ export const byYou = (c: Ctx) => {
   ]);
 };
 
+/**
+ * Where to stand to put its mouth (or a paw) to a thing on the floor, `short` of it and facing it,
+ * with the whole of it clear of the room's solid things, its chest and its hips both and not only
+ * its middle (a thing lying in a gap narrower than a cat is long is gone to from out in the open,
+ * not from inside the gap): the way it comes first, then round to either side; null if nowhere
+ * near will do.
+ */
+export function standTo(c: Ctx, at: THREE.Vector3, from: THREE.Vector3, short: number) {
+  const solids = c.m.solids?.() ?? [];
+  const base = Math.atan2(from.x - at.x, from.z - at.z);
+  const ok = (x: number, z: number) => solids.every(([o, R]) => Math.hypot(x - o.x, z - o.z) >= R + 0.08);
+  for (const da of [0, 0.4, -0.4, 0.8, -0.8, 1.2, -1.2, 1.6, -1.6, 2.1, -2.1, 2.6, -2.6, Math.PI]) {
+    const a = base + da, x = at.x + Math.sin(a) * short, z = at.z + Math.cos(a) * short;
+    const face = a + Math.PI, fx = Math.sin(face), fz = Math.cos(face);
+    if (!ok(x + fx * 0.11, z + fz * 0.11) || !ok(x - fx * 0.09, z - fz * 0.09)) continue;
+    // (on the floor of the room, not in a wall nor in a bowl)
+    const p = new THREE.Vector3(x, 0, z), k = c.keepClear(p.clone(), 0.05);
+    if (k.distanceTo(p) > 0.01) continue;
+    return { to: p, face };
+  }
+  return null;
+}
+
 /** you looking round the room, at something over there (x along the room): a cat curious about
  *  you, and about what you see, strolls over there itself, has a sniff about, and sits and looks
  *  up at you; then about its own business again */
@@ -2930,7 +2955,8 @@ export class Play implements Act {
           this.aim.copy(y);
           // (short of it, and clear of the room's things: a ball come to rest in the gap between
           // the box and the lamp's foot is stalked from out in the open, not from in the gap)
-          const stop = c.keepClear(new THREE.Vector3(y.x - (dx / dist) * 0.27, 0, y.z - (dz / dist) * 0.27), 0.12);
+          const spot = standTo(c, y, m.pos, 0.27);
+          const stop = spot ? spot.to : c.keepClear(new THREE.Vector3(y.x - (dx / dist) * 0.27, 0, y.z - (dz / dist) * 0.27), 0.12);
           // after a ball on the move at a run, creeping up low on one at rest
           const sp = this.ys > 0.25 ? (dist > 0.6 ? 0.95 : 0.5) : dist > 0.6 ? 0.45 : 0.22;
           if (sp > 0.3) m.setPosture('stand');
