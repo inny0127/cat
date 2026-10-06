@@ -108,8 +108,9 @@ export class PixelApp {
     // (walking, round what is in the way; never in anything solid)
     this.cat.motor.obstacles = () => this.room.inTheWay();
     this.cat.motor.solids = () => this.room.solids();
-    // (what the cat's eyes cannot see past)
+    // (what the cat's eyes cannot see past; the window it looks out of now and then)
     this.avatar.blockers = () => this.room.blockers();
+    this.avatar.windowAt = this.room.windowMiddle;
     this.avatar.ground = {
       keepClear: (p, r) => this.room.keepClear(p, r),
       detour: (from, to, r) => this.room.detour(from, to, r),
@@ -1562,6 +1563,10 @@ export class PixelApp {
     // from being quite dark, but the pupils open in it
     const dark = Room.dark(hour);
     const mood = moodFromBrain(this.brain, sick, s.trust, 0.75 * dark);
+    // (prey in its eyes: the will to hunt widens the pupils, as excitement does)
+    mood.arousal = Math.max(mood.arousal, 0.8 * this.avatar.nerves.hunt);
+    this.avatar.needs.hunger = s.hunger;
+    this.avatar.needs.thirst = s.thirst;
     this.cat.motor.setMood(mood, true);
     this.avatar.mode = this.brain.mode;
     this.avatar.mood = mood;

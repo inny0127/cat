@@ -23,7 +23,7 @@ import * as THREE from 'three';
  */
 
 /** what sort of thing it is, to a cat */
-export type Kind = 'dot' | 'toy' | 'bug' | 'bird' | 'hand' | 'you' | 'glint';
+export type Kind = 'dot' | 'toy' | 'bug' | 'bird' | 'hand' | 'you' | 'glint' | 'spot';
 
 /** something in the room it might see, as the room has it this frame (world) */
 export interface Thing {
@@ -51,6 +51,8 @@ const KIND: Record<Kind, { look: number; prey: number }> = {
   hand: { look: 0.5, prey: 0.3 },
   you: { look: 0.38, prey: 0 },
   glint: { look: 0.3, prey: 0.5 },
+  /** a place it knows: the window, its bowl */
+  spot: { look: 0.14, prey: 0 },
 };
 
 /** the eye and the brain: how late what it sees is (s) */
@@ -89,9 +91,11 @@ export class Unit {
   onset = 0;
   /** how tired its input is (0..1) */
   hab = 0;
-  /** the neuron: what it has taken in, and how hard it fires (0..1) */
+  /** the neuron: what it has taken in, and how hard it fires (0..1); and its own slow wandering
+   *  (a brain is never quite still: now and then this is what tips a glance at a thing) */
   u = 0;
   a = 0;
+  wander = 0;
   /** in the room this frame */
   here = false;
   felt = false;
@@ -295,7 +299,9 @@ export class Nerves {
       // (a thing that goes on just the same tires the eye; a thing that moves stays new)
       u.hab = Math.min(1, Math.max(0, u.hab + dt * (0.09 * u.vis * (1 - u.motion) * (u === this.attending ? 1.3 : 0.6) - 0.05 * u.hab - 0.4 * u.onset * u.hab)));
       const rest = total - u.a;
-      const input = drive + 0.32 * u.a - 0.62 * rest + 0.05 * this.noise();
+      // (its wandering: a slow drift, a few seconds long, about nothing in particular)
+      u.wander += -u.wander * dt / 2.5 + 0.16 * Math.sqrt(2 * dt / 2.5) * (this.noise() + this.noise()) * 1.7;
+      const input = drive + (u.vis > 0.2 ? u.wander : 0) + 0.32 * u.a - 0.62 * rest + 0.05 * this.noise();
       u.u += (input - u.u) * Math.min(1, dt / tau);
       u.a = 1 / (1 + Math.exp(-(u.u - 0.42) * 10));
       if (!u.here && u.conf < 0.05) u.a *= Math.exp(-dt * 6);

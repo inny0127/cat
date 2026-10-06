@@ -494,14 +494,21 @@ export class Motor {
   private keepOut() {
     if (this.ghost || !this.solids) return;
     const fx = Math.sin(this.yaw), fz = Math.cos(this.yaw);
-    for (const [c, R0] of this.solids()) {
-      for (const k of [0.11, -0.09]) {
-        const dx = this.pos.x + fx * k - c.x, dz = this.pos.z + fz * k - c.z, d = Math.hypot(dx, dz), min = R0 + 0.075;
-        if (d >= min) continue;
-        const ux = d > 1e-4 ? dx / d : fx, uz = d > 1e-4 ? dz / d : fz;
-        this.pos.x += ux * (min - d);
-        this.pos.z += uz * (min - d);
+    // (a few times over: squeezed between two things, out of the one is into the other)
+    const solids = this.solids();
+    for (let pass = 0; pass < 4; pass++) {
+      let moved = false;
+      for (const [c, R0] of solids) {
+        for (const k of [0.11, -0.09]) {
+          const dx = this.pos.x + fx * k - c.x, dz = this.pos.z + fz * k - c.z, d = Math.hypot(dx, dz), min = R0 + 0.075;
+          if (d >= min - 1e-4) continue;
+          const ux = d > 1e-4 ? dx / d : fx, uz = d > 1e-4 ? dz / d : fz;
+          this.pos.x += ux * (min - d);
+          this.pos.z += uz * (min - d);
+          moved = true;
+        }
       }
+      if (!moved) break;
     }
   }
 

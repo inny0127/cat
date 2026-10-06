@@ -91,6 +91,9 @@ export class PixelAvatar implements Avatar {
   blockers: (() => readonly Blocker[]) | null = null;
   /** your hand, while a finger is on the screen: just in front of the room (set by the app) */
   userHand: THREE.Vector3 | null = null;
+  /** the middle of the window, and how hungry and thirsty it is (0..1; set by the app) */
+  windowAt: THREE.Vector3 | null = null;
+  readonly needs = { hunger: 0, thirst: 0 };
   private readonly seeing: Thing[] = [];
   private readonly eyeW = new THREE.Vector3();
   private readonly headQ = new THREE.Quaternion();
@@ -535,6 +538,12 @@ export class PixelAvatar implements Avatar {
     const pom = this.ground?.pompom();
     if (pom) T.push({ id: 'pompom', kind: 'toy', p: pom });
     T.push({ id: 'you', kind: 'you', p: this.viewer() });
+    // (places it knows, looked at now and then: the window; its bowls, the more the hungrier or
+    // thirstier it is)
+    if (this.windowAt) T.push({ id: 'window', kind: 'spot', p: this.windowAt });
+    if (this.spots) {
+      T.push({ id: 'food', kind: 'spot', p: this.spots.food }, { id: 'water', kind: 'spot', p: this.spots.water });
+    }
     const F = this.fingerNow();
     if (F) T.push({ id: 'hand', kind: 'hand', p: F.at });
     else if (this.userHand) T.push({ id: 'hand', kind: 'hand', p: this.userHand });
@@ -549,6 +558,8 @@ export class PixelAvatar implements Avatar {
     N.blockers = this.blockers ?? (() => []);
     // (what it is about colours what it watches: after the dot, the dot)
     N.bias.clear();
+    N.bias.set('food', 0.35 * Math.max(0, this.needs.hunger - 0.4));
+    N.bias.set('water', 0.35 * Math.max(0, this.needs.thirst - 0.4));
     if (this.act instanceof Chase) N.bias.set('dot', 0.45);
     else if (this.act instanceof Tease) N.bias.set('wand', 0.4);
     else if (this.act?.name === 'play') N.bias.set('yarn', 0.35);
