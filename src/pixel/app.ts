@@ -1694,6 +1694,7 @@ export class PixelApp {
     if (this.cat.motor.tailThumped) {
       this.cat.motor.tailThumped = false;
       if (!this.avatar.hidden) this.audio.play('thump', { gain: 0.035, rate: 1.5, pan: this.catPan() });
+      this.justNow.add('thump');
     }
     if (this.cat.motor.nibbled) {
       this.cat.motor.nibbled = false;
@@ -1913,6 +1914,7 @@ export class PixelApp {
     if (close) { now.add(close); this.state.hints.face = 1; }
     if (doing === 'box' && phase === 'duck') now.add('ambush');
     if (a.glancing) now.add('glance');
+    if (a.earToSound) now.add('earsound');
     // (a loaf: lying with its paws tucked under, awake and easy, a good while)
     this.loafFor = m.posture === 'loaf' && !asleep && !doing && m.speed < 0.02 ? this.loafFor + dt : 0;
     if (this.loafFor > 20) now.add('loaf');

@@ -5,6 +5,7 @@ export const FIRSTS: Record<string, string> = {
   knead: '꾹꾹이를 해요. 아기 고양이 때처럼 편하고 행복하대요',
   rub: '손가락에 볼을 비벼요. 당신에게 자기 냄새를 묻히는 중이에요',
   bite: "살짝 깨물었어요. '좋았어, 이제 그만'이라는 뜻이에요",
+  thump: '누워서 꼬리로 바닥을 탁탁 쳐요. 짜증 났다는 뜻이에요',
   more: '손을 떼자 머리를 내밀며 쳐다봐요. 더 쓰다듬어 달래요',
   trap: '와락 끌어안고 뒷발로 팡팡! 고양이 배는 원래 함정이에요',
   sleeppurr: '자면서도 골골거려요. 당신 손이 편한가 봐요',
@@ -27,6 +28,7 @@ export const FIRSTS: Record<string, string> = {
   shy: '빤히 보니 눈을 피해요. 고양이끼리 빤히 보는 건 실례래요',
   ambush: '상자에 몸을 숨기고 노려요. 곧 튀어나올 거예요!',
   glance: '그루밍하다 멈칫! 뭔가 눈에 띄었나 봐요',
+  earsound: '자면서도 귀만 소리 쪽으로 돌려요. 다 듣고 있어요',
 };
 
 /** the line at the foot of the screen, as far as the first words need it */

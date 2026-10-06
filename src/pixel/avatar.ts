@@ -222,6 +222,10 @@ export class PixelAvatar implements Avatar {
   private readonly lookAway = new THREE.Vector3();
   /** a sound heard in its sleep: where, and how much longer an ear stays round to it (s) */
   private earSound: { at: THREE.Vector3; t: number } | null = null;
+  /** asleep, an ear round to a sound it heard (for the word on it, the first time) */
+  get earToSound() {
+    return !!this.earSound && this.earSound.t > 0.5 && this.sleep > 0.5;
+  }
   groove = 0;
   private grooveFor = 0;
   private grooveIn = 15 + Math.random() * 30;
