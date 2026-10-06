@@ -85,10 +85,14 @@ export class Cat3D {
   private lastYaw: number | null = null;
   private readonly lastPos = v();
   private readonly inv = new THREE.Matrix4();
-  private readonly tmp = { a: v(), b: v(), q: new THREE.Quaternion(), q2: new THREE.Quaternion() };
+  private readonly tmp = { a: v(), b: v(), q: new THREE.Quaternion(), q2: new THREE.Quaternion(), q3: new THREE.Quaternion() };
   /** the eyeball's radius (m) */
   private eyeRadius = 0.007;
   private breathT = 0;
+  /** the head as the chest had it last frame (for its turn to be no quicker than a head's) */
+  private headWas: THREE.Quaternion | null = null;
+  private headI: number | null = null;
+  private chestI: number | null = null;
   /** this breath: how much longer than the mood has it, and how much deeper */
   private breathK = 1;
   private breathD = 1;
@@ -434,6 +438,22 @@ export class Cat3D {
       p.neckPitch += tip;
       body.trunk(p);
       if (lookW > 0.01) body.look(tmp.a.copy(motor.gaze).applyMatrix4(this.inv), lookW, p.headRoll);
+    }
+    // (the head never snaps round faster than a head can go: however the look has it this frame, as
+    // the chest has it, it turns at most so far from where it was the last; the thing looked at
+    // whisked across close under its chin or round behind it, it follows, not flips)
+    {
+      const H = this.headI ??= kin.i('head'), C = this.chestI ??= kin.i('chest');
+      const rel = tmp.q2.copy(kin.wq[C]).invert().multiply(kin.wq[H]);
+      if (this.headWas && this.lastYaw !== null && dt > 0) {
+        const ang = rel.angleTo(this.headWas), most = 16 * dt;
+        if (ang > most) {
+          rel.copy(this.headWas).slerp(tmp.q3.copy(kin.wq[C]).invert().multiply(kin.wq[H]), most / ang);
+          kin.setWorld(H, tmp.q3.copy(kin.wq[C]).multiply(rel));
+          kin.fkAll();
+        }
+      }
+      (this.headWas ??= new THREE.Quaternion()).copy(rel);
     }
     body.legsTo(p, this.targ, this.flex, this.ground);
     // (a paw on the floor the leg could not reach to: the stepper moves it, next frame)
