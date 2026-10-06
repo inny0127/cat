@@ -395,6 +395,7 @@ export class PixelAvatar implements Avatar {
     if (!this.alive || this.isHidden) return false;
     this.cat.motor.jolt(1.3);
     this.cat.motor.flickEar('both', 1.2);
+    this.lookToYou();
     if (this.sleep > 0.3 || this.errand || this.trip) return false;
     // (up on the sill, most likely it was the one that sent it over: it only starts, and looks;
     // sulking in its corner, it only starts, and looks)
@@ -583,6 +584,8 @@ export class PixelAvatar implements Avatar {
     N.update(dt, this.eyeW, this.headYaw, this.headPitch, T);
     // (a hand come down on it out of nowhere: felt, and its eyes go round to it)
     if (this.handCue > 0 && N.unit('hand')) { N.cue('hand', this.handCue); this.handCue = 0; }
+    // (a start, a moment ago: a look at you)
+    if (this.referIn > 0 && (this.referIn -= dt) <= 0 && N.awake > 0.6) N.cue('you', 1.3);
     this.remember(dt);
     // (a big shift of the eyes, as often as not, a blink with it, as eyes do when they jump a long
     // way; intent on prey, its eyes hardly blink)
@@ -1709,6 +1712,14 @@ export class PixelAvatar implements Avatar {
 
   jolt(strength = 1) {
     this.cat.motor.jolt(strength);
+    this.lookToYou();
+  }
+
+  /** something gave it a start: a moment after, a look at you (what do you make of it?), as a cat
+   *  does at the one it lives with, the more the surer of you it is */
+  private referIn = 0;
+  private lookToYou() {
+    if (this.mood.trust > 0.15 && Math.random() < 0.35 + 0.5 * this.mood.trust) this.referIn = 0.7 + Math.random() * 0.9;
   }
 
   /** a quick cuff with a forepaw at the hand on it: struck out at you and back in under half a
