@@ -153,6 +153,8 @@ export class PixelAvatar implements Avatar {
     this.ctx.rain = r;
   }
   /** how dark it is outside */
+  /** how near it is to dawn or dusk (0 .. 1): a cat's liveliest hours */
+  dusk = 0;
   set night(n: number) {
     this.ctx.night = n;
   }
@@ -1383,10 +1385,11 @@ export class PixelAvatar implements Avatar {
     c.temper = this.temper;
     this.whim.gain = 6 * (1 + 0.4 * this.temper.curious);
     // (how often something of its own comes into its head: stirred up, often; calm, now and then;
-    // drowsy, hardly; a lazy cat less, and in bouts, livelier a few minutes and then quieter)
+    // drowsy, hardly; a lazy cat less, about dawn and dusk more, and in bouts, livelier a few
+    // minutes and then quieter)
     const md = this.mood, bout = 0.75 + 0.25 * (1 + noise1(this.clock * 0.012 + 7));
     this.whim.pace = Math.max(0.15, Math.min(1.6, (0.3 + 1.2 * md.arousal) * (1 - 0.6 * md.sleepy) * (1 - 0.25 * this.temper.lazy)
-      * (this.mode === 'alert' ? 1.4 : 1) * bout));
+      * (this.mode === 'alert' ? 1.4 : 1) * (1 + 0.6 * this.dusk) * bout));
     m.lazy = this.temper.lazy;
     c.kneading = this.kneading;
     // at home: on the bed, wherever on it the body has settled

@@ -54,11 +54,16 @@ export function nightness(t: number) {
   return 0;
 }
 
+/** how near an hour is to dawn or dusk, when a cat is at its liveliest (0 .. 1) */
+export function crepuscular(h: number) {
+  const bump = (c: number, w: number) => Math.exp(-((h - c) ** 2) / (2 * w * w));
+  return Math.max(bump(6.5, 1.3), bump(19, 1.6));
+}
+
 /** Cats are crepuscular: busiest around dawn and dusk. */
 export function activity(t: number) {
   const h = new Date(t).getHours() + new Date(t).getMinutes() / 60;
-  const bump = (c: number, w: number) => Math.exp(-((h - c) ** 2) / (2 * w * w));
-  return clamp(0.25 + 0.75 * Math.max(bump(6.5, 1.3), bump(19, 1.6)));
+  return clamp(0.25 + 0.75 * crepuscular(h));
 }
 
 function rand(lo: number, hi: number) {

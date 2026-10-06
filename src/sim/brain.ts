@@ -5,7 +5,7 @@ import type { Hint } from '../ui/hint';
 import type { Contact } from '../input/pointer';
 import type { CatState } from './state';
 import { GRAIN_TOLERANT, ZONE_LIKE, type Zone } from './zones';
-import { THRESH, chooseErrand, needs, nightness, runErrand } from './life';
+import { THRESH, chooseErrand, crepuscular, needs, nightness, runErrand } from './life';
 import { chance, clamp, rand, smoothstep } from '../util/math';
 
 export type Mode = 'sleep' | 'doze' | 'rest' | 'alert' | 'enjoy' | 'annoyed' | 'angry' | 'leaving' | 'away' | 'arriving' | 'dead' | 'gone';
@@ -913,7 +913,9 @@ export class Brain {
   private updateRest(dt: number, touching: boolean) {
     const s = this.s;
     const idle = this.time - Math.max(this.lastTouch, this.lastToy);
-    const tired = 0.5 + 0.5 * nightness(Date.now()) + (s.health < THRESH.sick ? 0.4 : 0);
+    // (sleepier at night; about dawn and dusk, its liveliest hours, it stays up longer)
+    const now = Date.now(), h = new Date(now).getHours() + new Date(now).getMinutes() / 60;
+    const tired = (0.5 + 0.5 * nightness(now) + (s.health < THRESH.sick ? 0.4 : 0)) * (1 - 0.35 * crepuscular(h));
     if (touching) return;
     switch (this.mode) {
       case 'rest':
