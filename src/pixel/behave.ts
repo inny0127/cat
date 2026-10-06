@@ -2770,7 +2770,9 @@ export class Play implements Act {
         // (and again whenever the ball has gone somewhere else)
         if (!m.goal || !(Math.hypot(y.x - this.aim.x, y.z - this.aim.z) < 0.06)) {
           this.aim.copy(y);
-          const stop = new THREE.Vector3(y.x - (dx / dist) * 0.27, 0, y.z - (dz / dist) * 0.27);
+          // (short of it, and clear of the room's things: a ball come to rest in the gap between
+          // the box and the lamp's foot is stalked from out in the open, not from in the gap)
+          const stop = c.keepClear(new THREE.Vector3(y.x - (dx / dist) * 0.27, 0, y.z - (dz / dist) * 0.27), 0.12);
           // after a ball on the move at a run, creeping up low on one at rest
           const sp = this.ys > 0.25 ? (dist > 0.6 ? 0.95 : 0.5) : dist > 0.6 ? 0.45 : 0.22;
           if (sp > 0.3) m.setPosture('stand');
