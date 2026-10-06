@@ -28,6 +28,9 @@ export interface MindState {
   dream?: string | null;
   /** its strongest urges just now, and how much of them all each is */
   urges?: { key: string; share: number }[];
+  /** what it has learnt most about comes of the things it does with you, and how much keener (or
+   *  less keen) on each it is for it */
+  lessons?: { key: string; by: number }[];
   wonder: string | null;
   expects: { laser: number; wand: number; yarn: number; pet: number };
 }
@@ -138,6 +141,7 @@ export class Mind {
     if (m.urges?.length && !m.intent && !m.doing) rows.push(`끌리는 것  ${m.urges.map((u) => `${DOING[u.key] ?? u.key} ${Math.round(u.share * 100)}%`).join(', ')}`);
     if (N.awake < 0.3) rows.splice(0, rows.length, '잠들었어요', ...(m.dream ? [`꿈  ${NAMES[m.dream] ?? m.dream}`] : []));
     if (m.wonder) rows.push(`궁금한 것  ${NAMES[m.wonder] ?? m.wonder}`);
+    if (m.lessons?.length && N.awake >= 0.3) rows.push(`배운 것  ${m.lessons.map((l) => `${DOING[l.key] ?? l.key} ${l.by > 0 ? '+' : '-'}${Math.round(Math.abs(l.by) * 100)}%`).join(', ')}`);
     if (looks) rows.push(`기다리는 것  ${looks}`);
     const text = rows.join('\n');
     if (this.lines.textContent !== text) this.lines.textContent = text;

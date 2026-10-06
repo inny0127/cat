@@ -1,4 +1,5 @@
 import { newHabits, type Habits } from './habits';
+import { newLearned, type Learned } from './learn';
 
 export type AwayReason = 'eat' | 'drink' | 'litter' | 'wander' | 'sulk';
 
@@ -60,6 +61,8 @@ export interface CatState {
   stats: { petSeconds: number; hisses: number; feeds: number; visits: number };
   /** what it has learnt to look for at what hour of the day (habits.ts) */
   habits: Habits;
+  /** what it has learnt comes of the things it does of its own accord (learn.ts) */
+  learned: Learned;
 }
 
 const KEY = 'cat-window.v1';
@@ -110,6 +113,7 @@ export function newCat(now: number, generation = 1): CatState {
     notifyAsked: false,
     stats: { petSeconds: 0, hisses: 0, feeds: 0, visits: 0 },
     habits: newHabits(now),
+    learned: newLearned(now),
   };
 }
 

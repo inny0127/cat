@@ -104,6 +104,9 @@ export interface Ctx {
   pointer?: () => THREE.Vector3 | null;
   /** its temperament (state.ts: bold, playful, lazy, curious, each -1 .. 1) */
   temper?: { bold: number; playful: number; lazy: number; curious: number };
+  /** how much keener (or less keen) on each thing it might do it is for what it has learnt comes
+   *  of it with you (learn.ts: a weight, 1 nothing learnt) */
+  worth?: (key: string) => number;
   /** one of its things moved while it was not looking, and where it is now: something to go and
    *  see about (how much: 0 .. 1) */
   curious?: () => { id: string; at: THREE.Vector3; k: number } | null;
@@ -3781,7 +3784,7 @@ export function idleOptions(c: Ctx, atHome: boolean, posture: PoseName): Option[
     : OUT.has(key) ? (1 + 0.35 * T.bold) * (1 + 0.2 * T.curious) * (1 - 0.2 * T.lazy)
     : key === 'investigate' ? (1 + 0.6 * T.curious) * (1 + 0.3 * T.bold) : 1;
   const add = (key: string, w: number, make: () => Act | null, about?: string, at?: THREE.Vector3 | null) => {
-    w *= tempered(key);
+    w *= tempered(key) * (c.worth?.(key) ?? 1);
     if (w > 0) opts.push({ key, w, make, about, at });
   };
   const lying = posture === 'loaf' || posture === 'sphinx' || posture === 'side' || posture === 'sit';

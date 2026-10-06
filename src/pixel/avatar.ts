@@ -504,7 +504,44 @@ export class PixelAvatar implements Avatar {
   /** a tap on the glass: caught at whatever it was up to on the sill (true if it was up to
    *  something there) */
   caught() {
-    return this.act instanceof Sill && this.act.caught();
+    const was = this.act instanceof Sill && this.act.caught();
+    if (was) this.outcome(-1);
+    return was;
+  }
+
+  /**
+   * Something good (r > 0: strokes it likes, a game) or bad (r < 0: scolded, handled roughly) has
+   * just come of what it did lately: put down to each thing it did of its own accord in the last
+   * minute, the more the more lately it did it, once each.
+   */
+  outcome(r: number) {
+    for (const T of this.tried) {
+      const age = this.clock - T.t;
+      if (age > 60 || (r > 0 ? T.paid : T.rued)) continue;
+      const e = Math.exp(-age / 25);
+      if (e < 0.1) continue;
+      this.taught?.(T.key, r, e);
+      if (r > 0) T.paid = true; else T.rued = true;
+    }
+  }
+
+  /** each frame: strokes it is enjoying, or a hand that has made it cross, are what came of it;
+   *  and what it did for you (come up to the front, asked for a game, brought you its mouse, lay
+   *  down by you) and nothing came of in a minute, with you there, it does a little less */
+  private reckon(dt: number) {
+    const L = this.laser || this.wand?.held || this.lure;
+    this.sinceYou = this.hands.length || this.touched || L ? 0 : this.sinceYou + dt;
+    if (this.mode !== this.learnMode) {
+      if (this.mode === 'enjoy') this.outcome(1);
+      else if ((this.mode === 'annoyed' || this.mode === 'angry') && this.hands.length) this.outcome(-0.6);
+      this.learnMode = this.mode;
+    }
+    for (let i = this.tried.length - 1; i >= 0; i--) {
+      const T = this.tried[i];
+      if (this.clock - T.t < 60) continue;
+      if (!T.paid && /^(window|ask|gift|by you)$/.test(T.key) && this.sinceYou < 600 && this.alive) this.taught?.(T.key, -0.25, 1);
+      this.tried.splice(i, 1);
+    }
   }
   /** a paw patted at the glass this frame: which (null: none) */
   get pawLanded() {
@@ -980,6 +1017,15 @@ export class PixelAvatar implements Avatar {
   private easyNow = false;
   /** its temperament (state.ts: bold, playful, lazy, curious, each -1 .. 1; set by the app) */
   temper = { bold: 0, playful: 0, lazy: 0, curious: 0 };
+  /** what it has learnt comes of the things it does with you about (learn.ts; set by the app):
+   *  how much keener on each it is for it, and where a lesson goes */
+  worthOf: ((key: string) => number) | null = null;
+  taught: ((key: string, r: number, e: number) => void) | null = null;
+  /** what it did of its own accord lately (its clock), and whether anything good, or bad, came of
+   *  it yet; and how long since you did anything at all */
+  private tried: { key: string; t: number; paid: boolean; rued: boolean }[] = [];
+  private sinceYou = 0;
+  private learnMode = '';
   /** what it looks for just now, by the hour it is (habits.ts, 0 .. 1; set by the app): a game
    *  with the red dot, the feathers, the ball of wool; strokes. And where the laser pointer lies,
    *  if it is lying there */
@@ -1047,6 +1093,7 @@ export class PixelAvatar implements Avatar {
       gaze: (id) => (this.nerves.attending?.id === id ? this.nerves.gazePoint : null),
       curious: () => this.curiosity(),
       expects: () => this.expects,
+      worth: (key) => this.worthOf?.(key) ?? 1,
       pointer: () => this.pointerAt,
       seen: (id) => {
         const u = this.nerves.unit(id);
@@ -1475,6 +1522,7 @@ export class PixelAvatar implements Avatar {
     const w = this.whim.update(dt, () => idleOptions(c, atHome, m.posture), this.nerves);
     if (w?.act) {
       this.act = w.act;
+      this.tried.push({ key: w.o.key, t: this.clock, paid: false, rued: false });
       if (w.o.key === 'investigate' && w.o.about) this.wonder.delete(w.o.about);
     }
     else if (w && Math.random() < 0.5) this.rest = restingPose(this.mood, this.mode);
@@ -1545,6 +1593,7 @@ export class PixelAvatar implements Avatar {
     this.clock += dt;
     this.closeLook(dt);
     this.sense(dt);
+    this.reckon(dt);
     // under cover from the storm a while: out, and over to lie by the glass, near you (out of the
     // box first if it is in it)
     if (this.comfortIn > 0 && (this.comfortIn -= dt) <= 0) {

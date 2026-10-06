@@ -14,6 +14,7 @@ import { SlowWatch } from './pace';
 import { Brain } from '../sim/brain';
 import { loadState, newCat, saveState, type CatState } from '../sim/state';
 import { HABITS, expectation, note, type Habit } from '../sim/habits';
+import { learn, lessons, worth } from '../sim/learn';
 import { stepLife, THRESH } from '../sim/life';
 import { clamp, smoothstep } from '../util/math';
 import { PixelAvatar } from './avatar';
@@ -107,6 +108,9 @@ export class PixelApp {
       held: () => this.room.yarnHeld, pin: (sec, at) => this.room.pinYarn(sec, at), pinned: () => this.room.yarnPinned,
     };
     this.avatar.sillSpot = () => this.room.sillSpot();
+    // (what it learns comes of the things it does, kept with the rest of it)
+    this.avatar.worthOf = (key) => worth(this.state, key, this.clock().getTime());
+    this.avatar.taught = (key, r, e) => learn(this.state, key, r, e, this.clock().getTime());
     // (walking, round what is in the way; never in anything solid)
     this.cat.motor.obstacles = () => this.room.inTheWay();
     this.cat.motor.solids = () => this.room.solids();
@@ -263,6 +267,8 @@ export class PixelApp {
           this.room.tossMouse(to.clone().sub(M.p), Math.min(2.6, d / 0.34) * (wild ? 1.15 : 1));
           this.audio.play('pencil', { gain: 0.04, rate: 0.7 });
           this.haptic.tap?.();
+          // (its present taken up, and a game made of it)
+          this.avatar.outcome(0.8);
           this.avatar.fetchNow();
           return;
         }
@@ -1201,7 +1207,10 @@ export class PixelApp {
   private readonly mind = (() => { const m = new Mind(); if (new URLSearchParams(location.search).has('mind')) m.toggle(true); return m; })();
   private seeMind() {
     const M = this.mind, av = this.avatar;
-    M.update(av.nerves, { intent: av.whim.intent?.o.key ?? null, doing: av.doing, wonder: av.wondering, expects: av.expects, dream: av.dreaming, urges: M.open ? av.whim.urges(av.nerves, 2) : undefined });
+    M.update(av.nerves, {
+      intent: av.whim.intent?.o.key ?? null, doing: av.doing, wonder: av.wondering, expects: av.expects, dream: av.dreaming,
+      urges: M.open ? av.whim.urges(av.nerves, 2) : undefined, lessons: M.open ? lessons(this.state, this.clock().getTime()) : undefined,
+    });
     // (its lids down as far as sleep has them)
     this.stage.inset = M.open && !av.hidden ? { cam: M.cam, rect: M.rect, hide: this.cat.group, lids: 1 - av.nerves.awake } : null;
   }
@@ -1212,6 +1221,7 @@ export class PixelApp {
   private habitIn = 0;
   private readonly noted: Record<Habit, number> = { laser: -1e15, wand: -1e15, yarn: -1e15, pet: -1e15 };
   private wasDoing: string | null = null;
+  private offered = false;
   private readonly pointerW = new THREE.Vector3();
   private learnHabits(now: number, dt: number, stroked: boolean) {
     const s = this.state, doing = this.avatar.doing;
@@ -1631,6 +1641,11 @@ export class PixelApp {
     this.avatar.mode = this.brain.mode;
     this.avatar.mood = mood;
     this.avatar.temper = s.personality;
+    // (what it learns comes of what it does: a game offered it, the red dot, the feathers, the ball
+    // under your finger, is a good thing come of it)
+    const offered = this.laser.held || !!this.wandFinger || !!this.toyFinger;
+    if (offered && !this.offered) this.avatar.outcome(1);
+    this.offered = offered;
     if (contacts.length) this.touchedAt = now;
     this.avatar.hands = contacts;
     // (a finger on the screen anywhere is your hand at the front of the room, to the cat's eyes;
