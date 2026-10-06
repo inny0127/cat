@@ -217,7 +217,9 @@ export class Stepper {
           this.aim(F.to, home[l], vel, yawRate, centre, (1 - s) * F.dur + standT * 0.5);
         }
         F.pos.lerpVectors(F.from, F.to, ease(s));
-        F.pos.y = F.to.y + F.height * hump(s, FRONT[l] ? 0.38 : 0.45);
+        // (up and over in an arc from the height it left to the height it lands at: a step up onto
+        // the bed's cushion, or down off it, rises or falls through the swing, not at its start)
+        F.pos.y = F.from.y + (F.to.y - F.from.y) * ease(s) + F.height * hump(s, FRONT[l] ? 0.38 : 0.45);
         // forepaw: the wrist folds at lift-off (the pads turn to face back), opens through the
         // swing and the toes reach forward to land; hind: the hock folds and the foot comes
         // through low
