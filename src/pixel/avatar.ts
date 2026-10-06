@@ -2107,6 +2107,8 @@ export class PixelAvatar implements Avatar {
     // (awake: at it, or sulking, or about)
     this.sleep = 0;
     this.setHidden(false);
+    // (up on something when you left: it has been down off it since, whatever else)
+    const wasUp = this.perched || this.cat.perch !== null || this.cat.liftHold !== null;
     if (this.act) { this.act.stop(this.ctx); this.act = null; }
     this.errand = null;
     this.trip = null;
@@ -2142,6 +2144,10 @@ export class PixelAvatar implements Avatar {
     const w = S.length ? S[Math.floor(Math.random() * S.length)] : null;
     if (w) {
       this.cat.place(w.to.x, w.to.z, w.face);
+      m.snap('stand');
+    } else if (wasUp) {
+      // (nowhere in particular to be: at home, not still in the air over the floor where it was)
+      this.cat.place(this.home.x, this.home.z, m.yaw);
       m.snap('stand');
     }
   }

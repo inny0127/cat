@@ -108,12 +108,20 @@ export class Stepper {
   /** how far across under the body each planted paw was last frame, past the middle, in the frame
    *  of its own shoulders or hips (m; below 0: on its own side; the cat sets it after its IK) */
   readonly cross: Record<Leg, number> = { LF: -1, RF: -1, LH: -1, RH: -1 };
+  /** each leg's girdle (shoulders, hips) as the body had it last frame, world: where it is and the
+   *  way out from the middle to that leg's side, level (the cat sets them after its IK) */
+  readonly girdle: Record<Leg, { at: THREE.Vector3; out: THREE.Vector3; ok: boolean }> = {
+    LF: { at: new THREE.Vector3(), out: new THREE.Vector3(), ok: false }, RF: { at: new THREE.Vector3(), out: new THREE.Vector3(), ok: false },
+    LH: { at: new THREE.Vector3(), out: new THREE.Vector3(), ok: false }, RH: { at: new THREE.Vector3(), out: new THREE.Vector3(), ok: false },
+  };
   private settleCooldown = 0;
   private moving = 0;
   private still = 1;
   private readonly fwd = new THREE.Vector3();
   private readonly tmp = new THREE.Vector3();
   private readonly tmp2 = new THREE.Vector3();
+  private readonly tmp3 = new THREE.Vector3();
+  private readonly tmp4 = new THREE.Vector3();
   private readonly across = new THREE.Vector3();
 
   constructor() {
@@ -218,6 +226,7 @@ export class Stepper {
           // it is aimed at no faster than a paw in the air can be redirected: not a jump of it)
           const was = this.tmp2.copy(F.to);
           this.aim(F.to, home[l], vel, yawRate, centre, (1 - s) * F.dur + standT * 0.5);
+          this.ownSide(F.to, l, vel, yawRate, centre, (1 - s) * F.dur);
           const moved = F.to.distanceTo(was), most = 2.5 * dt;
           if (moved > most) F.to.lerpVectors(was, F.to, most / moved);
         }
@@ -293,6 +302,34 @@ export class Stepper {
     this.body(home);
   }
 
+  /** which leg a foot is */
+  private legOf(F: FootState): Leg {
+    for (const l of LEGS) if (this.feet[l] === F) return l;
+    return 'LF';
+  }
+
+  /** a paw is put down out on its own side of its shoulders or hips as they will be when it lands
+   *  (`lead` s on), never across under the body past the middle: round a sharp turn at a run the
+   *  spine bends and the hips swing out, and a place reckoned for the body as a whole was in under
+   *  them */
+  private ownSide(to: THREE.Vector3, l: Leg, vel: THREE.Vector3, yawRate: number, centre: THREE.Vector3, lead: number) {
+    const G = this.girdle[l];
+    if (!G.ok) return;
+    const at = this.tmp3;
+    this.aim(at, G.at, vel, yawRate, centre, lead);
+    const a = yawRate * lead, c = Math.cos(a), sn = Math.sin(a);
+    const out = this.tmp4.set(G.out.x * c + G.out.z * sn, 0, -G.out.x * sn + G.out.z * c);
+    const side = (to.x - at.x) * out.x + (to.z - at.z) * out.z, least = FRONT[l] ? 0.014 : 0.018;
+    // (going along: spun round on the spot after its tail, the shuffle of its paws is its own)
+    const going = Math.max(0, Math.min(1, (Math.hypot(vel.x, vel.z) - 0.15) / 0.3));
+    if (side < least && going > 0) {
+      // (and down on the floor where it is moved to: off the edge of the cushion, or on it)
+      const g0 = this.ground ? this.ground(to.x, to.z) : 0;
+      to.addScaledVector(out, (least - side) * going);
+      if (this.ground) to.y += this.ground(to.x, to.z) - g0;
+    }
+  }
+
   /** where a paw should land: its place under the body `lead` seconds from now */
   private aim(out: THREE.Vector3, home: THREE.Vector3, vel: THREE.Vector3, yawRate: number, centre: THREE.Vector3, lead: number) {
     out.copy(home).addScaledVector(vel, lead);
@@ -314,6 +351,7 @@ export class Stepper {
   private begin(F: FootState, home: THREE.Vector3, vel: THREE.Vector3, yawRate: number, centre: THREE.Vector3, dur: number, lead: number, height: number, settle: boolean) {
     F.from.copy(F.pos);
     this.aim(F.to, home, vel, yawRate, centre, lead);
+    this.ownSide(F.to, this.legOf(F), vel, yawRate, centre, dur);
     // high enough to clear whatever lies between (a bed's rim)
     if (this.ground) {
       for (let i = 1; i < 10; i++) {
@@ -322,6 +360,9 @@ export class Stepper {
         const need = g + home.y - this.lift + 0.012 - (F.from.y + (F.to.y - F.from.y) * t);
         if (need > 0) height = Math.max(height, need / Math.max(0.3, hump(s, 0.42)));
       }
+      // (a rim right at the start or the end of the step is brushed past, not leapt: no paw goes up
+      // more than a hand's breadth for a step)
+      height = Math.min(height, 0.1);
     }
     F.s = 0;
     F.dur = dur;

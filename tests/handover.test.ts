@@ -76,3 +76,28 @@ describe('a rhythm of its own', () => {
     }
   });
 });
+
+describe('the wiggle before a spring', () => {
+  it('winds up: small and slow to begin with, big and quick at the full of it', async () => {
+    const { wiggle } = await import('../src/pixel/behave');
+    const D = 3, dt = 1 / 480;
+    const span = (a: number, b: number) => {
+      let peak = 0, cross = 0, was = wiggle(a, D);
+      for (let t = a + dt; t < b; t += dt) {
+        const x = wiggle(t, D);
+        peak = Math.max(peak, Math.abs(x));
+        if (x * was < 0) cross++;
+        was = x;
+      }
+      return { peak, hz: cross / 2 / (b - a) };
+    };
+    const first = span(0.01, 1.01), last = span(2, 3), on = span(3, 5);
+    expect(first.peak).toBeLessThan(0.75);
+    expect(last.peak).toBeGreaterThan(0.9);
+    expect(first.hz).toBeLessThan(4.6);
+    expect(last.hz).toBeGreaterThan(5);
+    // (and at the full of it, so on)
+    expect(on.hz).toBeGreaterThan(5.6);
+    expect(on.hz).toBeLessThan(6.4);
+  });
+});

@@ -272,6 +272,9 @@ export class Cat3D {
     this.motor.yawWas = null;
     this.first = true;
     this.tail.reset();
+    // (put down somewhere, it stands on the floor there at once: not left at the height of
+    // whatever it was up on, to sink to the floor from there with its legs out of reach of it)
+    if (this.perch === null && this.liftHold === null) this.lift = this.groundAt ? this.groundAt(x, z) : 0;
   }
 
   /** jump into a posture with the paws already where it wants them */
@@ -483,11 +486,18 @@ export class Cat3D {
     for (const l of LEGS) {
       const down = this.planted[l] && !stepper.feet[l].stepping;
       stepper.strain[l] = down ? body.reached[l].distanceTo(this.targ[l]) : 0;
+      const L = body.legs[l];
       if (down) {
-        const L = body.legs[l];
         const g = tmp.b.copy(kin.wp[L.b[3]]).sub(kin.wp[L.girdle]).applyQuaternion(tmp.q2.copy(kin.wq[L.girdle]).invert());
         stepper.cross[l] = -g.x * L.side;
       } else stepper.cross[l] = -1;
+      // (where its shoulders or hips are, and which way is out to this leg's side, for the next
+      // step to come down on its own side of them)
+      const G = stepper.girdle[l];
+      G.at.copy(kin.wp[L.girdle]).applyMatrix4(group.matrixWorld);
+      G.out.set(L.side, 0, 0).applyQuaternion(kin.wq[L.girdle]).applyQuaternion(group.quaternion).setY(0);
+      G.ok = G.out.lengthSq() > 0.25;
+      if (G.ok) G.out.normalize();
     }
     body.face(p, motor.twitch);
     for (let i = 0; i < this.tail.n; i++) this.tail.wave[i] = motor.tailWaveAt(i, this.tail.n);

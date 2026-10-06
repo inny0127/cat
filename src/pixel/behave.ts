@@ -189,6 +189,14 @@ const pick = <T>(xs: T[]) => xs[Math.floor(Math.random() * xs.length)];
  *  little slower, a tenth or so either way over a second or two; never a metronome's. Monotonic,
  *  and never more than a tenth of a second off the clock */
 export const lived = (t: number, s: number) => t + 0.06 * Math.sin(1.3 * t + s) + 0.04 * Math.sin(0.7 * t + 2.1 * s);
+/** the rump's wiggle before a spring, `t` into it of a wiggle meant to last `dur`: slow and small
+ *  to begin with, quicker and bigger as it winds up (about three and a half a second to six), and
+ *  so on at the full of it if it goes on (-1 .. 1) */
+export const wiggle = (t: number, dur: number) => {
+  const D = Math.max(0.25, dur), u = Math.min(t, D);
+  const ph = 2 * Math.PI * (3.5 * t + 1.25 * u * u / D + 2.5 * Math.max(0, t - D));
+  return (0.55 + 0.45 * Math.min(1, t / D)) * Math.sin(ph);
+};
 
 /** an act it can look up from a moment (a wash, a scratch): its own time stopped while it looks,
  *  and on again where it left off */
@@ -2761,7 +2769,7 @@ export class Play implements Act {
       case 'wiggle': {
         if (dist > 0.5) { this.next('go'); return true; }
         // the rump up a little and wiggling, the hind paws treading
-        const wg = Math.sin(this.t * Math.PI * 2 * 5);
+        const wg = wiggle(this.t, this.dur);
         m.layer = {
           pose: {
             ...watch, hipY: 0.15, hipPitch: -0.12, neckPitch: -0.45, headPitch: 0.1, hipYaw: 0.1 * wg, hipRoll: 0.07 * wg,
@@ -2942,7 +2950,7 @@ export class Zoomies implements Act {
     if (this.phase === 'wind') {
       // low on the forelegs, the rump up and wiggling, eyes on nothing at all
       m.setPosture('crouch');
-      const wg = Math.sin(this.t * Math.PI * 2 * 5);
+      const wg = wiggle(this.t, 0.9);
       m.layer = { pose: { hipY: 0.15, hipPitch: -0.12, hipYaw: 0.1 * wg, hipRoll: 0.07 * wg, tailCurl: 0.8 * Math.sin(this.t * 13), earFwd: 0.4 }, w: ease(this.t / 0.25) };
       if (this.t > 0.75) {
         this.phase = 'dash';

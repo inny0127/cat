@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { PoseLayer, PoseName } from '../cat3d/pose';
-import { washFace, type Act, type Ctx, type SillSpot } from './behave';
+import { washFace, wiggle, type Act, type Ctx, type SillSpot } from './behave';
 
 const ease = (x: number) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x));
 const smooth = (x: number) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * x * (10 + x * (6 * x - 15)));
@@ -359,7 +359,7 @@ export class Chase implements Act {
         const err = wrapA(Math.atan2(L!.p.x - m.pos.x, L!.p.z - m.pos.z) - m.yaw);
         m.yaw = wrapA(m.yaw + clamp(err * 4, -1.7, 1.7) * dt);
         m.setPosture('crouch');
-        const wg = Math.sin(this.t * Math.PI * 2 * 5);
+        const wg = wiggle(this.t, this.dur);
         m.layer = {
           pose: {
             ...keen, hipY: 0.15, hipPitch: -0.12, neckPitch: -0.45, headPitch: 0.1, hipYaw: 0.1 * wg, hipRoll: 0.07 * wg,
@@ -503,7 +503,7 @@ export class Chase implements Act {
         if (this.t < this.dur || this.leaps >= 3) {
           // (watching it up there: chattering at it now and then once it has given up leaping)
           m.setPosture('crouch');
-          const wg = this.leaps < 3 ? Math.sin(this.t * Math.PI * 2 * 5) : 0;
+          const wg = this.leaps < 3 ? wiggle(this.t, this.dur) : 0;
           const chat = this.leaps >= 3 ? 0.1 + 0.09 * Math.max(0, Math.sin(this.t * Math.PI * 2 * 11)) * (Math.sin(this.t * 1.3) > 0.6 ? 1 : 0) : 0;
           m.layer = { pose: { ...keen, hipY: 0.15, neckPitch: 0.5, headPitch: 0.15, hipYaw: 0.08 * wg, jaw: chat, LH: { y: 0.012 + 0.01 * Math.max(0, wg) }, RH: { y: 0.012 + 0.01 * Math.max(0, -wg) } }, w: Math.min(1, this.t / 0.25) };
           if (this.leaps >= 3 && this.t > 4) { this.leaps = 0; this.next('leap', rand(0.4, 0.8)); }
@@ -691,7 +691,7 @@ export class Chase implements Act {
             return true;
           }
         }
-        const wg = Math.sin(this.t * Math.PI * 2 * 5);
+        const wg = wiggle(this.t, 1);
         const pat = L && d < 0.2 ? Math.max(0, Math.sin(this.t * 7)) : 0;
         m.layer = {
           pose: {
