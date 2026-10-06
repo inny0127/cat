@@ -26,6 +26,8 @@ export interface MindState {
   doing: string | null;
   /** asleep: what it dreams of just now, if anything */
   dream?: string | null;
+  /** its strongest urges just now, and how much of them all each is */
+  urges?: { key: string; share: number }[];
   wonder: string | null;
   expects: { laser: number; wand: number; yarn: number; pet: number };
 }
@@ -61,7 +63,7 @@ export class Mind {
     frame.appendChild(marks);
     el.appendChild(frame);
     const lines = (this.lines = document.createElement('div'));
-    lines.style.cssText = 'margin-top:4px;background:rgba(43,36,51,.72);padding:3px 6px;border-radius:2px;white-space:pre';
+    lines.style.cssText = 'margin-top:4px;background:rgba(43,36,51,.72);padding:3px 6px;border-radius:2px;white-space:pre-wrap;word-break:keep-all';
     el.appendChild(lines);
     document.body.appendChild(el);
     this.place();
@@ -133,6 +135,7 @@ export class Mind {
       `사냥 욕구  ${pct(N.hunt)}`,
       `하려는 것  ${m.intent ? DOING[m.intent] ?? m.intent : m.doing ? DOING[m.doing] ?? m.doing : '-'}`,
     ];
+    if (m.urges?.length && !m.intent && !m.doing) rows.push(`끌리는 것  ${m.urges.map((u) => `${DOING[u.key] ?? u.key} ${Math.round(u.share * 100)}%`).join(', ')}`);
     if (N.awake < 0.3) rows.splice(0, rows.length, '잠들었어요', ...(m.dream ? [`꿈  ${NAMES[m.dream] ?? m.dream}`] : []));
     if (m.wonder) rows.push(`궁금한 것  ${NAMES[m.wonder] ?? m.wonder}`);
     if (looks) rows.push(`기다리는 것  ${looks}`);

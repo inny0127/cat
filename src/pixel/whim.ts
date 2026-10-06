@@ -43,6 +43,16 @@ export class Whim {
 
   constructor(private readonly rnd: () => number = Math.random) {}
 
+  /** how strongly each urge pulls just now, as shares of them all (staying as it is left out):
+   *  the strongest few, for the window on its mind */
+  urges(eyes: Eyes, n = 3) {
+    const A = eyes.attending;
+    const all = this.opts.filter((o) => o.key !== 'still').map((o) => ({ key: o.key, w: o.w * (1 + this.gain * (o.about && A?.id === o.about ? A.a : 0)) }));
+    const W = all.reduce((s, o) => s + o.w, 0);
+    if (W <= 0) return [];
+    return all.sort((x, y) => y.w - x.w).slice(0, n).map((o) => ({ key: o.key, share: o.w / W }));
+  }
+
   /** how hard what it has in mind draws its eyes (added to the drive of that thing's neuron) */
   get pull() {
     return this.intent ? 0.45 + 0.45 * Math.min(1, this.intent.t / 1.2) : 0;

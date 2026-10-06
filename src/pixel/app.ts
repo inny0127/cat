@@ -1185,7 +1185,7 @@ export class PixelApp {
   private readonly mind = (() => { const m = new Mind(); if (new URLSearchParams(location.search).has('mind')) m.toggle(true); return m; })();
   private seeMind() {
     const M = this.mind, av = this.avatar;
-    M.update(av.nerves, { intent: av.whim.intent?.o.key ?? null, doing: av.doing, wonder: av.wondering, expects: av.expects, dream: av.dreaming });
+    M.update(av.nerves, { intent: av.whim.intent?.o.key ?? null, doing: av.doing, wonder: av.wondering, expects: av.expects, dream: av.dreaming, urges: M.open ? av.whim.urges(av.nerves, 2) : undefined });
     // (its lids down as far as sleep has them)
     this.stage.inset = M.open && !av.hidden ? { cam: M.cam, rect: M.rect, hide: this.cat.group, lids: 1 - av.nerves.awake } : null;
   }
