@@ -4,7 +4,7 @@ import { POSES, SIDE_TURN, type Leg, type PoseLayer, type PoseName } from '../ca
 import { NEUTRAL, type Mood } from '../cat3d/mood';
 import type { Avatar } from '../sim/avatar';
 import type { EarMood, TailMood } from '../rig/animator';
-import { boop, byYou, canGlance, coolOff, feel, idleOptions, groomChest, groomFlank, knead, lookWith, restingPose, sneeze, toBed, toWindow, wander, warmUp, washFace, yawn, type Act, type Ctx, sunbathe, Play, Sill, Hunt, Box, Zoomies, Walk, Stare, Rub, scratchEar, wakeUp, stretchSideOn, Greet, Gift, Snub, Beg, PawGlass, TailChase, Claw, Top, Fish, Bat, Trap, Sulk, isPerching, type Perching, type ScratchPost, type GlassFinger, type SillSpot, type SulkSpot } from './behave';
+import { boop, byYou, canGlance, coolOff, feel, idleOptions, mealLayer, mealPlan, type MealPlan, groomChest, groomFlank, knead, lookWith, restingPose, sneeze, toBed, toWindow, wander, warmUp, washFace, yawn, type Act, type Ctx, sunbathe, Play, Sill, Hunt, Box, Zoomies, Walk, Stare, Rub, scratchEar, wakeUp, stretchSideOn, Greet, Gift, Snub, Beg, PawGlass, TailChase, Claw, Top, Fish, Bat, Trap, Sulk, isPerching, type Perching, type ScratchPost, type GlassFinger, type SillSpot, type SulkSpot } from './behave';
 import { Chase, Startle, type LaserDot } from './chase';
 import { Tease, type Lure } from './tease';
 import { GOAL, Whim } from './whim';
@@ -65,7 +65,7 @@ export class PixelAvatar implements Avatar {
   private trip: { kind: 'leave' | 'come' | 'errand'; onDone?: () => void } | null = null;
   /** an errand in the room: to the bowl (or the box), eat or drink there, and then about the room
    *  again (off: done, and waiting to be called back) */
-  private errand: { reason: string; phase: 'go' | 'do' | 'off'; t: number; dur: number; dir: number } | null = null;
+  private errand: { reason: string; phase: 'go' | 'do' | 'off'; t: number; dur: number; dir: number; plan?: MealPlan } | null = null;
   /** the room's places (bowls, box), once there is a room */
   spots: { food: THREE.Vector3; water: THREE.Vector3; litter: THREE.Vector3; sniff?: { to: THREE.Vector3; face: number }[]; posts?: THREE.Vector3[]; scratcher?: ScratchPost; sulk?: SulkSpot[] } | null = null;
   /** a place in the sun on the floor, if there is one now */
@@ -2087,10 +2087,10 @@ export class PixelAvatar implements Avatar {
         };
         return;
       }
-      const chew = e.reason === 'eat' ? 0.25 * Math.max(0, Math.sin(e.t * 8)) : 0.14 * Math.max(0, Math.sin(e.t * 15));
-      // (drinking, the tongue lapping, curled down to scoop: four or five laps a second)
-      const lap = e.reason === 'drink' ? Math.max(0, Math.sin(e.t * 15)) : 0;
-      m.layer = { pose: { neckPitch: -0.85, headPitch: -0.25, jaw: chew, tongue: lap, tongueUp: -0.9 }, w: Math.min(1, e.t * 1.5) };
+      // (a sniff at it first; then mouthfuls, the head up between them to chew and look about; or
+      // lapping, with now and then a lick of the lips)
+      e.plan ??= mealPlan(e.reason, e.dur);
+      m.layer = { pose: mealLayer(e.reason, e.t, e.plan), w: Math.min(1, e.t * 1.5) };
     } else if (e.phase === 'off' && this.mode !== 'away') {
       // (done, and nobody waiting to call it back: about the room again of itself)
       this.arrive();

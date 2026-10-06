@@ -277,6 +277,77 @@ class Settled implements Act, Glancing {
   }
 }
 
+/** a meal's own timings (mealLayer): how long the first sniff at it, and then, by turns, how long
+ *  each spell with the head down at it, how long each up between them, and which way it looks then */
+export interface MealPlan { first: number; down: number[]; up: number[]; look: number[] }
+
+export function mealPlan(reason: string, dur: number): MealPlan {
+  const eat = reason === 'eat';
+  const P: MealPlan = { first: eat ? rand(0.8, 1.5) : rand(0.5, 1.1), down: [], up: [], look: [] };
+  for (let t = P.first; t < dur + 12;) {
+    const d = eat ? rand(3.5, 8) : rand(4, 9), u = eat ? rand(1.2, 2.6) : rand(0.8, 1.4);
+    P.down.push(d);
+    P.up.push(u);
+    P.look.push(rand(-0.6, 0.6));
+    t += d + u;
+  }
+  return P;
+}
+
+/**
+ * At the bowl, t s in: eating, a sniff at it first, the nose working; then a few mouthfuls with the
+ * head down, and up between them to chew, a look about; drinking, a look at the water first, then
+ * lapping, with a pause now and then and a lick of its lips. Never quite the same twice (the plan).
+ */
+export function mealLayer(reason: string, t: number, P: MealPlan): PoseLayer {
+  const eat = reason === 'eat';
+  const down = (k: number): PoseLayer => eat
+    ? { neckPitch: -0.85, headPitch: -0.25, jaw: 0.25 * Math.max(0, Math.sin(t * 8)) * k }
+    // (the tongue lapping, curled down to scoop: four or five laps a second)
+    : { neckPitch: -0.85, headPitch: -0.25, tongue: Math.max(0, Math.sin(t * 15)) * k, tongueUp: -0.9, jaw: 0.14 * Math.max(0, Math.sin(t * 15)) * k };
+  // (the nose down to it, working, the whiskers forward; at the water, a look)
+  const sniff = (at: number): PoseLayer => eat
+    ? { neckPitch: -0.8, headPitch: -0.35 + 0.05 * Math.sin(at * 14), whisker: 0.6, earFwd: 0.3 }
+    : { neckPitch: -0.75, headPitch: -0.3, whisker: 0.3, earFwd: 0.3 };
+  if (t < P.first) return sniff(t);
+  let u = t - P.first;
+  for (let i = 0; i < P.down.length; i++) {
+    if (u < P.down[i]) {
+      // (the first moment down to it, from the sniff or back from a look about, eased; the mouth
+      // busy only once there)
+      const k = Math.min(1, u / 0.35);
+      const L = down(k * k);
+      if (k >= 1) return L;
+      return blendLayers(i > 0 ? up(P, i - 1, P.up[i - 1], eat, t) : sniff(P.first), L, k * k * (3 - 2 * k));
+    }
+    u -= P.down[i];
+    if (u < P.up[i]) {
+      const k = Math.min(1, u / 0.35);
+      return blendLayers(down(1), up(P, i, u, eat, t), k * k * (3 - 2 * k));
+    }
+    u -= P.up[i];
+  }
+  return down(1);
+}
+
+/** a moment (u s) up from the bowl between mouthfuls: chewing, the head up and a look about;
+ *  from the water, a lick of the lips */
+function up(P: MealPlan, i: number, u: number, eat: boolean, t: number): PoseLayer {
+  const look = P.look[i] * Math.min(1, u / 0.6);
+  if (eat) return { neckPitch: -0.15, headPitch: -0.05, headYaw: look, neckYaw: 0.4 * look, jaw: 0.16 * Math.max(0, Math.sin(t * 7)), earFwd: 0.2 };
+  const lick = u > 0.15 && u < 0.6 ? Math.sin(Math.PI * (u - 0.15) / 0.45) : 0;
+  return { neckPitch: -0.3, headPitch: -0.05, headYaw: 0.5 * look, tongue: 0.45 * lick, tongueUp: 0.6, jaw: 0.05 * lick };
+}
+
+/** two layers mixed (k 0: the one, 1: the other), channel by channel; a channel only one of them
+ *  has goes from or to nothing */
+function blendLayers(a: PoseLayer, b: PoseLayer, k: number): PoseLayer {
+  const out: Record<string, number> = {};
+  const A = a as Record<string, number>, B = b as Record<string, number>;
+  for (const key of new Set([...Object.keys(A), ...Object.keys(B)])) out[key] = (A[key] ?? 0) * (1 - k) + (B[key] ?? 0) * k;
+  return out as PoseLayer;
+}
+
 /** a big yawn: the mouth wide, the tongue curled up at its tip in the bottom of it, eyes squeezed,
  *  head back, ears out; now and then you hear it */
 export const yawn = (heard = Math.random() < 0.5) => new Layered('yawn', 2.4, 0.7, () => ({
