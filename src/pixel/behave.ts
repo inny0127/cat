@@ -2468,6 +2468,20 @@ export const byYou = (c: Ctx) => {
   ]);
 };
 
+/** you looking round the room, at something over there (x along the room): a cat curious about
+ *  you, and about what you see, strolls over there itself, has a sniff about, and sits and looks
+ *  up at you; then about its own business again */
+export const lookWith = (c: Ctx, x: number) => {
+  const at = c.keepClear(new THREE.Vector3(x + rand(-0.08, 0.08), 0, c.home.z + rand(0.05, 0.22)), 0.12);
+  const sniff = (t: number): PoseLayer => ({ neckPitch: -1.0, headPitch: -0.4 + 0.05 * Math.sin(t * 14), whisker: 0.6, earFwd: 0.4, hipY: 0.19 });
+  // (sat a little side-on to you, the head turned up to you: square on, a sitting cat is a pillar)
+  const v = c.viewer(), you = Math.atan2(v.x - at.x, v.z - at.z), side = Math.random() < 0.5 ? -1 : 1;
+  return new Walk('look with you', [
+    { to: at, face: null, stay: rand(1.2, 2.4), posture: 'stand', layer: sniff },
+    { to: at, face: you + side * 0.42, stay: rand(4, 8), posture: 'sit' },
+  ], 0.3);
+};
+
 /** in the heating months, a long while lying on the floor by the warm radiator, then back to bed */
 export const warmUp = (c: Ctx) => {
   const spot = c.warm();

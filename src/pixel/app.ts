@@ -611,6 +611,25 @@ export class PixelApp {
     this.look.v = Math.max(-1.6, Math.min(1.6, -v * (2 * this.viewHalf()) / Math.max(1, innerWidth)));
     this.look.until = this.tickNow + 25;
     this.state.hints.look = 1;
+    // (and the cat may come to see what you are looking at, once the view has come to rest there)
+    this.lookSeen = this.tickNow + 1.6 + Math.random();
+  }
+  /** when to see whether the cat comes over to where you look (the app's clock; 0: not), and not
+   *  again till when */
+  private lookSeen = 0;
+  private lookSeenRest = 0;
+  private lookAlong() {
+    if (!this.lookSeen || this.tickNow < this.lookSeen) return;
+    this.lookSeen = 0;
+    const L = this.look;
+    if (L.on || this.tickNow >= L.until || this.tickNow < this.lookSeenRest) return;
+    // where the view rests, along the room, and how far the cat is from it
+    const x = Math.max(-0.75, Math.min(0.72, this.roomView.target.x + this.panX));
+    if (Math.abs(x - this.cat.motor.pos.x) < 0.45) return;
+    // (a cat fond of you, and curious, as often as not; one that hardly knows you, seldom)
+    const trust = this.state.trust;
+    if (Math.random() > 0.15 + 0.55 * Math.max(0, Math.min(1, trust))) return;
+    if (this.avatar.comeSee(x)) this.lookSeenRest = this.tickNow + 60;
   }
   private readonly tmpR = new THREE.Vector3();
   private readonly tmpA = new THREE.Vector3();
@@ -1340,6 +1359,7 @@ export class PixelApp {
   /** one step of the cat's life, mind and body (also driven by tests in fixed steps) */
   tick(dt: number, now: number) {
     this.tickNow = now;
+    this.lookAlong();
     stepLife(this.state, dt * 1000, false);
     // the radio on and the room left open and untouched a long while: the cat comes for a moment
     // of you (dozing, it wakes for it, with a stretch; deep asleep, not this time)
