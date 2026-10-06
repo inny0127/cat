@@ -69,6 +69,9 @@ export interface Avatar {
   tidy?(where: 'face' | 'flank' | 'chest'): boolean | void;
   /** a love bite on the finger stroking it, gently, and a lick (true if it did) */
   loveBite?(): boolean;
+  /** scratched at the base of its tail: the nose up and a few licks at the air, as cats do for it
+   *  (true if it did) */
+  airLick?(): boolean;
   /** the hand gone before it had had enough: the head pushed out after it, a look at you (true if
    *  it does) */
   askMore?(): boolean;

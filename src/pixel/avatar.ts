@@ -387,6 +387,22 @@ export class PixelAvatar implements Avatar {
     return true;
   }
 
+  /** it has just licked the air (for whoever wants to say what that is, to clear) */
+  airLicked = false;
+  /** scratched at the base of its tail: the nose lifted, the eyes half shut, and a few licks at
+   *  the air in front of it (true if it did) */
+  airLick() {
+    const m = this.cat.motor;
+    if (!this.alive || this.sleep > 0.3 || this.errand || this.trip || m.licking || m.hissNow > 0 || (this.act && this.act.name !== 'knead')) return false;
+    this.cat.group.updateMatrixWorld(true);
+    const E = this.cat.body.eyes(this.eyesAt).applyMatrix4(this.cat.group.matrixWorld);
+    this.lickAt = E.clone().add(new THREE.Vector3(Math.sin(m.yaw) * 0.12, 0.05, Math.cos(m.yaw) * 0.12));
+    m.lick(3 + Math.floor(Math.random() * 4), false);
+    this.lickRest = Math.max(this.lickRest, 8);
+    this.airLicked = true;
+    return true;
+  }
+
   /** a blep: after a lick or a wash, now and then the tip of the tongue stays out a few seconds,
    *  forgotten there, until something else takes its mind */
   private blepNow(dt: number) {

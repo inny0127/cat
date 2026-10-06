@@ -427,11 +427,12 @@ export class Motor {
     this.voice = { kind, t: -delay, dur: Math.max(0.08, dur) };
   }
 
-  /** licks (a hand held still by its face): how far through, how many */
-  private licks: { t: number; n: number } | null = null;
-  /** n rough licks, about three a second: the tongue out, tip up, and in again each time */
-  lick(n = 4) {
-    this.licks = { t: 0, n };
+  /** licks (a hand held still by its face): how far through, how many, whether on the hand */
+  private licks: { t: number; n: number; hand: boolean } | null = null;
+  /** n rough licks, about three a second: the tongue out, tip up, and in again each time (on the
+   *  hand, or only at the air) */
+  lick(n = 4, hand = true) {
+    this.licks = { t: 0, n, hand };
   }
   get licking() {
     return this.licks !== null || this.nibbleT >= 0;
@@ -923,7 +924,7 @@ export class Motor {
       const per = 0.34, k0 = L.t / per;
       L.t += dt;
       const k = L.t / per;
-      if (Math.floor(k0 + 0.5) !== Math.floor(k + 0.5) && k < L.n) this.lickLanded = true;
+      if (Math.floor(k0 + 0.5) !== Math.floor(k + 0.5) && k < L.n && L.hand) this.lickLanded = true;
       if (k >= L.n) this.licks = null;
       else {
         const s = Math.sin(Math.PI * (k - Math.floor(k)));

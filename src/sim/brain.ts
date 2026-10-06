@@ -596,6 +596,11 @@ export class Brain {
     this.express(dt, contacts);
   }
 
+  /** how long a hand has been scratching at the base of its tail (s), and till when it will not
+   *  lick the air for it again */
+  private rumpScratch = 0;
+  private airLickRest = 0;
+
   /** each hand on it: how it has been going of late, and where (see scratching) */
   private readonly ways = new Map<number, { vx: number; vy: number; v: number; px: number; py: number; scratch: number }>();
 
@@ -649,6 +654,13 @@ export class Brain {
     }
     // (and scratched where a cat likes it best, by a hand it knows: better than a stroke there)
     p += sc * (SCRATCH_LIKE[zone] ?? 0) * smoothstep(-0.2, 0.5, trust);
+    // (at the base of its tail, a good scratch a moment or two, and up goes the nose and out comes
+    // the tongue: a few licks at the air, which cats do for it and cannot help; now and then)
+    this.rumpScratch = zone === 'rump' && sc > 0.6 ? this.rumpScratch + dt : Math.max(0, this.rumpScratch - dt * 2);
+    if (this.rumpScratch > 1.4 && this.time > this.airLickRest && trust > 0.3 && (this.mode === 'enjoy' || this.mode === 'rest') && p > 0) {
+      this.airLickRest = this.time + rand(4, 9);
+      if (chance(0.55) && this.anim.airLick?.()) this.airLickRest = this.time + rand(15, 30);
+    }
     if (c.press > 0.8) p -= 0.15;
     // too much of a good thing
     const tol = (22 + 75 * clamp(trust)) * s.personality.tolerance;

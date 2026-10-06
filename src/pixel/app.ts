@@ -1903,6 +1903,7 @@ export class PixelApp {
     if (this.brain.purr > 0.45 && !asleep) now.add('purr');
     if (this.brain.purr > 0.3 && asleep) now.add('sleeppurr');
     if (a.kneading || doing === 'knead') now.add('knead');
+    if (a.airLicked) { a.airLicked = false; now.add('airlick'); }
     if (a.nuzzled) now.add('rub');
     if (this.brain.grumbled) { this.brain.grumbled = false; now.add('grumble'); }
     // (its body saying how it is: ill, hunched; afraid and cross, arched; afraid, slinking)
