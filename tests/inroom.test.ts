@@ -24,6 +24,7 @@ function world(trust: number, seed = 7) {
     awayAt: (why: string) => did.push('found at ' + why),
     sulkTouched: (again: boolean) => did.push(again ? 'shrugs, and moves off' : 'shrugs'),
     sulkOver: () => did.push('turns round to you'),
+    sulkHeard: () => did.push('looks back'),
     arrive: () => did.push('about the room'),
     setHidden: (h: boolean) => { if (h) did.push('HIDDEN'); },
   });
@@ -65,6 +66,10 @@ describe('away, and in the room all the same', () => {
       expect(w.did).toContain('shrugs, and moves off');
       expect(w.did).toContain('sound growl');
       expect(w.s.awayUntil).toBeGreaterThan(until + 30_000);
+      expect(w.mode).toBe('away');
+      // (called, with a knock on the glass: it looks back, and sulks on)
+      w.b.knock(100, 100);
+      expect(w.did).toContain('looks back');
       expect(w.mode).toBe('away');
       // (and never made up with, a cat not yet fond of you: it sulks it out)
       w.step(200);
