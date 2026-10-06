@@ -62,6 +62,8 @@ export interface InputHandlers {
    *  now on, and nothing else's); pinch: how much further apart they are than last time (a ratio),
    *  where the point between them is now, and how far it went since (css px); pinchEnd: let go */
   pinchStart?(): boolean;
+  /** three fingers on the glass at once */
+  threeFingers?(): void;
   pinch?(k: number, mx: number, my: number, dx: number, dy: number): void;
   pinchEnd?(): void;
   /** looking round goes up and down as well as along (the view in close): any way the finger goes */
@@ -131,6 +133,7 @@ export class PointerInput {
       press: this.pressOf(e), maxSpeed: 0,
     };
     this.contacts.set(e.pointerId, c);
+    if (this.contacts.size === 3) this.h.threeFingers?.();
     if (this.contacts.size === 2 && !this.two) {
       const [a, b] = [...this.contacts.values()];
       const d = Math.hypot(a.sx - b.sx, a.sy - b.sy), mx = (a.sx + b.sx) / 2, my = (a.sy + b.sy) / 2;

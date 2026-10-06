@@ -677,6 +677,10 @@ export class PixelAvatar implements Avatar {
       was.copy(u.belief);
     }
   }
+  /** what it wonders at just now, if anything (the name its eyes know it by) */
+  get wondering() {
+    return this.curiosity()?.id ?? null;
+  }
   /** the thing it is most curious about just now, and where it is */
   private curiosity() {
     let best: { id: string; at: THREE.Vector3; k: number } | null = null;

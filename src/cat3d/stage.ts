@@ -713,8 +713,122 @@ export class Stage {
     u.uScreen.value.copy(buf);
   }
 
+  /** a second, small view drawn over a corner of the screen (the cat's own eyes: mind.ts): its
+   *  camera, where on the screen (css px, from the top left), and what is left out of it (the cat:
+   *  its eyes are inside its head). Drawn in the room's own pixels */
+  inset: { cam: THREE.PerspectiveCamera; rect: { x: number; y: number; w: number; h: number }; hide: THREE.Object3D | null } | null = null;
+  private insetRT: THREE.WebGLRenderTarget | null = null;
+  private insetArt: THREE.WebGLRenderTarget | null = null;
+  private insetPaint: THREE.ShaderMaterial | null = null;
+  private insetView: { scene: THREE.Scene; cam: THREE.OrthographicCamera; mat: THREE.ShaderMaterial } | null = null;
+  private drawInset() {
+    const I = this.inset!, r = this.renderer, R = I.rect, cam = I.cam, P = this.pixel;
+    // (as coarse as the room's own pixels)
+    const css = P ? P.k / r.getPixelRatio() : 2;
+    const w = Math.max(8, Math.round(R.w / css)), h = Math.max(4, Math.round(R.h / css));
+    if (!this.insetRT) {
+      this.insetRT = new THREE.WebGLRenderTarget(w, h, {
+        type: THREE.HalfFloatType, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, depthTexture: new THREE.DepthTexture(w, h, THREE.FloatType),
+      });
+      this.insetArt = new THREE.WebGLRenderTarget(w, h, { minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter });
+      // (the room's materials draw what the paint pass makes into colour: the same pass, the same
+      // light and weather, for this view)
+      if (P) {
+        const U = P.mat.uniforms;
+        this.insetPaint = new THREE.ShaderMaterial({
+          uniforms: {
+            ...U, uColor: { value: this.insetRT.texture }, uDepth: { value: this.insetRT.depthTexture }, uSize: { value: new THREE.Vector2(w, h) },
+            uProjInv: { value: new THREE.Matrix4() }, uViewInv: { value: new THREE.Matrix4() }, uNear: { value: cam.near }, uFar: { value: cam.far }, uDetail: { value: 1 },
+          },
+          vertexShader: PIXEL_VERT, fragmentShader: ART_FRAG, depthTest: false, depthWrite: false, toneMapped: false,
+        });
+      }
+      // (as a cat sees: in blues and yellows, reds gone to olive, the colours weaker; and a little
+      // dark round the edges, where its eyes are good for nothing but movement)
+      const mat = new THREE.ShaderMaterial({
+        uniforms: { uSrc: { value: null }, uRaw: { value: 0 }, uDepth: { value: this.insetRT.depthTexture } },
+        vertexShader: PIXEL_VERT,
+        fragmentShader: `
+          uniform sampler2D uSrc; uniform float uRaw; uniform sampler2D uDepth; varying vec2 vUv;
+          void main() {
+            vec3 c = texture2D(uSrc, vUv).rgb;
+            c = uRaw > 0.5 ? c * 1.8 / (1.0 + c * 1.8) : pow(c, vec3(2.2));
+            // (nothing there: out past the front of the room, where you are, a dim warm dusk)
+            if (texture2D(uDepth, vUv).r > 0.99999) c = mix(vec3(0.05, 0.035, 0.05), vec3(0.11, 0.08, 0.09), vUv.y);
+            // (a dichromat's colours: what a deuteranope sees, near enough to a cat's)
+            c = mat3(0.367322, 0.280085, -0.011820, 0.860646, 0.672501, 0.042940, -0.227968, 0.047413, 0.968881) * c;
+            float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+            c = mix(vec3(l), c, 0.75);
+            vec2 d = vUv - 0.5;
+            c *= 1.0 - 0.45 * smoothstep(0.25, 0.7, length(d * vec2(1.0, 0.6)));
+            gl_FragColor = vec4(pow(max(c, 0.0), vec3(1.0 / 2.2)), 1.0);
+          }`,
+        depthTest: false, depthWrite: false, toneMapped: false,
+      });
+      const scene = new THREE.Scene();
+      const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), mat);
+      quad.frustumCulled = false;
+      scene.add(quad);
+      this.insetView = { scene, cam: new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1), mat };
+    }
+    const resized = this.insetRT.width !== w || this.insetRT.height !== h;
+    if (resized) {
+      this.insetRT.setSize(w, h);
+      this.insetArt!.setSize(w, h);
+    }
+    // (drawn afresh every other frame: half the cost, and the eyes none the worse for it)
+    this.insetOdd = !this.insetOdd;
+    if (this.insetOdd || resized) this.paintInset(cam, w, h);
+    this.showInset();
+  }
+  private insetOdd = false;
+  private paintInset(cam: THREE.PerspectiveCamera, w: number, h: number) {
+    const I = this.inset!, r = this.renderer, P = this.pixel;
+    const was = I.hide?.visible ?? false, shadows = r.shadowMap.autoUpdate;
+    if (I.hide) I.hide.visible = false;
+    r.shadowMap.autoUpdate = false;
+    r.setRenderTarget(this.insetRT);
+    r.render(this.scene, cam);
+    r.shadowMap.autoUpdate = shadows;
+    if (I.hide) I.hide.visible = was;
+    const V = this.insetView!;
+    if (P && this.insetPaint) {
+      const u = this.insetPaint.uniforms;
+      u.uSize.value.set(w, h);
+      u.uProjInv.value.copy(cam.projectionMatrixInverse);
+      u.uViewInv.value.copy(cam.matrixWorld);
+      u.uNear.value = cam.near;
+      u.uFar.value = cam.far;
+      const main = P.quad.material;
+      P.quad.material = this.insetPaint;
+      r.setRenderTarget(this.insetArt);
+      r.render(P.scene, P.cam);
+      P.quad.material = main;
+      V.mat.uniforms.uSrc.value = this.insetArt!.texture;
+      V.mat.uniforms.uRaw.value = 0;
+    } else {
+      V.mat.uniforms.uSrc.value = this.insetRT!.texture;
+      V.mat.uniforms.uRaw.value = 1;
+    }
+  }
+  private showInset() {
+    const R = this.inset!.rect, r = this.renderer, V = this.insetView!;
+    r.setRenderTarget(null);
+    const size = r.getSize(new THREE.Vector2());
+    r.setScissorTest(true);
+    r.setScissor(R.x, size.y - R.y - R.h, R.w, R.h);
+    r.setViewport(R.x, size.y - R.y - R.h, R.w, R.h);
+    r.render(V.scene, V.cam);
+    r.setScissorTest(false);
+    r.setViewport(0, 0, size.x, size.y);
+  }
+
   /** draw the scene: straight to the screen, or small and then as pixel art */
   private draw() {
+    this.drawMain();
+    if (this.inset) this.drawInset();
+  }
+  private drawMain() {
     if (!this.pixel) { this.renderer.render(this.scene, this.camera); return; }
     const P = this.pixel;
     const r = this.renderer;

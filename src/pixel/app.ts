@@ -17,6 +17,7 @@ import { HABITS, expectation, note, type Habit } from '../sim/habits';
 import { stepLife, THRESH } from '../sim/life';
 import { clamp } from '../util/math';
 import { PixelAvatar } from './avatar';
+import { Mind } from './mind';
 import { Senses3D } from './senses';
 import { Room } from './room';
 import { rainAt } from '../cat3d/roomlight';
@@ -414,6 +415,8 @@ export class PixelApp {
       lookMove: (dx, dy) => this.lookMove(dx, dy),
       lookEnd: (v, cancelled, vy) => this.lookEnd(v, cancelled, vy),
       lookFree: () => this.userZoom > 1.02,
+      // three fingers at once: the cat's mind opened, or shut again
+      threeFingers: () => this.mind.toggle(),
       // two fingers: the view in or out, and along
       pinchStart: () => {
         if (this.creditsOpen) return false;
@@ -1178,6 +1181,14 @@ export class PixelApp {
   /** a finger holding the feather wand (where, which) */
   private wandFinger: { x: number; y: number; id: number } | null = null;
 
+  /** the cat's mind, opened (mind.ts): three fingers on the glass, the M key, or ?mind */
+  private readonly mind = (() => { const m = new Mind(); if (new URLSearchParams(location.search).has('mind')) m.toggle(true); return m; })();
+  private seeMind() {
+    const M = this.mind, av = this.avatar;
+    M.update(av.nerves, { intent: av.whim.intent?.o.key ?? null, doing: av.doing, wonder: av.wondering, expects: av.expects });
+    this.stage.inset = M.open && !av.hidden ? { cam: M.cam, rect: M.rect, hide: this.cat.group } : null;
+  }
+
   /** what the cat learns of your hours (habits.ts): a game begun with the red dot, the feathers or
    *  the ball under your finger, or strokes, is one more time it came at this hour (once a sitting:
    *  not again within ten minutes); and every few seconds, what it looks for just now */
@@ -1521,6 +1532,7 @@ export class PixelApp {
       if (this.creditsOpen) this.showCredits(false);
       return;
     }
+    if (k === 'm') { this.mind.toggle(); return; }
     if (k === 'f') this.brain.kibble(0.9);
     else if (k === 'w') this.brain.pourStart();
     else if (k === 'l' || k === 's') this.brain.scoop();
@@ -1628,6 +1640,7 @@ export class PixelApp {
     this.avatar.music = this.audio.musicPlaying;
     this.learnHabits(clock.getTime(), dt, contacts.length > 0);
     this.avatar.update(dt);
+    this.seeMind();
     const landed = this.avatar.pawLanded;
     // (its cheek rubbed on the glass at your finger: felt, a soft bump each time)
     if (this.avatar.nuzzled) {
