@@ -1,6 +1,7 @@
 // node tools/soak.mjs [minutes] (SOAK_QUERY=px=2.1 for more of the query): runs the pixel cat's life in fixed steps of game time with acts,
-// hours and weather changing at random, and reports anything wrong (errors, NaN, a cat left up in
-// the air or perched off the sill, a still thing of the room's that moved).
+// hours and weather changing at random, hands on it now and then, and reports anything wrong (errors,
+// NaN, a cat left up in the air or perched off the sill, a still thing of the room's that moved, its
+// mind, posture or doing flicked to something and straight back).
 import { chromium } from 'playwright-core';
 const minutes = +(process.argv[2] ?? 10);
 const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
@@ -18,6 +19,13 @@ const report = await page.evaluate(async (minutes) => {
   const issues = [];
   let t = 1, seen = {}, drag = null, drags = 0, errands = 0, laser = null, wand = null, laserUses = 0, wandUses = 0, returns = 0, tosses = 0, glass = null, glasses = 0;
   let lean = null, leans = 0, leanEnd = -1;
+  // a hand on the cat now and then: strokes head to tail, scratches at the crown, the cheek or the
+  // base of the tail, a rough rub, a hand on its tail
+  let hand = null, hands = 0;
+  // (and anything that flicks from one thing to another and straight back: its mind, the posture
+  // it is going to, what it is doing)
+  const flick = { mode: { v: app.brain.mode, h: [] }, post: { v: app.cat.motor.targetPosture, h: [] }, act: { v: app.avatar.doing ?? '-', h: [] } };
+  let flicks = 0;
   // (the last few steps, to say what led up to the first thing wrong with the legs)
   const recent = [];
   let legDetail = null;
@@ -50,7 +58,7 @@ const report = await page.evaluate(async (minutes) => {
     if (i % 2600 === 1300 && app.brain.mode !== 'away') { app.onVisibility(false); app.state.lastTick -= 1800e3; app.onVisibility(true); returns++; }
     // now and then a finger on the glass beside the cat, moved about slowly a few seconds (the cat
     // may come and pat at it), and lifted
-    if (i % 1300 === 650 && !drag && !laser && !wand && !glass && !lean && Math.random() < 0.6) {
+    if (i % 1300 === 650 && !drag && !laser && !wand && !glass && !lean && !hand && Math.random() < 0.6) {
       const m = app.cat.motor, cam = app.stage.camera;
       const q = cam.position.clone().set(m.pos.x + (Math.random() < 0.5 ? -1 : 1) * 0.1, 0.12 + Math.random() * 0.25, app.room.spots.bed.z + 0.45).project(cam);
       glass = { x: (q.x * 0.5 + 0.5) * innerWidth, y: (-q.y * 0.5 + 0.5) * innerHeight, until: i + 120 + Math.floor(Math.random() * 100), k: 0 };
@@ -63,7 +71,7 @@ const report = await page.evaluate(async (minutes) => {
     }
     // now and then two fingers take the view right in on its face a few seconds, and out again
     // (and once out, nothing of the close look left on its face)
-    if (i % 1700 === 1100 && !lean && !drag && !laser && !wand && !glass && Math.random() < 0.6) { lean = { i0: i, hold: 80 + Math.floor(Math.random() * 120) }; leans++; }
+    if (i % 1700 === 1100 && !lean && !drag && !laser && !wand && !glass && !hand && Math.random() < 0.6) { lean = { i0: i, hold: 80 + Math.floor(Math.random() * 120) }; leans++; }
     else if (lean) {
       const k = i - lean.i0, cam = app.stage.camera;
       const e = app.cat.body.eyes(cam.position.clone()).applyMatrix4(app.cat.group.matrixWorld).project(cam);
@@ -76,7 +84,7 @@ const report = await page.evaluate(async (minutes) => {
       if (app.avatar.lean < 0.2 && (m.nose > 0 || m.shy > 0)) issues.push(`a close look left on its face at ${i} (nose ${m.nose}, shy ${m.shy})`);
     }
     // now and then a finger takes the ball of wool and drags it about a few seconds
-    if (i % 300 === 0 && !drag && !laser && !wand && !glass && !lean && Math.random() < 0.4) {
+    if (i % 300 === 0 && !drag && !laser && !wand && !glass && !lean && !hand && Math.random() < 0.4) {
       const p = app.room.yarnAt().clone().project(app.stage.camera);
       const x = (p.x * 0.5 + 0.5) * innerWidth, y = (-p.y * 0.5 + 0.5) * innerHeight;
       drag = { x, y, until: i + 40 + Math.floor(Math.random() * 120), vx: 0, vy: 0 };
@@ -92,7 +100,7 @@ const report = await page.evaluate(async (minutes) => {
     // now and then the laser pointer: taken off the sill, shone about (now and then on the mug,
     // or the sill), lifted off and put back down at times, and in the end put back
     const scr = (p) => { const q = p.clone().project(app.stage.camera); return [(q.x * 0.5 + 0.5) * innerWidth, (-q.y * 0.5 + 0.5) * innerHeight]; };
-    if (i % 900 === 300 && !laser && !drag && !wand && !lean && Math.random() < 0.6) {
+    if (i % 900 === 300 && !laser && !drag && !wand && !lean && !hand && Math.random() < 0.6) {
       const [x, y] = scr(app.room.pointerHome);
       app.input.down({ ...ev(x, y, t), pointerId: 11 });
       app.input.up({ ...ev(x, y, t + 0.05), pointerId: 11 }, false);
@@ -123,7 +131,7 @@ const report = await page.evaluate(async (minutes) => {
       }
     }
     // and the feather wand: taken up by its feathers and dangled about a while, then dropped
-    if (i % 1200 === 900 && !laser && !drag && !wand && !lean && Math.random() < 0.6) {
+    if (i % 1200 === 900 && !laser && !drag && !wand && !lean && !hand && Math.random() < 0.6) {
       const [x, y] = scr(app.room.lureAt());
       app.input.down({ ...ev(x, y, t), pointerId: 14 });
       wand = { x, y, until: i + 120 + Math.floor(Math.random() * 240), vx: 0, vy: 0, took: !!app.wandFinger, why: `laser ${app.laser.held} credits ${app.creditsOpen} yarn ${!!app.toyFinger}` };
@@ -139,6 +147,30 @@ const report = await page.evaluate(async (minutes) => {
       app.input.move({ ...ev(wand.x, wand.y, t), pointerId: 14 });
       if (i >= wand.until) { app.input.up({ ...ev(wand.x, wand.y, t), pointerId: 14 }, false); wand = null; }
     }
+    if (i % 1100 === 200 && !hand && !drag && !laser && !wand && !glass && !lean && !app.avatar.hidden && Math.random() < 0.5) {
+      hand = { kind: ['stroke', 'crown', 'cheek', 'rump', 'rough', 'tail'][Math.floor(Math.random() * 6)], i0: i, len: 40 + Math.floor(Math.random() * 200), down: false };
+      hands++;
+    } else if (hand) {
+      const u = (i - hand.i0) * 0.05, cam = app.stage.camera;
+      const sc = (v) => { const q = v.project(cam); return [(q.x * 0.5 + 0.5) * innerWidth, (-q.y * 0.5 + 0.5) * innerHeight]; };
+      const head = (x, y, z) => sc(app.cat.body.eyeOffset.clone().add({ x, y, z }).applyMatrix4(app.cat.byName.get('head').matrixWorld));
+      const bone = (n) => sc(app.cat.kin.wp[app.cat.kin.i(n)].clone().applyMatrix4(app.cat.group.matrixWorld));
+      let p = null;
+      if (hand.kind === 'crown') { const c = head(0, 0.028, -0.025); p = [c[0] + 6 * Math.cos(u * 15), c[1] + 4 * Math.sin(u * 15)]; }
+      else if (hand.kind === 'cheek') { const c = head(0.026, -0.014, -0.005); p = [c[0] + 5 * Math.cos(u * 18), c[1] + 3 * Math.sin(u * 18)]; }
+      else if (hand.kind === 'rump') { const c = bone('hips'); p = [c[0] + 6 * Math.cos(u * 16), c[1] - 5 + 3 * Math.sin(u * 16)]; }
+      else if (hand.kind === 'tail') { const c = bone('tail0'); p = [c[0] + 8 * Math.sin(u * 3), c[1]]; }
+      else {
+        const per = hand.kind === 'rough' ? 0.5 : 1.4, w = (u % per) / per, A = head(0, 0.028, -0.025), B = bone('spine2'), C = bone('hips');
+        const e = hand.kind === 'rough' ? (Math.floor(u / per) % 2 ? 1 - w : w) : w * w * (3 - 2 * w);
+        const [P, Q, v] = e < 0.5 ? [A, B, e * 2] : [B, C, e * 2 - 1];
+        p = hand.kind !== 'rough' && w > 0.85 ? null : [P[0] + (Q[0] - P[0]) * v, P[1] + (Q[1] - P[1]) * v - 4];
+      }
+      if (p && p.every(Number.isFinite) && i - hand.i0 < hand.len) {
+        if (!hand.down) { app.input.down({ ...ev(p[0], p[1], t), pointerId: 15 }); hand.down = true; } else app.input.move({ ...ev(p[0], p[1], t), pointerId: 15 });
+      } else if (hand.down) { app.input.up({ ...ev(0, 0, t), pointerId: 15 }, false); hand.down = false; }
+      if (i - hand.i0 >= hand.len || app.avatar.hidden) { if (hand.down) app.input.up({ ...ev(0, 0, t), pointerId: 15 }, false); hand = null; }
+    }
     if (app.room.mess && Math.random() < 0.002) app.room.sweepMug();
     try { app.tick(0.05, t); } catch (e) { issues.push('tick: ' + e.message); break; }
     const lp = app.room.lureAt();
@@ -148,6 +180,18 @@ const report = await page.evaluate(async (minutes) => {
     if (![yp.x, yp.z].every(Number.isFinite) || yp.x < yb.minX - 1e-3 || yp.x > yb.maxX + 1e-3 || yp.z < yb.minZ - 1e-3 || yp.z > yb.maxZ + 1e-3) issues.push(`yarn out at ${i}: ${yp.x},${yp.z}`);
     const m = app.cat.motor, c = app.cat;
     const d = app.avatar.doing;
+    for (const [k, v] of [['mode', app.brain.mode], ['post', m.targetPosture], ['act', d ?? '-']]) {
+      const F = flick[k];
+      if (v === F.v) continue;
+      F.h.push({ i, from: F.v, to: v });
+      const n = F.h.length;
+      if (n >= 2 && F.h[n - 1].to === F.h[n - 2].from && i - F.h[n - 2].i < 20 && flicks < 8) {
+        flicks++;
+        issues.push(`${k} flicked ${F.h[n - 2].from} > ${F.h[n - 2].to} > ${v} in ${((i - F.h[n - 2].i) * 0.05).toFixed(2)} s at ${i} (hand ${hand ? hand.kind : '-'}, mode ${app.brain.mode}, act ${d ?? '-'})`);
+      }
+      if (F.h.length > 4) F.h.shift();
+      F.v = v;
+    }
     if (d) seen[d] = (seen[d] || 0) + 1;
     if (![m.pos.x, m.pos.z, m.yaw].every(Number.isFinite)) { issues.push(`NaN at ${i}`); break; }
     if (c.perch !== null && !(app.avatar.act && ['sill', 'chase', 'top'].includes(app.avatar.act.name))) issues.push(`perched without the sill act at ${i}`);
@@ -196,7 +240,7 @@ const report = await page.evaluate(async (minutes) => {
     if (i % 2400 === 0) await new Promise((r) => setTimeout(r, 0));
   }
   app.stage.render();
-  return { issues: issues.slice(0, 20), legDetail, batch: app.room.batchCount, seen, drags, errands, laserUses, wandUses, returns, tosses, glasses, leans, mug: app.room.mugUp ? 'up' : 'down', mode: app.brain.mode, doing: app.avatar.doing };
+  return { issues: issues.slice(0, 20), legDetail, batch: app.room.batchCount, seen, drags, errands, laserUses, wandUses, returns, tosses, glasses, leans, hands, mug: app.room.mugUp ? 'up' : 'down', mode: app.brain.mode, doing: app.avatar.doing };
 }, minutes);
 console.log(JSON.stringify(report), 'errors:', errs.slice(0, 10));
 await b.close();

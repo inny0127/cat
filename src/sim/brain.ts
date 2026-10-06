@@ -69,6 +69,9 @@ export class Brain {
   fear = 0;
   arousal = 0;
   stim = 0; // seconds of recent petting, for overstimulation
+  /** on edge after a fright, a few minutes, the fear itself gone (0..1): it starts the more
+   *  easily for it; a hand it likes, or a nap, settles it */
+  shaken = 0;
   sleepDepth = 1;
   purr = 0;
   /** awake, how long yet (s of nobody touching it, by night the quicker) before it nods off: a
@@ -287,7 +290,7 @@ export class Brain {
       // start, the ears flicked, and round to see whose it is; less of one, the surer of you it is.
       // Seen coming, it takes it as it comes
       const u = this.anim.unseen(c.sx, c.sy);
-      const k = clamp((u - 0.5) * 2) * (1 - 0.6 * clamp(this.s.trust)) * (1 - 0.4 * (this.s.personality.bold ?? 0));
+      const k = clamp(clamp((u - 0.5) * 2) * (1 - 0.6 * clamp(this.s.trust)) * (1 - 0.4 * (this.s.personality.bold ?? 0)) * (1 + this.shaken));
       if (k > 0.12) {
         this.anim.jolt(0.25 + 0.6 * k);
         this.anim.twitchEar('both', 0.5 + 0.4 * k);
@@ -386,9 +389,11 @@ export class Brain {
     }
     // (never enough on its own to send it off sulking)
     // (a bold cat is less put out by it, a timid one more)
-    this.fear = Math.max(this.fear, Math.min(0.7, this.fear + 0.5 * loud * (1 - 0.4 * (this.s.personality.bold ?? 0))));
+    // (on edge from the last one, it takes the next the harder)
+    const edge = 1 + this.shaken;
+    this.fear = Math.max(this.fear, Math.min(0.7 + 0.15 * this.shaken, this.fear + 0.5 * loud * edge * (1 - 0.4 * (this.s.personality.bold ?? 0))));
     this.arousal = clamp(this.arousal + 0.3 * loud);
-    if (loud > 0.45) this.anim.jolt(loud);
+    if (loud * edge > 0.45) this.anim.jolt(Math.min(1, loud * edge));
   }
 
   knock(sx: number, sy: number) {
@@ -543,6 +548,10 @@ export class Brain {
     this.fear = Math.max(0, this.fear - dt * 0.06 * calm);
     this.arousal = Math.max(0, this.arousal - dt * 0.05);
     this.settleFright(dt, touching);
+    // (a real fright leaves it on edge a while; it wears off over a few minutes, the quicker under a
+    // hand it likes, and a nap takes it off)
+    if (this.fear > 0.3) this.shaken = Math.max(this.shaken, Math.min(1, this.fear * 1.1));
+    this.shaken *= Math.exp(-dt / (asleepNow(this.mode) ? 25 : this.mode === 'enjoy' ? 50 : 140));
 
     // ---- thresholds
     const hissAt = 0.68 - 0.18 * clamp(-s.trust) + 0.1 * clamp(s.trust);

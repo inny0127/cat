@@ -23,9 +23,12 @@ export interface Mood {
   trust: number;
   /** 0 dark .. 1 bright sunshine */
   light: number;
+  /** on edge, a while after a fright, the fear itself gone: watchful, the eyes wide, a little low
+   *  on its feet, the tail carried low, quick to start (0..1) */
+  wary?: number;
 }
 
-export const NEUTRAL: Mood = { pleasure: 0, irritation: 0, fear: 0, arousal: 0, sleepy: 0, sick: 0, trust: 0, light: 0.5 };
+export const NEUTRAL: Mood = { pleasure: 0, irritation: 0, fear: 0, arousal: 0, sleepy: 0, sick: 0, trust: 0, light: 0.5, wary: 0 };
 
 /** named feelings, for scripts and the lab (?mood=) */
 export const MOODS = {
@@ -35,6 +38,7 @@ export const MOODS = {
   curious: { arousal: 0.45 },
   playful: { arousal: 0.95 },
   scared: { fear: 0.95 },
+  wary: { wary: 0.85 },
   hiss: { fear: 0.75, irritation: 0.8 },
   annoyed: { irritation: 0.5 },
   angry: { irritation: 0.95 },
@@ -67,13 +71,14 @@ export function eyesFor(m: Mood): EyeLook {
   // day an upright oval, not the slit of full sun: a slit in a cat at its ease reads as a glare)
   const rest = 0.9 - 0.4 * m.light;
   let pupil = rest;
-  pupil += (1 - pupil) * (0.8 * m.fear + 0.55 * m.arousal);
+  const wary = clamp01(m.wary ?? 0);
+  pupil += (1 - pupil) * (0.8 * m.fear + 0.55 * m.arousal + 0.3 * wary);
   pupil -= pupil * 0.6 * m.irritation * calm;
   pupil -= 0.06 * m.pleasure;
   // (a little sleepiness, as of a cat awake and at its ease, leaves the eyes open: a pixel off them
   // and they look sullen, not at peace; it is drowsiness that brings the lids down)
   const drowsy = clamp01((m.sleepy - 0.15) / 0.85);
-  const open = 0.95 - 0.42 * m.pleasure - 0.6 * drowsy - 0.32 * m.sick - 0.24 * m.irritation * calm + 0.05 * (m.fear + m.arousal);
+  const open = 0.95 - 0.42 * m.pleasure * (1 - 0.6 * wary) - 0.6 * drowsy - 0.32 * m.sick - 0.24 * m.irritation * calm + 0.05 * (m.fear + m.arousal + wary);
   const squint = 0.03 + 0.3 * m.pleasure + 0.32 * m.irritation * calm + 0.25 * m.sick;
   const fondness = clamp01((m.pleasure - 0.2) / 0.6) * clamp01((m.trust + 0.1) / 0.6) * calm;
   return {
@@ -128,7 +133,8 @@ export interface BodyLook {
  * The rest of the body, read as a cat reads another: ears forward for interest, a little out and
  * easy when content, swivelled back and out when annoyed, flattened sideways in fear and pinned
  * back for the hiss; whiskers forward when keen, pulled back when afraid or cross; on its feet and
- * afraid, low on bent legs, slinking; ill, hunched up, the head drawn in; afraid and
+ * afraid, low on bent legs, slinking (and on edge a while after, a little low still, the tail
+ * carried low, the ears busy); ill, hunched up, the head drawn in; afraid and
  * ready to fight, the back arched high on stiff legs; cross, stiff-legged, the head down, staring; the tail up with
  * a hook for a friend, low and tucked in fear, bottle-brush for the hiss, twitching when annoyed
  * and lashing in anger, low and limp when ill; fur standing on end, the mouth open to hiss; quick
@@ -136,16 +142,17 @@ export interface BodyLook {
  */
 export function bodyFor(m: Mood): BodyLook {
   const calm = 1 - m.fear;
+  const wary = clamp01(m.wary ?? 0) * calm;
   const threat = m.fear * m.irritation;          // afraid and ready to fight: the defensive hiss
   const cross = m.irritation * calm;             // annoyed and sure of itself
   const scared = m.fear * (1 - m.irritation);    // plain fear: make itself small
   const friendly = m.pleasure * clamp01((m.trust + 0.3) / 0.8);
   return {
-    earFwd: 0.55 * m.arousal - 0.12 * m.pleasure - 0.55 * m.fear - 0.45 * cross - 0.25 * m.sick - 0.15 * m.sleepy,
-    earOut: 0.25 * m.pleasure + 0.5 * m.fear + 0.6 * cross + 0.35 * m.sick + 0.2 * m.sleepy,
+    earFwd: 0.55 * m.arousal - 0.12 * m.pleasure - 0.55 * m.fear - 0.45 * cross - 0.25 * m.sick - 0.15 * m.sleepy + 0.15 * wary,
+    earOut: 0.25 * m.pleasure + 0.5 * m.fear + 0.6 * cross + 0.35 * m.sick + 0.2 * m.sleepy + 0.12 * wary,
     earFlat: 0.8 * m.fear + 0.25 * cross,
     whisker: 0.8 * m.arousal - 0.25 * m.pleasure - 0.9 * m.fear - 0.6 * cross - 0.3 * m.sick,
-    tailLift: 0.75 * friendly + 0.3 * m.arousal - 1.0 * scared + 0.6 * threat - 0.2 * cross - 0.5 * m.sick,
+    tailLift: 0.75 * friendly * (1 - 0.5 * wary) + 0.3 * m.arousal - 1.0 * scared + 0.6 * threat - 0.2 * cross - 0.5 * m.sick - 0.35 * wary,
     tailCurve: -0.35 * friendly + 0.35 * scared,
     tailCurl: 0,
     tailHook: 0.7 * friendly + 0.2 * m.arousal,
@@ -153,16 +160,16 @@ export function bodyFor(m: Mood): BodyLook {
     puff: 0.65 * m.fear + 0.6 * threat + 0.15 * cross,
     jaw: Math.min(1, 1.5 * threat),
     snarl: Math.min(1, 1.2 * threat + 0.25 * cross),
-    headPitch: -0.25 * scared - 0.2 * m.sick + 0.1 * m.arousal,
-    low: 0.9 * scared,
+    headPitch: -0.25 * scared - 0.2 * m.sick + 0.1 * m.arousal - 0.05 * wary,
+    low: 0.9 * scared + 0.35 * wary,
     hunch: 0.9 * m.sick,
     arch: Math.min(1, 1.6 * threat),
     stiff: Math.min(1, 1.3 * cross),
     breath: 0.2 * m.pleasure - 0.15 * m.fear + 0.15 * m.sleepy,
     tailWave: 0.35 * cross + 0.45 * cross * cross + 0.25 * m.arousal - 0.08 * m.sleepy - 0.06 * m.pleasure,
     tailWaveSpeed: 1 + 1.6 * cross + 0.8 * m.arousal - 0.4 * m.sleepy - 0.3 * m.pleasure,
-    breathRate: 1 + 0.9 * m.fear + 0.6 * cross + 0.3 * m.arousal - 0.25 * m.pleasure - 0.3 * m.sleepy,
-    earFlicks: 1 + 3 * cross + 1.5 * m.fear,
+    breathRate: 1 + 0.9 * m.fear + 0.6 * cross + 0.3 * m.arousal - 0.25 * m.pleasure - 0.3 * m.sleepy + 0.25 * wary,
+    earFlicks: 1 + 3 * cross + 1.5 * m.fear + 2 * wary,
   };
 }
 
@@ -171,10 +178,11 @@ export function bodyFor(m: Mood): BodyLook {
  * much it trusts you) as a Mood. `sick` is 0..1 as the brain works it out; `night` 0 day .. 1 night.
  */
 export function moodFromBrain(
-  b: { mode: string; pleasure: number; irritation: number; fear: number; arousal: number; sleepDepth: number; asking?: boolean },
+  b: { mode: string; pleasure: number; irritation: number; fear: number; arousal: number; sleepDepth: number; asking?: boolean; shaken?: number },
   sick: number, trust: number, night: number,
 ): Mood {
-  const dozy = b.mode === 'sleep' || b.mode === 'doze' ? Math.max(0.5, b.sleepDepth) : b.mode === 'rest' ? 0.25 : 0;
+  const asleep = b.mode === 'sleep' || b.mode === 'doze';
+  const dozy = asleep ? Math.max(0.5, b.sleepDepth) : b.mode === 'rest' ? 0.25 : 0;
   // (asking for more, the hand gone: the bliss off its face, the eyes open on you, the ears up)
   const ask = b.asking ? 1 : 0;
   return {
@@ -186,5 +194,7 @@ export function moodFromBrain(
     sick: clamp01(sick),
     trust,
     light: 0.7 - 0.55 * night,
+    // (on edge after a fright, awake: it does not show asleep)
+    wary: asleep ? 0 : clamp01(b.shaken ?? 0),
   };
 }

@@ -4134,8 +4134,15 @@ export function idleOptions(c: Ctx, atHome: boolean, posture: PoseName): Option[
     : REST.has(key) ? 1 + 0.4 * T.lazy
     : OUT.has(key) ? (1 + 0.35 * T.bold) * (1 + 0.2 * T.curious) * (1 - 0.2 * T.lazy)
     : key === 'investigate' ? (1 + 0.6 * T.curious) * (1 + 0.3 * T.bold) : 1;
+  // (on edge, a while after a fright: no games, and less going about; into the box, or by you, or
+  // keeping an eye out and a nose in the air, more)
+  const wary = m.wary ?? 0;
+  const edge = (key: string) => GAME.has(key) ? 1 - 0.75 * wary
+    : key === 'box' || key === 'by you' ? 1 + 0.8 * wary
+    : key === 'stare' || key === 'scent' ? 1 + wary
+    : OUT.has(key) ? 1 - 0.4 * wary : 1;
   const add = (key: string, w: number, make: () => Act | null, about?: string, at?: THREE.Vector3 | null) => {
-    w *= tempered(key) * (c.worth?.(key) ?? 1);
+    w *= tempered(key) * edge(key) * (c.worth?.(key) ?? 1);
     if (w > 0) opts.push({ key, w, make, about, at });
   };
   const lying = posture === 'loaf' || posture === 'sphinx' || posture === 'side' || posture === 'sit';
