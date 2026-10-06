@@ -558,7 +558,19 @@ export class PixelAvatar implements Avatar {
     // round for it wherever it is)
     if (L && !this.dotWas) N.cue('dot', 1.4);
     this.dotWas = !!L;
+    // the ears round to what it attends to, like a pair of dishes: the one on that side the
+    // further, the other a little; straight ahead, both forward
+    const A = N.attending, E = m.earTo;
+    if (A && N.awake > 0.5 && A.kind !== 'you') {
+      const to = this.headLocal.copy(A.belief).sub(this.eyeW).applyQuaternion(this.headQ.invert());
+      const az = Math.atan2(to.x, to.z), k = Math.min(1, A.a * 1.2);
+      // (the cat's left is +x: the left ear turns out to it, the right ear in)
+      const near = Math.min(1.3, Math.abs(az) * 0.9), far = Math.min(0.5, Math.abs(az) * 0.4);
+      E.L = k * (az > 0 ? near : -far);
+      E.R = k * (az > 0 ? -far : near);
+    } else { E.L = 0; E.R = 0; }
   }
+  private readonly headLocal = new THREE.Vector3();
   private dotWas = false;
 
   /** the red dot as it has it: where it believes it is, if it is sure enough (once lost, it has to

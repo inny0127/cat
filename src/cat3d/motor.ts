@@ -174,6 +174,10 @@ export class Motor {
   /** ears turned toward something: -1 the cat's right .. 1 its left */
   earAim = 0;
   private earAimS = 0;
+  /** each ear turned toward something (rad of its own swivel; the cat's attention sets it), and
+   *  how far it has got */
+  readonly earTo = { L: 0, R: 0 };
+  private readonly earToS = { L: 0, R: 0 };
   private tailFlickW = new Wobble(140, 6);
   private joltW = new Wobble(260, 12);
   /** a twitch in its sleep (a dream): a forepaw, the whiskers */
@@ -771,8 +775,12 @@ export class Motor {
     this.twitch.L = this.earL.step(dt);
     this.twitch.R = this.earR.step(dt);
     this.earAimS += (this.earAim - this.earAimS) * (1 - Math.exp(-dt * 6));
-    this.twitch.swivelL = 0.25 * noise1(t * 0.3 + 1) + 0.6 * this.earAimS;
-    this.twitch.swivelR = 0.25 * noise1(t * 0.3 + 9) + 0.6 * this.earAimS;
+    // (each ear round to what it attends to, quickly, the one nearer it the further)
+    const ke = 1 - Math.exp(-dt * 9);
+    this.earToS.L += (this.earTo.L - this.earToS.L) * ke;
+    this.earToS.R += (this.earTo.R - this.earToS.R) * ke;
+    this.twitch.swivelL = 0.25 * noise1(t * 0.3 + 1) + 0.6 * this.earAimS + this.earToS.L;
+    this.twitch.swivelR = 0.25 * noise1(t * 0.3 + 9) + 0.6 * this.earAimS + this.earToS.R;
     // startle and tail flicks: springs that settle by themselves
     p.headPitch += 0.35 * this.joltW.step(dt);
     p.neckPitch += 0.2 * this.joltW.x;
