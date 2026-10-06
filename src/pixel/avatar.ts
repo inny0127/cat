@@ -476,6 +476,7 @@ export class PixelAvatar implements Avatar {
    *  the box, it only stares). True if it was up on the sill (or in the box): its own doing */
   crash(at: THREE.Vector3) {
     if (!this.alive || this.isHidden) return false;
+    this.frightAt = at.clone();
     this.cat.motor.jolt(1.3);
     this.cat.motor.flickEar('both', 1.2);
     this.lookToYou();
@@ -1081,6 +1082,7 @@ export class PixelAvatar implements Avatar {
   thunder(loud: number, at: THREE.Vector3) {
     if (!this.alive || this.isHidden) return;
     this.hear(at);
+    if (loud > 0.4) this.frightAt = at.clone();
     // (sulking in its corner: it starts, and looks, and sulks on)
     if (loud < 0.75 || this.sleep > 0.3 || this.perched || this.errand || this.trip || this.act instanceof Sulk || Math.random() < 0.5) return;
     // (by you already: it stays by you, only starts)
@@ -1093,6 +1095,20 @@ export class PixelAvatar implements Avatar {
   }
   /** taken cover from the thunder: how long till it comes out to lie by you instead */
   private comfortIn = 0;
+  /** where its last fright came from (the window, for the thunder; where the mug broke): on edge
+   *  after it, it looks back there now and then, the ears going to it, till it settles */
+  private frightAt: THREE.Vector3 | null = null;
+  private waryLookIn = 3;
+  private waryLook(dt: number) {
+    const wary = this.mood.wary ?? 0;
+    if (wary < 0.05) { this.frightAt = null; return; }
+    if (!this.frightAt || this.sleep > 0.3 || this.act || this.errand || this.trip || this.hands.length || this.heard) return;
+    if ((this.waryLookIn -= dt) > 0) return;
+    this.waryLookIn = (4 + Math.random() * 8) / (0.4 + wary);
+    if (wary < 0.2) return;
+    this.cat.motor.flickEar('both', 0.4);
+    this.heard = { at: this.frightAt.clone(), t: 0.7 + Math.random() * 0.8, tilt: 0 };
+  }
 
   /** something to do once it is down off the sill (asked to go somewhere while up there) */
   private afterPerch: (() => void) | null = null;
@@ -1726,6 +1742,7 @@ export class PixelAvatar implements Avatar {
     this.lickHand(dt);
     this.blepNow(dt);
     this.keepTime(dt);
+    this.waryLook(dt);
     // (the lights out a moment ago, and the cat still free: off it goes)
     if (this.lightsOutIn > 0 && (this.lightsOutIn -= dt) <= 0 && !this.act && !this.hands.length && this.sleep < 0.3 && !this.perched) {
       this.act = new Zoomies(this.ctx);
