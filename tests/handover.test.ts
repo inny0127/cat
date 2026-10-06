@@ -166,3 +166,20 @@ describe('an easy walk', () => {
     expect(wandered).toBeGreaterThanOrEqual(3);
   });
 });
+
+describe('a stop at a run', () => {
+  it('slows in time to stop where it was going, not on past it and round again', () => {
+    for (const [sp, zoom] of [[1.0, 0], [1.35, 1], [0.95, 0]] as const) {
+      const m = new Motor();
+      m.snap('stand');
+      m.pos.set(0, 0, 0);
+      m.yaw = 0;
+      m.zoom = zoom;
+      let arrived = false, far = 0;
+      m.walkTo(new THREE.Vector3(0, 0, 1.4), sp, null, () => { arrived = true; });
+      for (let i = 0; i < 60 * 6 && !arrived; i++) { m.update(1 / 60); far = Math.max(far, m.pos.z); }
+      expect(arrived).toBe(true);
+      expect(far).toBeLessThan(1.42);
+    }
+  });
+});

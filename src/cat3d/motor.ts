@@ -639,6 +639,8 @@ export class Motor {
         const md = this.mood;
         const pace = this.goalSpeed <= 0.35 ? this.goalPace * clamp(1 - 0.25 * md.sleepy + 0.2 * md.arousal - 0.1 * this.lazy, 0.7, 1.25) : 1;
         want = this.goalSpeed * pace * steer * (this.goalPass ? 1 : clamp(dist / 0.14, 0.3, 1));
+        // (to stop there, slowing in time to: not on past it at a run and round again)
+        if (!this.goalPass) want = Math.min(want, Math.sqrt(2 * 0.8 * 1.4 * (1 + 2 * this.zoom) * Math.max(0, dist - 0.02)));
         if (dist < 0.025 || stuck) want = 0;
       }
     }
