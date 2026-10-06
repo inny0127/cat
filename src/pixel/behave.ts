@@ -2995,6 +2995,9 @@ export class Play implements Act {
       m.layer = null;
       this.next('sit', rand(3, 6));
     }
+    // (only stalking does it turn round to the ball: crouched to spring, in the air, swiping at it or
+    // holding it down, nothing turns it on the spot over its planted paws)
+    if ((this.phase === 'wiggle' || this.phase === 'pounce' || this.phase === 'bat' || this.phase === 'pin') && m.goal) m.stop();
     switch (this.phase) {
       case 'go': {
         m.layer = null;
@@ -3028,9 +3031,10 @@ export class Play implements Act {
           w: Math.min(1, this.t / 0.4),
         };
         // it moves: the hunter cannot wait (brushed past close by, a swipe at it)
-        if (this.ys > 0.35 && dist < 0.26 && this.t > 0.25) { this.bats = 1 + Math.floor(Math.random() * 2); this.hits.clear(); this.next('bat'); }
+        // (and only once it is round to it)
+        if (this.ys > 0.35 && dist < 0.26 && this.t > 0.25 && Math.abs(err) < 0.6) { this.bats = 1 + Math.floor(Math.random() * 2); this.hits.clear(); this.next('bat'); }
         else if (this.ys > 0.12 && this.t > 0.4 && Math.abs(err) < 0.4) this.next('wiggle', rand(0.3, 0.6));
-        else if (this.t > this.dur) this.next('wiggle', rand(0.7, 1.3));
+        else if (this.t > this.dur && (Math.abs(err) < 0.4 || this.t > this.dur + 2)) this.next('wiggle', rand(0.7, 1.3));
         return true;
       }
       case 'wiggle': {
@@ -3110,6 +3114,8 @@ export class Play implements Act {
           else this.next('sit', rand(3, 6));
           return true;
         }
+        // (gone off round to its side: no swiping at it there; round to it again, low)
+        if (Math.abs(wrapA(face - m.yaw)) > 0.9 && u < 0.2) { m.layer = null; this.next('stalk', rand(0.3, 0.6)); return true; }
         const right = k % 2 === 0;
         const lift = Math.sin(Math.PI * u);
         const across = u < 0.45 ? 0.045 : 0.045 - 0.09 * (u - 0.45) / 0.55;
