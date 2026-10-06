@@ -343,14 +343,15 @@ export class Body {
     const Mg = this.t.c.copy(M).applyQuaternion(girdleQ);
     M.lerp(Mg, 1 - ground).normalize();
     const W = this.t.d.copy(T).addScaledVector(M, -L.len[2]);
-    // (the more the leg is folded, the further the elbow goes out to the side, as a crouching
-    // cat's does, clear of its chest; and if it would still be in through the chest or the belly,
-    // further out again)
-    let splay = 0.12 + 0.9 * Math.max(0, 0.85 - W.distanceTo(S) / (L.len[0] + L.len[1]));
+    // (a leg it stands on: the more it is folded, the further the elbow goes out to the side, as a
+    // crouching cat's does, clear of its chest; and if it would still be in through the chest or
+    // the belly, further out again. Not a leg it lies on or holds up: lying curled on its side,
+    // out to the side is up, and the elbow would come out through its back)
+    let splay = 0.12 + 0.9 * ground * Math.max(0, 0.85 - W.distanceTo(S) / (L.len[0] + L.len[1]));
     const pole = this.bendPole(L, S, W, girdleQ, -1, this.t.e, splay);
     const E = this.t.f, W2 = this.t.g;
     twoBone(S, L.len[0], L.len[1], W, pole, E, W2);
-    for (let k = 0; k < 3 && (this.inTrunk(E) || this.inTrunk(this.cl.m.copy(E).lerp(W2, 0.5))); k++) {
+    for (let k = 0; ground > 0.5 && k < 3 && (this.inTrunk(E) || this.inTrunk(this.cl.m.copy(E).lerp(W2, 0.5))); k++) {
       splay += 0.45;
       this.bendPole(L, S, W, girdleQ, -1, pole, splay);
       twoBone(S, L.len[0], L.len[1], W, pole, E, W2);
