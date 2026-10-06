@@ -558,12 +558,35 @@ export const scratchEar = () => {
   return new Settled(L, 'sit');
 };
 
-/** kneading: the front paws treading in turn, as kittens do at their mother */
-export const knead = () => new Layered('knead', 1e9, 0.5, (t) => {
-  const ph = t * Math.PI * 2 * 1.4;
-  const l = Math.max(0, Math.sin(ph)), r = Math.max(0, Math.sin(ph + Math.PI));
-  return { LF: { y: 0.012 + 0.02 * l, flex: 0.4 * l }, RF: { y: 0.012 + 0.02 * r, flex: 0.4 * r }, eyeOpen: 0.3, squint: 0.5 };
-}, 'sphinx');
+/** kneading: the front paws treading in turn, as kittens do at their mother; harder and softer by
+ *  turns, and every few seconds a lull, both paws down a moment, the eyes all but shut, before it
+ *  takes it up again */
+export const knead = () => {
+  const seed = Math.random() * 10;
+  // (the lulls, laid out as far ahead as wanted: from when, to when)
+  const lulls: [number, number][] = [];
+  let next = rand(4, 9);
+  const going = (t: number) => {
+    while (next < t + 3) {
+      const len = rand(0.6, 1.4);
+      lulls.push([next, next + len]);
+      next += len + rand(4, 9);
+    }
+    let k = 1;
+    for (const [a, b] of lulls) {
+      if (t < a - 0.3 || t > b + 0.3) continue;
+      const off = Math.min(Math.min(1, (t - (a - 0.3)) / 0.3), Math.min(1, (b + 0.3 - t) / 0.3));
+      k = Math.min(k, 1 - off * off * (3 - 2 * off));
+    }
+    return k;
+  };
+  return new Layered('knead', 1e9, 0.5, (t) => {
+    const ph = t * Math.PI * 2 * 1.4, g = going(t);
+    const amp = g * (0.8 + 0.2 * Math.sin(0.23 * t + seed) * Math.sin(0.41 * t + 2 * seed));
+    const l = Math.max(0, Math.sin(ph)) * amp, r = Math.max(0, Math.sin(ph + Math.PI)) * amp;
+    return { LF: { y: 0.012 + 0.02 * l, flex: 0.4 * l }, RF: { y: 0.012 + 0.02 * r, flex: 0.4 * r }, eyeOpen: 0.2 + 0.1 * g, squint: 0.5 };
+  }, 'sphinx');
+};
 
 /** booped on the nose: the face screwed up a moment, the eyes squeezed shut and the whiskers back,
  *  the head drawn back a little; then a lick of the nose and a quick shake of the head */

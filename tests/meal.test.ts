@@ -67,3 +67,25 @@ describe('grooming in bouts', () => {
     }
   });
 });
+
+describe('kneading', () => {
+  it('treads in turn, harder and softer, with a lull now and then; no paw ever jumps', async () => {
+    const { knead } = await import('../src/pixel/behave');
+    for (const r of [0.1, 0.5, 0.9]) {
+      const rnd = vi.spyOn(Math, 'random').mockReturnValue(r);
+      const act = knead() as unknown as { shape: (t: number) => { LF: { y: number }; RF: { y: number } } };
+      let prev = act.shape(0), jump = 0, still = 0, longest = 0;
+      for (let t = 1 / 60; t < 30; t += 1 / 60) {
+        const L = act.shape(t);
+        jump = Math.max(jump, Math.abs(L.LF.y - prev.LF.y), Math.abs(L.RF.y - prev.RF.y));
+        // (both paws down)
+        still = L.LF.y < 0.0125 && L.RF.y < 0.0125 ? still + 1 / 60 : 0;
+        longest = Math.max(longest, still);
+        prev = L;
+      }
+      rnd.mockRestore();
+      expect(jump).toBeLessThan(0.006);
+      expect(longest).toBeGreaterThan(0.5);
+    }
+  });
+});
