@@ -89,6 +89,9 @@ export class Cat3D {
   /** the eyeball's radius (m) */
   private eyeRadius = 0.007;
   private breathT = 0;
+  /** this breath: how much longer than the mood has it, and how much deeper */
+  private breathK = 1;
+  private breathD = 1;
   private readonly corrPoses: string[];
   strandUniforms: { uPx: { value: number }; uStrandWidth: { value: number }; uStrandLen: { value: number }; uStrandAlpha: { value: number } } | null = null;
 
@@ -491,8 +494,18 @@ export class Cat3D {
     const sg = this.sighT >= 0 ? Math.sin(Math.PI * Math.min(1, this.sighT / 3.2)) : 0;
     if (this.sighT >= 0 && (this.sighT += dt) > 3.2) this.sighT = -1;
     // (out of breath after a run: quicker, as well as deeper)
-    this.breathT += dt * (0.55 + 0.25 * (1 - p.breath)) * Math.max(0.3, motor.feel.breathRate) * (1 + 1.8 * motor.exertion) * (1 - 0.55 * sg);
-    this.shared.uBreath.value = 0.0022 * p.breath * (1 + 1.6 * sg) * Math.sin(this.breathT * Math.PI * 2);
+    // (each breath its own: a little longer or shorter, shallower or deeper than the last, now and
+    // then a big one; in quicker than out, and a moment still at the bottom of it)
+    const was = this.breathT;
+    this.breathT += dt * (0.55 + 0.25 * (1 - p.breath)) * Math.max(0.3, motor.feel.breathRate) * (1 + 1.8 * motor.exertion) * (1 - 0.55 * sg) / this.breathK;
+    if (Math.floor(this.breathT) !== Math.floor(was)) {
+      const big = Math.random() < 0.06;
+      this.breathK = big ? 1.35 : 0.88 + 0.24 * Math.random();
+      this.breathD = big ? 1.5 : 0.85 + 0.3 * Math.random();
+    }
+    const u = this.breathT - Math.floor(this.breathT), sm = (x: number) => x * x * (3 - 2 * x);
+    const f = u < 0.38 ? sm(u / 0.38) : u < 0.86 ? 1 - sm((u - 0.38) / 0.48) : 0;
+    this.shared.uBreath.value = 0.0022 * p.breath * this.breathD * (1 + 1.6 * sg) * (2 * f - 1);
     this.shared.uPuff.value = p.puff;
     // the skin of its back twitching, overstimulated: a wave back along it every second or so
     // while it lasts, quick, a few millimetres high
