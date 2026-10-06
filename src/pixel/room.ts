@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { AO_GLSL, LIGHT_GLSL } from '../cat3d/fur';
 import { ROOM_LIGHT_GLSL, NOCC, cloudAt, dayLight, fogAt, moonLit, moonPhase, rainAt, skyDay, stormAt, type DayLight } from '../cat3d/roomlight';
 import { PIX, PIX_GLSL, PIX_STEPS, type Material } from '../cat3d/pixclass';
@@ -158,6 +159,8 @@ void main() {
     // ramp, as the curtain's folds are, below, so the form survives the art pass's banding)
     float d = dot(N, normalize(vec3(-0.42, 0.55, 0.72)));
     fold = d > 0.79 ? 1 : d < 0.22 ? -1 : 0;
+    // (only where it turns: the flat of a face, the radio's front, keeps its own light)
+    if (length(fwidth(N)) < 0.012) fold = 0;
     tone += 0.05 * (d - 0.55);
   } else if (uPattern == 10) {
     // a curtain hanging in folds, painted as folds are painted: in upright bands, the cloth's own
@@ -894,8 +897,8 @@ uniform float uSeed;
 uniform float uDay;
 void main() {
   float tw = 0.5 + 0.5 * sin(uTime * (0.8 + uSeed) + uSeed * 9.0);
-  // (unlit: clear glass, catching the day)
-  vec3 off = mix(vec3(0.3, 0.27, 0.3), vec3(0.86, 0.82, 0.76), uDay);
+  // (unlit: coloured glass, catching the day, each bulb a pale tint of the colour it lights)
+  vec3 off = mix(vec3(0.3, 0.27, 0.3), mix(vec3(0.86, 0.82, 0.76), uCol, 0.35), uDay);
   // lit, it breathes: dimming, a filament goes amber, never a dull grey
   vec3 on = mix(uCol * vec3(0.95, 0.66, 0.4), uCol, tw);
   // alpha 0.2: shown as it is, and glowing (when lit)
@@ -1394,9 +1397,15 @@ export class Room {
     // two knobs and a handle (tapping it switches it on and off)
     const radio = new THREE.Group();
     const rw = 0.105, rh = 0.068, rd = 0.045;
-    radio.add(shadowy(new THREE.Mesh(new THREE.BoxGeometry(rw, rh, rd), this.mat('brown', { tone: 0.06 }))));
+    // (its case rounded at the corners, as old radios' were, and painted in the round: its upper
+    // left edges catching the light, its right and lower ones in shade; the grille set in a darker
+    // frame of the wood)
+    radio.add(shadowy(new THREE.Mesh(new RoundedBoxGeometry(rw, rh, rd, 3, 0.009), this.mat('brown', { tone: 0.06, pattern: 9 }))));
+    const bezel = new THREE.Mesh(new THREE.PlaneGeometry(rw * 0.5 + 0.007, rh * 0.62 + 0.007), this.mat('brown', { tone: -0.2 }));
+    bezel.position.set(-rw * 0.2, 0.002, rd / 2 + 0.0005);
+    radio.add(bezel);
     const grille = new THREE.Mesh(new THREE.PlaneGeometry(rw * 0.5, rh * 0.62), this.mat('rugCream', { tone: -0.05 }));
-    grille.position.set(-rw * 0.2, 0.002, rd / 2 + 0.0008);
+    grille.position.set(-rw * 0.2, 0.002, rd / 2 + 0.0009);
     radio.add(grille);
     for (let i = 0; i < 4; i++) {
       const slat = new THREE.Mesh(new THREE.PlaneGeometry(rw * 0.5, 0.0035), this.mat('brown', { tone: -0.12 }));
