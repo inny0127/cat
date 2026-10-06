@@ -1284,6 +1284,9 @@ export class PixelAvatar implements Avatar {
    */
   private lieIn(p: PoseName, atHome: boolean, dt: number) {
     const m = this.cat.motor;
+    // (up on its feet to turn round to something behind it (orient): let it, and settle after; not
+    // sat straight back down the next moment, the turn undone)
+    if (m.goal && !this.touched && !this.hands.length) return;
     if (this.touched) p = this.sameWay(p);
     const b = this.bedSpot(p);
     const e = wrap(b.yaw - m.yaw);
