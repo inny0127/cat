@@ -75,8 +75,10 @@ export class Whim {
       else if (A && A.a > 0.6) I.on = Math.max(0, I.on - 0.5 * dt);
       if (I.on >= I.dwell) return this.begin(eyes);
       const u = eyes.unit(I.id);
-      // (out of sight, round behind it or the far side of something: it knows where it is, and goes)
+      // (out of sight, round behind it or the far side of something: it knows where it is, and goes;
+      // only just in sight, out at the edge of its eyes, a moment later)
       if (I.t > 0.8 && I.on <= 0 && (!u || u.vis < 0.2)) return this.begin(eyes);
+      if (I.t > 1.5 && I.on <= 0 && u && u.vis < 0.5) return this.begin(eyes);
       // (in sight, and its eyes never got there: something else had them, and it is forgotten)
       if (I.t > 3) this.drop(eyes);
       return null;

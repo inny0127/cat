@@ -13,6 +13,7 @@ import { Firsts } from '../ui/firsts';
 import { SlowWatch } from './pace';
 import { Brain } from '../sim/brain';
 import { loadState, newCat, saveState, type CatState } from '../sim/state';
+import { HABITS, expectation, note, type Habit } from '../sim/habits';
 import { stepLife, THRESH } from '../sim/life';
 import { clamp } from '../util/math';
 import { PixelAvatar } from './avatar';
@@ -1177,6 +1178,35 @@ export class PixelApp {
   /** a finger holding the feather wand (where, which) */
   private wandFinger: { x: number; y: number; id: number } | null = null;
 
+  /** what the cat learns of your hours (habits.ts): a game begun with the red dot, the feathers or
+   *  the ball under your finger, or strokes, is one more time it came at this hour (once a sitting:
+   *  not again within ten minutes); and every few seconds, what it looks for just now */
+  private habitIn = 0;
+  private readonly noted: Record<Habit, number> = { laser: -1e15, wand: -1e15, yarn: -1e15, pet: -1e15 };
+  private wasDoing: string | null = null;
+  private readonly pointerW = new THREE.Vector3();
+  private learnHabits(now: number, dt: number, stroked: boolean) {
+    const s = this.state, doing = this.avatar.doing;
+    const begun = doing !== this.wasDoing ? doing : null;
+    this.wasDoing = doing;
+    const once = (k: Habit) => {
+      if (now - this.noted[k] < 10 * 60_000) return;
+      this.noted[k] = now;
+      note(s, k, now);
+    };
+    if (begun === 'chase' && this.laser.held) once('laser');
+    else if (begun === 'tease' && this.wandFinger) once('wand');
+    else if (begun === 'play' && this.toyFinger) once('yarn');
+    if (stroked) once('pet');
+    if ((this.habitIn -= dt) <= 0) {
+      this.habitIn = 5;
+      for (const k of HABITS) this.avatar.expects[k] = expectation(s, k, now);
+    }
+    // (where the laser pointer lies, for its eyes to go to, when it is lying there)
+    const P = this.room.pointer;
+    this.avatar.pointerAt = P.visible ? P.getWorldPosition(this.pointerW) : null;
+  }
+
   /** is the feather wand under a screen point: its feathers (a finger is wider than they are), or
    *  its cane where it shows */
   private hitWand(sx: number, sy: number) {
@@ -1595,6 +1625,7 @@ export class PixelApp {
     const resting = this.input.onGlass();
     if (resting.length) this.fingerOnGlass(resting[0].sx, resting[0].sy);
     this.avatar.music = this.audio.musicPlaying;
+    this.learnHabits(clock.getTime(), dt, contacts.length > 0);
     this.avatar.update(dt);
     const landed = this.avatar.pawLanded;
     // (its cheek rubbed on the glass at your finger: felt, a soft bump each time)

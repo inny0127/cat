@@ -542,6 +542,7 @@ export class PixelAvatar implements Avatar {
     // (places it knows, looked at now and then: the window; its bowls, the more the hungrier or
     // thirstier it is)
     if (this.windowAt) T.push({ id: 'window', kind: 'spot', p: this.windowAt });
+    if (this.pointerAt) T.push({ id: 'pointer', kind: 'spot', p: this.pointerAt });
     if (this.spots) {
       T.push({ id: 'food', kind: 'spot', p: this.spots.food }, { id: 'water', kind: 'spot', p: this.spots.water });
     }
@@ -565,6 +566,12 @@ export class PixelAvatar implements Avatar {
     N.bias.clear();
     N.bias.set('food', 0.35 * Math.max(0, this.needs.hunger - 0.4));
     N.bias.set('water', 0.35 * Math.max(0, this.needs.thirst - 0.4));
+    // (the hour you mostly play with it: its eyes go to the pointer lying on the sill, the feathers,
+    // the ball, as a cat's do to the door at the time someone comes home)
+    const X = this.expects;
+    N.bias.set('pointer', 0.5 * X.laser);
+    if (!this.wand?.held) N.bias.set('wand', 0.4 * X.wand);
+    N.bias.set('yarn', 0.35 * X.yarn);
     if (this.act instanceof Chase) N.bias.set('dot', 0.45);
     else if (this.act instanceof Tease) N.bias.set('wand', 0.4);
     else if (this.act?.name === 'play') N.bias.set('yarn', 0.35);
@@ -846,6 +853,11 @@ export class PixelAvatar implements Avatar {
   private easyNow = false;
   /** its temperament (state.ts: bold, playful, lazy, curious, each -1 .. 1; set by the app) */
   temper = { bold: 0, playful: 0, lazy: 0, curious: 0 };
+  /** what it looks for just now, by the hour it is (habits.ts, 0 .. 1; set by the app): a game
+   *  with the red dot, the feathers, the ball of wool; strokes. And where the laser pointer lies,
+   *  if it is lying there */
+  readonly expects = { laser: 0, wand: 0, yarn: 0, pet: 0 };
+  pointerAt: THREE.Vector3 | null = null;
   private dreamIn = 20;
   private scoot: { t: number; dx: number; dz: number; len: number } | null = null;
   private scootIn = 0.4;
@@ -907,6 +919,8 @@ export class PixelAvatar implements Avatar {
       laser: () => this.seenLaser(),
       gaze: (id) => (this.nerves.attending?.id === id ? this.nerves.gazePoint : null),
       curious: () => this.curiosity(),
+      expects: () => this.expects,
+      pointer: () => this.pointerAt,
       seen: (id) => {
         const u = this.nerves.unit(id);
         return u && u.conf > 0.25 ? u.belief : null;
@@ -1433,7 +1447,7 @@ export class PixelAvatar implements Avatar {
       if (this.laserT > this.laserNeed && this.chaseNow()) this.laserT = 0;
     } else {
       this.laserT = 0;
-      this.laserNeed = 0.15 + Math.random() * 0.45;
+      this.laserNeed = (0.15 + Math.random() * 0.45) * (1 - 0.6 * this.expects.laser);
     }
     // the feathers on the wand dangled and twitched: watched a moment, then it has to have them
     this.teaseRest = Math.max(0, this.teaseRest - dt);
@@ -1443,7 +1457,7 @@ export class PixelAvatar implements Avatar {
       if (this.wandT > this.wandNeed && this.teaseNow()) this.wandT = 0;
     } else {
       this.wandT = 0;
-      this.wandNeed = 0.3 + Math.random() * 0.6;
+      this.wandNeed = (0.3 + Math.random() * 0.6) * (1 - 0.6 * this.expects.wand);
     }
     // a ball someone is moving about: watched a moment, then it has to have it
     if (this.lure && this.act?.name !== 'play') {

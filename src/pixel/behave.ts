@@ -98,6 +98,10 @@ export interface Ctx {
    *  sight of), if it has a fair idea; what it goes for and aims at (a paw lands where the thing
    *  really is, or misses) */
   seen?: (id: string) => THREE.Vector3 | null;
+  /** what it looks for just now, by the hour (habits.ts, 0 .. 1): a game with the red dot, the
+   *  feathers, the ball of wool; strokes. And where the laser pointer lies, if it is lying there */
+  expects?: () => { laser: number; wand: number; yarn: number; pet: number };
+  pointer?: () => THREE.Vector3 | null;
   /** its temperament (state.ts: bold, playful, lazy, curious, each -1 .. 1) */
   temper?: { bold: number; playful: number; lazy: number; curious: number };
   /** one of its things moved while it was not looking, and where it is now: something to go and
@@ -2291,6 +2295,28 @@ export const wander = (c: Ctx) => {
 };
 
 /**
+ * About the hour you mostly play with it: it goes and waits by the thing (the laser pointer on the
+ * sill, the feathers, the ball of wool), sat a little side-on to you between it and you, its eyes
+ * going from it to you and back, and now and then a little meow about it.
+ */
+export const waitBy = (c: Ctx, at: THREE.Vector3) => {
+  const you = c.viewer();
+  // (a little way off it, on your side of it)
+  const dx = you.x - at.x, dz = you.z - at.z, d = Math.hypot(dx, dz) || 1;
+  const to = c.keepClear(new THREE.Vector3(at.x + (dx / d) * 0.3, 0, at.z + (dz / d) * 0.3), 0.12);
+  const face = Math.atan2(you.x - to.x, you.z - to.z) + (Math.random() < 0.5 ? -1 : 1) * 0.42;
+  const stay = rand(8, 20), say = rand(2, stay - 2);
+  let said = false;
+  return new Walk('wait', [{
+    to, face, stay, posture: 'sit',
+    layer: (t, m) => {
+      if (!said && t > say) { said = true; if (Math.random() < 0.6) m.vocalize(Math.random() < 0.5 ? 'meowSoft' : 'trill', 0.45); }
+      return { earFwd: 0.4, tailCurl: 0.4 * Math.sin(t * 3) };
+    },
+  }]);
+};
+
+/**
  * One of its things not where it was (the ball of wool, the toy mouse, the feathers moved while it
  * was not looking): over to it, slowing as it comes, and a look at it close, the neck stretched out
  * to it and the nose working, the ears and whiskers forward, a little wary of it (the tail low);
@@ -3770,7 +3796,9 @@ export function idleOptions(c: Ctx, atHome: boolean, posture: PoseName): Option[
     add('sneeze', 0.1, () => sneeze(c));
     add('scratch', 0.22, scratchEar);
     add('stare', 0.25 * (0.5 + m.arousal) * (1 - m.sleepy), () => new Stare(c));
-    add('window', 0.9 * Math.max(0, Math.min(1, m.trust + 0.3)) * (1 + m.arousal) + (c.mode === 'alert' ? 0.8 : 0), () => toWindow(c), 'you');
+    // (the hour you mostly stroke it: over to you, and as near you as it can get, more)
+    const strokes = c.expects?.().pet ?? 0;
+    add('window', (0.9 * Math.max(0, Math.min(1, m.trust + 0.3)) * (1 + m.arousal) + (c.mode === 'alert' ? 0.8 : 0)) * (1 + 1.5 * strokes), () => toWindow(c), 'you');
     add('wander', 0.5 * (1 + m.arousal) * (1 - m.sleepy), () => wander(c));
     // content and about, it goes and marks its things
     const posts = c.posts();
@@ -3789,7 +3817,7 @@ export function idleOptions(c: Ctx, atHome: boolean, posture: PoseName): Option[
     const warm = c.warm();
     if (c.mode === 'rest' && warm) add('warm', 0.8 + 0.8 * m.sleepy, () => warmUp(c), undefined, warm.at);
     // very fond of you and drowsy: a nap as near you as it can get
-    if (c.mode === 'rest' && m.trust > 0.55) add('by you', 1.2 * (m.trust - 0.5) * (0.3 + m.sleepy), () => byYou(c), 'you');
+    if (c.mode === 'rest' && m.trust > 0.55) add('by you', 1.2 * (m.trust - 0.5) * (0.3 + m.sleepy) * (1 + 1.5 * strokes), () => byYou(c), 'you');
     if (c.yarn()) add('play', 0.6 * (0.4 + m.arousal) * (1 - m.sleepy) * (c.mode === 'rest' ? 1 : 0.4), () => new Play(), 'yarn');
     // the feathers of the wand lying on the floor: now and then a game with them on its own
     const lure = c.lure();
@@ -3803,7 +3831,18 @@ export function idleOptions(c: Ctx, atHome: boolean, posture: PoseName): Option[
     }
     // in the mood for a game and fond of you, now and then it comes and asks you for one at the
     // glass
-    if (m.trust > 0.3) add('ask', 0.35 * Math.max(0, m.arousal - 0.15) * Math.min(1, m.trust + 0.2) * (1 - m.sleepy), () => new PawGlass(c.finger, true), 'you');
+    // (the more, about the hour you mostly play with it)
+    const X = c.expects?.() ?? { laser: 0, wand: 0, yarn: 0, pet: 0 };
+    const game = Math.max(X.laser, X.wand, X.yarn);
+    if (m.trust > 0.3) add('ask', 0.35 * (Math.max(0, m.arousal - 0.15) + 0.8 * game) * Math.min(1, m.trust + 0.2) * (1 - m.sleepy), () => new PawGlass(c.finger, true), 'you');
+    // (and now and then it goes and waits by the thing itself: the pointer on the sill, the
+    // feathers, the ball)
+    if (game > 0.15) {
+      const pointer = c.pointer?.(), lyingLure = lure && !lure.held ? lure.p : null, ball = c.yarn();
+      const which = X.laser >= X.wand && X.laser >= X.yarn && pointer ? { id: 'pointer', at: pointer }
+        : X.wand >= X.yarn && lyingLure ? { id: 'wand', at: lyingLure } : ball ? { id: 'yarn', at: ball } : null;
+      if (which) add('wait', 3 * game * (1 - m.sleepy), () => waitBy(c, which.at.clone().setY(0)), which.id);
+    }
     const box = c.box();
     if (box) add('box', 0.7 * (1 - 0.4 * m.sleepy), () => new Box(box), undefined, box.seat);
     // playful and with nothing better to do: its own tail
