@@ -46,6 +46,8 @@ export class Tease implements Act {
   private still = 0;
   private side = Math.random() < 0.5 ? 1 : -1;
   private leaps = 0;
+  /** sat up to swat, how long the feathers have been off out of its reach (s) */
+  private offFor = 0;
   private hit = false;
   /** over on its side kicking them, once a catch; which side (1: its right side down) */
   private kicked = false;
@@ -139,7 +141,10 @@ export class Tease implements Act {
         // floor)
         // (sat up after a swat or a rear, and them still up there in reach: it stays sat up for the
         // next, as a cat does, not down into a crouch and up again with every swat)
-        const satUp = m.targetPosture === 'sit' && h > 0.09 && dist <= 0.32;
+        // (swung off a little by its own swat, a moment: it waits for them to come back, sat)
+        const upThere = h > 0.09 && dist <= 0.42;
+        this.offFor = m.targetPosture === 'sit' && !upThere ? this.offFor + dt : 0;
+        const satUp = m.targetPosture === 'sit' && (upThere || this.offFor < 0.7);
         if (!satUp && m.targetPosture !== 'crouch') m.setPosture('crouch');
         if (Math.abs(wrapA(face - m.yaw)) > 0.45 && !m.goal && dist > 0.05) m.walkTo(m.pos.clone(), 0.15, face);
         const wg = h < 0.12 && this.ls > 0.1 ? Math.sin(this.t * Math.PI * 2 * 4) : 0;
