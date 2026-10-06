@@ -126,6 +126,8 @@ export class Motor {
    *  any nearer (something in the way it cannot get round: as near as it will get) */
   private goalBest = Infinity;
   private goalStall = 0;
+  /** this walk's own pace (never two walks quite alike) */
+  private goalPace = 1;
   onArrive: (() => void) | null = null;
   maxSpeed = 1.6;
   /** what is in the way on the floor (circles: middle and radius), round which a walk bends; and
@@ -282,7 +284,11 @@ export class Motor {
     copyPose(this.to, POSES[next]);
     if (TAIL_FLIPS.has(next) && !TAIL_FLIPS.has(this.posture) && (LOW[this.posture] ?? 2) >= 2) this.tailFlip = Math.random() < 0.5 ? 1 : -1;
     this.flipTail(this.to, next);
-    this.tdur = edgeTime(this.posture, next) * (0.9 + Math.random() * 0.2);
+    // (in its own time: languid when drowsy, quick when keyed up or frightened, quicker still in a
+    // mad rush; and never twice quite the same)
+    const md = this.mood;
+    const tempo = clamp(1 + 0.45 * md.sleepy - 0.3 * md.arousal - 0.35 * md.fear - 0.25 * this.zoom, 0.6, 1.5);
+    this.tdur = edgeTime(this.posture, next) * (0.85 + Math.random() * 0.3) * tempo;
     this.sched = (LOW[next] ?? 2) > (LOW[this.posture] ?? 2) ? RISE : SCHEDULE;
     this.posture = next;
     this.tt = 0;
@@ -306,6 +312,7 @@ export class Motor {
     if (!this.goal || Math.hypot(p.x - this.goal.x, p.z - this.goal.z) > 0.02) {
       this.goalBest = Infinity;
       this.goalStall = 0;
+      this.goalPace = 0.9 + 0.2 * Math.random();
     }
     this.goal = p.clone();
     this.goal.y = 0;
@@ -561,7 +568,11 @@ export class Motor {
         const facing = Math.cos(e);
         const steer = this.goalPass ? clamp(0.45 + 0.55 * facing, 0.15, 1)
           : clamp(0.35 + 0.65 * facing, 0.1, 1) * (Math.abs(e) > 0.6 ? clamp(dist / 0.25, 0.35, 1) : 1);
-        want = this.goalSpeed * steer * (this.goalPass ? 1 : clamp(dist / 0.14, 0.3, 1));
+        // (an easy walk at its own pace, and its mood's: dawdling drowsy, brisk keyed up; a run is
+        // as fast as it is asked)
+        const md = this.mood;
+        const pace = this.goalSpeed <= 0.35 ? this.goalPace * clamp(1 - 0.25 * md.sleepy + 0.2 * md.arousal, 0.7, 1.25) : 1;
+        want = this.goalSpeed * pace * steer * (this.goalPass ? 1 : clamp(dist / 0.14, 0.3, 1));
         if (dist < 0.025 || stuck) want = 0;
       }
     }
