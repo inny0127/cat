@@ -4,7 +4,7 @@ import { POSES, SIDE_TURN, type Leg, type PoseLayer, type PoseName } from '../ca
 import { NEUTRAL, type Mood } from '../cat3d/mood';
 import type { Avatar } from '../sim/avatar';
 import type { EarMood, TailMood } from '../rig/animator';
-import { boop, byYou, canGlance, coolOff, feel, idleOptions, mealLayer, mealPlan, type MealPlan, groomChest, groomFlank, knead, lookWith, restingPose, sneeze, toBed, toWindow, wander, warmUp, washFace, yawn, type Act, type Ctx, sunbathe, Play, Sill, Hunt, Box, Zoomies, Walk, Stare, Rub, scratchEar, wakeUp, stretchSideOn, Greet, Gift, Snub, Beg, PawGlass, TailChase, Claw, Top, Fish, Bat, Trap, Sulk, isPerching, type Perching, type ScratchPost, type GlassFinger, type SillSpot, type SulkSpot } from './behave';
+import { boop, byYou, canGlance, coolOff, feel, huff, idleOptions, mealLayer, mealPlan, type MealPlan, groomChest, groomFlank, knead, lookWith, restingPose, sneeze, toBed, toWindow, wander, warmUp, washFace, yawn, type Act, type Ctx, sunbathe, Play, Sill, Hunt, Box, Zoomies, Walk, Stare, Rub, scratchEar, wakeUp, stretchSideOn, Greet, Gift, Snub, Beg, PawGlass, TailChase, Claw, Top, Fish, Bat, Trap, Sulk, isPerching, type Perching, type ScratchPost, type GlassFinger, type SillSpot, type SulkSpot } from './behave';
 import { Chase, Startle, type LaserDot } from './chase';
 import { Tease, type Lure } from './tease';
 import { GOAL, Whim } from './whim';
@@ -1522,6 +1522,8 @@ export class PixelAvatar implements Avatar {
         this.act.stop(c);
         // (asked for a moment of you and no one came: then it will be by you)
         const unanswered = this.nudge === 2 && this.act instanceof PawGlass && this.act.unanswered;
+        // (asked you for a game of its own accord, and no one came: as often as not, a huff)
+        const ignored = !unanswered && this.act instanceof PawGlass && this.act.unanswered && Math.random() < 0.6;
         if (this.nudge === 2) this.nudge = 0;
         // played itself out: not again for a while
         if (this.act instanceof Play) this.playRest = this.act.tired ? 60 : 6;
@@ -1538,7 +1540,11 @@ export class PixelAvatar implements Avatar {
         const fetch = this.act instanceof Fish && this.act.out;
         // (made up with in its corner: over to the glass to you, as it would come to say hello)
         const madeUp = this.act instanceof Sulk && this.act.phase === 'round' && this.mode === 'rest' && this.mood.trust > 0.3;
-        this.act = unanswered ? byYou(c) : proud ? new Claw(post!) : fetch ? new Gift(true) : madeUp ? new Greet(0.4 + 0.5 * Math.max(0, this.mood.trust)) : null;
+        this.act = unanswered ? byYou(c) : proud ? new Claw(post!) : fetch ? new Gift(true) : madeUp ? new Greet(0.4 + 0.5 * Math.max(0, this.mood.trust)) : ignored ? huff() : null;
+        if (ignored) {
+          this.cat.sigh();
+          this.outside?.sound('sigh', 0.09);
+        }
       }
       return;
     }

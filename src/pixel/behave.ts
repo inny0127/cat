@@ -348,6 +348,13 @@ function blendLayers(a: PoseLayer, b: PoseLayer, k: number): PoseLayer {
   return out as PoseLayer;
 }
 
+/** a huff: asked you for something and no one came, the head drops a moment with a sigh, the ears
+ *  go out a little, and it is over it */
+export const huff = () => new Layered('huff', 1.8, 0.45, (t) => {
+  const k = Math.sin(Math.PI * Math.min(1, t / 1.8));
+  return { neckPitch: -0.2 * k, headPitch: -0.1 * k, earOut: 0.25 * k, earFwd: -0.15 * k, eyeOpen: 0.95 - 0.35 * k };
+});
+
 /** a big yawn: the mouth wide, the tongue curled up at its tip in the bottom of it, eyes squeezed,
  *  head back, ears out; now and then you hear it */
 export const yawn = (heard = Math.random() < 0.5) => new Layered('yawn', 2.4, 0.7, () => ({
