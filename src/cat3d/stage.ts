@@ -287,8 +287,8 @@ void main() {
     int level = stepOf(L, kind == 2 && dithers(mat), p, max(sx, sy));
     // the cat: a pixel in a light that none (or only one) of its neighbours in the same colour are
     // in takes the light most of them are in, so the coat is painted in clean bands of light and
-    // shade, not salted with specks of the one next to it
-    if (kind == 1) {
+    // shade, not salted with specks of the one next to it (and so the curtains' folds)
+    if (kind == 1 || (kind == 2 && mat == ${PIX.curtain})) {
       int cnt[5] = int[](0, 0, 0, 0, 0);
       int nSame = 0, sameLv = 0;
       for (int i = 0; i < 8; i++) {

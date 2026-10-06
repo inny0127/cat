@@ -163,15 +163,17 @@ void main() {
     if (length(fwidth(N)) < 0.012) fold = 0;
     tone += 0.05 * (d - 0.55);
   } else if (uPattern == 10) {
-    // a curtain hanging in folds, painted as folds are painted: in upright bands, the cloth's own
-    // colour with a narrow line of light up the side of each fold that faces the window and a band
-    // of shade down the side away from it into the fold. The light on it is the flat cloth's, and
-    // the folds are steps of the ramp up or down from it (below): lit fold by fold, the falloff of
-    // the lamp's and the fairy lights' light broke the bands into flames and bows
-    // (t: across a fold from the deepest of it, 0, up the side facing the window to the top, 0.5,
-    // and down the far side)
-    float t = fract(uSide * (vLocal.x / 0.17 * 5.0 + 0.5) * 0.5);
-    fold = t >= 0.14 && t < 0.27 ? 1 : t >= 0.6 && t < 0.93 ? -1 : 0;
+    // a curtain hanging in folds, painted as folds are painted: the side of each fold that faces
+    // the window a step up the ramp, the side turned away from it a step down, and deep in a fold
+    // a step down again; at its foot the hem, turned up double, a shade darker, and its lower edge
+    // in shadow. The light on it is the flat cloth's, and the folds are steps of the ramp up or
+    // down from it (below): lit fold by fold, the falloff of the lamp's and the fairy lights'
+    // light broke the bands into flames and bows. (vUv: x how far forward the cloth is there, -1
+    // deep in a fold .. 1 the front of one; y how far down it, 0 at the rings .. 1 at the hem)
+    float across = -N.x * uSide;
+    fold = across > 0.5 ? 1 : across < -0.25 ? -1 : 0;
+    if (vUv.x < -0.55) fold -= 1;
+    if (vUv.y > 0.968) { tone -= 0.06; if (vUv.y > 0.99) fold -= 1; }
     N = normalize(vec3(0.0, N.y, N.z));
   } else if (uPattern == 11) {
     // sisal rope wound round a post: turn on turn up it (a helix: each turn climbs one rope's
@@ -1298,20 +1300,39 @@ export class Room {
     add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.012, 12), this.mat('bookRed', { tone: 0.05 }))), bx + radW / 2 + 0.03, radB + 0.055, radZ + 0.01);
     add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.03, 6), this.mat('metal', { tone: 0.15 }))), bx + radW / 2 + 0.03, radB + 0.035, radZ + 0.01);
 
-    // the curtains on their rod, gathered in soft folds
-    add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, ww + 0.5, 8).rotateZ(Math.PI / 2), this.mat('metal'))), bx, winT + 0.09, wallZ + 0.06);
+    // the curtains on their rod, hung from rings, down to just above the sill (not through it)
+    const rodY = winT + 0.09, rodZ = wallZ + 0.06, ringR = 0.012;
+    add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, ww + 0.5, 8).rotateZ(Math.PI / 2), this.mat('metal'))), bx, rodY, rodZ);
+    const ringGeo = new THREE.TorusGeometry(ringR, 0.0018, 4, 14).rotateY(Math.PI / 2);
+    const ringMat = this.mat('metal', { tone: 0.15 });
     for (const side of [-1, 1]) {
-      const ch = winT + 0.09 - 0.22;
-      const g = new THREE.PlaneGeometry(0.17, ch, 18, 1);
-      const pos = g.attributes.position as THREE.BufferAttribute;
-      for (let i = 0; i < pos.count; i++) pos.setZ(i, 0.018 * Math.sin(pos.getX(i) / 0.17 * Math.PI * 5));
+      const W = 0.17, top = rodY - ringR, ch = top - (winB + 0.012);
+      const g = new THREE.PlaneGeometry(W, ch, 56, 30);
+      const pos = g.attributes.position as THREE.BufferAttribute, uv = g.attributes.uv as THREE.BufferAttribute;
+      // soft folds of cloth, not boards: gathered close under the rings and fanning out below, of
+      // uneven widths, wandering a little as they go down, deepening and easing along their length;
+      // shallow under the rings and deeper lower down, the cloth hanging a little forward toward
+      // the hem, which dips where a fold comes forward. (uv: how far forward the cloth is there,
+      // -1 deep in a fold .. 1 the front of one; how far down it, 0 at the rings .. 1 at the hem:
+      // the folds' shading reads them, see the room's pattern 10)
+      const s1 = side < 0 ? 0.7 : 2.3, s2 = side < 0 ? 1.9 : 0.4, T = Math.PI * 2;
+      for (let i = 0; i < pos.count; i++) {
+        const x = pos.getX(i), y = pos.getY(i);
+        const u = x / W + 0.5, v = 0.5 - y / ch;
+        const ph = T * ((6 - 1.4 * v) * (u - 0.5) + 0.16 * Math.sin(T * 1.6 * u + s1) + 0.09 * Math.sin(T * 2.7 * u + s2) + 0.12 * Math.sin(T * (0.9 * v + 0.7 * u) + s1));
+        const f = (Math.sin(ph) + 0.3 * Math.sin(2 * ph + 0.9)) / 1.25;
+        const amp = (0.008 + 0.013 * ss(0, 0.5, v)) * (0.75 + 0.25 * Math.sin(T * (1.1 * v + 2.3 * u) + s2));
+        pos.setXYZ(i, x * (1 + 0.06 * v), y - (v > 0.999 ? 0.004 * (0.5 + 0.5 * f) : 0), amp * f + 0.007 * v * v);
+        uv.setXY(i, f, v);
+      }
       g.computeVertexNormals();
       // (hung from the rod: it swings about the top, brushed by a cat going by)
-      g.translate(0, -ch / 2, 0);
+      g.translate(0, -ch / 2 - ringR, 0);
       const c = shadowy(new THREE.Mesh(g, this.mat('curtain', { pattern: 10, side })));
       const x = side < 0 ? winL - 0.07 : winR + 0.07;
-      add(c, x, winT + 0.09, wallZ + 0.07);
+      add(c, x, rodY, wallZ + 0.07);
       this.curtains.push({ mesh: c, x, a: 0, v: 0 });
+      for (let k = 0; k < 6; k++) add(shadowy(new THREE.Mesh(ringGeo, ringMat)), x - W / 2 + 0.012 + k * (W - 0.024) / 5, rodY, rodZ);
     }
     // fairy lights along the top of the window: a sagging wire and warm bulbs
     const n = 11, wire: THREE.Vector3[] = [];
