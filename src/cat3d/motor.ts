@@ -777,6 +777,19 @@ export class Motor {
     p.puff = clamp(p.puff + f.puff);
     p.jaw = clamp(p.jaw + f.jaw);
     p.headPitch += f.headPitch;
+    // afraid on its feet, it makes itself small: low on bent legs, the back level, the head down
+    // and out in front of it, slinking along (sat or lying it is as small as it gets already; an
+    // act holding the body at a height of its own keeps it there)
+    {
+      let feet = 0;
+      for (const [name, wgt] of this.postureWeights()) if (name === 'stand' || name === 'alert') feet += wgt;
+      const own = this.layer && this.layer.pose.hipY !== undefined ? this.layer.w : 0;
+      const low = f.low * clamp(feet) * (1 - own);
+      p.hipY -= 0.045 * low;
+      p.neckPitch -= 0.25 * low;
+      p.headPitch += 0.12 * low;
+      p.pastern += 0.12 * low;
+    }
     p.breath = clamp(p.breath + f.breath);
     {
       const work = clamp(((this.speed - 0.3) / 0.8) * (1 + 0.5 * this.zoom));
