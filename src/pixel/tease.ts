@@ -1,12 +1,11 @@
 import * as THREE from 'three';
-import { POSES, type PoseLayer, type PoseName } from '../cat3d/pose';
+import { POSES, type PoseLayer } from '../cat3d/pose';
 import { washFace, type Act, type Ctx } from './behave';
 
 const ease = (x: number) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x));
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
 const wrapA = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
 const clamp = (x: number, a: number, b: number) => Math.max(a, Math.min(b, x));
-const DOWN = new Set<PoseName>(['loaf', 'sphinx', 'side', 'curl', 'curlL']);
 
 /** the feathers on the end of the wand, as the cat sees them: where, how fast they go, whether a
  *  hand has the wand, whether the cat's paws have them */
@@ -113,8 +112,10 @@ export class Tease implements Act {
     }
     switch (this.phase) {
       case 'watch': {
-        // low and still, turned to them, eyes on them; deciding
-        if (DOWN.has(m.targetPosture) || m.targetPosture === 'stand') m.setPosture('crouch');
+        // low and still, turned to them, eyes on them; deciding (low: down off its haunches too,
+        // sat after a swat; the crouch's height on a sitting cat would lift its forepaws off the
+        // floor)
+        if (m.targetPosture !== 'crouch') m.setPosture('crouch');
         if (Math.abs(wrapA(face - m.yaw)) > 0.45 && !m.goal && dist > 0.05) m.walkTo(m.pos.clone(), 0.15, face);
         const wg = h < 0.12 && this.ls > 0.1 ? Math.sin(this.t * Math.PI * 2 * 4) : 0;
         m.layer = {
