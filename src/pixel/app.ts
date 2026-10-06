@@ -1225,7 +1225,9 @@ export class PixelApp {
    *  the ball under your finger, or strokes, is one more time it came at this hour (once a sitting:
    *  not again within ten minutes); and every few seconds, what it looks for just now */
   private habitIn = 0;
-  private readonly noted: Record<Habit, number> = { laser: -1e15, wand: -1e15, yarn: -1e15, pet: -1e15 };
+  private readonly noted: Record<Habit, number> = { laser: -1e15, wand: -1e15, yarn: -1e15, pet: -1e15, food: -1e15 };
+  /** the feeds counted so far (a new one: its dinner came, at this hour) */
+  private feeds = -1;
   private wasDoing: string | null = null;
   private offered = false;
   private readonly pointerW = new THREE.Vector3();
@@ -1242,6 +1244,9 @@ export class PixelApp {
     else if (begun === 'tease' && this.wandFinger) once('wand');
     else if (begun === 'play' && this.toyFinger) once('yarn');
     if (stroked) once('pet');
+    // (fed: the kibble rattled into its bowl)
+    if (this.feeds >= 0 && s.stats.feeds > this.feeds) once('food');
+    this.feeds = s.stats.feeds;
     if ((this.habitIn -= dt) <= 0) {
       this.habitIn = 5;
       for (const k of HABITS) this.avatar.expects[k] = expectation(s, k, now);

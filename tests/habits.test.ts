@@ -26,3 +26,48 @@ describe('it learns your hours', () => {
     expect(later).toBeGreaterThan(0.05);
   });
 });
+
+describe('its dinner hour', () => {
+  it('a cat saved before it learnt its dinner hours learns them now, from nothing', async () => {
+    const { note, expectation, newHabits } = await import('../src/sim/habits');
+    const { newCat } = await import('../src/sim/state');
+    const now = new Date(2026, 9, 6, 19, 0).getTime();
+    const s = newCat(now);
+    const old = newHabits(now) as { food?: number[] };
+    delete old.food;
+    s.habits = old as typeof s.habits;
+    expect(expectation(s, 'food', now)).toBe(0);
+    for (let d = 0; d < 4; d++) note(s, 'food', now - d * 864e5);
+    expect(expectation(s, 'food', now)).toBeGreaterThan(0.6);
+    // (the morning, nothing)
+    expect(expectation(s, 'food', new Date(2026, 9, 6, 8, 0).getTime())).toBeLessThan(0.05);
+  });
+
+  it('about its dinner hour, the bowl empty and it a little peckish: over to it to wait for you', async () => {
+    const { Brain } = await import('../src/sim/brain');
+    const { newCat } = await import('../src/sim/state');
+    const run = (learnt: boolean) => {
+      let r = 5;
+      const rnd = Math.random;
+      Math.random = () => ((r = (r * 16807) % 2147483647) / 2147483647);
+      const now = Date.now();
+      const s = newCat(now - 30 * 864e5);
+      s.trust = 0.5;
+      s.lastTick = now;
+      s.food = 0;
+      s.hunger = 0.32;
+      if (learnt) s.habits.food![new Date(now).getHours()] = 6;
+      s.habits.at = now;
+      const quiet = (own: object = {}) =>
+        new Proxy(own as Record<string, unknown>, { get: (t, k) => (k in t ? t[k as string] : () => {}), set: () => true });
+      let begged = '';
+      const b = new Brain(s, quiet({ inRoom: true, beg: (what: string) => { begged ||= what; return true; } }) as never, quiet({ play: () => 0.5 }) as never, quiet() as never, quiet() as never, quiet({ zoneAt: () => 'back', grainAt: () => [1, 0], headScreen: () => ({ x: 0, y: 0 }) }) as never);
+      b.toAwake('rest');
+      for (let t = 0; t < 240; t += 0.05) { s.lastTick += 50; s.hunger = 0.32; b.update(0.05, t, []); }
+      Math.random = rnd;
+      return begged;
+    };
+    expect(run(true)).toBe('food');
+    expect(run(false)).toBe('');
+  });
+});

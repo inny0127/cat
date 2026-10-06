@@ -1087,7 +1087,7 @@ export class PixelAvatar implements Avatar {
   /** what it looks for just now, by the hour it is (habits.ts, 0 .. 1; set by the app): a game
    *  with the red dot, the feathers, the ball of wool; strokes. And where the laser pointer lies,
    *  if it is lying there */
-  readonly expects = { laser: 0, wand: 0, yarn: 0, pet: 0 };
+  readonly expects = { laser: 0, wand: 0, yarn: 0, pet: 0, food: 0 };
   pointerAt: THREE.Vector3 | null = null;
   private dreamIn = 20;
   private scoot: { t: number; dx: number; dz: number; len: number } | null = null;

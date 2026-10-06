@@ -7,6 +7,7 @@ import type { CatState } from './state';
 import { GRAIN_TOLERANT, ZONE_LIKE, type Zone } from './zones';
 import { THRESH, chooseErrand, crepuscular, needs, nightness, runErrand } from './life';
 import { chance, clamp, rand, smoothstep } from '../util/math';
+import { expectation } from './habits';
 
 export type Mode = 'sleep' | 'doze' | 'rest' | 'alert' | 'enjoy' | 'annoyed' | 'angry' | 'leaving' | 'away' | 'arriving' | 'dead' | 'gone';
 
@@ -889,6 +890,12 @@ export class Brain {
         return;
       }
     }
+    // about the hour it is mostly fed, its bowl empty: over to it before it is really hungry, and
+    // sat by it waiting for you (once in a good while, and only if it has learnt the hour)
+    if (!touching && s.food < 0.05 && s.hunger > 0.2 && s.hunger <= THRESH.askFood && (this.mode === 'rest' || this.mode === 'alert')
+      && this.time - this.dinnerAt > 600 && chance(dt / 30) && expectation(s, 'food', Date.now()) > 0.45) {
+      if (this.anim.beg?.('food', false, () => s.food < 0.05)) this.dinnerAt = this.time;
+    }
     // asking you for what only you can give
     const n = needs(s);
     if ((n.food || n.water || n.litter) && this.mode !== 'angry') {
@@ -971,6 +978,9 @@ export class Brain {
   private grumbleAt = -1e9;
   private grumbleGap = 8;
   grumbled = false;
+
+  /** when it last went to wait by its bowl about its dinner hour (brain time, s) */
+  private dinnerAt = -1e9;
 
   /** a fright: the most afraid it came to, and how long since it was at its worst (s) */
   private fright = { peak: 0, since: 0, will: false };
