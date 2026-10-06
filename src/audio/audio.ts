@@ -18,7 +18,7 @@ export interface PlayOpts {
  * Sounds from beyond the window (eating, the litter box) go through a muffled "far" bus.
  */
 /** the cat's own voice: what it says and sings, and its purr */
-const VOICE = new Set(['meow', 'meowSoft', 'meowPlead', 'trill', 'chirp', 'grumble', 'hiss', 'growl', 'yawn', 'sigh']);
+const VOICE = new Set(['meow', 'meowSoft', 'meowPlead', 'trill', 'chirp', 'grumble', 'hiss', 'growl', 'yawn', 'sigh', 'snore']);
 
 export class CatAudio {
   ctx: AudioContext | null = null;
@@ -220,6 +220,7 @@ export class CatAudio {
       ['sneeze', () => S.sneeze(sr), 3],
       ['yawn', () => S.yawn(sr), 3],
       ['sigh', () => S.sigh(sr), 3],
+      ['snore', () => S.snore(sr), 3],
       ['thunderNear', () => S.thunder(sr, true), 2],
     ];
     for (const [name, fn, count] of jobs) {

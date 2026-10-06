@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bell, grumble, lick, meow, pencil, rugScratch, rustle, shatter, sigh, sneeze, yawn } from '../src/audio/synth';
+import { bell, grumble, lick, meow, pencil, rugScratch, rustle, shatter, sigh, sneeze, snore, yawn } from '../src/audio/synth';
 
 const check = (d: Float32Array, sr: number, minS: number, maxS: number) => {
   expect(d.length / sr).toBeGreaterThan(minS);
@@ -22,6 +22,21 @@ describe("the cat's small sounds", () => {
       const g = grumble(22050);
       check(g, 22050, 0.3, 0.5);
       expect(zc(g)).toBeLessThan(zc(meow(22050, 'ask')) * 0.75);
+    }
+  });
+
+  it('a snore is one breath in, low, and fluttering, softer than a sigh', () => {
+    const zc = (d: Float32Array) => { let n = 0; for (let i = 1; i < d.length; i++) if ((d[i - 1] < 0) !== (d[i] < 0)) n++; return n / d.length; };
+    for (let i = 0; i < 4; i++) {
+      const z = snore(22050);
+      check(z, 22050, 0.7, 1.1);
+      expect(zc(z)).toBeLessThan(zc(sigh(22050)) * 0.6);
+      // (the flutter: its loudness, in tenths of a 50th of a second, rises and falls many times)
+      const w = Math.floor(22050 / 100), env: number[] = [];
+      for (let k = 0; k + w <= z.length; k += w) { let e = 0; for (let j = k; j < k + w; j++) e += z[j] * z[j]; env.push(Math.sqrt(e / w)); }
+      let turns = 0;
+      for (let k = 2; k < env.length; k++) if ((env[k] - env[k - 1]) * (env[k - 1] - env[k - 2]) < 0) turns++;
+      expect(turns).toBeGreaterThan(20);
     }
   });
 

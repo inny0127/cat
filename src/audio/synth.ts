@@ -585,6 +585,23 @@ export function sigh(sr: number) {
   return normalize(fade(out, sr, 0.02, 0.1), 0.4);
 }
 
+/** a snore, deep asleep: one breath in through the nose, the soft palate fluttering in it, low and
+ *  soft, more a purr of air than a sound */
+export function snore(sr: number) {
+  const dur = rnd(0.75, 1.05), n = Math.floor(dur * sr);
+  const out = new Float32Array(n);
+  const f = new Biquad(sr, 'bp', rnd(170, 240), 1.3);
+  const flutter = rnd(24, 34), ph = Math.random() * Math.PI * 2;
+  for (let i = 0; i < n; i++) {
+    const x = i / n, t = i / sr;
+    const e = Math.pow(Math.sin(Math.PI * Math.min(1, x * 1.15)), 0.8);
+    const fl = 0.5 + 0.5 * Math.sin(2 * Math.PI * flutter * t + ph);
+    out[i] = f.run(noise()) * e * (0.25 + 0.75 * fl * fl);
+  }
+  filter(out, sr, 'lp', 900, 0.7);
+  return normalize(fade(out, sr, 0.03, 0.12), 0.35);
+}
+
 /** a lick: the rough tongue drawn once over skin, a short dry rasp (the papillae catching), with
  *  a faint wet tick where it starts */
 export function lick(sr: number) {

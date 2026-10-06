@@ -227,6 +227,8 @@ export class Cat3D {
   peekEye = 0;
   /** awake (0 .. 1, eased by the avatar): in a posture made for sleep, its eyes open all the same */
   awake = 1;
+  /** a breath in just begun (for whoever wants to hear it, to clear) */
+  breathed = false;
 
   /** how upright the head is: 1 level, 0 lying on its side, below 0 upside down */
   headUp() {
@@ -550,6 +552,7 @@ export class Cat3D {
     const was = this.breathT;
     this.breathT += dt * (0.55 + 0.25 * (1 - p.breath)) * Math.max(0.3, motor.feel.breathRate) * (1 + 1.8 * motor.exertion) * (1 - 0.55 * sg) / this.breathK;
     if (Math.floor(this.breathT) !== Math.floor(was)) {
+      this.breathed = true;
       const big = Math.random() < 0.06;
       this.breathK = big ? 1.35 : 0.88 + 0.24 * Math.random();
       this.breathD = big ? 1.5 : 0.85 + 0.3 * Math.random();

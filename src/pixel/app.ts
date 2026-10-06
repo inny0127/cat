@@ -1698,6 +1698,7 @@ export class PixelApp {
     // (keeping time with the radio, when it is in the mood)
     this.cat.motor.beat = this.avatar.groove > 0.01 ? this.avatar.groove * this.audio.beat() : 0;
     this.cat.update(dt);
+    this.snoreStep(dt);
     // (its forehead put to your face: felt, a soft bump, and heard, just)
     if (this.bumpT >= 0 && (this.bumpT += dt) > 0.3) this.bumpT = -1;
     if (this.cat.motor.bonked) {
@@ -1904,6 +1905,29 @@ export class PixelApp {
   private justNow = new Set<string>();
   /** the view giving a little under a head bump: how far into it (s; less than nothing: not) */
   private bumpT = -1;
+  /** snoring: how long this bout goes on yet (s), and how long till the next */
+  private snoring = 0;
+  private snoreIn = 90 + Math.random() * 180;
+
+  /** deep asleep, some cats snore (about a third, which ones by their make): softly, on each breath
+   *  in, in bouts of a minute or so, a few minutes apart */
+  private snoreStep(dt: number) {
+    const s = this.state, a = this.avatar;
+    const snorer = ((s.personality.pitch ?? 1) * 997) % 1 < 0.35;
+    const deep = snorer && s.alive && a.sleep > 0.85 && !a.hidden && !this.input.touching;
+    if (!deep) this.snoring = 0;
+    else if (this.snoring > 0) {
+      this.snoring -= dt;
+      if (this.cat.breathed) {
+        this.audio.play('snore', { gain: 0.05 + 0.02 * Math.random(), pan: this.catPan() });
+        this.justNow.add('snore');
+      }
+    } else if ((this.snoreIn -= dt) <= 0) {
+      this.snoring = 30 + Math.random() * 60;
+      this.snoreIn = 180 + Math.random() * 300;
+    }
+    this.cat.breathed = false;
+  }
   private loafFor = 0;
 
   /** the first time it does each of the things in FIRSTS, a word on what it means */
