@@ -1407,6 +1407,7 @@ export class PixelAvatar implements Avatar {
         }
       }
       this.sleepStretch(dt, this.sleep > 0.75 && atHome && !this.touched);
+      this.resettle(dt, this.sleep > 0.75 && atHome && !this.touched && !this.act);
       this.nodOff(dt, this.sleep <= 0.75 && atHome && !this.touched && !this.act && m.posture === 'loaf' && m.targetPosture === 'loaf' && m.settled);
       return;
     }
@@ -1765,6 +1766,27 @@ export class PixelAvatar implements Avatar {
       this.stretchT = 0;
       m.layer = null;
     }
+  }
+
+  /**
+   * A long sleep: now and then it half wakes and shifts, up a little, round, and down again the
+   * other way, or flat out on its side, or (quite sure of you) on its back; settled, a sigh. Not
+   * in the middle of a stretch, nor with a paw over its eyes in the sun.
+   */
+  private settleIn = 480 + Math.random() * 720;
+  private sighIn = 0;
+  private resettle(dt: number, may: boolean) {
+    const m = this.cat.motor;
+    if (this.sighIn > 0 && (this.sighIn -= dt) <= 0 && may && m.settled) this.sigh();
+    if (!may || !this.deep || !m.settled || m.targetPosture !== m.posture || this.stretchT > 0 || this.shade.u > 0 || this.scoot) return;
+    if ((this.settleIn -= dt) > 0) return;
+    this.settleIn = 480 + Math.random() * 720;
+    const was = this.curlPose, r = Math.random();
+    let next: PoseName = was === 'curl' ? 'curlL' : was === 'curlL' ? 'curl' : Math.random() < 0.5 ? 'curl' : 'curlL';
+    if (was !== 'side' && r < 0.25) next = 'side';
+    else if (was !== 'back' && this.mood.trust > 0.7 && r < 0.4) next = 'back';
+    this.curlPose = next;
+    this.sighIn = 6 + Math.random() * 4;
   }
 
   /** asleep curled up in the sun, now and then it draws its upper forepaw up over its head and
