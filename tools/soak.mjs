@@ -177,7 +177,7 @@ const report = await page.evaluate(async (minutes) => {
         const across = g.x * L.side, miss = body.reached[leg].distanceTo(c.targ[leg]);
         const why = `act ${app.avatar.doing}${app.avatar.act?.phase ? '/' + app.avatar.act.phase : ''}, ${m.posture}, turning ${c.turnRate.toFixed(1)}, hips ${m.pose.hipYaw.toFixed(2)}/${m.pose.hipRoll.toFixed(2)}`;
         if (across < -0.05 && legIssues < 12) { legIssues++; issues.push(`${leg} across under the body by ${(-across * 100).toFixed(1)} cm at ${i} (${why})`); legDetail ??= recent.slice(); }
-        if (miss > 0.05 && legIssues < 12) { legIssues++; issues.push(`${leg} short of its paw by ${(miss * 100).toFixed(1)} cm at ${i} (${why})`); }
+        if (miss > 0.05 && legIssues < 12) { legIssues++; issues.push(`${leg} short of its paw by ${(miss * 100).toFixed(1)} cm at ${i} (${why})`); legDetail ??= recent.slice(); }
       }
     }
     recent.push(`${i} ${app.avatar.doing ?? '-'}${app.avatar.act?.phase ? '/' + app.avatar.act.phase : ''} ${m.posture} at ${m.pos.x.toFixed(3)},${m.pos.z.toFixed(3)} yaw ${m.yaw.toFixed(2)} speed ${m.speed.toFixed(2)}${m.goal ? ' goal' : ''}${app.avatar.trip ? ' trip ' + app.avatar.trip.kind : ''}${app.avatar.errand ? ' errand ' + app.avatar.errand.phase : ''} mode ${app.brain.mode}`);

@@ -1842,7 +1842,7 @@ export class Top implements Act {
     this.t = 0;
     this.dur = dur;
   }
-  update(dt: number, c: Ctx) {
+  update(dt: number, c: Ctx): boolean {
     const m = c.m, P = this.post, H = P.top;
     const seat = new THREE.Vector3(P.at.x, 0, P.at.z);
     this.t += dt;
@@ -1945,6 +1945,8 @@ export class Top implements Act {
           c.perch(null);
           c.hold(H);
           this.next('down', 0.48);
+          // (off the top this very frame: not a moment stood on it with nothing under the paws)
+          return this.update(0, c);
         }
         return true;
       case 'down': {
@@ -3297,7 +3299,7 @@ export class Sill implements Act {
     this.dur = dur;
   }
 
-  update(dt: number, c: Ctx) {
+  update(dt: number, c: Ctx): boolean {
     if (this.bed) return this.bed.update(dt, c);
     const m = c.m, S = this.spot;
     this.t += dt;
@@ -3716,13 +3718,15 @@ export class Sill implements Act {
           c.perch(null);
           c.hold(S.height);
           this.next('down', 0.4);
+          // (off the sill this very frame: not a moment stood on it with nothing under the paws)
+          return this.update(0, c);
         }
         return true;
       case 'down': {
         // and down: a little up and out, forelegs reaching down to land, hind legs following
         const u = Math.min(1, this.t / this.dur);
         m.pos.lerpVectors(this.from, S.land, smooth(u));
-        m.yaw = 0;
+        m.yaw = wrapA(m.yaw * (1 - Math.min(1, dt * 14)));
         c.hold(S.height * (1 - smooth(Math.min(1, u * 1.1))) + 0.05 * Math.sin(Math.PI * u));
         const fore = { planted: 0, frame: 0, x: 0.035, y: 0.012 - 0.03 * Math.sin(Math.PI * Math.min(1, u * 1.3)), z: 0.13 + 0.07 * Math.sin(Math.PI * u), flex: 0.25 };
         const hind = { planted: 0, frame: 0, x: 0.04, y: 0.013 + 0.03 * Math.sin(Math.PI * u), z: -0.17 };

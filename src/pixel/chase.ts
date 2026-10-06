@@ -623,7 +623,7 @@ export class Chase implements Act {
 
   /** after it up on the windowsill: a gather, the spring up, hunting it along the sill (anything
    *  in the way goes over the edge), and down again when it has gone off the sill */
-  private aloft(dt: number, c: Ctx, L: LaserDot | null) {
+  private aloft(dt: number, c: Ctx, L: LaserDot | null): boolean {
     const m = c.m, S = this.sill!;
     const keen: PoseLayer = { earFwd: 0.95, pupil: 1, eyeOpen: 1, whisker: 0.9, tailCurl: 0.7 * Math.sin(this.total * 9) };
     if (L) m.lookAt(c.gaze('dot') ?? L.p, 1);
@@ -730,6 +730,8 @@ export class Chase implements Act {
           c.perch(null);
           c.hold(S.height);
           this.next('down', 0.4);
+          // (off the sill this very frame: not a moment stood on it with nothing under the paws)
+          return this.aloft(0, c, L);
         }
         return true;
       }
@@ -737,7 +739,8 @@ export class Chase implements Act {
         const u = Math.min(1, this.t / this.dur);
         const land = new THREE.Vector3(this.from.x, 0, S.land.z);
         m.pos.lerpVectors(this.from, land, smooth(u));
-        m.yaw = 0;
+        // (the last of the turn to the room made in the air)
+        m.yaw = wrapA(m.yaw * (1 - Math.min(1, dt * 14)));
         c.hold(S.height * (1 - smooth(Math.min(1, u * 1.1))) + 0.05 * Math.sin(Math.PI * u));
         const fore = { planted: 0, frame: 0, x: 0.035, y: 0.012 - 0.03 * Math.sin(Math.PI * Math.min(1, u * 1.3)), z: 0.13 + 0.07 * Math.sin(Math.PI * u), flex: 0.25 };
         const hind = { planted: 0, frame: 0, x: 0.04, y: 0.013 + 0.03 * Math.sin(Math.PI * u), z: -0.17 };
