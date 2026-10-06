@@ -3532,6 +3532,129 @@ export class Play implements Act {
 }
 
 /**
+ * Full of beans, and something to be full of beans at (you, or its ball of wool): the Halloween
+ * cat's hop, in fun. Side on to it, the back humped up, the tail up in a hoop and a little fluffed,
+ * the ears turned out and the eyes wide, it bounces sideways at it on stiff legs, three or four
+ * hops, all four feet off the floor together; then it comes down out of it, sits, and looks at you
+ * as if nothing had happened (or it is off in a mad dash: see crab()).
+ */
+export class Crab implements Act {
+  readonly name = 'crab';
+  phase: 'turn' | 'up' | 'hop' | 'down' = 'turn';
+  private t = 0;
+  private hop = 0;
+  private hops = 0;
+  /** how it faces: side on to the thing, the less of a turn round of the two */
+  private face = 0;
+  private readonly side = new THREE.Vector3();
+  constructor(private readonly toward: THREE.Vector3) {}
+  get ownGaze() {
+    return true;
+  }
+  private next(phase: Crab['phase']) {
+    this.phase = phase;
+    this.t = 0;
+  }
+  /** the hump and the hoop, and the hop: k how far into it (0 .. 1), lift how high off the floor
+   *  the hop has it (0 .. 1) */
+  private pose(k: number, lift: number): PoseLayer {
+    // (the four feet drawn in together under the middle of it, the legs stiff and straight, and
+    // the back humped up high over them: the Halloween cat's shape)
+    const planted = 1 - Math.min(1, lift * 4), y = 0.012 + 0.045 * lift;
+    const fore = { planted, y, z: 0.104 - 0.05 * k }, hind = { planted, y, z: -0.158 + 0.04 * k };
+    return {
+      hipY: 0.218 + 0.028 * k + 0.055 * lift, hipPitch: 0.32 * k, lumbarPitch: 0.14 * k, chestPitch: -0.5 * k, neckPitch: 0.3 * k, headPitch: -0.06 * k,
+      pastern: 0.1 - 0.12 * k,
+      LF: fore, RF: fore, LH: hind, RH: hind,
+      tailLift: 1.25 * k, tailCurve: -0.45 * k, tailCurl: -0.25 * k, tailHook: 0,
+      earOut: 0.4 * k, earFwd: -0.15 * k, puff: 0.35 * k, pupil: 0.95, eyeOpen: 1, whisker: 0.4 * k,
+    };
+  }
+  update(dt: number, c: Ctx) {
+    const m = c.m;
+    this.t += dt;
+    m.lookAt(this.phase === 'down' && this.t > 0.4 ? c.viewer() : this.toward, 1);
+    switch (this.phase) {
+      case 'turn': {
+        if (this.t <= dt) {
+          // (side on to it, whichever side is the less of a turn round; as many hops as there is
+          // room for short of it, and clear of things, and not out of the picture toward you)
+          const a = Math.atan2(this.toward.x - m.pos.x, this.toward.z - m.pos.z);
+          const l = wrapA(a - Math.PI / 2), r = wrapA(a + Math.PI / 2);
+          this.face = Math.abs(wrapA(l - m.yaw)) <= Math.abs(wrapA(r - m.yaw)) ? l : r;
+          this.side.set(Math.sin(a), 0, Math.cos(a));
+          const room = Math.hypot(this.toward.x - m.pos.x, this.toward.z - m.pos.z) - 0.18;
+          this.hops = Math.min(3 + Math.floor(Math.random() * 3), Math.floor(room / 0.05));
+          const end = new THREE.Vector3();
+          while (this.hops > 1) {
+            end.copy(m.pos).addScaledVector(this.side, 0.05 * this.hops);
+            if (end.z < c.home.z + 0.24 && c.keepClear(end.clone(), 0.12).distanceTo(end) < 0.01) break;
+            this.hops--;
+          }
+          m.setPosture('stand');
+          m.stop();
+        }
+        // (round side on to it in a quick spring, all four off the floor a moment, the hump coming
+        // up as it goes)
+        const err = wrapA(this.face - m.yaw), D = 0.32, u = Math.min(1, this.t / D);
+        m.yaw = wrapA(m.yaw + Math.sign(err) * Math.min(Math.abs(err), (Math.abs(wrapA(this.face - m.yaw)) / Math.max(dt, D - this.t + dt)) * dt));
+        m.layer = { pose: this.pose(0.6 * ease(u), Math.abs(err) > 0.3 || u < 1 ? Math.sin(Math.PI * u) * 0.7 : 0), w: 1 };
+        if (u >= 1) { m.yaw = this.face; c.sound('thump', 0.03); this.next('up'); }
+        return true;
+      }
+      case 'up': {
+        // up into the hump, the tail going up into its hoop
+        m.stop();
+        m.setPosture('stand');
+        m.layer = { pose: this.pose(0.6 + 0.4 * ease(this.t / 0.25), 0), w: 1 };
+        if (this.t > 0.3) this.next(this.hops > 1 ? 'hop' : 'down');
+        return true;
+      }
+      case 'hop': {
+        // a bounce sideways, all four off the floor together, and down; and again
+        const T = 0.32, u = Math.min(1, this.t / T), air = Math.sin(Math.PI * u);
+        m.stop();
+        m.pos.addScaledVector(this.side, ((Math.PI / 2) * 0.05 / T) * air * dt);
+        m.layer = { pose: this.pose(1, air), w: 1 };
+        if (u >= 1) {
+          c.sound('thump', 0.035);
+          // (the first time, worth a word to someone new to cats: it is not afraid of you)
+          if (this.hop === 0) m.moment = 'crab';
+          this.hop++;
+          if (this.hop >= this.hops) this.next('down');
+          else this.t = 0;
+        }
+        return true;
+      }
+      case 'down': {
+        // down out of it, sat, a look at you: what?
+        m.stop();
+        const k = 1 - ease(this.t / 0.45);
+        m.layer = k > 0 ? { pose: this.pose(k, 0), w: 1 } : null;
+        if (this.t > 0.45) m.setPosture('sit');
+        if (this.t > 0.9 && this.t - dt <= 0.9 && Math.random() < 0.3) c.say('trill');
+        return this.t < 2.4;
+      }
+    }
+    return true;
+  }
+  stop(c: Ctx) {
+    c.m.layer = null;
+    c.m.lookAt(null);
+    c.m.stop();
+  }
+}
+
+/** the crab hop at you (or, out in front already, at its ball of wool), and as often as not a mad
+ *  dash round the room after it */
+export const crab = (c: Ctx) => {
+  const ball = c.yarn();
+  const you = new THREE.Vector3(c.m.pos.x, 0, c.home.z + 1.2);
+  const at = c.m.pos.z < c.home.z + 0.1 || !ball || ball.distanceTo(c.m.pos) > 0.9 ? you : ball.clone().setY(0);
+  return Math.random() < 0.45 ? new Seq('crab', [() => new Crab(at), () => new Zoomies(c)]) : new Crab(at);
+};
+
+/**
  * A moth or a fly in the room: the cat's eyes and head go with it wherever it goes, ears up, the
  * tip of the tail twitching, and now and then it chatters at it, jaw quivering. Landed low, it is
  * crept up on; come within reach, the cat rears up on its haunches and swipes at it (and off it
@@ -4553,7 +4676,7 @@ export function idleOptions(c: Ctx, atHome: boolean, posture: PoseName): Option[
   // (its temperament weighs everything it might do: a playful cat's games, a lazy one's long lies,
   // a bold one's ups and overs and intos, a curious one's going to see)
   const T = c.temper ?? { bold: 0, playful: 0, lazy: 0, curious: 0 };
-  const GAME = new Set(['play', 'tease', 'pompom', 'tail', 'zoomies', 'ask', 'gift', 'fish', 'wrestle']);
+  const GAME = new Set(['play', 'tease', 'pompom', 'tail', 'zoomies', 'ask', 'gift', 'fish', 'wrestle', 'crab']);
   const REST = new Set(['sun', 'warm', 'cool', 'by you', 'still', 'yawn']);
   const OUT = new Set(['wander', 'sill', 'top', 'box', 'claw', 'rub', 'window']);
   const tempered = (key: string) => GAME.has(key) ? (1 + 0.5 * T.playful) * (1 - 0.3 * T.lazy)
@@ -4643,6 +4766,9 @@ export function idleOptions(c: Ctx, atHome: boolean, posture: PoseName): Option[
     add('tail', 0.18 * Math.max(0, m.arousal - 0.1) * (1 - m.sleepy), () => new TailChase());
     // now and then, more at dusk and after dark, a mad few seconds
     add('zoomies', 0.28 * (0.3 + m.arousal) * (1 - m.sleepy) * (1 + 1.2 * c.night), () => new Zoomies(c));
+    // (and, quite beside itself, the crab hop at you, sideways, the back up: more so at dusk and after
+    // dark, and with someone it is easy with)
+    add('crab', 0.35 * Math.max(0, m.arousal - 0.3) * (1 - m.sleepy) * (1 + 0.8 * c.night) * (m.trust > 0.2 ? 1 : 0.3), () => crab(c), 'you');
     const sill = c.sill();
     // (a bird on the ledge outside: up for a closer look, which, as it is a bird, it will not wait for)
     const bird = c.visitor();
