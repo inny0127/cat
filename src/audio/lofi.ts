@@ -1,28 +1,41 @@
 /**
  * A radio in the cat's room playing lofi: soft electric-piano chords in jazzy voicings, a round
  * bass, lazy swung drums under a blanket of low-pass, the crackle of a record and a little tape
- * wobble. All of it is made here, as it plays: the chords walk through a few progressions, the
- * drums vary and now and then drop out, and a few notes of melody come and go. At night it slows
- * and goes softer.
+ * wobble. All of it is made here, as it plays, one track after another: each in its own key and at
+ * its own pace, on a couple of chord progressions of its own and a feel of its own in the drums,
+ * the piano alone for its first bars and the last chord left to ring, then a moment of crackle
+ * before the next. Within a track the drums vary and now and then drop out, and a few notes of
+ * melody come and go. At night it slows and goes softer.
  */
 
 const rnd = (a = 0, b = 1) => a + Math.random() * (b - a);
 const noise = () => Math.random() * 2 - 1;
 const mtof = (m: number) => 440 * Math.pow(2, (m - 69) / 12);
 
-// chords as [bass, voicing] in C (moved to the key below): rootless voicings round middle C
+// chords as [bass, voicing] in C (moved to the track's key): rootless voicings round middle C
 type Chord = [number, number[]];
+const I: Chord = [36, [52, 55, 59, 62]], II: Chord = [38, [53, 57, 60, 64]], III: Chord = [40, [50, 55, 59, 62]];
+const IV: Chord = [41, [52, 57, 60, 64]], V: Chord = [43, [53, 59, 64, 69]], VI: Chord = [45, [55, 59, 60, 64]];
 const PROGS: Chord[][] = [
   // ii - V - I - vi
-  [[38, [53, 57, 60, 64]], [43, [53, 59, 64, 69]], [36, [52, 55, 59, 62]], [45, [55, 59, 60, 64]]],
+  [II, V, I, VI],
   // IV - iii - ii - I, falling
-  [[41, [52, 57, 60, 64]], [40, [50, 55, 59, 62]], [38, [48, 53, 57, 60]], [36, [47, 52, 55, 59]]],
+  [IV, III, [38, [48, 53, 57, 60]], [36, [47, 52, 55, 59]]],
   // vi - ii - V - I
-  [[45, [55, 60, 64, 67]], [38, [53, 57, 60, 64]], [43, [53, 57, 59, 64]], [36, [52, 55, 59, 62]]],
+  [[45, [55, 60, 64, 67]], II, [43, [53, 57, 59, 64]], I],
   // IV - iv - iii - vi: the borrowed minor four, bittersweet
-  [[41, [52, 57, 60, 64]], [41, [51, 56, 60, 62]], [40, [50, 55, 59, 62]], [45, [55, 59, 60, 64]]],
+  [IV, [41, [51, 56, 60, 62]], III, VI],
+  // I - vi - ii - V, round and round
+  [I, [45, [55, 60, 64, 67]], II, [43, [53, 57, 59, 64]]],
+  // iii - vi - ii - V, walking down to it
+  [III, VI, II, V],
+  // I - IV, swaying between two
+  [I, IV, I, [41, [52, 57, 60, 65]]],
+  // vi - IV - I - V
+  [VI, IV, I, V],
 ];
-const KEY = -2;                         // B flat
+/** keys a track can be in (semitones from C), all keeping the piano near middle C */
+const KEYS = [-4, -2, 0, 1, 3, 5];
 const PENTA = [0, 2, 4, 7, 9];          // the melody's notes (major pentatonic, from the key)
 
 // sixteen steps a bar
@@ -30,9 +43,27 @@ const KICKS = [
   [1, 0, 0, 0, 0, 0, 0, 0.55, 0, 0, 0.8, 0, 0, 0, 0, 0],
   [1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0.6, 0, 0, 0, 0, 0],
   [1, 0, 0, 0.5, 0, 0, 0, 0, 0, 0, 0.85, 0, 0, 0, 0, 0],
+  // (half-time: one kick, and the snare only on three)
+  [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.7, 0, 0, 0, 0, 0],
+  [1, 0, 0, 0, 0, 0, 0.6, 0, 0, 0, 0.75, 0, 0, 0, 0.4, 0],
 ];
 const SNARE = [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0.22];
+const SNARE_HALF = [0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0.18];
 const HATS = [0.7, 0, 0.32, 0.12, 0.6, 0, 0.32, 0.18, 0.7, 0, 0.32, 0.12, 0.6, 0, 0.36, 0.22];
+
+/** a track: its key, its pace, the progressions it goes between, its feel in the drums, the tone
+ *  of its piano, and how long it goes on (bars) */
+interface Track {
+  key: number;
+  bpm: number;
+  progs: number[];
+  kicks: number[];
+  half: boolean;
+  hats: number;
+  ghost: number;
+  bright: number;
+  bars: number;
+}
 
 export class Lofi {
   private readonly out: GainNode;
@@ -50,6 +81,7 @@ export class Lofi {
   private prog = 0;
   private motif: { at: number; deg: number; len: number }[] = [];
   private night = 0;
+  private track: Track = Lofi.newTrack();
   playing = false;
   /** when its beats fall (the audio clock, a little ahead of now as they are scheduled), and how
    *  hard each is (a kick on it, a snare, or only the hats) */
@@ -148,6 +180,8 @@ export class Lofi {
         v.start();
         this.vinylSrc = v;
       }
+      this.track = Lofi.newTrack(this.track);
+      this.prog = this.track.progs[0];
       this.bar = 0;
       this.step = 0;
       this.nextAt = c.currentTime + 0.1;
@@ -180,9 +214,7 @@ export class Lofi {
       const s16 = 60 / this.bpm / 4;
       const swing = this.step % 2 === 1 ? 0.2 * s16 : 0;
       this.play(this.step, this.nextAt + swing, s16);
-      this.nextAt += s16;
-      this.step = (this.step + 1) % 16;
-      if (this.step === 0) this.bar++;
+      this.advance(s16);
     }
   }
 
@@ -202,7 +234,24 @@ export class Lofi {
   }
 
   private get bpm() {
-    return 76 - 6 * this.night;
+    return this.track.bpm - 6 * this.night;
+  }
+
+  /** a new track, unlike the last: another key, another pace, its own chords and feel */
+  private static newTrack(last?: Track): Track {
+    const pick = <T>(xs: T[]) => xs[Math.floor(Math.random() * xs.length)];
+    let key = pick(KEYS);
+    if (last && key === last.key) key = pick(KEYS);
+    const a = Math.floor(Math.random() * PROGS.length);
+    let b = Math.floor(Math.random() * PROGS.length);
+    if (b === a) b = (a + 1 + Math.floor(Math.random() * (PROGS.length - 1))) % PROGS.length;
+    const half = Math.random() < 0.25;
+    return {
+      key, bpm: Math.round(rnd(68, 84)), progs: [a, b],
+      kicks: half ? [3, 4] : [0, 1, 2].sort(() => Math.random() - 0.5).slice(0, 2),
+      half, hats: rnd(0.75, 1), ghost: rnd(0, 0.35), bright: rnd(0.8, 1.2),
+      bars: 8 * Math.round(rnd(6, 10)),
+    };
   }
 
   private schedule() {
@@ -212,25 +261,45 @@ export class Lofi {
       // swung sixteenths, a lazy feel
       const swing = this.step % 2 === 1 ? 0.2 * s16 : 0;
       this.play(this.step, this.nextAt + swing, s16);
-      this.nextAt += s16;
-      this.step = (this.step + 1) % 16;
-      if (this.step === 0) this.bar++;
+      this.advance(s16);
     }
   }
 
+  /** on to the next sixteenth; a track over, a moment's crackle and the next from its first bar */
+  private advance(s16: number) {
+    this.nextAt += s16;
+    this.step = (this.step + 1) % 16;
+    if (this.step !== 0) return;
+    this.bar++;
+    if (this.bar < this.track.bars) return;
+    this.track = Lofi.newTrack(this.track);
+    this.nextAt += rnd(2.5, 4.5);
+    this.bar = 0;
+    this.prog = this.track.progs[0];
+  }
+
   private play(step: number, t: number, s16: number) {
-    const bar = this.bar;
-    // a new progression now and then, every eight bars
+    const bar = this.bar, T = this.track, KEY = T.key;
+    // a new progression now and then, every eight bars, between the track's own
     if (step === 0 && bar % 8 === 0) {
-      this.prog = Math.random() < 0.6 ? this.prog : Math.floor(Math.random() * PROGS.length);
+      this.prog = bar === 0 ? T.progs[0] : Math.random() < 0.6 ? this.prog : T.progs[Math.random() < 0.5 ? 0 : 1];
       if (bar % 16 === 0) this.makeMotif();
     }
     const chords = PROGS[this.prog];
-    const [bass, voicing] = chords[bar % 4];
+    // (its last bar: home, the first chord of the tune, left to ring)
+    const last = bar === T.bars - 1;
+    const [bass, voicing] = last ? I : chords[bar % 4];
     const soft = 1 - 0.35 * this.night;
     const hum = () => rnd(-0.006, 0.006);
-    // the first two bars the piano alone; a bar with no drums every so often
-    const drumsIn = bar >= 2 && !(bar % 16 === 15 && step >= 8);
+    // the first two bars the piano alone; a bar with no drums every so often; none at the end
+    const drumsIn = bar >= 2 && !last && !(bar % 16 === 15 && step >= 8);
+    if (step === 0 && last) {
+      const vel = rnd(0.5, 0.6) * soft;
+      voicing.forEach((m, i) => this.ep(t + i * 0.03 + hum(), m + KEY, vel * (1 - i * 0.05), s16 * 28));
+      this.bassNote(t + hum(), bass + KEY, 0.5 * soft, s16 * 14);
+      return;
+    }
+    if (last) return;
     if (step === 0) {
       // the chord, rolled a little, held over the bar; a softer touch again later in some bars
       const vel = rnd(0.5, 0.68) * soft;
@@ -257,17 +326,20 @@ export class Lofi {
       }
     }
     // (the beats, for whatever keeps time with them)
+    const KICK = KICKS[T.kicks[(bar >> 1) % T.kicks.length]], SN = T.half ? SNARE_HALF : SNARE;
     if (step % 4 === 0) {
-      this.beats.push({ at: t, k: drumsIn ? (KICKS[(bar >> 1) % KICKS.length][step] || SNARE[step] ? 1 : 0.6) : 0.35 });
+      this.beats.push({ at: t, k: drumsIn ? (KICK[step] || SN[step] ? 1 : 0.6) : 0.35 });
       if (this.beats.length > 8) this.beats.shift();
     }
     if (drumsIn) {
-      const k = KICKS[(bar >> 1) % KICKS.length][step];
+      const k = KICK[step];
       if (k) this.hit('kick', t + hum(), k * 0.9 * soft);
-      const sn = SNARE[step];
+      const sn = SN[step];
       if (sn) this.hit('snare', t + hum() + 0.008, sn * 0.55 * soft * (sn < 1 ? rnd(0.6, 1) : 1));
+      // (now and then a ghost of a snare, hardly there, off the beat)
+      else if ((step === 7 || step === 13) && Math.random() < T.ghost) this.hit('snare', t + hum(), 0.12 * soft);
       const h = HATS[step];
-      if (h && Math.random() > 0.08) this.hit(step === 14 && bar % 4 === 3 ? 'ohat' : 'hat', t + hum(), h * 0.22 * soft * rnd(0.75, 1.1));
+      if (h && Math.random() < 0.92 * T.hats) this.hit(step === 14 && bar % 4 === 3 ? 'ohat' : 'hat', t + hum(), h * 0.22 * soft * rnd(0.75, 1.1));
     }
   }
 
@@ -300,7 +372,7 @@ export class Lofi {
     const mod = c.createOscillator();
     mod.frequency.value = f;
     const mg = c.createGain();
-    mg.gain.setValueAtTime(f * (0.9 + 1.4 * vel), t);
+    mg.gain.setValueAtTime(f * (0.9 + 1.4 * vel) * this.track.bright, t);
     mg.gain.exponentialRampToValueAtTime(f * 0.18, t + 1.1);
     mod.connect(mg).connect(car.frequency);
     const tine = c.createOscillator();
