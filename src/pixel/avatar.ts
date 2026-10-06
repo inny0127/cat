@@ -231,6 +231,8 @@ export class PixelAvatar implements Avatar {
   private grooveIn = 15 + Math.random() * 30;
   /** after eating: a wash of the face before it goes */
   private washAfter: Act | null = null;
+  /** off to its dinner, keen (the motor's eagerness its, till it gets there or is stopped) */
+  private keenWalk = false;
   private rubSide = 1;
   private readonly eyesAt = new THREE.Vector3();
 
@@ -1637,6 +1639,11 @@ export class PixelAvatar implements Avatar {
       f();
     }
     if (this.errand) this.doErrand(dt);
+    // (the trot to its dinner stopped on the way, by a hand or anything else: its keenness with it)
+    if (this.keenWalk && this.errand?.phase !== 'go') {
+      this.keenWalk = false;
+      m.eager = 0;
+    }
     // (right up against a thing or in it on purpose, or up off the floor: no keeping clear of it)
     m.ghost = !!this.errand || this.perched || this.isHidden || this.act instanceof Claw || this.act instanceof Rub || this.act instanceof Top
       || this.act instanceof Sill || this.act instanceof Box || this.act instanceof Bat || this.act instanceof Fish || (this.act instanceof Chase && this.act.up);
@@ -2166,7 +2173,7 @@ export class PixelAvatar implements Avatar {
     }
   }
 
-  bolt(dir: number, onDone?: () => void, calm = false, reason?: string) {
+  bolt(dir: number, onDone?: () => void, calm = false, reason?: string, keen = 0) {
     // (still at the bowl from the last errand, the mind on another already: that one is over)
     if (this.trip?.kind === 'errand') {
       this.errand = null;
@@ -2177,7 +2184,7 @@ export class PixelAvatar implements Avatar {
     if (this.trip || this.isHidden) return;
     if (this.perched) {
       // down off the sill first
-      this.afterPerch = () => this.bolt(dir, onDone, calm, reason);
+      this.afterPerch = () => this.bolt(dir, onDone, calm, reason, keen);
       (this.act as Perching).leave();
       return;
     }
@@ -2199,7 +2206,12 @@ export class PixelAvatar implements Avatar {
         dir: spot.x >= 0 ? 1 : -1,
       };
       m.setPosture('stand');
-      m.walkTo(at, 0.3, face, () => {
+      // (to its dinner, keen: up and away at once, at a trot, quick round to it)
+      m.eager = keen;
+      this.keenWalk = keen > 0;
+      m.walkTo(at, 0.3 + 0.4 * keen, face, () => {
+        m.eager = 0;
+        this.keenWalk = false;
         if (this.errand) {
           this.errand.phase = 'do';
           this.errand.t = 0;

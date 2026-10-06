@@ -79,8 +79,9 @@ export interface Avatar {
    *  (rolled over, flat out, on its back); false if not */
   bellyTrap?(): boolean;
   /** leave: dir -1 left, 1 right; calm walks off rather than bolting; reason: the errand, if one
-   *  (a body with a room to show it in goes to the bowl or the box) */
-  bolt(dir: number, onDone?: () => void, calm?: boolean, reason?: string): void;
+   *  (a body with a room to show it in goes to the bowl or the box); keen: how much it is looking
+   *  forward to it (0 .. 1: its dinner, hungry, the kibble just rattled), for the pace it goes at */
+  bolt(dir: number, onDone?: () => void, calm?: boolean, reason?: string, keen?: number): void;
   /** a body with a room to show it in keeps to it, away or not: off on an errand it is at the bowl
    *  or the box, sulking it is in a corner of the room (never out of it, never hidden) */
   readonly inRoom?: boolean;

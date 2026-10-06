@@ -447,8 +447,14 @@ export class Brain {
       this.arousal = clamp(this.arousal + 0.5);
       if (before < 0.05) s.trust = clamp(s.trust + 0.025 * s.personality.warmth, -1, 1);
       if (!this.chatterCooldown()) this.say(chance(0.5) ? 'trill' : 'meowSoft', { delay: 0.4 });
-      this.errandWait = 2.2; // goes to eat shortly
+      // goes to eat shortly; the hungrier the sooner
+      this.errandWait = 2.2 - 1.4 * this.keenToEat();
     }
+  }
+
+  /** how keen it is on its dinner just now (0 .. 1): hungry, and keyed up (the kibble rattled) */
+  private keenToEat() {
+    return clamp((this.s.hunger - 0.4) / 0.4) * clamp(this.arousal / 0.5);
   }
 
   pouring = false;
@@ -698,12 +704,14 @@ export class Brain {
       this.audio.play('scrabble', { gain: 0.8, pan: -0.5 });
       this.anim.bolt(-1, go);
     } else {
-      // gets up and pads off: a slower exit, footsteps instead of claws
+      // gets up and pads off: a slower exit, footsteps instead of claws (to its dinner, hungry and
+      // the kibble just rattled: up at once, and off at a trot)
+      const keen = reason === 'eat' ? this.keenToEat() : 0;
       this.anim.headLift = 1;
       this.anim.eyeTarget = 0.9;
-      this.later(0.9, () => {
-        this.audio.series('step', 4, 0.22, { gain: 0.5, pan: -0.4 });
-        this.anim.bolt(-1, go, true, reason);
+      this.later(0.9 - 0.6 * keen, () => {
+        this.audio.series('step', 4, 0.22 - 0.08 * keen, { gain: 0.5, pan: -0.4 });
+        this.anim.bolt(-1, go, true, reason, keen);
       });
     }
   }

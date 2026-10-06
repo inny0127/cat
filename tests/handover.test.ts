@@ -62,27 +62,31 @@ describe('one posture after another', () => {
     // (sat watching, half down from a crouch, and off after the dot all at once: the run's own
     // height for the hips asked for while it is still sitting, held off till it is up, and not let
     // in for a frame as the stand begins)
-    const m = new Motor();
-    m.snap('crouch');
-    m.setPosture('sit');
-    for (let i = 0; i < 10; i++) m.update(0.05);
-    let most = 0, was = m.pose.hipY, first = -1;
-    for (let i = 0; i < 30; i++) {
-      m.setPosture('stand');
-      m.layer = { pose: { hipY: 0.185, neckPitch: 0.05 }, w: Math.min(1, (i + 1) / 3) };
-      m.update(0.05);
-      if (m.posture === 'stand' && first < 0) {
-        first = i;
-        // (the moment it sets off up into it, it is still all but entirely as it was)
-        const w = Object.fromEntries(m.postureWeights());
-        expect(w.stand ?? 0).toBeLessThan(0.2);
+    for (const r of [0.05, 0.5, 0.95]) {
+      const rnd = vi.spyOn(Math, 'random').mockReturnValue(r);
+      const m = new Motor();
+      m.snap('crouch');
+      m.setPosture('sit');
+      for (let i = 0; i < 10; i++) m.update(0.05);
+      let was = m.pose.hipY, first = -1, jump = 0;
+      for (let i = 0; i < 30; i++) {
+        m.setPosture('stand');
+        m.layer = { pose: { hipY: 0.185, neckPitch: 0.05 }, w: Math.min(1, (i + 1) / 3) };
+        m.update(0.05);
+        if (m.posture === 'stand' && first < 0) {
+          first = i;
+          // (the moment it sets off up into it, it is still all but entirely as it was: the hips
+          // where they were, not up 4 cm in the one frame)
+          const w = Object.fromEntries(m.postureWeights());
+          expect(w.stand ?? 0).toBeLessThan(0.2);
+          jump = m.pose.hipY - was;
+        }
+        was = m.pose.hipY;
       }
-      most = Math.max(most, m.pose.hipY - was);
-      was = m.pose.hipY;
+      rnd.mockRestore();
+      expect(first).toBeGreaterThan(0);
+      expect(jump).toBeLessThan(0.008);
     }
-    expect(first).toBeGreaterThan(0);
-    // (up from a sit the hips rise, but over the stand, not 4 cm in a frame as it begins)
-    expect(most).toBeLessThan(0.02);
   });
 });
 
