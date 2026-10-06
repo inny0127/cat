@@ -159,6 +159,11 @@ export interface Act {
 }
 
 const ease = (x: number) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x));
+
+/** done with something away from its bed: back to it now? Drowsy, or after dark, most likely;
+ *  wide awake, as often as not it stays where it is a while, sits or lies down there, and goes back
+ *  in its own time (or on to something else) */
+export const homeward = (c: Ctx) => Math.random() < 0.3 + 0.55 * (c.mood?.sleepy ?? 0) + 0.2 * (c.night ?? 0);
 /** up, held, and back down over [0, d], with ramps of r seconds */
 const hump = (t: number, d: number, r: number) => ease(t / r) * ease((d - t) / r);
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
@@ -256,10 +261,11 @@ export const stretchSideOn = (c: Ctx, then: PoseName, hind?: boolean) => {
   if (Math.abs(Math.sin(c.m.yaw)) > 0.6) return make(then);
   const a = Math.PI / 2, b = -Math.PI / 2;
   const face = Math.abs(wrapA(a - c.m.yaw)) < Math.abs(wrapA(b - c.m.yaw)) ? a : b;
+  const home = Math.hypot(c.m.pos.x - c.home.x, c.m.pos.z - c.home.z) < 0.2;
   return new Seq('stretch', [
     () => new Walk('stretch', [{ to: c.m.pos.clone(), face, stay: 0.3, posture: 'stand' }], 0.22),
     () => make('stand'),
-    () => toBed(c, then === 'sit' ? 'sit' : 'loaf'),
+    ...(home ? [() => toBed(c, then === 'sit' ? 'sit' : 'loaf')] : []),
   ]);
 };
 
@@ -438,6 +444,7 @@ export class Rub implements Act {
   private set = false;
   /** afterwards, back to bed */
   private home: Act | null = null;
+  private stays = false;
   constructor(c: Ctx, private readonly post: THREE.Vector3) {
     // (the line it walks: just behind the pole, the cheek's reach from it; from the nearer end)
     this.lineZ = post.z - 0.068;
@@ -450,7 +457,10 @@ export class Rub implements Act {
   update(dt: number, c: Ctx) {
     const m = c.m;
     if (this.phase === 'done') {
-      this.home ??= toBed(c, 'loaf');
+      if (!this.home) {
+        if (this.stays || !homeward(c)) { this.stays = true; return false; }
+        this.home = toBed(c, 'loaf');
+      }
       return this.home.update(dt, c);
     }
     this.t += dt;
@@ -582,6 +592,8 @@ interface Leg {
   /** where it would rather be now (the patch of sun having moved on): it gets up and goes there
    *  (undefined: it is well where it is; null: there is nothing to stay for, and it moves on) */
   follow?: () => { to: THREE.Vector3; yaw: number } | null | undefined;
+  /** back to its bed, if it has a mind to (homeward): else the walk ends here, where it is */
+  home?: boolean;
 }
 
 /** walking somewhere and doing something there, then on */
@@ -596,6 +608,8 @@ export class Walk implements Act {
   /** a stop on the way, a look round (where at, how long yet), and whether this leg has had one */
   private pause: { t: number; at: THREE.Vector3 } | null = null;
   private paused = false;
+  /** the last leg it has asked itself whether to go home on (Leg.home) */
+  private asked = -1;
   constructor(readonly name: string, private readonly legs: Leg[], private readonly speed = 0.25) {}
   get ownGaze() {
     return !!this.pause;
@@ -608,6 +622,10 @@ export class Walk implements Act {
   update(dt: number, c: Ctx) {
     const leg = this.legs[this.i];
     if (!leg) return false;
+    if (leg.home && this.asked < this.i) {
+      this.asked = this.i;
+      if (!homeward(c)) return false;
+    }
     if (this.arrived && leg.nap && this.nap > 0.3) {
       // dozed off where it lay: the head sinking as it goes deeper; the time there waits till it wakes
       this.napT += dt;
@@ -708,7 +726,7 @@ export const toWindow = (c: Ctx) => {
   };
   return new Walk('window', [
     { to: c.window, face: (Math.random() < 0.5 ? -1 : 1) * 0.42, stay, posture: 'sit', layer: meow },
-    { to: bed.to, face: bed.yaw, stay: 0.1, posture: 'loaf' },
+    { to: bed.to, face: bed.yaw, stay: 0.1, posture: 'loaf', home: true },
   ]);
 };
 
@@ -2259,7 +2277,7 @@ export const wander = (c: Ctx) => {
     legs.push({ to: next.to, face: next.face, stay: rand(2, 5), posture: pick<PoseName>(['sit', 'stand']) });
   }
   const bed = c.bed('loaf');
-  legs.push({ to: bed.to, face: bed.yaw, stay: 0.1, posture: 'loaf' });
+  legs.push({ to: bed.to, face: bed.yaw, stay: 0.1, posture: 'loaf', home: true });
   return new Walk('wander', legs);
 };
 
@@ -2462,7 +2480,7 @@ export const sunbathe = (c: Ctx) => {
   return new Walk('sun', [
     ...roll,
     { to: place.to, face: place.yaw, stay: rand(60, 160), posture, nap: true, follow },
-    { to: bed.to, face: bed.yaw, stay: 0.1, posture: 'loaf' },
+    { to: bed.to, face: bed.yaw, stay: 0.1, posture: 'loaf', home: true },
   ]);
 };
 
@@ -2478,7 +2496,7 @@ export const byYou = (c: Ctx) => {
   const place = c.lieAt(posture, at, side * (flat ? 1.55 : rand(0.15, 0.35)));
   return new Walk('by you', [
     { to: place.to, face: place.yaw, stay: rand(70, 160), posture, nap: true },
-    { to: bed.to, face: bed.yaw, stay: 0.1, posture: 'loaf' },
+    { to: bed.to, face: bed.yaw, stay: 0.1, posture: 'loaf', home: true },
   ]);
 };
 
@@ -2505,7 +2523,7 @@ export const warmUp = (c: Ctx) => {
   const place = c.lieAt(posture, spot.at, spot.face + rand(-0.2, 0.2));
   return new Walk('warm', [
     { to: place.to, face: place.yaw, stay: rand(45, 120), posture, nap: true },
-    { to: bed.to, face: bed.yaw, stay: 0.1, posture: 'loaf' },
+    { to: bed.to, face: bed.yaw, stay: 0.1, posture: 'loaf', home: true },
   ]);
 };
 
@@ -2725,6 +2743,7 @@ export class Play implements Act {
         m.layer = { pose: { neckPitch: -0.75, headPitch: -0.55 + 0.12 * Math.sin(this.t * 8.5), jaw: 0.1 * Math.max(0, Math.sin(this.t * 8.5)), eyeOpen: 0.4 }, w: hump(this.t, this.dur, 0.6) };
         if (this.t > this.dur) {
           m.layer = null;
+          if (!homeward(c)) return false;
           this.bed = toBed(c, 'loaf');
         }
         return true;
@@ -3623,7 +3642,7 @@ export class Sill implements Act {
         return true;
       }
       case 'done':
-        if (this.leaving) return false;
+        if (this.leaving || !homeward(c)) return false;
         this.bed = toBed(c, 'loaf');
         return true;
     }
@@ -3706,51 +3725,54 @@ export function idleOptions(c: Ctx, atHome: boolean, posture: PoseName): Option[
     add('sneeze', 0.1, () => sneeze(c));
     add('scratch', 0.22, scratchEar);
     add('stare', 0.25 * (0.5 + m.arousal) * (1 - m.sleepy), () => new Stare(c));
-    if (atHome) add('window', 0.9 * Math.max(0, Math.min(1, m.trust + 0.3)) * (1 + m.arousal) + (c.mode === 'alert' ? 0.8 : 0), () => toWindow(c), 'you');
-    if (atHome) add('wander', 0.5 * (1 + m.arousal) * (1 - m.sleepy), () => wander(c));
+    add('window', 0.9 * Math.max(0, Math.min(1, m.trust + 0.3)) * (1 + m.arousal) + (c.mode === 'alert' ? 0.8 : 0), () => toWindow(c), 'you');
+    add('wander', 0.5 * (1 + m.arousal) * (1 - m.sleepy), () => wander(c));
     // content and about, it goes and marks its things
     const posts = c.posts();
-    if (atHome && posts.length) {
+    if (posts.length) {
       const post = pick(posts);
       add('rub', 0.3 * (0.4 + m.pleasure) * (1 - m.sleepy), () => new Rub(c, post), undefined, new THREE.Vector3(post.x, 0.12, post.z));
     }
     // ... and its claws, on the scratching post
     const post = c.scratcher();
-    if (atHome && post) add('claw', 0.4 * (0.4 + m.arousal) * (1 - 0.7 * m.sleepy), () => new Claw(post), undefined, new THREE.Vector3(post.at.x, 0.2, post.at.z));
+    if (post) add('claw', 0.4 * (0.4 + m.arousal) * (1 - 0.7 * m.sleepy), () => new Claw(post), undefined, new THREE.Vector3(post.at.x, 0.2, post.at.z));
     // ... and the pompom hanging from it to bat at
-    if (atHome && post && c.pompom?.()) add('pompom', 0.3 * (0.4 + m.arousal) * (1 - m.sleepy), () => new Bat(), 'pompom');
+    if (post && c.pompom?.()) add('pompom', 0.3 * (0.4 + m.arousal) * (1 - m.sleepy), () => new Bat(), 'pompom');
     // ... and up on top of it for a while, to look down on the room (or doze up there)
-    if (atHome && post && c.mode === 'rest') add('top', 0.35 * (0.6 + 0.6 * m.trust) * (1 + 0.6 * c.night) * (1 - 0.5 * m.sleepy), () => new Top(post), undefined, new THREE.Vector3(post.at.x, post.top, post.at.z));
-    if (atHome && c.mode === 'rest') add('sun', 0.7 + 0.8 * m.sleepy, () => sunbathe(c), undefined, c.sun());
+    if (post && c.mode === 'rest') add('top', 0.35 * (0.6 + 0.6 * m.trust) * (1 + 0.6 * c.night) * (1 - 0.5 * m.sleepy), () => new Top(post), undefined, new THREE.Vector3(post.at.x, post.top, post.at.z));
+    if (c.mode === 'rest') add('sun', 0.7 + 0.8 * m.sleepy, () => sunbathe(c), undefined, c.sun());
     const warm = c.warm();
-    if (atHome && c.mode === 'rest' && warm) add('warm', 0.8 + 0.8 * m.sleepy, () => warmUp(c), undefined, warm.at);
+    if (c.mode === 'rest' && warm) add('warm', 0.8 + 0.8 * m.sleepy, () => warmUp(c), undefined, warm.at);
     // very fond of you and drowsy: a nap as near you as it can get
-    if (atHome && c.mode === 'rest' && m.trust > 0.55) add('by you', 1.2 * (m.trust - 0.5) * (0.3 + m.sleepy), () => byYou(c), 'you');
-    if (atHome && c.yarn()) add('play', 0.6 * (0.4 + m.arousal) * (1 - m.sleepy) * (c.mode === 'rest' ? 1 : 0.4), () => new Play(), 'yarn');
+    if (c.mode === 'rest' && m.trust > 0.55) add('by you', 1.2 * (m.trust - 0.5) * (0.3 + m.sleepy), () => byYou(c), 'you');
+    if (c.yarn()) add('play', 0.6 * (0.4 + m.arousal) * (1 - m.sleepy) * (c.mode === 'rest' ? 1 : 0.4), () => new Play(), 'yarn');
     // the feathers of the wand lying on the floor: now and then a game with them on its own
     const lure = c.lure();
-    if (atHome && lure && !lure.held && lure.p.y < 0.05) add('tease', 0.3 * (0.4 + m.arousal) * (1 - m.sleepy), () => new Tease(true), undefined, lure.p.clone());
+    if (lure && !lure.held && lure.p.y < 0.05) add('tease', 0.3 * (0.4 + m.arousal) * (1 - m.sleepy), () => new Tease(true), undefined, lure.p.clone());
     // fond of you, now and then it brings you its toy mouse (lying somewhere off from the glass)
     const toy = c.mouse();
     // (the toy mouse in under the radiator: a go at getting it out)
-    if (atHome && toy?.under) add('fish', 0.5 * (0.5 + m.arousal) * (1 - m.sleepy), () => new Fish(), undefined, toy.p.clone());
-    else if (atHome && toy && toy.state === 'floor' && Math.hypot(toy.p.x - c.window.x, toy.p.z - c.window.z) > 0.3) {
+    if (toy?.under) add('fish', 0.5 * (0.5 + m.arousal) * (1 - m.sleepy), () => new Fish(), undefined, toy.p.clone());
+    else if (toy && toy.state === 'floor' && Math.hypot(toy.p.x - c.window.x, toy.p.z - c.window.z) > 0.3) {
       add('gift', 0.45 * Math.max(0, (m.trust - 0.35) / 0.65) * (0.5 + m.arousal) * (1 - m.sleepy), () => new Gift(), 'mouse');
     }
     // in the mood for a game and fond of you, now and then it comes and asks you for one at the
     // glass
-    if (atHome && m.trust > 0.3) add('ask', 0.35 * Math.max(0, m.arousal - 0.15) * Math.min(1, m.trust + 0.2) * (1 - m.sleepy), () => new PawGlass(c.finger, true), 'you');
+    if (m.trust > 0.3) add('ask', 0.35 * Math.max(0, m.arousal - 0.15) * Math.min(1, m.trust + 0.2) * (1 - m.sleepy), () => new PawGlass(c.finger, true), 'you');
     const box = c.box();
-    if (atHome && box) add('box', 0.7 * (1 - 0.4 * m.sleepy), () => new Box(box), undefined, box.seat);
+    if (box) add('box', 0.7 * (1 - 0.4 * m.sleepy), () => new Box(box), undefined, box.seat);
     // playful and with nothing better to do: its own tail
-    if (atHome) add('tail', 0.18 * Math.max(0, m.arousal - 0.1) * (1 - m.sleepy), () => new TailChase());
+    add('tail', 0.18 * Math.max(0, m.arousal - 0.1) * (1 - m.sleepy), () => new TailChase());
     // now and then, more at dusk and after dark, a mad few seconds
-    if (atHome) add('zoomies', 0.28 * (0.3 + m.arousal) * (1 - m.sleepy) * (1 + 1.2 * c.night), () => new Zoomies(c));
+    add('zoomies', 0.28 * (0.3 + m.arousal) * (1 - m.sleepy) * (1 + 1.2 * c.night), () => new Zoomies(c));
     const sill = c.sill();
     // (a bird on the ledge outside: up for a closer look, which, as it is a bird, it will not wait for)
     const bird = c.visitor();
-    if (atHome && sill) add('sill', 0.55 * (1 + 1.5 * c.rain + 1.2 * c.night) * (1 - 0.6 * m.sleepy) + (bird ? 3 : 0), () => new Sill(sill), bird ? 'bird' : undefined, bird ? undefined : sill.seat);
-    else add('bed', 1.5, () => toBed(c, 'loaf'), undefined, atHome ? null : c.home);
+    if (sill) add('sill', 0.55 * (1 + 1.5 * c.rain + 1.2 * c.night) * (1 - 0.6 * m.sleepy) + (bird ? 3 : 0), () => new Sill(sill), bird ? 'bird' : undefined, bird ? undefined : sill.seat);
+    else if (atHome) add('bed', 1.5, () => toBed(c, 'loaf'));
+    // away from its bed (it stayed where it was, after something): back to it in its own time, the
+    // sooner the drowsier it is, or after dark
+    if (!atHome) add('bed', 1 + 1.6 * m.sleepy + 0.6 * c.night, () => toBed(c, 'loaf'), undefined, c.home);
     add('still', 1.6, () => null);
   }
   return opts;

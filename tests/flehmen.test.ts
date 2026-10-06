@@ -23,9 +23,10 @@ describe('the flehmen', () => {
       const w = wander(c) as unknown as { legs: { lip?: unknown }[]; update: (dt: number, c: Ctx) => boolean };
       if (!w.legs[0].lip) { vi.restoreAllMocks(); continue; }
       found++;
-      let lip = 0, jaw = 0, headUp = -9, sniffed = false, after = 0;
+      let lip = 0, jaw = 0, headUp = -9, sniffed = false, after = 0, going = true, done = 0;
       for (let t = 0; t < 30; t += 1 / 60) {
-        const going = w.update(1 / 60, c);
+        // (the walk may end where it is after the sniff: the cat itself goes on a moment)
+        if (going) going = w.update(1 / 60, c);
         m.update(1 / 60);
         if (m.pose.neckPitch < -0.8) sniffed = true;
         if (m.lipUpNow > 0.8) {
@@ -35,7 +36,7 @@ describe('the flehmen', () => {
           expect(m.pose.squint).toBeGreaterThan(0.3);
         }
         if (lip > 0 && m.lipUpNow < 0.02) after += 1 / 60;
-        if (!going) break;
+        if (!going && (done += 1 / 60) > 1) break;
       }
       expect(sniffed).toBe(true);
       expect(lip).toBeGreaterThan(0.85);

@@ -927,6 +927,17 @@ export class PixelAvatar implements Avatar {
     if (Math.abs(e) <= 0.8) m.yaw = wrap(m.yaw + Math.max(-0.3 * dt, Math.min(0.3 * dt, e)));
   }
 
+  /** a resting pose that fits where it is, away from its bed: flat out on its side only with room
+   *  for it either way along the floor (not its nose in the plant's pot), else a loaf */
+  private restHere(p: PoseName): PoseName {
+    if (p !== 'side') return p;
+    const m = this.cat.motor, c = this.ctx;
+    const end = (d: number) => this.restEnd.set(m.pos.x + Math.sin(m.yaw) * d, 0, m.pos.z + Math.cos(m.yaw) * d);
+    const R = c.room, inside = (q: THREE.Vector3) => q.x > R.minX && q.x < R.maxX && q.z > R.minZ && q.z < R.maxZ;
+    return c.clear(end(0.25), 0.06) && inside(this.restEnd) && c.clear(end(-0.25), 0.06) && inside(this.restEnd) ? p : 'loaf';
+  }
+  private readonly restEnd = new THREE.Vector3();
+
   /** p, unless going into it from the posture it is in now would turn it round where it lies:
    *  curled up nose to tail, its face is the other way from a loaf's, and it would rise and turn
    *  under the hand, the close view going round with it. Then it stays as it is, and gets up and
@@ -1222,7 +1233,7 @@ export class PixelAvatar implements Avatar {
       this.act = new Hunt();
       return;
     }
-    this.lieIn(this.mode === 'alert' ? 'sit' : this.rest, atHome, dt);
+    this.lieIn(this.mode === 'alert' ? 'sit' : atHome ? this.rest : this.restHere(this.rest), atHome, dt);
     if (this.act) return;
     // (a cat at its ease mostly just sits there: something now and then, not one thing after
     // another; and what it does, it looks at first)
