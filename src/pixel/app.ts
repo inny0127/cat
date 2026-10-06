@@ -74,6 +74,9 @@ export class PixelApp {
     return new PixelApp(canvas, hint, cat);
   }
 
+  /** what the finger touches (and the pointer's look is set on): the picture, or on iOS's browsers
+   *  the see-through layer over it (Haptic.surface) */
+  private surface: HTMLElement;
   constructor(readonly canvas: HTMLCanvasElement, hintEl: HTMLDivElement, readonly cat: Cat3D) {
     this.stage = new Stage({ pixel: PixelApp.artWidth(), paper: '#f4eee4', shadowSize: 2.6 }, canvas);
     this.stage.add(cat);
@@ -215,6 +218,7 @@ export class PixelApp {
     // (what the finger touches: the picture, or on iOS's browsers a see-through layer over it whose
     // taps can be felt; see Haptic.surface)
     const surface = this.haptic.surface(canvas);
+    this.surface = surface;
     this.input = new PointerInput(surface, {
       // (a fingertip's width off its edge is on it, the more so close in, where a stroke that came
       // down just off its back was a finger on the glass; but not where a toy lies under the finger:
@@ -301,7 +305,7 @@ export class PixelApp {
         if (this.laser.held) return;
         // (with a mouse: the ball of wool, and the laser pointer, can be taken hold of)
         const over = this.hitThing(this.room.yarnBall, x, y, 14) || (this.room.pointer.visible && this.hitThing(this.room.pointer, x, y, 14));
-        if (over !== this.overToy) { this.overToy = over; canvas.style.cursor = over ? 'grab' : ''; }
+        if (over !== this.overToy) { this.overToy = over; surface.style.cursor = over ? 'grab' : ''; }
       },
       firstGesture: () => this.audio.start(),
       // the laser pointer in your hand: every finger on the glass is its red dot (a tap on the
@@ -320,7 +324,7 @@ export class PixelApp {
         L.sx = x;
         L.sy = y;
         L.idle = 0;
-        if (kind === 'mouse') canvas.style.cursor = 'none';
+        if (kind === 'mouse') surface.style.cursor = 'none';
         // (the little click of its button)
         this.audio.play('pencil', { gain: 0.035, rate: 2.4 });
         return true;
@@ -343,7 +347,7 @@ export class PixelApp {
           // (a jingle of its bell as it comes up: the cat knows that sound)
           this.audio.play('bell', { gain: 0.12 });
           this.avatar.perk(this.room.lureAt(), 0.3 + 0.4 * Math.max(0, this.state.trust));
-          canvas.style.cursor = 'grabbing';
+          surface.style.cursor = 'grabbing';
           if (!this.state.hints.wand) {
             this.state.hints.wand = 1;
             this.hintUi.show('깃털을 흔들어 보세요. 높이 들면 고양이가 뛰어올라요', 5000);
@@ -355,7 +359,7 @@ export class PixelApp {
         const at = this.floorPoint(x, y);
         if (!at) return false;
         this.toyFinger = { x, y, off: this.room.yarnAt().clone().sub(at).setY(0) };
-        canvas.style.cursor = 'grabbing';
+        surface.style.cursor = 'grabbing';
         return true;
       },
       dragToy: (x, y, id) => {
@@ -395,7 +399,7 @@ export class PixelApp {
           if (id === L.downOn) this.takeLaser(false);
           if (id === L.id) {
             L.id = -1;
-            if (canvas.style.cursor === 'none') canvas.style.cursor = 'crosshair';
+            if (surface.style.cursor === 'none') surface.style.cursor = 'crosshair';
             // (a quick tap is a tap on the glass all the same, pointer in hand or not: the cat
             // hears it, and two are a knock, which wakes it)
             if (tap) {
@@ -427,14 +431,14 @@ export class PixelApp {
           const tip = this.room.stringLine().a, hand = this.room.wandEnd;
           const dx = hand.x - tip.x, dz = hand.z - tip.z, d = Math.hypot(dx, dz) || 1;
           this.room.holdWand(false, new THREE.Vector3(tip.x + (dx / d) * 0.8, 0, tip.z + (dz / d) * 0.8));
-          canvas.style.cursor = '';
+          surface.style.cursor = '';
           this.gestureEnd();
           return;
         }
         const f = this.toyFinger;
         this.toyFinger = null;
         this.room.holdYarn(null);
-        canvas.style.cursor = this.overToy ? 'grab' : '';
+        surface.style.cursor = this.overToy ? 'grab' : '';
         this.gestureEnd();
         if (tap && f) this.flickYarn(f.x, f.y);
       },
@@ -781,8 +785,10 @@ export class PixelApp {
       // does not jerk after every kick and turn; with no hand on it, the view holds still
       if (this.focus < 0.98) a.at.lerp(spot, 1 - Math.exp(-dt * 6));
       else if (touching) {
-        const d = a.at.distanceTo(spot), step = Math.min(d * (1 - Math.exp(-dt * 5)), 0.3 * dt);
-        if (d > 1e-5) a.at.lerp(spot, step / d);
+        // (not for a stir of it, a turn of the head, the sway of kneading: only once it has gone
+        // a few centimetres from under the hand)
+        const d = a.at.distanceTo(spot), step = Math.min((d - 0.03) * (1 - Math.exp(-dt * 4)), 0.15 * dt);
+        if (step > 0) a.at.lerp(spot, step / d);
       }
       else {
         const d = a.at.distanceTo(spot);
@@ -1050,7 +1056,7 @@ export class PixelApp {
     this.haptic.tap?.();
     // (the cat knows that sound)
     if (up) this.avatar.perk(this.room.pointerHome, 0.35 + 0.4 * Math.max(0, this.state.trust));
-    this.canvas.style.cursor = up ? 'crosshair' : '';
+    this.surface.style.cursor = up ? 'crosshair' : '';
     if (up && !this.state.hints.laser) {
       this.state.hints.laser = 1;
       this.hintUi.show('화면을 누른 채 움직이면 빨간 점이 따라가요', 5000);

@@ -85,6 +85,8 @@ export interface Avatar {
   sulkTouched?(again: boolean): void;
   /** (in the room) made up with, in its corner: round to you */
   sulkOver?(): void;
+  /** (in the room) called as it sulks in its corner (a knock on the glass): it looks back */
+  sulkHeard?(): void;
   /** a body that slowly isn't there any more */
   fadeAway(onDone?: () => void): void;
   /** come back into view */

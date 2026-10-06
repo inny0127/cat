@@ -942,6 +942,10 @@ export class Sulk implements Act {
     this.shrug = 1;
     this.lashIn = 0;
   }
+  /** called (a knock on the glass): a look back over its shoulder (it heard you), and away again */
+  heard() {
+    if (this.phase === 'sit' && this.glance < 0) { this.glance = 0; this.glanceIn = rand(6, 12); }
+  }
   /** a hand that will not leave it be: up and off to another corner */
   moveTo(spot: SulkSpot) {
     this.spot = spot;

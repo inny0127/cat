@@ -981,7 +981,9 @@ export class PixelAvatar implements Avatar {
         const proud = this.act instanceof Greet && this.act.glad > 0.55 && !!post && Math.random() < 0.3;
         // (the toy mouse got out from under the radiator: after it, and it is brought to you)
         const fetch = this.act instanceof Fish && this.act.out;
-        this.act = unanswered ? byYou(c) : proud ? new Claw(post!) : fetch ? new Gift(true) : null;
+        // (made up with in its corner: over to the glass to you, as it would come to say hello)
+        const madeUp = this.act instanceof Sulk && this.act.phase === 'round' && this.mode === 'rest' && this.mood.trust > 0.3;
+        this.act = unanswered ? byYou(c) : proud ? new Claw(post!) : fetch ? new Gift(true) : madeUp ? new Greet(0.4 + 0.5 * Math.max(0, this.mood.trust)) : null;
       }
       return;
     }
@@ -1462,6 +1464,12 @@ export class PixelAvatar implements Avatar {
       if (other) { k.moveTo(other); return; }
     }
     k.rebuff();
+  }
+  /** called as it sulks in its corner: an ear to it, and a look back over its shoulder */
+  sulkHeard() {
+    if (!(this.act instanceof Sulk)) return;
+    this.cat.motor.flickEar('both', 0.8);
+    this.act.heard();
   }
   /** made up with in its corner: round to you, and a slow blink */
   sulkOver() {

@@ -348,6 +348,7 @@ export class Brain {
   knock(sx: number, sy: number) {
     // knocking on the glass is calling the cat
     if (this.mode === 'away' && this.s.alive) {
+      if (this.s.awayReason === 'sulk') this.anim.sulkHeard?.();
       if (this.s.awayReason !== 'sulk' || this.s.trust > 0.5) {
         this.s.awayUntil = Math.min(this.s.awayUntil, this.s.lastTick + rand(8, 25) * 1000);
         if (this.s.trust > 0.2 && chance(0.6)) this.say('meowSoft', { far: !this.anim.inRoom, delay: rand(0.8, 2) });
