@@ -13,6 +13,9 @@ export interface Avatar {
   pupilTarget: number;
   /** screen px; null looks at the viewer */
   gazeTarget: { x: number; y: number } | null;
+  /** the gaze target is a glance aside of its own, not at anything (a body in a room may look
+   *  somewhere of its own choosing instead) */
+  gazeAside?: boolean;
   earMood: EarMood;
   tailMood: TailMood;
   /** 0 tucked down .. 1 raised to look around */

@@ -37,6 +37,12 @@ export class PixelAvatar implements Avatar {
   squintTarget = 0;
   pupilTarget = 0.3;
   gazeTarget: { x: number; y: number } | null = null;
+  gazeAside = false;
+  /** a glance aside of its own: somewhere off to one side of where it faces, about its own eye
+   *  level (a little up, a little down), picked once a glance; never a point on the screen taken
+   *  into the room, which over its head had it looking straight up, and the head spun round on
+   *  the neck to come down from there */
+  private aside: { of: object; at: THREE.Vector3 } | null = null;
   earMood: EarMood = 'sleep';
   tailMood: TailMood = 'still';
   headLift = 0;
@@ -1738,15 +1744,47 @@ export class PixelAvatar implements Avatar {
       m.lookAt(this.heard.at, 0.8);
       tilt = this.heard.tilt;
     }
+    else if (this.gazeTarget && this.gazeAside) m.lookAt(this.glanceAside(this.gazeTarget), 0.9);
     else if (this.gazeTarget && this.screenToWorld(this.gazeTarget.x, this.gazeTarget.y, this.look)) m.lookAt(this.look, 0.9);
     else if (seen) { m.lookAt(N.gazePoint, this.trip ? 0.3 : 0.85); m.eyeAt = N.gazePoint; }
     else if (this.avertT > 0) m.lookAt(this.lookAway, 0.7);
-    else m.lookAt(this.viewer(), this.trip ? 0.3 : 0.85);
+    else if (this.eyesOnYou(dt)) m.lookAt(this.viewer(), this.trip ? 0.3 : 0.85);
+    else m.lookAt(this.restingGaze(), 0.5);
     if (this.puzzledFor > 0) {
       this.puzzledFor -= dt;
       if (!busy && this.alive && this.sleep <= 0.5) tilt = this.puzzledTilt;
     }
     m.tilt = tilt;
+  }
+
+  /** with nothing else to look at: you a while, then nowhere much a while (a cat does not stare
+   *  at anyone long); the more on you the fonder it is and the more lately you were about, and on
+   *  you whenever your hands are, and for a slow blink */
+  private readonly idleEyes = { you: true, t: 3 };
+  private eyesOnYou(dt: number) {
+    const E = this.idleEyes;
+    if ((E.t -= dt) <= 0) {
+      const fond = Math.max(0, Math.min(1, 0.5 + 0.6 * this.mood.trust)), lately = Math.exp(-this.sinceYou / 30);
+      E.you = Math.random() < (E.you ? 0.25 : 0.25 + 0.35 * fond + 0.35 * lately);
+      E.t = E.you ? 2 + Math.random() * (3 + 4 * lately) : (4 + Math.random() * 12) * (1 - 0.6 * lately);
+    }
+    return E.you || this.sinceYou < 4 || this.cat.motor.slowBlinking;
+  }
+  /** nowhere much: ahead of it and down a little, drifting slowly from side to side */
+  private readonly restAt = new THREE.Vector3();
+  private restingGaze() {
+    const a = this.cat.motor.yaw + 0.35 * noise1(this.clock * 0.06 + 3);
+    return this.restAt.set(Math.sin(a), -0.3 + 0.12 * noise1(this.clock * 0.05 + 9), Math.cos(a)).multiplyScalar(1.1).add(this.eyeW);
+  }
+
+  private glanceAside(of: object) {
+    if (this.aside?.of !== of) {
+      const m = this.cat.motor, side = Math.random() < 0.5 ? -1 : 1;
+      const yaw = m.yaw + side * (0.35 + Math.random() * 1.05), pitch = -0.15 + Math.random() * 0.5, d = 0.8 + Math.random() * 1.2;
+      const at = new THREE.Vector3(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch)).multiplyScalar(d).add(this.eyeW);
+      this.aside = { of, at };
+    }
+    return this.aside.at;
   }
 
   /** now and then, deep asleep on its side or curled up, a long slow stretch in its sleep: the

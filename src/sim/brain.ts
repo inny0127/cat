@@ -1079,6 +1079,7 @@ export class Brain {
       }
     }
     a.gazeTarget = gaze;
+    a.gazeAside = !!gaze && gaze === this.glance;
 
     // ears
     if (m === 'angry') a.earMood = 'flat';
