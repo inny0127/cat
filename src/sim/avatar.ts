@@ -66,7 +66,7 @@ export interface Avatar {
    *  if it does; empty: whether the bowl is still empty) */
   beg?(what: 'food' | 'water', urgent: boolean, empty: () => boolean): boolean;
   /** the hands gone, it puts its coat to rights where they were, if the body can show it */
-  tidy?(where: 'face' | 'flank' | 'chest'): void;
+  tidy?(where: 'face' | 'flank' | 'chest'): boolean | void;
   /** a love bite on the finger stroking it, gently, and a lick (true if it did) */
   loveBite?(): boolean;
   /** the hand gone before it had had enough: the head pushed out after it, a look at you (true if

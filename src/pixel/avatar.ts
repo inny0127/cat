@@ -996,10 +996,11 @@ export class PixelAvatar implements Avatar {
    *  face, a lick or two down the chest, or at the flank (not up on something, nor busy with
    *  something of its own) */
   tidy(where: 'face' | 'flank' | 'chest') {
-    if (!this.alive || this.isHidden || this.sleep > 0.3 || this.errand || this.trip || this.perched || this.hands.length) return;
-    if (this.act && this.act.name !== 'knead') return;
+    if (!this.alive || this.isHidden || this.sleep > 0.3 || this.errand || this.trip || this.perched || this.hands.length) return false;
+    if (this.act && this.act.name !== 'knead') return false;
     this.stopAct();
     this.act = this.tidying = where === 'face' ? washFace() : where === 'chest' ? groomChest() : groomFlank();
+    return true;
   }
   /** a tidy-up of the coat under way (it carries on in the minute or so the hands' pleasure
    *  lingers, as long as none come back) */

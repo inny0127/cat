@@ -533,6 +533,7 @@ export class Brain {
     this.pleasure = Math.max(0, this.pleasure - dt * (touching ? 0.04 : 0.09));
     this.fear = Math.max(0, this.fear - dt * 0.06 * calm);
     this.arousal = Math.max(0, this.arousal - dt * 0.05);
+    this.settleFright(dt, touching);
 
     // ---- thresholds
     const hissAt = 0.68 - 0.18 * clamp(-s.trust) + 0.1 * clamp(s.trust);
@@ -955,6 +956,26 @@ export class Brain {
     if ((this.napLeft -= dt) > 0) return;
     this.toAwake('rest', true);
     this.anim.wakeStretch?.();
+  }
+
+  /** a fright: the most afraid it came to, and how long since it was at its worst (s) */
+  private fright = { peak: 0, since: 0, will: false };
+
+  /** a fright got over, a cat puts itself to rights: a few licks at its shoulder, or down its
+   *  chest, as if nothing had happened (its way of settling itself after a start); not every time,
+   *  and when it is free to (busy, it does it when it is done, if that is soon) */
+  private settleFright(dt: number, touching: boolean) {
+    const F = this.fright;
+    if (this.fear >= F.peak) {
+      // (worse than it was: whether it will put itself to rights after, decided as it comes)
+      if (F.peak < 0.3 && this.fear >= 0.3) F.will = chance(0.65);
+      F.peak = this.fear;
+      F.since = 0;
+    } else F.since += dt;
+    // (long ago now: that one is forgotten)
+    if (F.since > 45) { F.peak = this.fear; F.since = 0; return; }
+    if (F.peak < 0.3 || this.fear > 0.12 || F.since < 3 || touching || (this.mode !== 'rest' && this.mode !== 'alert')) return;
+    if (!F.will || this.anim.tidy?.(chance(0.65) ? 'flank' : 'chest')) F.peak = this.fear;
   }
 
   /** the hands gone a moment after a good while on it: as often as not the cat puts its coat to
