@@ -49,6 +49,18 @@ describe('what comes into its head (whim)', () => {
     for (let i = 1; i < got.length; i++) expect(got[i].t - got[i - 1].t).toBeGreaterThan(1);
   });
 
+  it('calm, a thing now and then; stirred up, one after another', () => {
+    const opts = [opt('yawn', 1), opt('groom', 2), opt('still', 1)];
+    const calm = new Whim(seeded(3)), keen = new Whim(seeded(3));
+    calm.pace = 0.3;
+    keen.pace = 1.4;
+    const a = run(calm, opts, eyes(), 4000).length, b = run(keen, opts, eyes(), 4000).length;
+    // (a calm cat: one every forty seconds or so; and a while longer at its ease after each)
+    expect(a).toBeLessThan(4000 / 30);
+    expect(a).toBeGreaterThan(4000 / 70);
+    expect(b).toBeGreaterThan(3 * a);
+  });
+
   it('its eyes on the thing an urge is about: that urge many times stronger', () => {
     const opts = [opt('play', 0.5, 'yarn'), opt('groom', 0.5), opt('still', 1.5)];
     const blind = run(new Whim(seeded(5)), opts, eyes(null, { yarn: 1 }), 3000).filter((g) => g.key === 'play').length;

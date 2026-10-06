@@ -70,7 +70,9 @@ export class Brain {
   stim = 0; // seconds of recent petting, for overstimulation
   sleepDepth = 1;
   purr = 0;
-  private wantSleepIn = rand(25, 70);
+  /** awake, how long yet (s of nobody touching it, by night the quicker) before it nods off: a
+   *  few minutes of sitting about, looking round, a thing or two of its own, by day; less at night */
+  private wantSleepIn = rand(90, 240);
   /** how long yet this sleep lasts before it wakes of itself (s) */
   private napLeft = rand(600, 1500);
   private peekIn = rand(40, 160);
@@ -825,7 +827,7 @@ export class Brain {
     this.toAwake('rest', true);
     this.anim.arrive();
     if (s.trust > 0.35 && chance(sulked ? 0.4 : 0.7)) this.later(0.8, () => this.say('trill'));
-    this.wantSleepIn = rand(20, 60);
+    this.wantSleepIn = rand(90, 240);
   }
 
   private arrive() {
@@ -839,7 +841,7 @@ export class Brain {
       this.setMode('rest');
       this.audio.play('thump', { gain: 0.5 });
       if (s.trust > 0.35 && chance(0.7)) this.later(0.6, () => this.say('trill'));
-      this.wantSleepIn = rand(20, 60);
+      this.wantSleepIn = rand(90, 240);
     });
   }
 
@@ -1006,7 +1008,7 @@ export class Brain {
     this.sleepDepth = 0;
     this.drowsy = false;
     this.setMode(m);
-    this.wantSleepIn = rand(35, 110);
+    this.wantSleepIn = rand(120, 420);
     if (!quiet) this.anim.twitchEar('both', 0.5);
   }
 

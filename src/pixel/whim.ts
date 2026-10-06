@@ -40,6 +40,9 @@ export class Whim {
   private optsIn = 0;
   /** how much more an urge comes on while its eyes are on its thing (a curious cat, more) */
   gain = 6;
+  /** how lively it is just now (1: a thing in its head every EVERY seconds or so; at less, a calm
+   *  or drowsy cat, it mostly just sits there, and longer after each thing before the next) */
+  pace = 1;
 
   constructor(private readonly rnd: () => number = Math.random) {}
 
@@ -100,7 +103,7 @@ export class Whim {
       this.optsIn = 1;
       this.opts = options();
     }
-    const ramp = ss(1, 5, this.easy);
+    const ramp = ss(1, 2 + 3 / Math.max(0.3, Math.min(1, this.pace)), this.easy);
     if (ramp <= 0) return null;
     let W = 0;
     for (const o of this.opts) W += o.w;
@@ -109,7 +112,7 @@ export class Whim {
     for (const o of this.opts) {
       // (its eyes on the thing it is about: the urge many times stronger while they are)
       const on = o.about && A?.id === o.about ? A.a : 0;
-      const rate = (o.w / (W * EVERY)) * (1 + this.gain * on) * ramp;
+      const rate = (o.w / (W * EVERY)) * this.pace * (1 + this.gain * on) * ramp;
       if (this.rnd() >= rate * dt) continue;
       const act = o.make();
       // (nothing to be had there after all, the sun gone off the floor: as if it never came into
