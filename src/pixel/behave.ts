@@ -353,25 +353,31 @@ export const washFace = () => {
   const first = Math.random() < 0.5 ? 1 : -1;
   const cyc = rand(1.3, 1.7), n = 3 + Math.floor(Math.random() * 3);
   const both = Math.random() < 0.6;
-  const d = cyc * n * (both ? 2 : 1) + 0.6;
+  // a side: the paw up to the mouth, licked and wiped n times over without being put down, and down
+  // to the floor again; then perhaps the other
+  const R = 0.4, side = 2 * R + n * cyc;
+  const d = side * (both ? 2 : 1);
+  const sat = POSES.sit.LF;
   return new Settled(new Layered('wash', d, 0.5, (t) => {
-    const k = Math.floor(t / cyc), u = (t % cyc) / cyc;
-    const s = both && k >= n ? -first : first;
+    const k = both && t >= side ? 1 : 0, ts = t - k * side;
+    const s = k ? -first : first;
     const paw = s > 0 ? 'LF' : 'RF';
-    // up to the mouth (a quarter of the turn), licked (the next), then the wipe up and back over
-    // the cheek and ear, and down to the mouth again
-    const reach = Math.min(1, u / 0.12);
-    const lick = u > 0.12 && u < 0.45;
-    const w = u >= 0.45 ? Math.sin(Math.PI * (u - 0.45) / 0.55) : 0;
+    const reach = ease(ts / R) * (1 - ease((ts - side + R) / R));
+    // each turn: licked (the first third or so), then the wipe up the cheek to behind the ear,
+    // forward over the eye and down to the mouth again
+    const tc = ts - R, u = tc > 0 && tc < n * cyc ? (tc % cyc) / cyc : 0;
+    const lick = u < 0.38 ? Math.sin(Math.PI * u / 0.38) : 0;
+    const v = u >= 0.38 ? (u - 0.38) / 0.62 : 0, w = Math.sin(Math.PI * v);
     const pose: PoseLayer = {
       [paw]: {
         planted: 0, frame: 0,
-        x: 0.012 + 0.03 * w, y: 0.06 + 0.15 * reach + 0.06 * w, z: 0.08 + 0.055 * reach - 0.035 * w, flex: 0.85,
+        x: sat.x + (0.012 - sat.x) * reach + 0.03 * w, y: sat.y + (0.21 - sat.y) * reach + 0.06 * w,
+        z: sat.z + (0.135 - sat.z) * reach - 0.035 * w - 0.012 * Math.sin(2 * Math.PI * v), flex: 0.85 * reach,
       },
       headPitch: -0.32 - 0.25 * reach * (1 - w) + 0.1 * w, headYaw: s * 0.35 * w, headRoll: s * 0.4 * w,
       neckPitch: -0.1 * reach,
-      jaw: lick ? 0.16 * Math.max(0, Math.sin(t * 15)) : 0.04,
-      tongue: lick ? 0.9 * Math.max(0, Math.sin(t * 15)) : 0, tongueUp: -0.2,
+      jaw: 0.04 + 0.12 * lick * Math.max(0, Math.sin(t * 15)),
+      tongue: 0.9 * lick * Math.max(0, Math.sin(t * 15)), tongueUp: -0.2,
       eyeOpen: 0.3, squint: 0.55, earFwd: -0.2 * w,
     };
     return pose;
@@ -1630,10 +1636,14 @@ export class Claw implements Act {
         c.bump(new THREE.Vector3(P.at.x + P.r, Claw.TOP, P.at.z + side * 0.03), 0.5);
       }
       const ph = (u: number) => ((u % 1) + 1) % 1;
-      const a = ph(cyc), b = ph(cyc + 0.5);
+      // (the first paw drags from the top at once, the other waits at the top for its turn half a
+      // stroke later; and each, its drags done, stays at the top for the other to be done with its)
+      const S = this.strokes;
+      const a = cyc < Math.ceil(S / 2) ? ph(cyc) : 0;
+      const b = cyc >= 0.5 && cyc < 0.5 + Math.floor(S / 2) ? ph(cyc - 0.5) : 0;
       m.layer = { pose: { ...look, ...this.stance(surface, this.lead === 'LF' ? a : b, this.lead === 'LF' ? b : a, 1) }, w: 1 };
       // (done: both paws back at the top for the last long pull)
-      if (cyc * 2 >= this.strokes && ph(cyc) < 0.1) { this.phase = 'pull'; this.t = 0; }
+      if (cyc >= (S + 1) / 2) { this.phase = 'pull'; this.t = 0; }
       return true;
     }
     if (this.phase === 'pull') {

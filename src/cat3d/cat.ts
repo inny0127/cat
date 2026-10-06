@@ -71,6 +71,12 @@ export class Cat3D {
   private readonly homeW: Record<Leg, THREE.Vector3> = { LF: v(), RF: v(), LH: v(), RH: v() };
   private readonly targ: Record<Leg, THREE.Vector3> = { LF: v(), RF: v(), LH: v(), RH: v() };
   private readonly planted = { LF: 1, RF: 1, LH: 1, RH: 1 };
+  /** a paw handed over between the floor and the pose (put down, or taken up off it): where it was
+   *  last seen (world), and how much of the way to its new place it has yet to go (1 .. 0) */
+  private readonly wasPlanted = { LF: 1, RF: 1, LH: 1, RH: 1 };
+  private readonly shown: Record<Leg, THREE.Vector3> = { LF: v(), RF: v(), LH: v(), RH: v() };
+  private readonly handFrom: Record<Leg, THREE.Vector3> = { LF: v(), RF: v(), LH: v(), RH: v() };
+  private readonly hand = { LF: 0, RF: 0, LH: 0, RH: 0 };
   private readonly reachW = { LF: 0, RF: 0, LH: 0, RH: 0 };
   private readonly need = { hind: 0, front: 0 };
   private readonly drop = { hind: 0, front: 0 };
@@ -398,6 +404,7 @@ export class Cat3D {
       stepper.reset(this.homeW);
       this.first = false;
       this.lastYaw = null;
+      for (const l of LEGS) { this.hand[l] = 0; this.wasPlanted[l] = this.planted[l]; }
     }
     if (this.lastYaw === null || dt <= 0) {
       this.turnRate = motor.yawRate;
@@ -417,7 +424,20 @@ export class Cat3D {
     body.scapLift.R = stepper.signals.scapR;
     for (const l of LEGS) {
       const F = stepper.feet[l];
-      this.targ[l].copy(F.pos).applyMatrix4(this.inv);
+      this.targ[l].copy(F.pos);
+      // (put down on the floor or taken up off it, a paw goes there from where it was in a moment:
+      // the floor's place for it and the pose's are not the same, and a paw is never in two places
+      // a frame apart)
+      if (this.planted[l] !== this.wasPlanted[l]) {
+        this.hand[l] = 1;
+        this.handFrom[l].copy(this.shown[l]);
+      }
+      this.wasPlanted[l] = this.planted[l];
+      if (this.hand[l] > 0) {
+        const u = this.hand[l] = Math.max(0, this.hand[l] - dt / 0.14);
+        this.targ[l].lerp(this.handFrom[l], u * u * (3 - 2 * u));
+      }
+      this.targ[l].applyMatrix4(this.inv);
       // (a paw held up off the floor may be bent back, its pads turned to what it reaches for)
       this.flex[l] = F.stepping ? F.flex : p[l].flex < 0 ? p[l].flex * (1 - p[l].planted) : Math.max(p[l].flex, F.flex);
       this.ground[l] = p[l].planted;
@@ -456,6 +476,7 @@ export class Cat3D {
       (this.headWas ??= new THREE.Quaternion()).copy(rel);
     }
     body.legsTo(p, this.targ, this.flex, this.ground);
+    for (const l of LEGS) this.shown[l].copy(body.reached[l]).applyMatrix4(group.matrixWorld);
     // (a paw on the floor the leg could not reach to: the stepper moves it, next frame)
     // (and one come across under the body, past the middle, in the frame of its own shoulders or
     // hips as they are, turned and rolled: it steps out from there, next frame)

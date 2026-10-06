@@ -113,6 +113,7 @@ export class Stepper {
   private still = 1;
   private readonly fwd = new THREE.Vector3();
   private readonly tmp = new THREE.Vector3();
+  private readonly tmp2 = new THREE.Vector3();
   private readonly across = new THREE.Vector3();
 
   constructor() {
@@ -213,8 +214,12 @@ export class Stepper {
         // left to come down where the body has turned away from, across under it)
         if (!F.settle || this.moving > 0.3) {
           // keep aiming where this paw's stance will be centred under the body, as speed and
-          // heading change during the swing
+          // heading change during the swing (but a stop or a turn all at once moves the place
+          // it is aimed at no faster than a paw in the air can be redirected: not a jump of it)
+          const was = this.tmp2.copy(F.to);
           this.aim(F.to, home[l], vel, yawRate, centre, (1 - s) * F.dur + standT * 0.5);
+          const moved = F.to.distanceTo(was), most = 2.5 * dt;
+          if (moved > most) F.to.lerpVectors(was, F.to, most / moved);
         }
         F.pos.lerpVectors(F.from, F.to, ease(s));
         // (up and over in an arc from the height it left to the height it lands at: a step up onto

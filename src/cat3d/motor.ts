@@ -108,8 +108,19 @@ export class Motor {
   private readonly prog = {} as Record<Group, number>;
   readonly base: Pose = clonePose(POSES.stand);
   readonly pose: Pose = clonePose(POSES.stand);
-  /** pose overrides blended on top (eating head-down, grooming leg, ...) */
-  layer: { pose: PoseLayer; w: number } | null = null;
+  /** pose overrides blended on top (eating head-down, grooming leg, ...). Let go of all at once
+   *  (its act cut short by another, or a part of it done with half way), it goes out over a moment
+   *  and not in a frame: a paw up at the face is put down, not dropped to the floor */
+  get layer() {
+    return this.layerNow;
+  }
+  set layer(v: { pose: PoseLayer; w: number } | null) {
+    const was = this.layerNow;
+    if (!v && was && was.w > 0.02) this.layerOut = { pose: was.pose, w: was.w, t: 0 };
+    this.layerNow = v;
+  }
+  private layerNow: { pose: PoseLayer; w: number } | null = null;
+  private layerOut: { pose: PoseLayer; w: number; t: number } | null = null;
   /** how far a layer has its say over the trunk and the legs (0..1 per group): while the body is
    *  on its way into a posture, it comes in with it (a layer is a turn on the posture it is asked
    *  with: the hips lifted to a running height while the back is still sat upright would stand
@@ -253,6 +264,7 @@ export class Motor {
   /** jump straight into a posture (tests, restoring a saved state) */
   snap(name: PoseName) {
     this.easeReset = true;
+    this.layerOut = null;
     this.posture = this.target = this.fromName = name;
     this.path = [];
     copyPose(this.base, POSES[name]);
@@ -635,9 +647,8 @@ export class Motor {
       const want = this.tt >= 1 && !this.path.length ? 1 : this.path.length ? 0 : this.prog[g] ?? 1;
       li[g] += (want - li[g]) * kIn;
     }
-    if (this.layer && this.layer.w > 0) {
-      const w0 = this.layer.w;
-      for (const [k, val] of Object.entries(this.layer.pose)) {
+    const lay = (pose: PoseLayer, w0: number) => {
+      for (const [k, val] of Object.entries(pose)) {
         const g = GROUP_OF[k];
         const w = g === 'hips' || g === 'chest' || g === 'front' || g === 'hind' ? w0 * li[g] : w0;
         if (typeof val === 'number') (p as unknown as Record<string, number>)[k] += (val - (p as unknown as Record<string, number>)[k]) * w;
@@ -647,7 +658,16 @@ export class Motor {
           for (const [fk, fv] of Object.entries(val as Partial<Foot>)) (f as unknown as Record<string, number>)[fk] += ((fv as number) - (f as unknown as Record<string, number>)[fk]) * w;
         }
       }
+    };
+    // (one let go of going out under whatever comes next)
+    const out = this.layerOut;
+    if (out) {
+      out.t += dt;
+      const u = Math.min(1, out.t / 0.35), w = out.w * (1 - u * u * (3 - 2 * u));
+      if (w > 0.005) lay(out.pose, w);
+      else this.layerOut = null;
     }
+    if (this.layer && this.layer.w > 0) lay(this.layer.pose, this.layer.w);
     // (and no part of it ever jumps: what the posture and the act ask for is followed closely, but
     // eased, a few hundredths of a second behind: an act's overrides coming on all at once, or a
     // posture asked for in the middle of another, are a quick movement, not a cut)
