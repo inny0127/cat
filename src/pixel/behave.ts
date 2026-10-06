@@ -926,6 +926,11 @@ export class Sulk implements Act {
   private lashIn = rand(1.5, 4);
   private shrug = 0;
   private faceYou = 0;
+  /** sat there a good while, it dozes off where it sulks, its back still to you: how long it has
+   *  sat (s), when it nods off, and how far gone it is (0 .. 1) */
+  private satFor = 0;
+  private readonly dozeAt = rand(90, 150);
+  doze = 0;
   constructor(public spot: SulkSpot, private onThere?: () => void, private hurry = true) {}
   /** its eyes are its own business */
   get ownGaze() {
@@ -937,14 +942,17 @@ export class Sulk implements Act {
     this.t = 0;
     this.there();
   }
-  /** a hand on it: shrugged off */
+  /** a hand on it: shrugged off (woken, if it was dozing) */
   rebuff() {
     this.shrug = 1;
     this.lashIn = 0;
+    this.satFor = 0;
   }
-  /** called (a knock on the glass): a look back over its shoulder (it heard you), and away again */
+  /** called (a knock on the glass): a look back over its shoulder (it heard you), and away again
+   *  (woken a while, if it was dozing) */
   heard() {
     if (this.phase === 'sit' && this.glance < 0) { this.glance = 0; this.glanceIn = rand(6, 12); }
+    this.satFor = Math.min(this.satFor, this.dozeAt - 30);
   }
   /** a hand that will not leave it be: up and off to another corner */
   moveTo(spot: SulkSpot) {
@@ -998,14 +1006,18 @@ export class Sulk implements Act {
       m.layer = { pose: { earFwd: 0.1 }, w: ease(this.t / 0.6) };
       return this.faceYou === 0 ? this.t < 5 : this.t - this.faceYou < 1.6;
     }
-    // sat with its back to you
+    // sat with its back to you (and, a good while sat, dozing off there: the eyes closing, the head
+    // sinking, the tail still, the glances over the shoulder given up)
     m.setPosture('loaf');
-    if ((this.lashIn -= dt) <= 0) {
+    this.satFor += dt;
+    const dozy = this.satFor > this.dozeAt && this.shrug < 0.05 && this.glance < 0 ? 1 : 0;
+    this.doze += (dozy - this.doze) * (1 - Math.exp(-dt * (dozy ? 0.25 : 3)));
+    if ((this.lashIn -= dt * (1 - 0.8 * this.doze)) <= 0) {
       this.lashIn = rand(1.8, 4.5);
       m.flickTail(0.9 + 0.6 * this.shrug + 0.3 * Math.random());
     }
     // the look back over its shoulder at you, a moment, now and then (and at a hand on it, at once)
-    if (this.glance < 0 && ((this.glanceIn -= dt) <= 0 || this.shrug > 0.95)) { this.glance = 0; this.glanceIn = rand(6, 12); }
+    if (this.glance < 0 && ((this.doze < 0.5 && (this.glanceIn -= dt) <= 0) || this.shrug > 0.95)) { this.glance = 0; this.glanceIn = rand(6, 12); }
     let look = 0;
     if (this.glance >= 0) {
       this.glance += dt;
@@ -1013,7 +1025,14 @@ export class Sulk implements Act {
       if (this.glance > 1.6) this.glance = -1;
     }
     m.lookAt(look > 0.05 ? c.viewer() : null, look);
-    m.layer = { pose: { earFwd: -0.4 - 0.5 * this.shrug, earOut: 0.3 + 0.3 * this.shrug, earFlat: 0.8 * this.shrug, squint: 0.2 + 0.3 * this.shrug }, w: ease(this.t / 0.5) };
+    const d = this.doze;
+    m.layer = {
+      pose: {
+        earFwd: -0.4 - 0.5 * this.shrug + 0.25 * d, earOut: 0.3 + 0.3 * this.shrug, earFlat: 0.8 * this.shrug, squint: 0.2 + 0.3 * this.shrug,
+        eyeOpen: 0.92 - 0.8 * d, neckPitch: -0.45 * d, headPitch: -0.2 * d,
+      },
+      w: ease(this.t / 0.5),
+    };
     return true;
   }
   stop(c: Ctx) {

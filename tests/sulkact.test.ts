@@ -46,6 +46,22 @@ describe('sulking in a corner of the room', () => {
     k.stop(c);
   });
 
+  it('a good while sat sulking, it dozes off there, its back still to you; a hand on it, and it is awake again', () => {
+    const m = new Motor();
+    m.snap('stand');
+    const c = ctx(m, { now: 'away' });
+    const k = new Sulk(corner);
+    for (let t = 0; t < 12 && k.phase === 'go'; t += 1 / 60) { k.update(1 / 60, c); m.update(1 / 60); }
+    for (let t = 0; t < 60; t += 1 / 30) k.update(1 / 30, c);
+    expect(k.doze).toBeLessThan(0.05);
+    for (let t = 0; t < 140; t += 1 / 30) k.update(1 / 30, c);
+    expect(k.doze).toBeGreaterThan(0.8);
+    expect(Math.cos(m.yaw)).toBeLessThan(-0.4);
+    k.rebuff();
+    for (let t = 0; t < 1; t += 1 / 30) k.update(1 / 30, c);
+    expect(k.doze).toBeLessThan(0.2);
+  });
+
   it('pestered: up and off to the other corner', () => {
     const m = new Motor();
     m.snap('stand');

@@ -560,7 +560,8 @@ export class PixelAvatar implements Avatar {
   thunder(loud: number, at: THREE.Vector3) {
     if (!this.alive || this.isHidden) return;
     this.hear(at);
-    if (loud < 0.75 || this.sleep > 0.3 || this.perched || this.errand || this.trip || Math.random() < 0.5) return;
+    // (sulking in its corner: it starts, and looks, and sulks on)
+    if (loud < 0.75 || this.sleep > 0.3 || this.perched || this.errand || this.trip || this.act instanceof Sulk || Math.random() < 0.5) return;
     // (by you already: it stays by you, only starts)
     if (this.act && (this.act.name === 'box' || this.act.name === 'to bed' || this.act.name === 'by you')) return;
     this.stopAct();
