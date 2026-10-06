@@ -959,9 +959,13 @@ export class PixelAvatar implements Avatar {
         return;
       }
       if (this.act && !(this.act.name === 'knead' && this.kneading) && this.act.name !== 'boop') this.stopAct();
-      if (!this.act && this.kneading) this.act = knead();
+      // (treading with the front paws: in a sphinx, the elbows out; not from curled up nose to tail,
+      // which would turn it round under the hand)
+      if (!this.act && this.kneading && this.sameWay('sphinx') === 'sphinx') this.act = knead();
       if (this.act && !this.act.update(dt, c) && this.act.name === 'boop') { this.stopAct(); this.maybeBlep(0.3); }
-      else m.setPosture(this.sameWay(this.wanted() === 'sit' ? 'sit' : atHome ? this.rest : 'loaf'));
+      // (the kneading has the posture it treads in; anything else, the one it would rest in: never
+      // both, or the body is pulled from one to the other and back, rising and sinking)
+      else if (this.act?.name !== 'knead') m.setPosture(this.sameWay(this.wanted() === 'sit' ? 'sit' : atHome ? this.rest : 'loaf'));
       this.swatStep(dt);
       return;
     }
