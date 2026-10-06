@@ -560,9 +560,17 @@ export class PixelAvatar implements Avatar {
     if (this.hands.length || this.act instanceof Chase || this.act instanceof Tease || this.act instanceof Startle || this.act instanceof Play
       || this.act instanceof Hunt || this.act instanceof Greet || this.act instanceof Gift || this.act instanceof Beg) return false;
     this.stopAct();
-    this.act = new Beg((what === 'food' ? this.spots.food : this.spots.water).clone(), urgent, empty);
+    // (asked at the bowl a little while ago, and still nothing in it: this time it comes and gets
+    // you, and leads the way; not from right by the bowl, where there is no way to lead)
+    const bowl = (what === 'food' ? this.spots.food : this.spots.water).clone();
+    const far = Math.hypot(bowl.x - this.cat.motor.pos.x, bowl.z - this.cat.motor.pos.z) > 0.35;
+    const lead = far && this.clock - this.beggedAt < 240 && Math.random() < 0.7;
+    this.beggedAt = this.clock;
+    this.act = new Beg(bowl, urgent, empty, lead);
     return true;
   }
+  /** when it last asked you at its bowl (its clock) */
+  private beggedAt = -1e9;
 
   /** a finger on the glass, where the cat sees it (GlassFinger): told each frame it is there, and
    *  as it moves */

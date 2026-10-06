@@ -1306,20 +1306,63 @@ export class Sulk implements Act {
  */
 export class Beg implements Act {
   readonly name = 'beg';
-  phase: 'go' | 'sniff' | 'turn' | 'ask' = 'go';
+  phase: 'fetch' | 'call' | 'lead' | 'back' | 'go' | 'sniff' | 'turn' | 'ask' = 'go';
   private t = 0;
   private set = false;
   private said = false;
   private readonly stay = rand(7, 11);
-  constructor(private readonly bowl: THREE.Vector3, private readonly urgent: boolean, private readonly empty: () => boolean) {}
-  /** on the bowl till it has turned round to you */
+  /** lead: asked at the bowl already, and nothing came of it: this time it comes to you first, says
+   *  so, and leads the way, a look back at you on the way to see that you follow */
+  constructor(private readonly bowl: THREE.Vector3, private readonly urgent: boolean, private readonly empty: () => boolean, lead = false) {
+    if (lead) this.phase = 'fetch';
+  }
+  /** on the bowl till it has turned round to you (on you, coming to you and looking back) */
   get ownGaze() {
-    return this.phase !== 'ask';
+    return this.phase !== 'ask' && this.phase !== 'fetch' && this.phase !== 'call' && this.phase !== 'back';
   }
   update(dt: number, c: Ctx) {
     const m = c.m;
     this.t += dt;
     if (!this.empty()) return false;
+    if (this.phase === 'fetch') {
+      // to you first, at a brisk walk, the tail up
+      if (!this.set) {
+        this.set = true;
+        const v = c.viewer(), at = c.keepClear(c.window.clone(), 0.08);
+        m.setPosture('stand');
+        m.walkTo(at, 0.34, Math.atan2(v.x - at.x, v.z - at.z), () => { this.phase = 'call'; this.t = 0; this.set = false; });
+      }
+      m.lookAt(c.viewer(), 1);
+      m.layer = { pose: { tailLift: 0.5, tailHook: 0.4, earFwd: 0.3 }, w: Math.min(1, this.t / 0.5) };
+      return this.t < 14;
+    }
+    if (this.phase === 'call') {
+      // stood before you, looking up at you: a meow, and it is off, to show you
+      m.lookAt(c.viewer(), 1);
+      m.layer = { pose: { tailLift: 0.5, tailHook: 0.4, earFwd: 0.4, neckPitch: 0.15 }, w: 1 };
+      if (!this.said && this.t > 0.35) { this.said = true; c.say(this.urgent ? 'meowPlead' : 'meow'); }
+      if (this.t > 1.7) { this.phase = 'lead'; this.t = 0; this.set = false; this.said = false; }
+      return true;
+    }
+    if (this.phase === 'lead') {
+      // halfway to the bowl
+      if (!this.set) {
+        this.set = true;
+        const mid = c.keepClear(m.pos.clone().lerp(this.bowl, 0.5).setY(0), 0.08);
+        m.walkTo(mid, 0.3, Math.atan2(this.bowl.x - mid.x, this.bowl.z - mid.z), () => { this.phase = 'back'; this.t = 0; });
+      }
+      m.lookAt(this.bowl, 1);
+      m.layer = { pose: { tailLift: 0.5, tailHook: 0.4 }, w: 1 };
+      return this.t < 10;
+    }
+    if (this.phase === 'back') {
+      // stopped, a look back at you over its shoulder (coming?), a word, and on
+      m.lookAt(c.viewer(), 1);
+      m.layer = { pose: { tailLift: 0.45, tailHook: 0.4, earFwd: 0.35 }, w: 1 };
+      if (!this.said && this.t > 0.45) { this.said = true; c.say(Math.random() < 0.5 ? 'meowSoft' : 'trill'); }
+      if (this.t > 1.5) { this.phase = 'go'; this.t = 0; this.set = false; this.said = false; m.layer = null; }
+      return true;
+    }
     if (this.phase === 'go') {
       if (!this.set) {
         this.set = true;

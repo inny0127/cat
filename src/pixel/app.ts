@@ -1924,6 +1924,7 @@ export class PixelApp {
     if (m.feel.arch > 0.5 && m.posture === 'stand') now.add('arch');
     if (m.feel.low > 0.4 && m.posture === 'stand' && m.speed > 0.1) now.add('slink');
     if (doing === 'beg' && phase === 'ask') now.add('beg');
+    if (doing === 'beg' && phase === 'back') now.add('lead');
     if (doing === 'huff') now.add('huff');
     if (doing === 'cool' && m.posture === 'side') now.add('cool');
     if (a.askingNow) now.add('more');
