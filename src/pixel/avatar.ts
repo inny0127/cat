@@ -587,6 +587,11 @@ export class PixelAvatar implements Avatar {
     // (a start, a moment ago: a look at you)
     if (this.referIn > 0 && (this.referIn -= dt) <= 0 && N.awake > 0.6) N.cue('you', 1.3);
     this.remember(dt);
+    // (what its eyes are on, kept a while: an hour on, mostly gone)
+    const k = Math.exp(-dt / 3600);
+    for (const [id, s] of this.onMind) this.onMind.set(id, s * k);
+    if (N.attending && N.awake > 0.6) this.onMind.set(N.attending.id, (this.onMind.get(N.attending.id) ?? 0) + dt);
+    this.dreamT = Math.max(0, this.dreamT - dt);
     // (a big shift of the eyes, as often as not, a blink with it, as eyes do when they jump a long
     // way; intent on prey, its eyes hardly blink)
     m.focus = Math.min(1, 1.2 * N.hunt);
@@ -677,6 +682,20 @@ export class PixelAvatar implements Avatar {
       was.copy(u.belief);
     }
   }
+  /** what its eyes have been on of late, and for how long (s, fading over an hour or so): what
+   *  it dreams of, asleep; and what it is dreaming of now, if anything */
+  private readonly onMind = new Map<string, number>();
+  private dreamOf: string | null = null;
+  private dreamT = 0;
+  private mostOnMind() {
+    let best: string | null = null, most = 3;
+    for (const [id, s] of this.onMind) if (id !== 'goal' && s > most) { most = s; best = id; }
+    return best;
+  }
+  get dreaming() {
+    return this.dreamT > 0 && this.sleep > 0.5 ? this.dreamOf : null;
+  }
+
   /** what it wonders at just now, if anything (the name its eyes know it by) */
   get wondering() {
     return this.curiosity()?.id ?? null;
@@ -1246,6 +1265,9 @@ export class PixelAvatar implements Avatar {
       // deep asleep, now and then it dreams: a twitch of a paw, the whiskers, an ear
       if (this.sleep > 0.75 && atHome && (this.dreamIn -= dt) < 0) {
         this.dreamIn = 12 + Math.random() * 40;
+        // (what it dreams of: whatever its eyes were on most, of late; a run is a chase)
+        this.dreamOf = this.mostOnMind();
+        this.dreamT = 5 + Math.random() * 4;
         // (now and then, more than a twitch: it runs in its sleep, all four paws going a while)
         if (Math.random() < 0.22) this.cat.motor.dreamRun();
         else {

@@ -24,6 +24,8 @@ const DOING: Record<string, string> = {
 export interface MindState {
   intent: string | null;
   doing: string | null;
+  /** asleep: what it dreams of just now, if anything */
+  dream?: string | null;
   wonder: string | null;
   expects: { laser: number; wand: number; yarn: number; pet: number };
 }
@@ -131,7 +133,7 @@ export class Mind {
       `사냥 욕구  ${pct(N.hunt)}`,
       `하려는 것  ${m.intent ? DOING[m.intent] ?? m.intent : m.doing ? DOING[m.doing] ?? m.doing : '-'}`,
     ];
-    if (N.awake < 0.3) rows.splice(0, rows.length, '잠들었어요');
+    if (N.awake < 0.3) rows.splice(0, rows.length, '잠들었어요', ...(m.dream ? [`꿈  ${NAMES[m.dream] ?? m.dream}`] : []));
     if (m.wonder) rows.push(`궁금한 것  ${NAMES[m.wonder] ?? m.wonder}`);
     if (looks) rows.push(`기다리는 것  ${looks}`);
     const text = rows.join('\n');

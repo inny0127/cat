@@ -53,6 +53,8 @@ export class Whim {
     if (this.intent?.id === GOAL) eyes?.forget(GOAL);
     this.intent = null;
     this.easy = 0;
+    // (what it might do asked afresh, at its ease again: it may be somewhere else now)
+    this.optsIn = 0;
   }
 
   private begin(eyes: Eyes) {
@@ -85,7 +87,7 @@ export class Whim {
     }
     this.easy += dt;
     if ((this.optsIn -= dt) <= 0) {
-      this.optsIn = 0.25;
+      this.optsIn = 1;
       this.opts = options();
     }
     const ramp = ss(1, 5, this.easy);
@@ -104,6 +106,7 @@ export class Whim {
       // its head)
       if (!act && o.key !== 'still') continue;
       this.easy = 0;
+      this.optsIn = 0;
       const at = o.about ? null : o.at ?? null;
       if (!act || (!o.about && !at)) return { o, act };
       this.intent = { o, act, at: at && at.clone(), id: o.about ?? GOAL, t: 0, on: 0, dwell: 0.3 + 1.1 * this.rnd() };

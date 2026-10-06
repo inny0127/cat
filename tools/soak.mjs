@@ -79,7 +79,10 @@ const report = await page.evaluate(async (minutes) => {
       laser = { until: i + 200 + Math.floor(Math.random() * 300), on: false, x: 195, y: 650, aim: null };
       laserUses++;
     } else if (laser) {
-      if (!laser.on && Math.random() < 0.05) {
+      // (put down already: a tap on the sill came down on where the pointer lies, the view having
+      // moved round to the cat; that is a put-down, and an end of it)
+      if (!app.laser.held) { if (laser.on) app.input.up({ ...ev(laser.x, laser.y, t), pointerId: 12 }, false); laser = null; }
+      else if (!laser.on && Math.random() < 0.05) {
         laser.aim = Math.random() < 0.25 ? scr(app.room.mugTop) : Math.random() < 0.3 ? [100 + Math.random() * 200, 440 + Math.random() * 20] : null;
         app.input.down({ ...ev(laser.x, laser.y, t), pointerId: 12 }); laser.on = true;
       } else if (laser.on) {
@@ -89,7 +92,7 @@ const report = await page.evaluate(async (minutes) => {
         app.input.move({ ...ev(laser.x, laser.y, t), pointerId: 12 });
         if (Math.random() < 0.02) { app.input.up({ ...ev(laser.x, laser.y, t), pointerId: 12 }, false); laser.on = false; }
       }
-      if (i >= laser.until) {
+      if (laser && i >= laser.until) {
         if (laser.on) app.input.up({ ...ev(laser.x, laser.y, t), pointerId: 12 }, false);
         const [x, y] = scr(app.room.pointerHome);
         app.input.down({ ...ev(x, y, t), pointerId: 13 });
