@@ -862,7 +862,8 @@ export class Motor {
     p.headRoll += this.tiltNow;
     p.earFwd += 0.5 * Math.abs(this.tiltNow);
     // tail: a lazy swish, more when the motor asks for it or the cat is cross or keen
-    this.wavePhase += dt * (1.1 + 1.6 * this.waveAmp) * this.tailWaveSpeed * Math.max(0.2, f.tailWaveSpeed);
+    // (never quite in time: now a little quicker, now slower)
+    this.wavePhase += dt * (1.1 + 1.6 * this.waveAmp) * this.tailWaveSpeed * Math.max(0.2, f.tailWaveSpeed) * (0.8 + 0.2 * (1 + noise1(this.time * 0.17 + 23)));
     // ears: flick now and then, often when annoyed
     this.earT -= dt;
     if (this.earT < 0) {
@@ -982,9 +983,12 @@ export class Motor {
   private swayW = 0;
   private swayA = 0;
 
-  /** the tail's sway: the motor's own, plus the feeling's */
+  /** the tail's sway: the motor's own, plus the feeling's; at its ease, in bouts (a few swishes,
+   *  then a while hardly at all), cross, all the time */
   private get waveAmp() {
-    return Math.max(0, this.tailWave + this.feel.tailWave);
+    const a = Math.max(0, this.tailWave + this.feel.tailWave);
+    const bout = 0.25 + 0.75 * clamp(0.5 + 0.9 * noise1(this.time * 0.21 + 11));
+    return a * (bout + (1 - bout) * clamp(1.5 * this.feel.tailWave));
   }
 
   /** time-varying tail yaw for segment i of n */
