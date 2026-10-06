@@ -215,11 +215,14 @@ void main() {
     vec2 q = ip / vec2(mix(0.5 * pxI, max(0.5 * pxI, 0.42), open), 0.46 + 0.1 * uPupil);
     float pupil = open < 0.5 ? step(abs(q.x), 1.0) * step(abs(q.y), 1.0) : step(length(q), 1.0);
     // (never smaller than about an art pixel, so even a small eye keeps its spark; and low enough
-    // in the eye, just up and out from the pupil, that the upper lid's dark rim does not cover it
-    // when the eye is only half open, as it mostly is)
-    vec2 gq = abs(ip - vec2(-0.3, 0.1) - vec2(-0.3, 0.0) * max(0.0, uGlint - 0.12)) * 0.12 / uGlint;
+    // in the eye that the upper lid's dark rim does not cover it when the eye is only half open,
+    // as it mostly is. On the pupil, up toward the light, the same side in both eyes: beside the
+    // pupil, out on the iris, a spark of white in an eye a few art pixels across reads as the white
+    // of an eye, and the cat looks as if it were looking off sideways, or cross-eyed; and only one
+    // of them, but in an eye seen close)
+    vec2 gq = abs(ip - vec2(-0.13, 0.16)) * 0.12 / uGlint;
     vec2 gq2 = abs(ip - vec2(0.2, -0.2));
-    float glint = max(step(max(gq.x, gq.y), 0.12) * step(0.3, uShine), step(max(gq2.x, gq2.y), 0.05) * step(0.75, uShine));
+    float glint = max(step(max(gq.x, gq.y), 0.12) * step(0.3, uShine), step(max(gq2.x, gq2.y), 0.05) * step(0.75, uShine) * step(uGlint, 0.13));
     vec3 c = mix(iris, vec3(0.004), pupil);
     // in a dark room, what little light there is comes back out through the pupil off the mirror
     // at the back of a cat's eye: the pupils shine a soft green-gold (and glow a little)
@@ -334,7 +337,9 @@ export function setLids(e: CatEye, lids: THREE.Vector4, open: number, squint = 0
   // the lower lid rises a little as the eye shuts; the upper one comes down to meet it. Narrowed
   // with pleasure, the lower lid is pushed up in the middle past level, so that the slit arches
   // (as a painter draws a blissful cat's eyes: narrowed straight, by annoyance, they read as a sulk)
-  const arch = 0.55 * Math.max(0, Math.min(1, smile)) * Math.max(0, Math.min(1, (1 - o) / 0.6));
+  // (only a little: a cat's eyes narrowed in contentment are soft slits, not the upturned arcs of a
+  // drawn smile, which read as a cartoon)
+  const arch = 0.22 * Math.max(0, Math.min(1, smile)) * Math.max(0, Math.min(1, (1 - o) / 0.6));
   const lower = -0.43 + 0.3 * Math.max(0, Math.min(1, squint)) + 0.15 * (1 - o) + arch;
   const upper = lower - 0.04 + (0.5 - lower + 0.04) * o;
   e.eyeMat.uniforms.uLower.value = lower;
