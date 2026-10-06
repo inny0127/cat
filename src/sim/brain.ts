@@ -579,7 +579,8 @@ export class Brain {
     // (with a margin each way: liking a hand and minding it, the cat does not flick from the one to
     // the other and back with every little more or less of it; minding it, it is mollified only
     // once it has got over most of it)
-    if (this.mode !== 'sleep' && this.mode !== 'doze' && this.mode !== 'angry') {
+    // (and not once it is off: leave() above may have it on its way out this very frame)
+    if (this.mode !== 'sleep' && this.mode !== 'doze' && this.mode !== 'angry' && !this.inert) {
       const annoyed = this.mode === 'annoyed', enjoying = this.mode === 'enjoy';
       if (touching && this.pleasure > 0.45 && this.irritation < (annoyed ? 0.24 : 0.35)) this.setMode('enjoy');
       else if (this.irritation > (enjoying ? 0.42 : 0.32)) this.setMode('annoyed');
