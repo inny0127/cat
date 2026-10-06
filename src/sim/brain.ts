@@ -272,6 +272,17 @@ export class Brain {
       else this.anim.twitchEar('both', 0.8);
       this.toAwake(this.s.trust > 0.4 && zone !== 'tail' && zone !== 'paw' ? 'rest' : 'alert');
       this.peekEye = 0;
+    } else if (this.mode !== 'angry' && this.anim.unseen) {
+      // awake, and a hand on it it never saw coming (round behind it, its head turned away): a
+      // start, the ears flicked, and round to see whose it is; less of one, the surer of you it is.
+      // Seen coming, it takes it as it comes
+      const u = this.anim.unseen(c.sx, c.sy);
+      const k = clamp((u - 0.5) * 2) * (1 - 0.6 * clamp(this.s.trust));
+      if (k > 0.12) {
+        this.anim.jolt(0.25 + 0.6 * k);
+        this.anim.twitchEar('both', 0.5 + 0.4 * k);
+        this.fear = clamp(this.fear + 0.2 * k);
+      }
     }
     // its belly offered (rolled over before you, flat out, asleep on its back) and a hand put on
     // it: a trap, the hand hugged and bitten at and kicked, and let go. Half a game and half

@@ -569,7 +569,11 @@ export class PixelAvatar implements Avatar {
     else if (this.act?.name === 'play') N.bias.set('yarn', 0.35);
     else if (this.act?.name === 'pompom') N.bias.set('pompom', 0.35);
     if (I) N.bias.set(I.id, (N.bias.get(I.id) ?? 0) + this.whim.pull);
-    N.update(dt, this.eyeW, Math.atan2(this.headF.x, this.headF.z), Math.asin(Math.max(-1, Math.min(1, this.headF.y))), T);
+    this.headYaw = Math.atan2(this.headF.x, this.headF.z);
+    this.headPitch = Math.asin(Math.max(-1, Math.min(1, this.headF.y)));
+    N.update(dt, this.eyeW, this.headYaw, this.headPitch, T);
+    // (a hand come down on it out of nowhere: felt, and its eyes go round to it)
+    if (this.handCue > 0 && N.unit('hand')) { N.cue('hand', this.handCue); this.handCue = 0; }
     // (the red dot come on: the click of the pointer, and the room's light changed; it looks
     // round for it wherever it is)
     if (L && !this.dotWas) N.cue('dot', 1.4);
@@ -588,6 +592,29 @@ export class PixelAvatar implements Avatar {
   }
   private readonly headLocal = new THREE.Vector3();
   private dotWas = false;
+  /** the way its head faces (world), as of the last look round */
+  private headYaw = 0;
+  private headPitch = 0;
+  private handCue = 0;
+  private readonly comeIn = new THREE.Vector3();
+
+  /** a hand come down on it at a point on the screen: how far out of its sight that was (0: it saw
+   *  it coming .. 1: out of nowhere). A hand comes in from your side, so it is seen coming if the way
+   *  in from you to the spot is in its eyes' field: its back stroked while it looks at you is no
+   *  surprise; while it looks away, round behind it, it is. Its eyes go round to it, as felt */
+  unseen(sx: number, sy: number) {
+    if (!this.alive || this.isHidden || this.sleep > 0.3 || !this.feel) return 0;
+    const hit = this.feel(sx, sy);
+    if (!hit) return 0;
+    const N = this.nerves, blockers = this.blockers?.() ?? [], you = this.viewer();
+    let seen = 0;
+    for (const k of [0.06, 0.15, 0.28]) {
+      const q = this.comeIn.copy(you).sub(hit.point).normalize().multiplyScalar(k).add(hit.point);
+      seen = Math.max(seen, N.visible(q, this.headYaw, this.headPitch, blockers));
+    }
+    this.handCue = 0.6 + 0.9 * (1 - seen);
+    return 1 - seen;
+  }
 
   /** the red dot as it has it: where it believes it is, if it is sure enough (once lost, it has to
    *  be surer before it counts as found again); on its own coat it feels it, and knows */

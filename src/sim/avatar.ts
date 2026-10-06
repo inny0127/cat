@@ -69,6 +69,9 @@ export interface Avatar {
   /** the hand gone before it had had enough: the head pushed out after it, a look at you (true if
    *  it does) */
   askMore?(): boolean;
+  /** how far out of its sight a hand came down on it, at a point on the screen (0: it saw it coming
+   *  .. 1: out of nowhere, round behind it); and its eyes sent round to it */
+  unseen?(sx: number, sy: number): number;
   /** a hand on its belly: trapped (hugged, bitten at, kicked) if the belly is offered just now
    *  (rolled over, flat out, on its back); false if not */
   bellyTrap?(): boolean;
