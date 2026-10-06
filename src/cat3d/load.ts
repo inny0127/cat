@@ -71,11 +71,23 @@ export interface CatAsset {
 
 export const CORR_WIDTH = 1024;
 
-/** Reads the binary written by tools/cat3d/model.py: u32 header length, JSON header, arrays. */
-export async function loadCatAsset(url: string): Promise<CatAsset> {
+/** a file's bytes: fetched, or (a data: URL, as the app built for a claude.ai Artifact carries its
+ *  model, a frame that fetches nothing but its own files) decoded where it is */
+async function bytesOf(url: string): Promise<ArrayBuffer> {
+  if (url.startsWith('data:')) {
+    const bin = atob(url.slice(url.indexOf(',') + 1));
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out.buffer;
+  }
   const res = await fetch(url);
   if (!res.ok) throw new Error('cat asset ' + res.status);
-  const buf = await res.arrayBuffer();
+  return res.arrayBuffer();
+}
+
+/** Reads the binary written by tools/cat3d/model.py: u32 header length, JSON header, arrays. */
+export async function loadCatAsset(url: string): Promise<CatAsset> {
+  const buf = await bytesOf(url);
   const headLen = new Uint32Array(buf, 0, 1)[0];
   const head = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 4, headLen)));
   const base = 4 + headLen;

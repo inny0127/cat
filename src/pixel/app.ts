@@ -23,7 +23,11 @@ import { rainAt } from '../cat3d/roomlight';
 import { Capacitor } from '@capacitor/core';
 import { App as CapApp } from '@capacitor/app';
 
-const MODEL = './cat3d/fri.bin';
+// (the app built for a claude.ai Artifact carries the model in it, as a data: URL)
+const MODEL: string = import.meta.env.VITE_CAT_MODEL ?? './cat3d/fri.bin';
+/** built to be shown as a claude.ai Artifact (tools/artifact.mjs): a frame that allows no
+ *  notifications, no motion sensors and no service worker */
+const ARTIFACT = import.meta.env.VITE_ARTIFACT === '1';
 
 /**
  * The window onto the pixel cat's room. The same life, brain, gestures and notifications as the
@@ -195,6 +199,9 @@ export class PixelApp {
     const now = Date.now();
     const firstEver = !localStorageHas();
     this.state = loadState(now);
+    // (shown as a claude.ai Artifact, in its frame: no notifications to be had there, so the cat
+    // never asks for them)
+    if (ARTIFACT) this.state.notifyAsked = true;
     const away = Math.max(0, now - this.state.lastTick);
     stepLife(this.state, away, true);
     this.state.lastTick = now;
@@ -747,7 +754,7 @@ export class PixelApp {
       noseAt: (px, py) => this.senses.noseAt(px, py),
     });
     this.brain.onWantNotify = () => { this.askNotify = true; };
-    this.brain.onWantMotion = () => { if (this.motion.canAsk) this.askMotion = true; };
+    this.brain.onWantMotion = () => { if (this.motion.canAsk && !ARTIFACT) this.askMotion = true; };
   }
 
   /** the credits: the 3D cat is someone's model, shared under CC BY 4.0, changed for this app */

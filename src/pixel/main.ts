@@ -26,7 +26,8 @@ PixelApp.create(canvas, hint).catch((err) => {
 // the installable web version (iOS and Android alike): the room there offline too, and the
 // notifications shown through the service worker (Android's Chrome shows them no other way) and
 // brought to the front when tapped
-if ('serviceWorker' in navigator && import.meta.env.PROD && !Capacitor.isNativePlatform() && location.protocol === 'https:') {
+// (not in a claude.ai Artifact's frame, which has none)
+if ('serviceWorker' in navigator && import.meta.env.PROD && import.meta.env.VITE_ARTIFACT !== '1' && !Capacitor.isNativePlatform() && location.protocol === 'https:') {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
   });
