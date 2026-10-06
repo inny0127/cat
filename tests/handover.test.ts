@@ -134,3 +134,35 @@ describe('the wiggle before a spring', () => {
     expect(on.hz).toBeLessThan(6.4);
   });
 });
+
+describe('an easy walk', () => {
+  it('wanders a little from the straight way, and comes true at the end; a run does not', () => {
+    const lateral = (speed: number, seed: number, pass = false) => {
+      let r = seed;
+      const rnd = vi.spyOn(Math, 'random').mockImplementation(() => ((r = (r * 16807) % 2147483647) / 2147483647));
+      const m = new Motor();
+      rnd.mockRestore();
+      m.snap('stand');
+      m.pos.set(0, 0, 0);
+      m.yaw = 0;
+      let arrived = false, most = 0;
+      m.walkTo(new THREE.Vector3(0, 0, 1.4), speed, null, () => { arrived = true; }, pass);
+      for (let i = 0; i < 60 * 15 && !arrived; i++) {
+        m.update(1 / 60);
+        most = Math.max(most, Math.abs(m.pos.x));
+      }
+      return { most, arrived, end: Math.abs(m.pos.x) };
+    };
+    let wandered = 0;
+    for (const seed of [1, 2, 3, 4, 5]) {
+      const w = lateral(0.3, seed);
+      expect(w.arrived).toBe(true);
+      expect(w.end).toBeLessThan(0.03);
+      expect(w.most).toBeLessThan(0.12);
+      if (w.most > 0.015) wandered++;
+      // (after something at a run, on through it: straight at it)
+      expect(lateral(1.0, seed, true).most).toBeLessThan(0.005);
+    }
+    expect(wandered).toBeGreaterThanOrEqual(3);
+  });
+});

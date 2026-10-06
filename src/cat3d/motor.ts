@@ -152,6 +152,8 @@ export class Motor {
   ghost = false;
   /** 0 .. 1: keen to be up and off (glad to see you): up out of lying down the sooner, sleepy or not */
   eager = 0;
+  /** where in its own wandering its walks start (each cat's paths its own) */
+  private readonly wander = Math.random() * 100;
   /** 0 .. 1: quick off the mark and sharp in the turns (the zoomies), rather than an easy walk */
   zoom = 0;
   /** 0 .. 1: out of breath, after a run (the harder and the longer, the more; got back over half a
@@ -615,7 +617,12 @@ export class Motor {
         } else this.arrive();
       } else {
         // (round anything in the way)
-        const want_yaw = this.roundAbout(dx, dz, dist) ?? Math.atan2(dx, dz);
+        // (an easy walk is no ruled line: where it heads wanders a little, now this side, now that,
+        // and comes true as it nears the place; round something in the way, it keeps to the way round)
+        const round = this.roundAbout(dx, dz, dist);
+        const meander = round === null && this.goalSpeed <= 0.35 && !this.goalPass
+          ? 0.14 * noise1(this.time * 0.32 + this.wander) * clamp((dist - 0.15) / 0.45) : 0;
+        const want_yaw = (round ?? Math.atan2(dx, dz)) + meander;
         const e = wrap(want_yaw - this.yaw);
         // (on the spot a little slower than on the move; quicker at a run, but in an arc, not on
         // a pin; and quicker keen or keyed up)
