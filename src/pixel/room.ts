@@ -3250,9 +3250,14 @@ export class Room {
 
   /** what a cat running about has to go round (not the bed: that it runs over; not the ball of
    *  wool, which it sends flying) */
-  private inTheWay(): [THREE.Vector3, number][] {
+  inTheWay(): [THREE.Vector3, number][] {
     const S = this.spots;
     return [[S.food, 0.07], [S.water, 0.07], [S.litter, 0.19], ...this.things.filter(([c, r]) => r > 0 && c !== this.yarnHome)];
+  }
+  /** of those, the solid things a cat is never in: the plant's pot, the lamp's foot, the books, the
+   *  scratching post, the box when it is out */
+  solids(): [THREE.Vector3, number][] {
+    return this.things.filter(([c, r]) => r > 0 && c !== this.yarnHome);
   }
 
   /** a point on the floor (for the middle of a cat r across) moved out of the room's things and

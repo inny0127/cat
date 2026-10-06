@@ -24,7 +24,7 @@ export interface LaserDot {
   selfAt?: THREE.Vector3;
 }
 
-type Phase = 'notice' | 'stalk' | 'run' | 'wiggle' | 'pounce' | 'hold' | 'rear' | 'leap' | 'search' | 'tired' | 'self'
+type Phase = 'notice' | 'stalk' | 'run' | 'wiggle' | 'pounce' | 'land' | 'hold' | 'rear' | 'leap' | 'search' | 'tired' | 'self'
   | 'gather' | 'up' | 'sill' | 'spring' | 'look' | 'down';
 
 /**
@@ -83,6 +83,12 @@ export class Chase implements Act {
   private selfRest = 0;
   /** how long the dot has been on its own coat (a beam it has only walked through is nothing) */
   private selfOn = 0;
+  /** the pounce under way: from where, facing which way (fixed once it is off the floor), how far
+   *  it carries and for how long; and when the last one was (the chase's own clock) */
+  private readonly leapFrom = new THREE.Vector3();
+  private leapYaw = 0;
+  private leapReach = 0;
+  private lastPounce = -9;
   /** the last pat that knocked at the wall, and whether this leap has */
   private patK = -1;
   private patted = false;
@@ -346,9 +352,11 @@ export class Chase implements Act {
         const books = L!.on === 'books';
         if (!books && L!.on !== 'floor' && L!.on !== 'bed') { this.decide(c, L!); return true; }
         if (d > (books ? 0.3 : 0.5)) { this.next(this.ds > 0.5 ? 'run' : 'stalk'); return true; }
-        // (squarely at it)
-        const face = Math.atan2(L!.p.x - m.pos.x, L!.p.z - m.pos.z);
-        if (Math.abs(wrapA(face - m.yaw)) > 0.45 && !m.goal) m.walkTo(m.pos.clone(), 0.15, face);
+        // (squared round to it, as a crouched cat does, a shuffle of the forepaws at a time: not
+        // spun on a pin)
+        m.stop();
+        const err = wrapA(Math.atan2(L!.p.x - m.pos.x, L!.p.z - m.pos.z) - m.yaw);
+        m.yaw = wrapA(m.yaw + clamp(err * 4, -1.7, 1.7) * dt);
         m.setPosture('crouch');
         const wg = Math.sin(this.t * Math.PI * 2 * 5);
         m.layer = {
@@ -359,36 +367,61 @@ export class Chase implements Act {
           },
           w: 1,
         };
-        // (it moves while it is in reach: the hunter cannot wait)
-        if (this.t > this.dur || (this.t > 0.15 && this.ds > 0.25 && d < 0.4)) this.pounce(c);
+        // (once square to it, and its last spring a moment behind it: off, when the wiggle is done,
+        // or at once if it moves, in reach: the hunter cannot wait)
+        const ready = Math.abs(err) < 0.3 && this.total - this.lastPounce > 1.1;
+        if (ready && (this.t > this.dur || (this.t > 0.3 && this.ds > 0.25 && d < 0.4))) this.pounce(c);
         return true;
       }
       case 'pounce': {
-        // spring forward, all four off the floor a moment, the forepaws reaching to come down on it
-        // (steering in the air after a dot that moves); on the books, the forepaws come down on top
-        const at = L ? L.p : this.last;
+        // gathered, then up and forward off the hind legs, the forepaws reaching out and coming
+        // down on where it was; the way it faces fixed from the moment it leaves the floor; on the
+        // books, the forepaws come down on top of them
         const books = (L ? L.on : this.lastOn) === 'books';
-        const dx = at.x - m.pos.x, dz = at.z - m.pos.z, dist = Math.hypot(dx, dz);
-        const u = Math.min(1, this.t / this.dur), arc = Math.sin(Math.PI * u);
-        m.yaw = wrapA(m.yaw + clamp(wrapA(Math.atan2(dx, dz) - m.yaw), -1, 1) * Math.min(1, dt * 6) * (1 - u));
-        const reach = books ? 0.04 : clamp(dist - 0.14, 0.05, 0.26);
-        m.pos.addScaledVector(this.fwd, ((Math.PI / 2) * reach / this.dur) * arc * dt);
+        const u = Math.min(1, this.t / this.dur);
+        const fx = Math.sin(this.leapYaw), fz = Math.cos(this.leapYaw);
+        // (the gather 0 .. 0.2, in the air 0.2 .. 0.8, landing after)
+        const air = clamp((u - 0.2) / 0.6, 0, 1), go = smooth(air), arc = Math.sin(Math.PI * air);
+        const gather = u < 0.2 ? ease(u / 0.2) : 1 - ease((u - 0.2) / 0.15);
+        const land = u > 0.8 ? Math.sin(Math.PI * (u - 0.8) / 0.2) : 0;
+        m.yaw = this.leapYaw;
+        m.pos.set(this.leapFrom.x + fx * this.leapReach * go, 0, this.leapFrom.z + fz * this.leapReach * go);
+        const lift = (0.02 + 0.1 * this.leapReach / 0.5) * arc;
         const top = books ? 0.088 * smooth(u) : 0;
-        const fore = { planted: 0, frame: 0, x: 0.03, y: 0.012 + top + 0.07 * arc, z: 0.115 + 0.11 * Math.sin(Math.PI * Math.min(1, u * 1.15)) + (books ? 0.03 * u : 0), flex: 0.2 * arc };
-        const hind = { planted: 0, frame: 0, x: 0.04, y: 0.013 + 0.025 * arc, z: -0.13 - 0.04 * arc };
+        const fore = { planted: 0, frame: 0, x: 0.03, y: 0.012 + top + 0.09 * arc, z: 0.1 + 0.13 * Math.sin(Math.PI * Math.min(1, air * 1.1)) + (books ? 0.03 * u : 0), flex: 0.35 * arc - 0.2 * land };
+        const hind = { planted: 0, frame: 0, x: 0.04, y: 0.013 + 0.03 * arc, z: -0.13 - 0.07 * Math.sin(Math.PI * Math.min(1, air * 1.6)) };
         m.layer = {
-          pose: { ...keen, hipY: 0.15 + 0.06 * arc + (books ? 0.04 * u : 0), chestPitch: 0.3 * arc + (books ? 0.25 * u : 0), neckPitch: -0.15, headPitch: 0.05, LF: fore, RF: fore, LH: hind, RH: hind, tailLift: 0.3 * arc - 0.2 },
+          pose: {
+            ...keen, hipY: 0.15 - 0.025 * gather + lift + (books ? 0.04 * u : 0) - 0.02 * land, hipPitch: -0.15 * gather,
+            chestPitch: 0.25 * arc - 0.12 * gather + (books ? 0.25 * u : 0) - 0.1 * land, neckPitch: -0.2 + 0.1 * arc, headPitch: 0.05,
+            LF: fore, RF: fore, LH: hind, RH: hind, tailLift: 0.35 * arc - 0.25, tailCurve: -0.3 * arc,
+          },
           w: 1,
         };
         if (u >= 1) {
           c.sound('thump', books ? 0.12 : 0.18);
-          const paws = m.pos.clone().addScaledVector(this.fwd, books ? 0.18 : 0.2);
+          const paws = m.pos.clone().addScaledVector(this.fwd.set(fx, 0, fz), books ? 0.18 : 0.19);
           this.pinAt.copy(paws);
           c.bump(paws.clone().setY(0.05), 0.4);
-          // on it (as near as a cat can tell): held down; or missed, and after it again
-          const near = L && Math.hypot(L.p.x - paws.x, L.p.z - paws.z) < 0.09 && (L.on === 'floor' || L.on === 'bed' || books);
+          // on it (as near as a cat can tell): held down; or missed, and a moment to see where it
+          // went before it goes after it again
+          const near = L && Math.hypot(L.p.x - paws.x, L.p.z - paws.z) < 0.1 && (L.on === 'floor' || L.on === 'bed' || books);
           if (near) { this.side = Math.random() < 0.5 ? 1 : -1; this.next('hold', rand(0.6, 1.2)); }
-          else if (L) this.decide(c, L);
+          else if (L) this.next('land', rand(0.3, 0.6));
+          else { this.asked = false; this.next('search'); }
+        }
+        return true;
+      }
+      case 'land': {
+        // missed: down where it came down, crouched, the head round after it, the tail lashing
+        // (and only then after it again)
+        m.stop();
+        m.setPosture('crouch');
+        if (L) m.lookAt(L.p, 1);
+        m.layer = { pose: { ...keen, hipY: 0.135, neckPitch: -0.3, tailSide: 0.5 * Math.sin(this.t * 9) }, w: 1 };
+        if (this.t > this.dur) {
+          m.layer = null;
+          if (L) this.decide(c, L);
           else { this.asked = false; this.next('search'); }
         }
         return true;
@@ -544,7 +577,7 @@ export class Chase implements Act {
     this.aim.set(NaN, 0, 0);
     this.via = null;
     if (L.on === 'floor' || L.on === 'bed') {
-      if (d < 0.36) this.next('wiggle', rand(0.2, 0.6));
+      if (d < 0.36) this.next('wiggle', rand(0.35, 0.8));
       else if (this.ds > 0.45 || d > 0.85) this.next('run');
       else this.next('stalk');
       return;
@@ -553,10 +586,25 @@ export class Chase implements Act {
     this.next('run');
   }
 
+  /** a pounce: how far to carry (the forepaws to come down on the dot, as near as a cat can
+   *  judge), the way it faces now, and the longer the leap the longer it takes */
   private pounce(c: Ctx) {
-    c.m.stop();
-    c.m.zoom = 0;
-    this.next('pounce', 0.34);
+    const m = c.m, L = c.laser();
+    m.stop();
+    m.zoom = 0;
+    // (the run's way on is in the leap now)
+    m.speed = 0;
+    this.leapFrom.copy(m.pos);
+    this.leapYaw = m.yaw;
+    const at = L ? L.p : this.last, books = (L ? L.on : this.lastOn) === 'books';
+    const along = (at.x - m.pos.x) * Math.sin(m.yaw) + (at.z - m.pos.z) * Math.cos(m.yaw);
+    this.leapReach = books ? 0.04 : clamp(along - 0.19 + rand(-0.03, 0.03), 0.04, 0.5);
+    // (not into anything: no further than the floor there is clear)
+    const to = m.pos.clone().addScaledVector(new THREE.Vector3(Math.sin(m.yaw), 0, Math.cos(m.yaw)), this.leapReach);
+    const clear = c.keepClear(to.clone(), 0.12);
+    if (clear.distanceTo(to) > 0.02) this.leapReach = Math.max(0.04, this.leapReach - clear.distanceTo(to));
+    this.lastPounce = this.total;
+    this.next('pounce', 0.3 + 0.32 * this.leapReach / 0.5);
   }
 
   /** after it up on the windowsill: a gather, the spring up, hunting it along the sill (anything

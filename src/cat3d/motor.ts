@@ -108,6 +108,13 @@ export class Motor {
   goalPass = false;
   onArrive: (() => void) | null = null;
   maxSpeed = 1.6;
+  /** what is in the way on the floor (circles: middle and radius), round which a walk bends; and
+   *  of those the solid things a body is never in (the plant's pot, the lamp's foot, the books, the
+   *  scratching post). Neither while `ghost`: at something it means to be right up against or in
+   *  (raking the post, at the bowl, in the box), or up off the floor */
+  obstacles: (() => readonly (readonly [THREE.Vector3, number])[]) | null = null;
+  solids: (() => readonly (readonly [THREE.Vector3, number])[]) | null = null;
+  ghost = false;
   /** 0 .. 1: quick off the mark and sharp in the turns (the zoomies), rather than an easy walk */
   zoom = 0;
 
@@ -381,10 +388,55 @@ export class Motor {
     }
   }
 
+  /** on its feet, or as good as: getting up from a crouch into a stand (or down into one), it can
+   *  be off already, as a cat springs up into a run */
+  private get canWalk() {
+    if (this.standing) return true;
+    const feet = (p: PoseName) => p === 'stand' || p === 'crouch' || p === 'alert';
+    return this.path.length === 0 && feet(this.posture) && feet(this.fromName);
+  }
+
+  /** the way to head to get round whatever is first in the way between here and the goal, along
+   *  its near side (null: the way is clear) */
+  private roundAbout(dx: number, dz: number, dist: number): number | null {
+    if (this.ghost || !this.obstacles || !this.goal) return null;
+    const ux = dx / dist, uz = dz / dist, way = Math.atan2(ux, uz);
+    let best: number | null = null, bestT = dist;
+    for (const [c, R0] of this.obstacles()) {
+      const R = R0 + 0.13;
+      const ox = c.x - this.pos.x, oz = c.z - this.pos.z, dc = Math.hypot(ox, oz);
+      // (going to it, in among it: not in the way; already in it: the push out sees to that)
+      if (Math.hypot(this.goal.x - c.x, this.goal.z - c.z) < R || dc < R * 0.98) continue;
+      const t = ox * ux + oz * uz;
+      if (t <= 0 || t - R > bestT) continue;
+      if (Math.abs(ox * uz - oz * ux) >= R) continue;
+      // (to the side of it the way already passes, just clear of it)
+      const at = Math.atan2(ox, oz), off = Math.asin(Math.min(1, R / dc));
+      best = at + (wrap(at - way) > 0 ? -1 : 1) * Math.min(1.5, off * 1.08);
+      bestT = t;
+    }
+    return best;
+  }
+
+  /** the body out of anything solid it has got into (its chest and its hips, each a circle) */
+  private keepOut() {
+    if (this.ghost || !this.solids) return;
+    const fx = Math.sin(this.yaw), fz = Math.cos(this.yaw);
+    for (const [c, R0] of this.solids()) {
+      for (const k of [0.11, -0.09]) {
+        const dx = this.pos.x + fx * k - c.x, dz = this.pos.z + fz * k - c.z, d = Math.hypot(dx, dz), min = R0 + 0.075;
+        if (d >= min) continue;
+        const ux = d > 1e-4 ? dx / d : fx, uz = d > 1e-4 ? dz / d : fz;
+        this.pos.x += ux * (min - d);
+        this.pos.z += uz * (min - d);
+      }
+    }
+  }
+
   private locomote(dt: number) {
     let want = 0, turn = 0;
     if (!this.goal && this.spin && this.standing) turn = this.spin;
-    if (this.goal && this.standing) {
+    if (this.goal && this.canWalk) {
       const dx = this.goal.x - this.pos.x, dz = this.goal.z - this.pos.z;
       const dist = Math.hypot(dx, dz);
       if (this.goalPass && dist < 0.06) this.arrive();
@@ -396,10 +448,12 @@ export class Motor {
           if (Math.abs(e) < 0.06) this.arrive();
         } else this.arrive();
       } else {
-        const want_yaw = Math.atan2(dx, dz);
+        // (round anything in the way)
+        const want_yaw = this.roundAbout(dx, dz, dist) ?? Math.atan2(dx, dz);
         const e = wrap(want_yaw - this.yaw);
-        // (on the spot a little slower than on the move)
-        const maxTurn = (1.35 + 0.45 * clamp(this.speed / 0.2)) * (1 + 2.2 * this.zoom);
+        // (on the spot a little slower than on the move; quicker at a run, but in an arc, not on
+        // a pin)
+        const maxTurn = (1.35 + 0.45 * clamp(this.speed / 0.2)) * (1 + 1.2 * this.zoom);
         turn = clamp(e * 3.2, -maxTurn, maxTurn);
         // a cat walks round in an arc rather than stopping to pivot, slowing for the sharper
         // turns (near the goal too, so as not to circle it); the way behind it, it all but turns
@@ -419,6 +473,7 @@ export class Motor {
     this.yaw = wrap(this.yaw + this.yawRate * dt);
     this.vel.set(Math.sin(this.yaw) * this.speed, 0, Math.cos(this.yaw) * this.speed);
     this.pos.addScaledVector(this.vel, dt);
+    this.keepOut();
   }
 
   private arrive() {

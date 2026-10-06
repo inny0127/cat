@@ -105,6 +105,9 @@ export class PixelApp {
       held: () => this.room.yarnHeld, pin: (sec, at) => this.room.pinYarn(sec, at), pinned: () => this.room.yarnPinned,
     };
     this.avatar.sillSpot = () => this.room.sillSpot();
+    // (walking, round what is in the way; never in anything solid)
+    this.cat.motor.obstacles = () => this.room.inTheWay();
+    this.cat.motor.solids = () => this.room.solids();
     this.avatar.ground = {
       keepClear: (p, r) => this.room.keepClear(p, r),
       detour: (from, to, r) => this.room.detour(from, to, r),

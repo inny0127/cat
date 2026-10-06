@@ -132,6 +132,15 @@ const report = await page.evaluate(async (minutes) => {
     const mp = app.room.mouse.p;
     if (!Number.isFinite(mp.x + mp.y + mp.z) || mp.y < -0.01 || mp.y > 2) issues.push(`the toy mouse lost (${mp.x.toFixed(2)}, ${mp.y.toFixed(2)}, ${mp.z.toFixed(2)}) at ${i}`);
     if (Math.abs(m.pos.x) > 3 || Math.abs(m.pos.z) > 3) issues.push(`far away ${m.pos.x.toFixed(2)},${m.pos.z.toFixed(2)} at ${i}`);
+    // (never in anything solid, the plant's pot, the lamp's foot, the books, the post, the box: its
+    // chest and its hips, unless it means to be right up against it)
+    if (!m.ghost && !app.avatar.hidden && i % 5 === 0) {
+      const fx = Math.sin(m.yaw), fz = Math.cos(m.yaw);
+      for (const [cc, R] of app.room.solids()) for (const k of [0.11, -0.09]) {
+        const d = Math.hypot(m.pos.x + fx * k - cc.x, m.pos.z + fz * k - cc.z) - (R + 0.075);
+        if (d < -0.02 && issues.length < 40) issues.push(`in a solid thing (${cc.x.toFixed(2)},${cc.z.toFixed(2)}) by ${(-d * 100).toFixed(1)} cm at ${i} (act ${app.avatar.doing})`);
+      }
+    }
     const moved = Math.hypot(m.pos.x - lastPos.x, m.pos.z - lastPos.z) > 0.002;
     lastPos.x = m.pos.x; lastPos.z = m.pos.z;
     const wants = (app.avatar.trip && !app.avatar.hidden && (!app.avatar.errand || app.avatar.errand.phase !== 'do'));

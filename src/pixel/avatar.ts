@@ -1153,6 +1153,9 @@ export class PixelAvatar implements Avatar {
       f();
     }
     if (this.errand) this.doErrand(dt);
+    // (right up against a thing or in it on purpose, or up off the floor: no keeping clear of it)
+    m.ghost = !!this.errand || this.perched || this.isHidden || this.act instanceof Claw || this.act instanceof Rub || this.act instanceof Top
+      || this.act instanceof Sill || this.act instanceof Box || this.act instanceof Bat || this.act instanceof Fish || (this.act instanceof Chase && this.act.up);
     this.leanIntoHand(dt);
     this.askAfter(dt);
     this.lickHand(dt);
