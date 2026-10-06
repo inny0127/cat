@@ -137,10 +137,17 @@ export class Tease implements Act {
         // low and still, turned to them, eyes on them; deciding (low: down off its haunches too,
         // sat after a swat; the crouch's height on a sitting cat would lift its forepaws off the
         // floor)
-        if (m.targetPosture !== 'crouch') m.setPosture('crouch');
+        // (sat up after a swat or a rear, and them still up there in reach: it stays sat up for the
+        // next, as a cat does, not down into a crouch and up again with every swat)
+        const satUp = m.targetPosture === 'sit' && h > 0.09 && dist <= 0.32;
+        if (!satUp && m.targetPosture !== 'crouch') m.setPosture('crouch');
         if (Math.abs(wrapA(face - m.yaw)) > 0.45 && !m.goal && dist > 0.05) m.walkTo(m.pos.clone(), 0.15, face);
         const wg = h < 0.12 && this.ls > 0.1 ? Math.sin(this.t * Math.PI * 2 * 4) : 0;
-        m.layer = {
+        m.layer = satUp ? {
+          // (as it sits to swat: up on its haunches, a little forward, the forepaws down)
+          pose: { ...keen, chestPitch: -0.97, hipY: 0.064, neckPitch: h > 0.25 ? 0.3 : 0.05, headPitch: 0.05, tailSide: 0.35 * Math.sin(this.t * 6) },
+          w: 1,
+        } : {
           pose: { ...keen, hipY: 0.14, neckPitch: h > 0.25 ? 0.45 : -0.3, headPitch: h > 0.25 ? 0.1 : 0.05, hipYaw: 0.08 * wg, tailSide: 0.35 * Math.sin(this.t * 6) },
           w: Math.min(1, this.t / 0.25),
         };
