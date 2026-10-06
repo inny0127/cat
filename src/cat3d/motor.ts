@@ -410,12 +410,12 @@ export class Motor {
   /** leaning into a hand: the head rolled and turned toward the side being rubbed, the chin up
    *  under a scratch, the rump and tail raised under a stroke at the base of the tail (set by
    *  whoever knows where the hand is; eased toward) */
-  readonly petTarget = { roll: 0, yaw: 0, pitch: 0, rump: 0 };
+  readonly petTarget = { roll: 0, yaw: 0, pitch: 0, rump: 0, ears: 0 };
   /** the head tipped to one side, as a cat listens to something it cannot place (radians, + to
    *  its right) */
   tilt = 0;
   private tiltNow = 0;
-  private readonly pet = { roll: 0, yaw: 0, pitch: 0, rump: 0 };
+  private readonly pet = { roll: 0, yaw: 0, pitch: 0, rump: 0, ears: 0 };
 
   /** a moment in what it does worth a word to someone new to cats (a silent meow, a roll on its
    *  back), just now (for whoever wants it, to clear) */
@@ -925,6 +925,14 @@ export class Motor {
       if (this.posture === 'stand' || this.posture === 'sit' || this.posture === 'crouch') p.hipY += 0.018 * P.rump;
       p.hipPitch -= 0.12 * P.rump;
       p.tailLift += 0.6 * P.rump;
+      // (a hand over its crown presses the ears down and back, flat under it; let go, they spring
+      // up again, with a flick)
+      const pressed = P.ears > 0.35;
+      P.ears += (T.ears - P.ears) * (1 - Math.exp(-dt * (T.ears > P.ears ? 14 : 9)));
+      if (pressed && P.ears <= 0.35 && T.ears < 0.1) this.flickEar('both', 0.7);
+      p.earFlat = clamp(p.earFlat + 0.75 * P.ears);
+      p.earFwd -= 0.7 * P.ears;
+      p.earOut += 0.25 * P.ears;
     }
     // a face close in front of it
     this.noseNow += (this.nose - this.noseNow) * (1 - Math.exp(-dt * 3));

@@ -246,19 +246,39 @@ export class PixelAvatar implements Avatar {
   private keenWalk = false;
   private rubSide = 1;
   private readonly eyesAt = new THREE.Vector3();
+  private readonly crownL = new THREE.Vector3();
+  private readonly crownR = new THREE.Vector3();
+  private readonly crownM = new THREE.Vector3();
+  /** a hand pressing its ears down just now */
+  private earsDown = false;
 
   /** where a hand is on it, its body answers: the cheek or the head rubbed into it, the chin
    *  lifted to a scratch, the rump and tail raised to a stroke at the base of the tail; the
    *  happier it is under the hand, the more */
   private leanIntoHand(dt: number) {
     const m = this.cat.motor, T = m.petTarget;
-    T.roll = T.yaw = T.pitch = T.rump = 0;
+    T.roll = T.yaw = T.pitch = T.rump = T.ears = 0;
     const h = this.hands[0];
+    if (!h) this.earsDown = false;
     if (!h && this.lastHand) this.lastHand.t += dt;
     const keen = !this.alive || this.sleep > 0.5 ? 0 : this.mode === 'enjoy' ? 1 : this.mode === 'rest' || this.mode === 'alert' ? 0.45 : 0;
-    if (!h || keen <= 0 || !this.feel) return;
+    if (!h || !this.feel || !this.alive) return;
     const hit = this.feel(h.sx, h.sy);
     if (!hit) return;
+    // (a hand on its crown, between and over the ears, presses them down flat, asleep or awake,
+    // liking it or not: it is only a hand, and ears give)
+    if (hit.bone.startsWith('ear') || hit.bone === 'head') {
+      // (near the roots of the ears, or between them: wherever the head lies)
+      const K = this.cat.kin, W = this.cat.group.matrixWorld;
+      const l = this.crownL.copy(K.wp[K.i('earL')]).applyMatrix4(W), r = this.crownR.copy(K.wp[K.i('earR')]).applyMatrix4(W);
+      const mid = this.crownM.copy(l).add(r).multiplyScalar(0.5);
+      // (and once down under the hand, kept down while it stays about there: not let up and
+      // pressed again as the head moves a little under it)
+      const more = this.earsDown ? 0.015 : 0;
+      this.earsDown = hit.bone.startsWith('ear') || Math.min(hit.point.distanceTo(l), hit.point.distanceTo(r)) < 0.04 + more || hit.point.distanceTo(mid) < 0.045 + more;
+      if (this.earsDown) T.ears = 1;
+    } else this.earsDown = false;
+    if (keen <= 0) return;
     this.rub += dt;
     const b = hit.bone;
     // where on the head the hand is, from between the eyes: which side (+ the cat's left; near the
