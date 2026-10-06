@@ -805,6 +805,14 @@ export class Motor {
       p.neckPitch -= 0.25 * low;
       p.headPitch += 0.12 * low;
       p.pastern += 0.12 * low;
+      // (ill, sat or lying on its chest or up on its feet: hunched up, the back rounded, the head
+      // drawn in and down, as a cat that is not well sits it out)
+      let upright = 0;
+      for (const [name, wgt] of this.postureWeights()) if (name !== 'side' && name !== 'back' && name !== 'curl' && name !== 'curlL') upright += wgt;
+      const hunch = f.hunch * clamp(upright) * (1 - own);
+      p.lumbarPitch += 0.16 * hunch;
+      p.neckPitch -= 0.28 * hunch;
+      p.headPitch += 0.08 * hunch;
     }
     p.breath = clamp(p.breath + f.breath);
     {
