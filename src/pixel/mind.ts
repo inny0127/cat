@@ -106,7 +106,7 @@ export class Mind {
     const W = this.marks.width, H = this.marks.height;
     g.clearRect(0, 0, W, H);
     for (const u of N.units.values()) {
-      if (u.a < 0.04 || (!u.here && u.conf < 0.05)) continue;
+      if (N.awake < 0.3 || u.a < 0.04 || (!u.here && u.conf < 0.05)) continue;
       const q = this.p.copy(u.conf > 0.2 ? u.belief : u.seen).project(cam);
       if (q.z > 1 || Math.abs(q.x) > 1.1 || Math.abs(q.y) > 1.1) continue;
       const x = Math.round((q.x * 0.5 + 0.5) * W), y = Math.round((-q.y * 0.5 + 0.5) * H);
@@ -131,6 +131,7 @@ export class Mind {
       `사냥 욕구  ${pct(N.hunt)}`,
       `하려는 것  ${m.intent ? DOING[m.intent] ?? m.intent : m.doing ? DOING[m.doing] ?? m.doing : '-'}`,
     ];
+    if (N.awake < 0.3) rows.splice(0, rows.length, '잠들었어요');
     if (m.wonder) rows.push(`궁금한 것  ${NAMES[m.wonder] ?? m.wonder}`);
     if (looks) rows.push(`기다리는 것  ${looks}`);
     const text = rows.join('\n');

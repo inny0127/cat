@@ -716,7 +716,7 @@ export class Stage {
   /** a second, small view drawn over a corner of the screen (the cat's own eyes: mind.ts): its
    *  camera, where on the screen (css px, from the top left), and what is left out of it (the cat:
    *  its eyes are inside its head). Drawn in the room's own pixels */
-  inset: { cam: THREE.PerspectiveCamera; rect: { x: number; y: number; w: number; h: number }; hide: THREE.Object3D | null } | null = null;
+  inset: { cam: THREE.PerspectiveCamera; rect: { x: number; y: number; w: number; h: number }; hide: THREE.Object3D | null; lids?: number } | null = null;
   private insetRT: THREE.WebGLRenderTarget | null = null;
   private insetArt: THREE.WebGLRenderTarget | null = null;
   private insetPaint: THREE.ShaderMaterial | null = null;
@@ -746,10 +746,10 @@ export class Stage {
       // (as a cat sees: in blues and yellows, reds gone to olive, the colours weaker; and a little
       // dark round the edges, where its eyes are good for nothing but movement)
       const mat = new THREE.ShaderMaterial({
-        uniforms: { uSrc: { value: null }, uRaw: { value: 0 }, uDepth: { value: this.insetRT.depthTexture } },
+        uniforms: { uSrc: { value: null }, uRaw: { value: 0 }, uDepth: { value: this.insetRT.depthTexture }, uLids: { value: 0 } },
         vertexShader: PIXEL_VERT,
         fragmentShader: `
-          uniform sampler2D uSrc; uniform float uRaw; uniform sampler2D uDepth; varying vec2 vUv;
+          uniform sampler2D uSrc; uniform float uRaw; uniform sampler2D uDepth; uniform float uLids; varying vec2 vUv;
           void main() {
             vec3 c = texture2D(uSrc, vUv).rgb;
             c = uRaw > 0.5 ? c * 1.8 / (1.0 + c * 1.8) : pow(c, vec3(2.2));
@@ -761,6 +761,9 @@ export class Stage {
             c = mix(vec3(l), c, 0.75);
             vec2 d = vUv - 0.5;
             c *= 1.0 - 0.45 * smoothstep(0.25, 0.7, length(d * vec2(1.0, 0.6)));
+            // (its lids coming down, drowsy: from above and below, to a slit, to shut)
+            float lid = abs(d.y) * 2.0 + 0.25 * d.x * d.x;
+            c *= 1.0 - smoothstep(1.0 - uLids * 1.05, 1.08 - uLids * 1.05, lid);
             gl_FragColor = vec4(pow(max(c, 0.0), vec3(1.0 / 2.2)), 1.0);
           }`,
         depthTest: false, depthWrite: false, toneMapped: false,
@@ -813,6 +816,7 @@ export class Stage {
   }
   private showInset() {
     const R = this.inset!.rect, r = this.renderer, V = this.insetView!;
+    V.mat.uniforms.uLids.value = this.inset!.lids ?? 0;
     r.setRenderTarget(null);
     const size = r.getSize(new THREE.Vector2());
     r.setScissorTest(true);

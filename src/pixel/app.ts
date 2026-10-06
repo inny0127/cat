@@ -1186,7 +1186,8 @@ export class PixelApp {
   private seeMind() {
     const M = this.mind, av = this.avatar;
     M.update(av.nerves, { intent: av.whim.intent?.o.key ?? null, doing: av.doing, wonder: av.wondering, expects: av.expects });
-    this.stage.inset = M.open && !av.hidden ? { cam: M.cam, rect: M.rect, hide: this.cat.group } : null;
+    // (its lids down as far as sleep has them)
+    this.stage.inset = M.open && !av.hidden ? { cam: M.cam, rect: M.rect, hide: this.cat.group, lids: 1 - av.nerves.awake } : null;
   }
 
   /** what the cat learns of your hours (habits.ts): a game begun with the red dot, the feathers or
