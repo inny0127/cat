@@ -34,6 +34,9 @@ export interface MindState {
   lessons?: { key: string; by: number }[];
   wonder: string | null;
   expects: { laser: number; wand: number; yarn: number; pet: number };
+  /** how lively it is (what it takes into its head, how often: whim.ts), and how drowsy */
+  pace?: number;
+  sleepy?: number;
 }
 
 /**
@@ -134,7 +137,10 @@ export class Mind {
     const pct = (k: number) => `${Math.round(k * 100)}%`;
     const top = (['laser', 'wand', 'yarn', 'pet'] as const).reduce((a, b) => (m.expects[b] > m.expects[a] ? b : a), 'laser');
     const looks = m.expects[top] > 0.25 ? { laser: '레이저 놀이', wand: '깃털 놀이', yarn: '털실 놀이', pet: '쓰다듬기' }[top] : null;
+    // (its mood in a word: keyed up, at its ease, drowsy, or quiet)
+    const mood = m.pace === undefined ? null : m.pace > 0.85 ? '들뜸' : m.pace > 0.4 ? '느긋함' : (m.sleepy ?? 0) > 0.35 ? '나른함' : '차분함';
     const rows = [
+      ...(mood ? [`기분  ${mood}`] : []),
       `보는 것  ${A ? NAMES[A.id] ?? A.id : '-'}`,
       `사냥 욕구  ${pct(N.hunt)}`,
       `하려는 것  ${m.intent ? DOING[m.intent] ?? m.intent : m.doing ? DOING[m.doing] ?? m.doing : '-'}`,

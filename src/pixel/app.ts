@@ -1214,6 +1214,7 @@ export class PixelApp {
     M.update(av.nerves, {
       intent: av.whim.intent?.o.key ?? null, doing, wonder: av.wondering, expects: av.expects, dream: av.dreaming,
       urges: M.open ? av.whim.urges(av.nerves, 2) : undefined, lessons: M.open ? lessons(this.state, this.clock().getTime()) : undefined,
+      pace: av.whim.pace, sleepy: av.mood.sleepy,
     });
     // (its lids down as far as sleep has them)
     this.stage.inset = M.open && !av.hidden ? { cam: M.cam, rect: M.rect, hide: this.cat.group, lids: 1 - av.nerves.awake } : null;
