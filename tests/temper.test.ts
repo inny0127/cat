@@ -44,13 +44,18 @@ describe('a cat of its own', () => {
     it('is given one, and keeps what it had', () => {
       const old = newCat(1000);
       const p = old.personality as unknown as Record<string, unknown>;
-      delete p.bold; delete p.playful; delete p.lazy; delete p.curious;
+      delete p.bold; delete p.playful; delete p.lazy; delete p.curious; delete p.pitch;
       p.voice = 0.77;
       localStorage.setItem('cat-window.v1', JSON.stringify(old));
       const s = loadState(2000);
       expect(s.personality.voice).toBe(0.77);
       expect(typeof s.personality.bold).toBe('number');
       expect(Number.isFinite(s.personality.curious)).toBe(true);
+      // (and a voice of its own, kept from then on)
+      expect(s.personality.pitch).toBeGreaterThanOrEqual(0.88);
+      expect(s.personality.pitch).toBeLessThanOrEqual(1.16);
+      localStorage.setItem('cat-window.v1', JSON.stringify(s));
+      expect(loadState(3000).personality.pitch).toBe(s.personality.pitch);
     });
   });
 

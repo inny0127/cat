@@ -1670,6 +1670,7 @@ export class PixelApp {
     const resting = this.input.onGlass();
     if (resting.length) this.fingerOnGlass(resting[0].sx, resting[0].sy);
     this.avatar.music = this.audio.musicPlaying;
+    this.audio.voice = s.personality.pitch ?? 1;
     this.avatar.lean = this.leanIn();
     this.learnHabits(clock.getTime(), dt, contacts.length > 0);
     this.avatar.update(dt);

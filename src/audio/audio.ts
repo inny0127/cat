@@ -17,8 +17,13 @@ export interface PlayOpts {
  * All sound lives here. The context starts on the first touch (browsers require a gesture).
  * Sounds from beyond the window (eating, the litter box) go through a muffled "far" bus.
  */
+/** the cat's own voice: what it says and sings, and its purr */
+const VOICE = new Set(['meow', 'meowSoft', 'meowPlead', 'trill', 'chirp', 'hiss', 'growl', 'yawn', 'sigh']);
+
 export class CatAudio {
   ctx: AudioContext | null = null;
+  /** how high this cat's voice is (a playback rate on all it says: every cat its own) */
+  voice = 1;
   private master!: GainNode;
   private near!: GainNode;
   private far!: GainNode;
@@ -238,7 +243,8 @@ export class CatAudio {
     if (!list?.length) return 0;
     const src = ctx.createBufferSource();
     src.buffer = pick(list);
-    src.playbackRate.value = (o.rate ?? 1) * rand(0.97, 1.03);
+    // (its own voice, and never quite the same twice)
+    src.playbackRate.value = (o.rate ?? 1) * (VOICE.has(name) ? this.voice * rand(0.94, 1.06) : rand(0.97, 1.03));
     const g = ctx.createGain();
     g.gain.value = o.gain ?? 1;
     let node: AudioNode = src.connect(g);
@@ -265,7 +271,7 @@ export class CatAudio {
       const src = ctx.createBufferSource();
       src.buffer = pick(this.bank.purr);
       src.loop = true;
-      src.playbackRate.value = rand(0.96, 1.04);
+      src.playbackRate.value = (0.5 + 0.5 * this.voice) * rand(0.96, 1.04);
       src.connect(this.purrGain);
       src.start();
       this.purrSrc = src;

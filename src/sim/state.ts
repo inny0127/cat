@@ -21,6 +21,8 @@ export interface Personality {
   playful: number;
   lazy: number;
   curious: number;
+  /** how high its voice is (a playback rate on all it says, 0.88 .. 1.16): every cat its own */
+  pitch: number;
 }
 
 /** a temperament: most cats near the middle, now and then one well to one side */
@@ -80,8 +82,12 @@ export function newPersonality(generation: number): Personality {
     voice: 0.5 + Math.random() * 0.7,
     coat: generation === 1 ? 'ginger' : coats[Math.floor(Math.random() * coats.length)],
     ...temperament(),
+    pitch: voicePitch(),
   };
 }
+
+/** a voice of its own: most middling, some high and squeaky, some low */
+export const voicePitch = () => 0.88 + 0.28 * (Math.random() + Math.random()) / 2;
 
 export function newCat(now: number, generation = 1): CatState {
   return {
@@ -123,7 +129,7 @@ export function loadState(now: number): CatState {
     if (raw) {
       const s = JSON.parse(raw) as CatState;
       // (a cat from before cats had a temperament: given one now, kept from here on)
-      if (s && s.v === 1) return { ...newCat(now), ...s, personality: { ...temperament(), ...s.personality } };
+      if (s && s.v === 1) return { ...newCat(now), ...s, personality: { ...temperament(), ...s.personality, pitch: s.personality?.pitch ?? voicePitch() } };
     }
   } catch {
     /* private mode or corrupt: start fresh */
