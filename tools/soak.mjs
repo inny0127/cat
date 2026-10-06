@@ -138,7 +138,7 @@ const report = await page.evaluate(async (minutes) => {
       const fx = Math.sin(m.yaw), fz = Math.cos(m.yaw);
       for (const [cc, R] of app.room.solids()) for (const k of [0.11, -0.09]) {
         const d = Math.hypot(m.pos.x + fx * k - cc.x, m.pos.z + fz * k - cc.z) - (R + 0.075);
-        if (d < -0.02 && issues.length < 40) issues.push(`in a solid thing (${cc.x.toFixed(2)},${cc.z.toFixed(2)}) by ${(-d * 100).toFixed(1)} cm at ${i} (act ${app.avatar.doing})`);
+        if (d < -0.02 && issues.length < 40) issues.push(`in a solid thing (${cc.x.toFixed(2)},${cc.z.toFixed(2)}) by ${(-d * 100).toFixed(1)} cm at ${i} (act ${app.avatar.doing}${app.avatar.act?.phase ? '/' + app.avatar.act.phase : ''}, ${k > 0 ? 'chest' : 'hips'}, at ${m.pos.x.toFixed(2)},${m.pos.z.toFixed(2)} facing ${m.yaw.toFixed(2)}, ${m.posture})`);
       }
     }
     // (legs: a paw on the floor never across under the body to the other side, nor hanging off a
