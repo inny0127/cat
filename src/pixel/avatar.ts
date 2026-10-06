@@ -686,6 +686,8 @@ export class PixelAvatar implements Avatar {
     for (const [id, s] of this.onMind) this.onMind.set(id, s * k);
     if (N.attending && N.awake > 0.6) this.onMind.set(N.attending.id, (this.onMind.get(N.attending.id) ?? 0) + dt);
     this.dreamT = Math.max(0, this.dreamT - dt);
+    // (the second twitch of a dream, in game time)
+    if (this.twitchAgain >= 0 && (this.twitchAgain -= dt) < 0 && this.sleep > 0.5) this.cat.motor.dreamTwitch();
     // (a big shift of the eyes, as often as not, a blink with it, as eyes do when they jump a long
     // way; intent on prey, its eyes hardly blink)
     m.focus = Math.min(1, 1.2 * N.hunt);
@@ -1435,6 +1437,9 @@ export class PixelAvatar implements Avatar {
       // the radiator, it sleeps there
       if (this.perched || (this.act instanceof Walk && this.act.canNap)) {
         if (!this.act!.update(dt, c)) this.act = null;
+        // (and dreams there as in its bed; a run in its sleep only stretched out on the floor)
+        const out = m.posture === 'side' || m.posture === 'back' || CURLED(m.posture);
+        this.dream(dt, this.sleep > 0.75 && !this.touched, out && !this.perched);
         return;
       }
       // otherwise sleep is taken in bed: go back to it, turn round once and settle (a hand on it on
@@ -1447,24 +1452,7 @@ export class PixelAvatar implements Avatar {
         return;
       }
       this.lieIn(this.wanted(), atHome, dt);
-      // deep asleep, now and then it dreams: a twitch of a paw, the whiskers, an ear
-      if (this.sleep > 0.75 && atHome && (this.dreamIn -= dt) < 0) {
-        this.dreamIn = 12 + Math.random() * 40;
-        // (what it dreams of: whatever its eyes were on most, of late; a run is a chase)
-        this.dreamOf = this.mostOnMind();
-        this.dreamT = 5 + Math.random() * 4;
-        // (now and then, more than a twitch: it runs in its sleep, all four paws going a while)
-        if (Math.random() < 0.22) this.cat.motor.dreamRun();
-        else {
-          this.cat.motor.dreamTwitch();
-          if (Math.random() < 0.4) setTimeout(() => this.cat.motor.dreamTwitch(), 180 + Math.random() * 200);
-        }
-        // (and now and then a little mew in its sleep, hardly heard, the mouth hardly moving)
-        if (Math.random() < 0.18) {
-          this.outside?.sound('meowSoft', 0.07);
-          this.vocalize('chirp', 0.2, 0.05);
-        }
-      }
+      this.dream(dt, this.sleep > 0.75 && atHome, true);
       this.sleepStretch(dt, this.sleep > 0.75 && atHome && !this.touched);
       this.resettle(dt, this.sleep > 0.75 && atHome && !this.touched && !this.act);
       this.nodOff(dt, this.sleep <= 0.75 && atHome && !this.touched && !this.act && m.posture === 'loaf' && m.targetPosture === 'loaf' && m.settled);
@@ -1617,6 +1605,29 @@ export class PixelAvatar implements Avatar {
     if (trust > 0.7 && Math.random() < 0.18 * (1 - cold)) return 'back';
     return Math.random() < 0.5 ? 'curl' : 'curlL';
   }
+
+  /** deep asleep, now and then it dreams: a twitch of a paw, the whiskers, an ear; now and then
+   *  (if it may: lying where its legs are free) more than a twitch, a run in its sleep; and now and
+   *  then a little mew, hardly heard */
+  private dream(dt: number, may: boolean, run: boolean) {
+    if (!may || (this.dreamIn -= dt) >= 0) return;
+    this.dreamIn = 12 + Math.random() * 40;
+    // (what it dreams of: whatever its eyes were on most, of late; a run is a chase)
+    this.dreamOf = this.mostOnMind();
+    this.dreamT = 5 + Math.random() * 4;
+    if (run && Math.random() < 0.22) this.cat.motor.dreamRun();
+    else {
+      this.cat.motor.dreamTwitch();
+      if (Math.random() < 0.4) this.twitchAgain = 0.18 + Math.random() * 0.2;
+    }
+    // (the mouth hardly moving)
+    if (Math.random() < 0.18) {
+      this.outside?.sound('meowSoft', 0.07);
+      this.vocalize('chirp', 0.2, 0.05);
+    }
+  }
+  /** a second twitch coming in a moment (s; less than nothing: none) */
+  private twitchAgain = -1;
 
   /** the brain's wish for a posture right now */
   private wanted(): PoseName {
