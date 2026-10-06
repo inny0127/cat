@@ -57,6 +57,35 @@ describe('a paw is never in two places a frame apart', () => {
   });
 });
 
+describe('one posture after another', () => {
+  it('a new posture starts from where the body is: not a frame of it there already', () => {
+    // (sat watching, half down from a crouch, and off after the dot all at once: the run's own
+    // height for the hips asked for while it is still sitting, held off till it is up, and not let
+    // in for a frame as the stand begins)
+    const m = new Motor();
+    m.snap('crouch');
+    m.setPosture('sit');
+    for (let i = 0; i < 10; i++) m.update(0.05);
+    let most = 0, was = m.pose.hipY, first = -1;
+    for (let i = 0; i < 30; i++) {
+      m.setPosture('stand');
+      m.layer = { pose: { hipY: 0.185, neckPitch: 0.05 }, w: Math.min(1, (i + 1) / 3) };
+      m.update(0.05);
+      if (m.posture === 'stand' && first < 0) {
+        first = i;
+        // (the moment it sets off up into it, it is still all but entirely as it was)
+        const w = Object.fromEntries(m.postureWeights());
+        expect(w.stand ?? 0).toBeLessThan(0.2);
+      }
+      most = Math.max(most, m.pose.hipY - was);
+      was = m.pose.hipY;
+    }
+    expect(first).toBeGreaterThan(0);
+    // (up from a sit the hips rise, but over the stand, not 4 cm in a frame as it begins)
+    expect(most).toBeLessThan(0.02);
+  });
+});
+
 describe('a rhythm of its own', () => {
   it('a living time: never back, never far off the clock, and not a metronome', async () => {
     const { lived } = await import('../src/pixel/behave');

@@ -316,6 +316,13 @@ export class Motor {
     this.sched = (LOW[next] ?? 2) > (LOW[this.posture] ?? 2) ? RISE : SCHEDULE;
     this.posture = next;
     this.tt = 0;
+    // (and how far each part has got is this one's from its start, not the last one's, finished:
+    // else for a frame the body reads as there already, and an act's own hold on it, let go as
+    // the last one ran its course, comes back on all at once: the shoulders up off a forepaw)
+    for (const g of Object.keys(GROUPS) as Group[]) {
+      const [d, l] = this.sched[g];
+      this.prog[g] = ease(-d / l);
+    }
   }
 
   /** the posture it is in or on its way to */
