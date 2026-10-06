@@ -2,8 +2,8 @@
  * Finger (and mouse) handling. Touches that start on the cat are petting contacts, sampled every
  * frame. Touches on a toy in the room move it about (and with a laser pointer in hand, every touch
  * is the pointer's). Touches on the empty "glass" around it are gestures: tap, knock (double tap),
- * long press (pouring water), quick side-to-side scrubbing (shaking the kibble), and a downward
- * swipe (scooping the litter).
+ * long press (pouring water), quick side-to-side scrubbing (shaking the kibble), a downward swipe
+ * (scooping the litter), and a finger drawn sideways across it (looking round the room).
  */
 export interface Contact {
   id: number;
@@ -49,6 +49,13 @@ export interface InputHandlers {
   /** the finger moving the toy; letting go of it (tap: let go at once, barely moved) */
   dragToy?(sx: number, sy: number, id: number): void;
   releaseToy?(tap: boolean, id: number): void;
+  /** a finger drawn sideways across the glass: looking round the room. lookStart: may it (true:
+   *  the view goes with the finger from now on); lookMove: how far the finger went (css px, + to
+   *  the right); lookEnd: let go (how fast it was going, css px/s), or called off (cancelled: it
+   *  was scrubbing the glass after all) */
+  lookStart?(): boolean;
+  lookMove?(dx: number): void;
+  lookEnd?(v: number, cancelled: boolean): void;
 }
 
 interface GlassTrack {
@@ -60,6 +67,10 @@ interface GlassTrack {
   holdTimer: number;
   /** the touch has hold of a toy */
   toy?: boolean;
+  /** the finger is looking round the room (how fast it goes, css px/s, smoothed; when it last
+   *  moved), or will not (it scrubbed) */
+  look?: { v: number; t: number } | null;
+  noLook?: boolean;
 }
 
 export class PointerInput {
@@ -157,19 +168,46 @@ export class PointerInput {
       this.h.dragToy?.(c.sx, c.sy, e.pointerId);
       return;
     }
+    // (a pour begun by a timer that ran while the page was too busy to hear the finger move: by
+    // the events' own times it was moving before the pour was due, and it is no pour after all)
+    if (g.pouring && c.travel > 14 && e.timeStamp - c.t0 < 520) {
+      g.pouring = false;
+      this.h.pourEnd();
+    }
     // (a finger moving over the glass is watched, as a mouse's pointer is)
-    this.h.hover(c.sx, c.sy);
-    // side-to-side scrubbing: count direction reversals
+    if (!g.look) this.h.hover(c.sx, c.sy);
+    // side-to-side scrubbing: count direction reversals (and a finger that has gone back and forth
+    // twice in a moment is scrubbing, not looking round: the view goes back where it was)
     if (Math.abs(dsx) > 0.5) {
       if (Math.sign(dsx) !== Math.sign(g.lastDx) && g.accum > 16) {
         g.reversals.push(e.timeStamp);
         g.accum = 0;
         const recent = g.reversals.filter((t) => e.timeStamp - t < 1300);
         g.reversals = recent;
+        if (recent.length >= 2 && g.look) {
+          g.look = null;
+          this.h.lookEnd?.(0, true);
+        }
+        if (recent.length >= 2) g.noLook = true;
         if (recent.length >= 3) this.h.shake(Math.min(1, recent.length / 6));
       }
       g.accum += Math.abs(dsx);
       g.lastDx = dsx;
+    }
+    // drawn sideways across the glass: looking round the room, the view going with the finger
+    if (g.look) {
+      this.h.lookMove?.(dsx);
+      const idt = Math.max(1, e.timeStamp - g.look.t) / 1000;
+      g.look.v += (dsx / idt - g.look.v) * Math.min(1, idt * 12);
+      g.look.t = e.timeStamp;
+    } else if (!g.noLook && !g.pouring) {
+      const dx = c.sx - c.x0, dy = c.sy - c.y0;
+      if (Math.abs(dx) > 30 && Math.abs(dx) > 2 * Math.abs(dy) && this.h.lookStart?.()) {
+        g.look = { v: 0, t: e.timeStamp };
+        clearTimeout(g.timer);
+        clearTimeout(g.holdTimer);
+        this.h.lookMove?.(dx);
+      }
     }
     if (c.travel > 14 && !g.pouring) clearTimeout(g.timer);
   }
@@ -193,6 +231,11 @@ export class PointerInput {
     }
     if (g?.toy) {
       this.h.releaseToy?.(tap, e.pointerId);
+      return;
+    }
+    if (g?.look) {
+      // (gone still before it let go: no glide)
+      this.h.lookEnd?.(e.timeStamp - g.look.t > 120 ? 0 : g.look.v, cancelled);
       return;
     }
     // (a pour begun by a timer that ran while the page was too busy to hear the finger lift: by
@@ -222,7 +265,7 @@ export class PointerInput {
     const out: { sx: number; sy: number }[] = [];
     for (const [id, c] of this.contacts) {
       const g = this.glass.get(id);
-      if (!c.startedOnCat && g && !g.toy && !g.pouring) out.push({ sx: c.sx, sy: c.sy });
+      if (!c.startedOnCat && g && !g.toy && !g.pouring && !g.look) out.push({ sx: c.sx, sy: c.sy });
     }
     return out;
   }

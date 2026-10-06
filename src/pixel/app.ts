@@ -374,6 +374,9 @@ export class PixelApp {
         f.y = y;
         this.room.holdYarn(at.add(f.off));
       },
+      lookStart: () => this.lookStart(),
+      lookMove: (dx) => this.lookMove(dx),
+      lookEnd: (v, cancelled) => this.lookEnd(v, cancelled),
       releaseToy: (tap, id) => {
         const L = this.laser;
         if (L.held) {
@@ -534,6 +537,56 @@ export class PixelApp {
 
   /** the room view drifts sideways after the cat, so wherever it goes it stays in view */
   private panX = 0;
+  /** looking round the room, a finger drawn sideways across the glass: whether the finger has the
+   *  view now, where the view was when it took it, how fast the view glides on after the finger
+   *  let go (m/s), and till when it stays where it was taken (the app's clock, s) before it goes
+   *  back after the cat */
+  private readonly look = { on: false, from: 0, v: 0, until: 0 };
+  /** the app's clock at the last step of the cat's life (s) */
+  private tickNow = 0;
+  /** how far the view can go either way along the room (m): to its things at either end (the
+   *  scratching post and the pictures on the left, the shelf, the monstera and the box on the
+   *  right), and no further; nowhere, where the whole room is in view already */
+  private panRange(): [number, number] {
+    const half = this.viewHalf();
+    return [Math.min(0, half - 1.03), Math.max(0, 0.97 - half)];
+  }
+  /** half the width of the room view where it looks (m) */
+  private viewHalf() {
+    const cam = this.stage.camera;
+    return Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2) * cam.aspect * this.roomView.dist;
+  }
+  private lookStart() {
+    const [lo, hi] = this.panRange();
+    // (not close in on the cat, nor where there is nowhere to go)
+    if (hi - lo < 0.05 || this.focusT > 0 || this.focus > 0.05) return false;
+    Object.assign(this.look, { on: true, from: this.panX, v: 0 });
+    this.look.until = this.tickNow + 25;
+    return true;
+  }
+  private lookMove(dx: number) {
+    if (!this.look.on) return;
+    // the room goes with the finger (drawn to the left, it takes the view to the right), heavier
+    // past the room's ends, and only so far past them
+    const [lo, hi] = this.panRange();
+    let d = -dx * (2 * this.viewHalf()) / Math.max(1, innerWidth);
+    if ((this.panX < lo && d < 0) || (this.panX > hi && d > 0)) d *= 0.3;
+    this.panX = Math.max(lo - 0.06, Math.min(hi + 0.06, this.panX + d));
+    this.look.until = this.tickNow + 25;
+  }
+  private lookEnd(v: number, cancelled: boolean) {
+    if (!this.look.on) return;
+    this.look.on = false;
+    if (cancelled) {
+      // (it was scrubbing the glass: the view back where it was)
+      this.panX = this.look.from;
+      this.look.v = 0;
+      return;
+    }
+    this.look.v = Math.max(-1.6, Math.min(1.6, -v * (2 * this.viewHalf()) / Math.max(1, innerWidth)));
+    this.look.until = this.tickNow + 25;
+    this.state.hints.look = 1;
+  }
   private readonly tmpR = new THREE.Vector3();
   private readonly tmpA = new THREE.Vector3();
   private readonly tmpU = new THREE.Vector3();
@@ -716,18 +769,35 @@ export class PixelApp {
     // (and a little toward where its head is: rubbing along the lamp, its face was off the side
     // while the middle of it was still in view)
     // (at the scratching post, the post in the picture with it: it stands by the room's left end)
+    const [lo, hi] = this.panRange();
     const lead = want.x + 0.08 * Math.sin(m.yaw) + m.vel.x * 0.7 * (1 - m.zoom) + (this.avatar.doing === 'claw' ? -0.1 : 0);
     const off = lead - this.panX, dead = 0.07;
-    const goal = Math.max(-0.66, Math.min(0.6, off > dead ? lead - dead : off < -dead ? lead + dead : this.panX));
+    const goal = Math.max(lo, Math.min(hi, off > dead ? lead - dead : off < -dead ? lead + dead : this.panX));
     const L = this.laser, wf = this.wandFinger;
     const playing = this.avatar.doing === 'chase' || this.avatar.doing === 'tease';
     const tool = L.held && L.id >= 0 ? L.sx : wf ? wf.x : null;
-    if (tool !== null && playing) {
+    // looking round the room: a hand on the cat, or a toy taken up, and the view goes back to it
+    const Lk = this.look;
+    if (touching || L.held || wf || this.toyFinger) { Lk.until = 0; Lk.on = false; }
+    const looking = Lk.on || this.tickNow < Lk.until;
+    if (looking) {
+      // (the finger let go: the view glides on a little, slowing, and back inside the room's ends
+      // if it went past them)
+      if (!Lk.on) {
+        this.panX += Lk.v * dt;
+        Lk.v *= Math.exp(-dt * 3.2);
+        if (this.panX < lo || this.panX > hi) {
+          Lk.v *= Math.exp(-dt * 12);
+          this.panX += ((this.panX < lo ? lo : hi) - this.panX) * (1 - Math.exp(-dt * 9));
+        }
+      }
+    }
+    else if (tool !== null && playing) {
       // the red dot on: the room holds still under the finger (else the dot would slide off with
       // it as the view went after the cat), unless the dot is held out near an edge, which takes
       // the view on that way
       const ex = (tool / innerWidth) * 2 - 1, edge = 0.7;
-      if (Math.abs(ex) > edge) this.panX = Math.max(-0.66, Math.min(0.6, this.panX + Math.sign(ex) * ((Math.abs(ex) - edge) / (1 - edge)) * 0.45 * dt));
+      if (Math.abs(ex) > edge) this.panX = Math.max(lo, Math.min(hi, this.panX + Math.sign(ex) * ((Math.abs(ex) - edge) / (1 - edge)) * 0.45 * dt));
     }
     // (a little quicker after it when it is tearing about, so that it is not lost off the side)
     else this.panX += (goal - this.panX) * (1 - Math.exp(-dt * (1.8 + 1.2 * m.zoom)));
@@ -1229,6 +1299,7 @@ export class PixelApp {
 
   /** one step of the cat's life, mind and body (also driven by tests in fixed steps) */
   tick(dt: number, now: number) {
+    this.tickNow = now;
     stepLife(this.state, dt * 1000, false);
     // the radio on and the room left open and untouched a long while: the cat comes for a moment
     // of you (dozing, it wakes for it, with a stretch; deep asleep, not this time)
@@ -1396,6 +1467,7 @@ export class PixelApp {
   }
 
   private radioHintIn = 25;
+  private lookHintIn = 60;
   private mistHintIn = 8;
   private lampHintIn = 40;
 
@@ -1438,6 +1510,14 @@ export class PixelApp {
     if (this.room.lampLitNow && Room.dark(this.clock().getHours() + this.clock().getMinutes() / 60) > 0.8 && s.hints.radio && !s.hints.lamp && !touching && !this.input.touching && (this.lampHintIn -= dt) < 0) {
       s.hints.lamp = 1;
       this.hintUi.show('스탠드를 톡 누르면 불을 끄고 켤 수 있어요', 5000);
+      return;
+    }
+    // in a view narrower than the room, once it has been a while: that it can be looked round (not
+    // needed once a finger has done it)
+    const [lo, hi] = this.panRange();
+    if (!s.hints.look && hi - lo > 0.3 && (s.hints.pet || s.stats.petSeconds > 4) && !touching && !this.input.touching && (this.lookHintIn -= dt) < 0) {
+      s.hints.look = 1;
+      this.hintUi.show('화면을 옆으로 밀면 방의 다른 곳을 둘러볼 수 있어요', 5500);
       return;
     }
     if (touching || this.input.touching) {

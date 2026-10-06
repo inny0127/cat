@@ -133,6 +133,21 @@ await touch('touchEnd', fx - 20, fy - 60);
 await page.waitForTimeout(600);
 check('the wand let go', !(await get(() => window.__pcat.room.wandHeld)));
 
+// a finger drawn sideways across the glass, over the window: the view goes round the room (and
+// back the other way)
+await page.waitForTimeout(1500);
+const pan0 = await get(() => window.__pcat.panX);
+await drag([[330, 300], [290, 302], [240, 303], [190, 304], [140, 305]], 50);
+await touch('touchEnd', 140, 305, 0.05);
+await page.waitForTimeout(800);
+const pan1 = await get(() => window.__pcat.panX);
+check('a swipe to the left looks to the right', pan1 > pan0 + 0.2, `${pan0.toFixed(2)} -> ${pan1.toFixed(2)}`);
+await drag([[60, 300], [110, 302], [160, 303], [210, 304], [260, 305], [310, 306]], 50);
+await touch('touchEnd', 310, 306, 0.05);
+await page.waitForTimeout(800);
+const pan2 = await get(() => window.__pcat.panX);
+check('a swipe to the right looks back to the left', pan2 < pan1 - 0.2, `${pan1.toFixed(2)} -> ${pan2.toFixed(2)}`);
+
 check('no errors on the page', errs.length === 0, errs.join(' | ').slice(0, 300));
 for (const [what, ok, detail] of results) console.log(ok ? 'ok  ' : 'FAIL', what.padEnd(46), detail);
 await b.close();
