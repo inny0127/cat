@@ -1,5 +1,6 @@
 /** what the things a cat does mean, said the first time it does each (most telling first) */
 export const FIRSTS: Record<string, string> = {
+  hunch: '등을 웅크리고 있어요. 몸이 안 좋다는 신호예요',
   blink: "천천히 눈을 깜빡였어요. 고양이식 '좋아해'예요",
   purr: '골골송을 불러요. 기분이 아주 좋대요',
   knead: '꾹꾹이를 해요. 아기 고양이 때처럼 편하고 행복하대요',
@@ -7,6 +8,9 @@ export const FIRSTS: Record<string, string> = {
   bite: "살짝 깨물었어요. '좋았어, 이제 그만'이라는 뜻이에요",
   thump: '누워서 꼬리로 바닥을 탁탁 쳐요. 짜증 났다는 뜻이에요',
   grumble: '낮게 웅얼거려요. 슬슬 그만하라는 경고예요',
+  arch: '등을 아치처럼 세웠어요. 무섭지만 맞서겠다는 뜻이에요',
+  slink: '몸을 낮추고 살금살금 걸어요. 아직 겁이 나나 봐요',
+  beg: '빈 밥그릇 옆에서 당신을 봐요. 밥 달라는 뜻이에요',
   more: '손을 떼자 머리를 내밀며 쳐다봐요. 더 쓰다듬어 달래요',
   trap: '와락 끌어안고 뒷발로 팡팡! 고양이 배는 원래 함정이에요',
   sleeppurr: '자면서도 골골거려요. 당신 손이 편한가 봐요',
@@ -30,6 +34,8 @@ export const FIRSTS: Record<string, string> = {
   ambush: '상자에 몸을 숨기고 노려요. 곧 튀어나올 거예요!',
   glance: '그루밍하다 멈칫! 뭔가 눈에 띄었나 봐요',
   earsound: '자면서도 귀만 소리 쪽으로 돌려요. 다 듣고 있어요',
+  huff: '조르다 대답이 없자 한숨을 쉬어요. 조금 서운한가 봐요',
+  cool: '바닥에 길게 누웠어요. 더워서 시원한 곳을 찾았대요',
 };
 
 /** the line at the foot of the screen, as far as the first words need it */

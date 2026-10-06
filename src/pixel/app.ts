@@ -1904,6 +1904,13 @@ export class PixelApp {
     if (a.kneading || doing === 'knead') now.add('knead');
     if (a.nuzzled) now.add('rub');
     if (this.brain.grumbled) { this.brain.grumbled = false; now.add('grumble'); }
+    // (its body saying how it is: ill, hunched; afraid and cross, arched; afraid, slinking)
+    if (m.feel.hunch > 0.5 && !asleep) now.add('hunch');
+    if (m.feel.arch > 0.5 && m.posture === 'stand') now.add('arch');
+    if (m.feel.low > 0.4 && m.posture === 'stand' && m.speed > 0.1) now.add('slink');
+    if (doing === 'beg' && phase === 'ask') now.add('beg');
+    if (doing === 'huff') now.add('huff');
+    if (doing === 'cool' && m.posture === 'side') now.add('cool');
     if (a.askingNow) now.add('more');
     if (m.posture === 'back' && asleep) now.add('back');
     if (doing === 'greet') now.add('greet');
