@@ -16,7 +16,7 @@ const report = await page.evaluate(async (minutes) => {
   const issues = [];
   let t = 1, seen = {}, drag = null, drags = 0, errands = 0, laser = null, wand = null, laserUses = 0, wandUses = 0, returns = 0, tosses = 0, glass = null, glasses = 0;
   // a cat that wants to go somewhere and does not move
-  let stillFor = 0, lastAct = '';
+  let stillFor = 0, lastAct = '', legIssues = 0;
   const lastPos = { x: 0, z: 0 };
   const ev = (x, y, t) => ({ preventDefault() {}, pointerId: 9, clientX: x, clientY: y, timeStamp: t * 1000, pointerType: 'touch', pressure: 0.5, width: 20, height: 20, buttons: 1 });
   app.brain.toAwake('rest');
@@ -139,6 +139,19 @@ const report = await page.evaluate(async (minutes) => {
       for (const [cc, R] of app.room.solids()) for (const k of [0.11, -0.09]) {
         const d = Math.hypot(m.pos.x + fx * k - cc.x, m.pos.z + fz * k - cc.z) - (R + 0.075);
         if (d < -0.02 && issues.length < 40) issues.push(`in a solid thing (${cc.x.toFixed(2)},${cc.z.toFixed(2)}) by ${(-d * 100).toFixed(1)} cm at ${i} (act ${app.avatar.doing})`);
+      }
+    }
+    // (legs: a paw on the floor never across under the body to the other side, nor hanging off a
+    // leg too short to reach it)
+    if (!app.avatar.hidden && i % 3 === 0) {
+      const kin = c.kin, body = c.body;
+      for (const leg of ['LF', 'RF', 'LH', 'RH']) {
+        if (!c.planted[leg] || c.stepper.feet[leg].stepping) continue;
+        const L = body.legs[leg];
+        const g = kin.wp[L.b[3]].clone().sub(kin.wp[L.girdle]).applyQuaternion(kin.wq[L.girdle].clone().invert());
+        const across = g.x * L.side, miss = body.reached[leg].distanceTo(c.targ[leg]);
+        if (across < -0.05 && legIssues < 12) { legIssues++; issues.push(`${leg} across under the body by ${(-across * 100).toFixed(1)} cm at ${i} (act ${app.avatar.doing}, ${m.posture})`); }
+        if (miss > 0.05 && legIssues < 12) { legIssues++; issues.push(`${leg} short of its paw by ${(miss * 100).toFixed(1)} cm at ${i} (act ${app.avatar.doing}, ${m.posture})`); }
       }
     }
     const moved = Math.hypot(m.pos.x - lastPos.x, m.pos.z - lastPos.z) > 0.002;

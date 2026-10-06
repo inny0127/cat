@@ -256,7 +256,7 @@ export class Chase implements Act {
           const spin = u < 0.72;
           if (spin) {
             m.setPosture('stand');
-            m.yaw = wrapA(m.yaw + s * 7.5 * Math.min(1, this.t / 0.25) * dt);
+            m.yaw = wrapA(m.yaw + s * 5 * Math.min(1, this.t / 0.25) * dt);
             pose = { ...keen, hipY: 0.17, neckYaw: s * 0.95, headYaw: s * 0.55, headRoll: -s * 0.2, lumbarYaw: s * 0.4, chestYaw: s * 0.3, tailSide: s * 1.2, tailCurl: s * 0.8, tailLift: 0.2 };
           } else {
             m.setPosture('sit');

@@ -77,6 +77,13 @@ export class Cat3D {
   private readonly flex = { LF: 0, RF: 0, LH: 0, RH: 0 };
   private readonly ground = { LF: 1, RF: 1, LH: 1, RH: 1 };
   private first = true;
+  /** how fast the body really turns and goes (rad/s, m/s), whatever moves it: the motor's own
+   *  steering, or an act that squares it round to something or carries it directly. The legs
+   *  keep up with this, not only with what the motor meant */
+  private turnRate = 0;
+  private readonly goVel = v();
+  private lastYaw: number | null = null;
+  private readonly lastPos = v();
   private readonly inv = new THREE.Matrix4();
   private readonly tmp = { a: v(), b: v(), q: new THREE.Quaternion() };
   /** the eyeball's radius (m) */
@@ -376,13 +383,27 @@ export class Cat3D {
       this.homeW[l].copy(this.homeM[l]).applyMatrix4(group.matrixWorld);
       this.planted[l] = p[l].planted >= 0.98 ? 1 : 0;
     }
+    // (a jump of more than a stride in a frame is the cat put somewhere, not a step: its paws go
+    // with it)
+    if (this.lastYaw !== null && this.lastPos.distanceTo(motor.pos) > 0.2) this.first = true;
     if (this.first) {
       stepper.reset(this.homeW);
       this.first = false;
+      this.lastYaw = null;
     }
+    if (this.lastYaw === null || dt <= 0) {
+      this.turnRate = motor.yawRate;
+      this.goVel.copy(motor.vel);
+    } else {
+      const k = 1 - Math.exp(-dt * 25), dy = motor.yaw - this.lastYaw;
+      this.turnRate += (Math.atan2(Math.sin(dy), Math.cos(dy)) / dt - this.turnRate) * k;
+      this.goVel.lerp(tmp.b.copy(motor.pos).sub(this.lastPos).divideScalar(dt).setY(0), k);
+    }
+    this.lastYaw = motor.yaw;
+    this.lastPos.copy(motor.pos);
     // (tearing about, it bounds whenever it is going at any pace, round the turns too)
     stepper.eager = motor.zoom > 0.5;
-    stepper.update(dt, this.homeW, this.planted, motor.vel, motor.yawRate, motor.pos, motor.yaw, motor.goal ? motor.wantSpeed : 0);
+    stepper.update(dt, this.homeW, this.planted, this.goVel, this.turnRate, motor.pos, motor.yaw, motor.goal ? motor.wantSpeed : 0);
     body.scapLift.L = stepper.signals.scapL;
     body.scapLift.R = stepper.signals.scapR;
     for (const l of LEGS) {
@@ -410,6 +431,8 @@ export class Cat3D {
       if (lookW > 0.01) body.look(tmp.a.copy(motor.gaze).applyMatrix4(this.inv), lookW, p.headRoll);
     }
     body.legsTo(p, this.targ, this.flex, this.ground);
+    // (a paw on the floor the leg could not reach to: the stepper moves it, next frame)
+    for (const l of LEGS) stepper.strain[l] = this.planted[l] && !stepper.feet[l].stepping ? body.reached[l].distanceTo(this.targ[l]) : 0;
     body.face(p, motor.twitch);
     for (let i = 0; i < this.tail.n; i++) this.tail.wave[i] = motor.tailWaveAt(i, this.tail.n);
     // body capsules first: the tail lies against them

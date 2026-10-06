@@ -13,6 +13,8 @@ const TROT: Record<Leg, number> = { LH: 0, RF: 0.02, RH: 0.5, LF: 0.52 };
  *  together, then the fores one after the other */
 const BOUND: Record<Leg, number> = { LH: 0, RH: 0.06, LF: 0.46, RF: 0.58 };
 const FRONT: Record<Leg, boolean> = { LF: true, RF: true, LH: false, RH: false };
+/** which side of the body each leg is on (the model's +x is the cat's left) */
+const SIDE: Record<Leg, number> = { LF: 1, LH: 1, RF: -1, RH: -1 };
 
 /** stride length (m) at a speed (m/s): a slow cat takes long, unhurried steps, a quick one more
  *  of them rather than ever longer ones */
@@ -101,11 +103,14 @@ export class Stepper {
   lift = 0;
   /** a paw coming down (settle: a little shift of the feet, not a stride) */
   onLand: ((leg: Leg, settle: boolean) => void) | null = null;
+  /** how far short of each planted paw its leg came last frame (m; the cat sets it after its IK) */
+  readonly strain: Record<Leg, number> = { LF: 0, RF: 0, LH: 0, RH: 0 };
   private settleCooldown = 0;
   private moving = 0;
   private still = 1;
   private readonly fwd = new THREE.Vector3();
   private readonly tmp = new THREE.Vector3();
+  private readonly across = new THREE.Vector3();
 
   constructor() {
     const f = (): FootState => ({
@@ -150,9 +155,12 @@ export class Stepper {
     if (!this.bound && (speed > 1.2 || (this.eager && speed > 0.75))) this.bound = true;
     else if (this.bound && speed < (this.eager ? 0.45 : 0.95)) this.bound = false;
     this.stride = strideAt(v);
-    this.freq = v / this.stride;
+    // (round on the spot, or round a tight turn, the paws patter: quick short steps, each sweeping
+    // no more than about half a radian round under the body, rather than long strides the body
+    // turns out from over)
+    this.freq = Math.max(v / this.stride, Math.min(4.5, 1.25 * Math.abs(yawRate)));
     // (bounding: the paws are on the floor only a third of the stride)
-    const swingT = this.bound ? 0.6 / this.freq : swingTimeAt(v);
+    const swingT = this.bound ? 0.6 / this.freq : Math.min(swingTimeAt(v), 0.58 / this.freq);
     this.duty = this.bound ? 0.36 : Math.min(0.82, Math.max(0.42, 1 - swingT * this.freq));
     const standT = this.duty / this.freq;
     if (wantGait && this.still > 0.6) {
@@ -173,6 +181,7 @@ export class Stepper {
     if (this.moving > 0) this.clock += this.freq * dt * Math.max(0.35, this.moving);
     this.phase = this.clock - Math.floor(this.clock);
     this.fwd.set(Math.sin(heading), 0, Math.cos(heading));
+    this.across.set(Math.cos(heading), 0, -Math.sin(heading));
 
     for (const l of LEGS) {
       const F = this.feet[l];
@@ -218,6 +227,21 @@ export class Stepper {
         continue;
       }
       F.flex = 0;
+      // a paw the body has turned or gone on from over: in toward the middle under it, far out of
+      // its place, or past where its leg reaches. It steps at once, quickly, whatever the others
+      // are doing: a cat's legs never cross under it, nor hang straight off a paw left behind
+      {
+        const o = this.tmp.copy(F.pos).sub(home[l]);
+        o.y = 0;
+        const d = o.length();
+        const inward = -SIDE[l] * o.dot(this.across);
+        if (inward > 0.03 || d > 0.075 + 0.5 * speed * standT || (this.strain[l] > 0.012 && d > 0.02)) {
+          if (this.moving > 0) F.last = Math.floor(this.clock - off);
+          this.begin(F, home[l], vel, yawRate, centre, Math.min(swingT, 0.2), Math.min(swingT, 0.2) + (this.moving > 0.3 ? standT * 0.5 : 0),
+            (FRONT[l] ? 0.02 : 0.016) + 0.01 * Math.min(1, speed), false);
+          continue;
+        }
+      }
       if (this.moving > 0) {
         const x = this.clock - off, cyc = Math.floor(x), psi = x - cyc;
         if (psi < this.duty) F.stance = psi / this.duty;

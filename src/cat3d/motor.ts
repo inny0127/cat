@@ -67,6 +67,10 @@ function route(from: PoseName, to: PoseName): PoseName[] {
   return [to];
 }
 
+/** which group each channel of a pose moves with */
+const GROUP_OF: Record<string, Group> = {};
+for (const [g, ks] of Object.entries(GROUPS)) for (const k of ks) GROUP_OF[k] = g as Group;
+
 function edgeTime(a: PoseName, b: PoseName) {
   for (const [x, y, d] of EDGES) if ((x === a && y === b) || (x === b && y === a)) return d;
   return 1.2;
@@ -99,6 +103,11 @@ export class Motor {
   readonly pose: Pose = clonePose(POSES.stand);
   /** pose overrides blended on top (eating head-down, grooming leg, ...) */
   layer: { pose: PoseLayer; w: number } | null = null;
+  /** how far a layer has its say over the trunk and the legs (0..1 per group): while the body is
+   *  on its way into a posture, it comes in with it (a layer is a turn on the posture it is asked
+   *  with: the hips lifted to a running height while the back is still sat upright would stand
+   *  the cat on its tail); the face, the ears, the head and the tail answer at once */
+  private readonly layerIn: Record<'hips' | 'chest' | 'front' | 'hind', number> = { hips: 1, chest: 1, front: 1, hind: 1 };
 
   // locomotion
   goal: THREE.Vector3 | null = null;
@@ -487,9 +496,16 @@ export class Motor {
   private compose(dt: number) {
     const p = this.pose;
     copyPose(p, this.base);
+    const li = this.layerIn, kIn = 1 - Math.exp(-dt * 12);
+    for (const g of ['hips', 'chest', 'front', 'hind'] as const) {
+      const want = this.tt >= 1 && !this.path.length ? 1 : this.path.length ? 0 : this.prog[g] ?? 1;
+      li[g] += (want - li[g]) * kIn;
+    }
     if (this.layer && this.layer.w > 0) {
-      const w = this.layer.w;
+      const w0 = this.layer.w;
       for (const [k, val] of Object.entries(this.layer.pose)) {
+        const g = GROUP_OF[k];
+        const w = g === 'hips' || g === 'chest' || g === 'front' || g === 'hind' ? w0 * li[g] : w0;
         if (typeof val === 'number') (p as unknown as Record<string, number>)[k] += (val - (p as unknown as Record<string, number>)[k]) * w;
         else if (val) {
           // a paw: each of its numbers given

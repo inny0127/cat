@@ -3,6 +3,12 @@ import { Kin, aim, euler, twoBone } from './kin';
 import { LEGS, type Leg, type Pose } from './pose';
 
 const v = () => new THREE.Vector3();
+/** the belly and the chest, as capsules along the spine (bone, its offset down, bone, offset,
+ *  radius): what a foreleg must not pass through */
+const TRUNK: [string, number, string, number, number][] = [
+  ['spine1', -0.012, 'spine2', -0.018, 0.056],
+  ['spine2', -0.018, 'chest', -0.026, 0.06],
+];
 const q = () => new THREE.Quaternion();
 
 interface LegRig {
@@ -207,7 +213,11 @@ export class Body {
       const reach = (L.len[0] + L.len[1] + L.len[2]) * (L.front ? 0.95 : 0.9);
       const hd = Math.hypot(T.x - J.x, T.z - J.z);
       const dv = Math.sqrt(Math.max(0, reach * reach - hd * hd));
-      const drop = Math.min(0.03, Math.max(0, J.y + lift - T.y - dv)) * w;
+      // (a stride's worth of sinking, a few centimetres; but more for a paw on the floor the leg
+      // could not otherwise reach at all: the hips or the shoulders come down to it, rather than
+      // the paw hang in the air off a straight leg, as getting up out of a sit straight into a run)
+      const short = Math.max(0, J.y + lift - T.y - dv);
+      const drop = (short < 0.03 ? short : 0.03 + 0.8 * Math.min(0.12, short - 0.03)) * w;
       if (L.front) out.front = Math.max(out.front, drop);
       else out.hind = Math.max(out.hind, drop);
     }
@@ -221,6 +231,19 @@ export class Body {
     const kin = this.kin;
     // on the floor in the model frame
     const a = this.t.d.set(f.x * L.side, f.y, f.z);
+    // (a paw on the floor stands under its girdle as the spine bends: round a turn, or bent round
+    // after its tail, the chest swings to the side and the forepaws go with it, rather than one of
+    // them left under the middle of the chest and its leg in through it)
+    if (f.planted >= 0.98) {
+      const G = kin.wp[L.girdle], F = this.t.e.set(0, 0, 1).applyQuaternion(kin.wq[L.girdle]);
+      const h = Math.hypot(F.x, F.z);
+      if (h > 0.2) {
+        const psi = Math.atan2(F.x, F.z) * Math.min(1, (h - 0.2) / 0.3), c = Math.cos(psi), sn = Math.sin(psi);
+        const dx = a.x, dz = a.z - G.z;
+        a.x = G.x + dx * c + dz * sn;
+        a.z = G.z - dx * sn + dz * c;
+      }
+    }
     if (f.frame > 0.001) {
       // relative to the limb's root joint, in the girdle's frame
       const b = this.t.e.set(f.x * L.side, f.y, f.z).applyQuaternion(kin.wq[L.girdle]).add(kin.wp[L.b[0]]);
@@ -260,6 +283,20 @@ export class Body {
   }
 
   private readonly sc = { chain: v(), bend: v(), fem: v(), axis: v(), d: v(), side: v() };
+  private readonly cl = { a: v(), b: v(), p: v(), m: v() };
+
+  /** is a point of a foreleg in through the trunk: inside the belly or the chest (the spine's two
+   *  stretches as capsules, a little fattened for the fur) */
+  private inTrunk(P: THREE.Vector3) {
+    const { kin, I } = this, { a, b, p } = this.cl;
+    for (const [from, fy, to, ty, r] of TRUNK) {
+      a.set(0, fy, 0).applyQuaternion(kin.wq[I[from]]).add(kin.wp[I[from]]);
+      b.set(0, ty, 0).applyQuaternion(kin.wq[I[to]]).add(kin.wp[I[to]]);
+      const ab = b.sub(a), t = Math.max(0, Math.min(1, p.copy(P).sub(a).dot(ab) / Math.max(ab.lengthSq(), 1e-9)));
+      if (P.distanceTo(a.addScaledVector(ab, t)) < r) return true;
+    }
+    return false;
+  }
 
   private sideOf(rootP: THREE.Vector3, mid: THREE.Vector3, end: THREE.Vector3, pole: THREE.Vector3, out: THREE.Vector3) {
     const chain = this.sc.chain.copy(end).sub(rootP);
@@ -289,9 +326,18 @@ export class Body {
     const Mg = this.t.c.copy(M).applyQuaternion(girdleQ);
     M.lerp(Mg, 1 - ground).normalize();
     const W = this.t.d.copy(T).addScaledVector(M, -L.len[2]);
-    const pole = this.bendPole(L, S, W, girdleQ, -1, this.t.e);
+    // (the more the leg is folded, the further the elbow goes out to the side, as a crouching
+    // cat's does, clear of its chest; and if it would still be in through the chest or the belly,
+    // further out again)
+    let splay = 0.12 + 0.9 * Math.max(0, 0.85 - W.distanceTo(S) / (L.len[0] + L.len[1]));
+    const pole = this.bendPole(L, S, W, girdleQ, -1, this.t.e, splay);
     const E = this.t.f, W2 = this.t.g;
     twoBone(S, L.len[0], L.len[1], W, pole, E, W2);
+    for (let k = 0; k < 3 && (this.inTrunk(E) || this.inTrunk(this.cl.m.copy(E).lerp(W2, 0.5))); k++) {
+      splay += 0.45;
+      this.bendPole(L, S, W, girdleQ, -1, pole, splay);
+      twoBone(S, L.len[0], L.len[1], W, pole, E, W2);
+    }
     const side = this.sideOf(S, E, W2, pole, this.sc.side);
     const d = this.sc.d;
     kin.setWorld(L.b[0], aim(L.restDir[0], L.restSide, d.copy(E).sub(S), side, this.t.q1));
