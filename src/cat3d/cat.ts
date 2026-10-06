@@ -398,7 +398,8 @@ export class Cat3D {
     } else {
       const k = 1 - Math.exp(-dt * 25), dy = motor.yaw - this.lastYaw;
       this.turnRate += (Math.atan2(Math.sin(dy), Math.cos(dy)) / dt - this.turnRate) * k;
-      this.goVel.lerp(tmp.b.copy(motor.pos).sub(this.lastPos).divideScalar(dt).setY(0), k);
+      // (eased out of a thing it was in: stepped clear of, not a way it is going)
+      this.goVel.lerp(tmp.b.copy(motor.pos).sub(this.lastPos).sub(motor.easedOut).divideScalar(dt).setY(0), k);
     }
     this.lastYaw = motor.yaw;
     this.lastPos.copy(motor.pos);

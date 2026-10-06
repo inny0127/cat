@@ -524,6 +524,9 @@ export class Motor {
   /** stepping out of a thing it was right up against or in on purpose (the box, the post), now
    *  that that is over: not yet clear of it */
   easingOut = false;
+  /** how far it was eased out this frame (world, m): not a way it is going, for its paws to go
+   *  on ahead along */
+  readonly easedOut = new THREE.Vector3();
   private wasGhost = false;
 
   /** the body out of anything solid it has got into (its chest and its hips, each a circle).
@@ -531,6 +534,7 @@ export class Motor {
    *  once that is over it steps out, as quick as it is going and at a walk at the least, the paws
    *  going with it, and does not jump clear of it in one go */
   private keepOut(dt: number) {
+    this.easedOut.set(0, 0, 0);
     if (this.ghost || !this.solids) { this.wasGhost = this.ghost; return; }
     if (this.wasGhost) { this.wasGhost = false; this.easingOut = true; }
     const fx = Math.sin(this.yaw), fz = Math.cos(this.yaw);
@@ -550,6 +554,7 @@ export class Motor {
           const by = Math.min(min - d, left);
           this.pos.x += ux * by;
           this.pos.z += uz * by;
+          if (this.easingOut) { this.easedOut.x += ux * by; this.easedOut.z += uz * by; }
           left -= by;
           moved = true;
         }
