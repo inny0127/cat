@@ -3676,64 +3676,94 @@ export function restingPose(mood: Mood, mode: string): PoseName {
   return r < 0.35 ? 'loaf' : r < 0.65 ? 'sphinx' : 'sit';
 }
 
-/** something to do now, or null to stay as it is */
-export function chooseAct(c: Ctx, atHome: boolean, posture: PoseName): Act | null {
+/** one thing it might take it into its head to do (whim.ts): how much it is in the mood for it
+ *  (a weight: what counts is how it compares with the rest), what it is about (a thing it sees,
+ *  by the nerves' name for it; or a place), and the act itself */
+export interface Option {
+  key: string;
+  w: number;
+  about?: string;
+  at?: THREE.Vector3 | null;
+  make: () => Act | null;
+}
+
+/** what it might do of its own accord just now, and how much it is in the mood for each */
+export function idleOptions(c: Ctx, atHome: boolean, posture: PoseName): Option[] {
   const m = c.mood;
-  const opts: [number, () => Act | null][] = [];
+  const opts: Option[] = [];
+  const add = (key: string, w: number, make: () => Act | null, about?: string, at?: THREE.Vector3 | null) => {
+    if (w > 0) opts.push({ key, w, make, about, at });
+  };
   const lying = posture === 'loaf' || posture === 'sphinx' || posture === 'side' || posture === 'sit';
   if (c.mode === 'rest' || c.mode === 'alert') {
-    opts.push([0.8 + m.sleepy, yawn]);
-    if (lying) opts.push([1 + m.pleasure, groomFlank], [0.6, groomChest], [0.8, washFace]);
-    opts.push([0.35, () => stretchSideOn(c, posture === 'sit' ? 'sit' : 'loaf')]);
-    opts.push([0.1, () => sneeze(c)]);
-    opts.push([0.22, scratchEar]);
-    opts.push([0.25 * (0.5 + m.arousal) * (1 - m.sleepy), () => new Stare(c)]);
-    if (atHome) opts.push([0.9 * Math.max(0, Math.min(1, m.trust + 0.3)) * (1 + m.arousal) + (c.mode === 'alert' ? 0.8 : 0), () => toWindow(c)]);
-    if (atHome) opts.push([0.5 * (1 + m.arousal) * (1 - m.sleepy), () => wander(c)]);
+    add('yawn', 0.8 + m.sleepy, yawn);
+    if (lying) {
+      add('groom', 1 + m.pleasure, groomFlank);
+      add('groom chest', 0.6, groomChest);
+      add('wash', 0.8, washFace);
+    }
+    add('stretch', 0.35, () => stretchSideOn(c, posture === 'sit' ? 'sit' : 'loaf'));
+    add('sneeze', 0.1, () => sneeze(c));
+    add('scratch', 0.22, scratchEar);
+    add('stare', 0.25 * (0.5 + m.arousal) * (1 - m.sleepy), () => new Stare(c));
+    if (atHome) add('window', 0.9 * Math.max(0, Math.min(1, m.trust + 0.3)) * (1 + m.arousal) + (c.mode === 'alert' ? 0.8 : 0), () => toWindow(c), 'you');
+    if (atHome) add('wander', 0.5 * (1 + m.arousal) * (1 - m.sleepy), () => wander(c));
     // content and about, it goes and marks its things
     const posts = c.posts();
-    if (atHome && posts.length) opts.push([0.3 * (0.4 + m.pleasure) * (1 - m.sleepy), () => new Rub(c, pick(posts))]);
+    if (atHome && posts.length) {
+      const post = pick(posts);
+      add('rub', 0.3 * (0.4 + m.pleasure) * (1 - m.sleepy), () => new Rub(c, post), undefined, new THREE.Vector3(post.x, 0.12, post.z));
+    }
     // ... and its claws, on the scratching post
     const post = c.scratcher();
-    if (atHome && post) opts.push([0.4 * (0.4 + m.arousal) * (1 - 0.7 * m.sleepy), () => new Claw(post)]);
+    if (atHome && post) add('claw', 0.4 * (0.4 + m.arousal) * (1 - 0.7 * m.sleepy), () => new Claw(post), undefined, new THREE.Vector3(post.at.x, 0.2, post.at.z));
     // ... and the pompom hanging from it to bat at
-    if (atHome && post && c.pompom?.()) opts.push([0.3 * (0.4 + m.arousal) * (1 - m.sleepy), () => new Bat()]);
+    if (atHome && post && c.pompom?.()) add('pompom', 0.3 * (0.4 + m.arousal) * (1 - m.sleepy), () => new Bat(), 'pompom');
     // ... and up on top of it for a while, to look down on the room (or doze up there)
-    if (atHome && post && c.mode === 'rest') opts.push([0.35 * (0.6 + 0.6 * m.trust) * (1 + 0.6 * c.night) * (1 - 0.5 * m.sleepy), () => new Top(post)]);
-    if (atHome && c.mode === 'rest') opts.push([0.7 + 0.8 * m.sleepy, () => sunbathe(c)]);
-    if (atHome && c.mode === 'rest' && c.warm()) opts.push([0.8 + 0.8 * m.sleepy, () => warmUp(c)]);
+    if (atHome && post && c.mode === 'rest') add('top', 0.35 * (0.6 + 0.6 * m.trust) * (1 + 0.6 * c.night) * (1 - 0.5 * m.sleepy), () => new Top(post), undefined, new THREE.Vector3(post.at.x, post.top, post.at.z));
+    if (atHome && c.mode === 'rest') add('sun', 0.7 + 0.8 * m.sleepy, () => sunbathe(c), undefined, c.sun());
+    const warm = c.warm();
+    if (atHome && c.mode === 'rest' && warm) add('warm', 0.8 + 0.8 * m.sleepy, () => warmUp(c), undefined, warm.at);
     // very fond of you and drowsy: a nap as near you as it can get
-    if (atHome && c.mode === 'rest' && m.trust > 0.55) opts.push([1.2 * (m.trust - 0.5) * (0.3 + m.sleepy), () => byYou(c)]);
-    if (atHome && c.yarn()) opts.push([0.6 * (0.4 + m.arousal) * (1 - m.sleepy) * (c.mode === 'rest' ? 1 : 0.4), () => new Play()]);
+    if (atHome && c.mode === 'rest' && m.trust > 0.55) add('by you', 1.2 * (m.trust - 0.5) * (0.3 + m.sleepy), () => byYou(c), 'you');
+    if (atHome && c.yarn()) add('play', 0.6 * (0.4 + m.arousal) * (1 - m.sleepy) * (c.mode === 'rest' ? 1 : 0.4), () => new Play(), 'yarn');
     // the feathers of the wand lying on the floor: now and then a game with them on its own
     const lure = c.lure();
-    if (atHome && lure && !lure.held && lure.p.y < 0.05) opts.push([0.3 * (0.4 + m.arousal) * (1 - m.sleepy), () => new Tease(true)]);
+    if (atHome && lure && !lure.held && lure.p.y < 0.05) add('tease', 0.3 * (0.4 + m.arousal) * (1 - m.sleepy), () => new Tease(true), undefined, lure.p.clone());
     // fond of you, now and then it brings you its toy mouse (lying somewhere off from the glass)
     const toy = c.mouse();
     // (the toy mouse in under the radiator: a go at getting it out)
-    if (atHome && toy?.under) opts.push([0.5 * (0.5 + m.arousal) * (1 - m.sleepy), () => new Fish()]);
+    if (atHome && toy?.under) add('fish', 0.5 * (0.5 + m.arousal) * (1 - m.sleepy), () => new Fish(), undefined, toy.p.clone());
     else if (atHome && toy && toy.state === 'floor' && Math.hypot(toy.p.x - c.window.x, toy.p.z - c.window.z) > 0.3) {
-      opts.push([0.45 * Math.max(0, (m.trust - 0.35) / 0.65) * (0.5 + m.arousal) * (1 - m.sleepy), () => new Gift()]);
+      add('gift', 0.45 * Math.max(0, (m.trust - 0.35) / 0.65) * (0.5 + m.arousal) * (1 - m.sleepy), () => new Gift(), 'mouse');
     }
     // in the mood for a game and fond of you, now and then it comes and asks you for one at the
     // glass
-    if (atHome && m.trust > 0.3) opts.push([0.35 * Math.max(0, m.arousal - 0.15) * Math.min(1, m.trust + 0.2) * (1 - m.sleepy), () => new PawGlass(c.finger, true)]);
+    if (atHome && m.trust > 0.3) add('ask', 0.35 * Math.max(0, m.arousal - 0.15) * Math.min(1, m.trust + 0.2) * (1 - m.sleepy), () => new PawGlass(c.finger, true), 'you');
     const box = c.box();
-    if (atHome && box) opts.push([0.7 * (1 - 0.4 * m.sleepy), () => new Box(box)]);
+    if (atHome && box) add('box', 0.7 * (1 - 0.4 * m.sleepy), () => new Box(box), undefined, box.seat);
     // playful and with nothing better to do: its own tail
-    if (atHome) opts.push([0.18 * Math.max(0, m.arousal - 0.1) * (1 - m.sleepy), () => new TailChase()]);
+    if (atHome) add('tail', 0.18 * Math.max(0, m.arousal - 0.1) * (1 - m.sleepy), () => new TailChase());
     // now and then, more at dusk and after dark, a mad few seconds
-    if (atHome) opts.push([0.28 * (0.3 + m.arousal) * (1 - m.sleepy) * (1 + 1.2 * c.night), () => new Zoomies(c)]);
+    if (atHome) add('zoomies', 0.28 * (0.3 + m.arousal) * (1 - m.sleepy) * (1 + 1.2 * c.night), () => new Zoomies(c));
     const sill = c.sill();
     // (a bird on the ledge outside: up for a closer look, which, as it is a bird, it will not wait for)
-    if (atHome && sill) opts.push([0.55 * (1 + 1.5 * c.rain + 1.2 * c.night) * (1 - 0.6 * m.sleepy) + (c.visitor() ? 3 : 0), () => new Sill(sill)]);
-    else opts.push([1.5, () => toBed(c, 'loaf')]);
-    opts.push([1.6, () => null]);
+    const bird = c.visitor();
+    if (atHome && sill) add('sill', 0.55 * (1 + 1.5 * c.rain + 1.2 * c.night) * (1 - 0.6 * m.sleepy) + (bird ? 3 : 0), () => new Sill(sill), bird ? 'bird' : undefined, bird ? undefined : sill.seat);
+    else add('bed', 1.5, () => toBed(c, 'loaf'), undefined, atHome ? null : c.home);
+    add('still', 1.6, () => null);
   }
-  const total = opts.reduce((a, [w]) => a + w, 0);
+  return opts;
+}
+
+/** something to do now, or null to stay as it is (one throw of the dice: see whim.ts for how it
+ *  is done in the room) */
+export function chooseAct(c: Ctx, atHome: boolean, posture: PoseName): Act | null {
+  const opts = idleOptions(c, atHome, posture);
+  const total = opts.reduce((a, o) => a + o.w, 0);
   let r = Math.random() * total;
-  for (const [w, f] of opts) {
-    if ((r -= w) <= 0) return f();
+  for (const o of opts) {
+    if ((r -= o.w) <= 0) return o.make();
   }
   return null;
 }

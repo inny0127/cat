@@ -248,6 +248,12 @@ export class Nerves {
     return this.attending?.id === id ? this.attending.a : 0;
   }
 
+  /** a thing gone from its mind altogether (a place it had a mind to go to, and has gone, or not) */
+  forget(id: string) {
+    if (this.attending?.id === id) this.attending = null;
+    this.units.delete(id);
+  }
+
   /**
    * One step: things as the room has them, the eyes where the rig has them, the head facing
    * `yaw` (world) and pitched `pitch` (rad, up +).

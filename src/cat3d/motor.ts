@@ -122,6 +122,10 @@ export class Motor {
   goalFace: number | null = null;
   /** a waypoint on the way somewhere: walk through it without stopping */
   goalPass = false;
+  /** the nearest it has got to the goal, and how long it has walked at it since without getting
+   *  any nearer (something in the way it cannot get round: as near as it will get) */
+  private goalBest = Infinity;
+  private goalStall = 0;
   onArrive: (() => void) | null = null;
   maxSpeed = 1.6;
   /** what is in the way on the floor (circles: middle and radius), round which a walk bends; and
@@ -291,6 +295,11 @@ export class Motor {
   }
 
   walkTo(p: THREE.Vector3, speed = 0.45, face: number | null = null, onArrive: (() => void) | null = null, pass = false) {
+    // (a new place to go: how near it has got to it so far starts afresh)
+    if (!this.goal || Math.hypot(p.x - this.goal.x, p.z - this.goal.z) > 0.02) {
+      this.goalBest = Infinity;
+      this.goalStall = 0;
+    }
     this.goal = p.clone();
     this.goal.y = 0;
     this.goalSpeed = speed;
@@ -518,8 +527,13 @@ export class Motor {
     if (this.goal && this.canWalk) {
       const dx = this.goal.x - this.pos.x, dz = this.goal.z - this.pos.z;
       const dist = Math.hypot(dx, dz);
-      if (this.goalPass && dist < 0.06) this.arrive();
-      else if (dist < 0.025 && this.speed < 0.05) {
+      // (walking straight at it and getting no nearer: the last of the way is blocked, by the box's
+      // corner or the like; near it, that will do; a long way off, it gives up on it)
+      if (dist < this.goalBest - 0.004) { this.goalBest = dist; this.goalStall = 0; }
+      else if (this.speed > 0.05 && Math.abs(wrap(Math.atan2(dx, dz) - this.yaw)) < 0.7) this.goalStall += dt;
+      const stuck = (this.goalStall > 0.6 && dist < 0.2) || this.goalStall > 2;
+      if (this.goalPass && (dist < 0.06 || stuck)) this.arrive();
+      else if ((dist < 0.025 || stuck) && this.speed < 0.05) {
         // arrived: turn to face the requested way, then report
         if (this.goalFace !== null) {
           const e = wrap(this.goalFace - this.yaw);
@@ -541,7 +555,7 @@ export class Motor {
         const steer = this.goalPass ? clamp(0.45 + 0.55 * facing, 0.15, 1)
           : clamp(0.35 + 0.65 * facing, 0.1, 1) * (Math.abs(e) > 0.6 ? clamp(dist / 0.25, 0.35, 1) : 1);
         want = this.goalSpeed * steer * (this.goalPass ? 1 : clamp(dist / 0.14, 0.3, 1));
-        if (dist < 0.025) want = 0;
+        if (dist < 0.025 || stuck) want = 0;
       }
     }
     this.wantSpeed = want;

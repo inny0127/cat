@@ -4,9 +4,10 @@ import { POSES, SIDE_TURN, type Leg, type PoseLayer, type PoseName } from '../ca
 import { NEUTRAL, type Mood } from '../cat3d/mood';
 import type { Avatar } from '../sim/avatar';
 import type { EarMood, TailMood } from '../rig/animator';
-import { boop, byYou, chooseAct, groomChest, groomFlank, knead, lookWith, restingPose, sneeze, toBed, toWindow, wander, warmUp, washFace, yawn, type Act, type Ctx, sunbathe, Play, Sill, Hunt, Box, Zoomies, Walk, Stare, Rub, scratchEar, wakeUp, stretchSideOn, Greet, Gift, Snub, Beg, PawGlass, TailChase, Claw, Top, Fish, Bat, Trap, Sulk, isPerching, type Perching, type ScratchPost, type GlassFinger, type SillSpot, type SulkSpot } from './behave';
+import { boop, byYou, idleOptions, groomChest, groomFlank, knead, lookWith, restingPose, sneeze, toBed, toWindow, wander, warmUp, washFace, yawn, type Act, type Ctx, sunbathe, Play, Sill, Hunt, Box, Zoomies, Walk, Stare, Rub, scratchEar, wakeUp, stretchSideOn, Greet, Gift, Snub, Beg, PawGlass, TailChase, Claw, Top, Fish, Bat, Trap, Sulk, isPerching, type Perching, type ScratchPost, type GlassFinger, type SillSpot, type SulkSpot } from './behave';
 import { Chase, Startle, type LaserDot } from './chase';
 import { Tease, type Lure } from './tease';
+import { GOAL, Whim } from './whim';
 import { Nerves, type Blocker, type Thing } from './nerves';
 
 const LYING: PoseName[] = ['loaf', 'sphinx', 'side', 'back', 'curl', 'curlL'];
@@ -544,6 +545,9 @@ export class PixelAvatar implements Avatar {
     if (this.spots) {
       T.push({ id: 'food', kind: 'spot', p: this.spots.food }, { id: 'water', kind: 'spot', p: this.spots.water });
     }
+    // (and a place it has a mind to go to: looked at before it goes)
+    const I = this.whim.intent;
+    if (I?.at) T.push({ id: GOAL, kind: 'spot', p: I.at });
     const F = this.fingerNow();
     if (F) T.push({ id: 'hand', kind: 'hand', p: F.at });
     else if (this.userHand) T.push({ id: 'hand', kind: 'hand', p: this.userHand });
@@ -564,6 +568,7 @@ export class PixelAvatar implements Avatar {
     else if (this.act instanceof Tease) N.bias.set('wand', 0.4);
     else if (this.act?.name === 'play') N.bias.set('yarn', 0.35);
     else if (this.act?.name === 'pompom') N.bias.set('pompom', 0.35);
+    if (I) N.bias.set(I.id, (N.bias.get(I.id) ?? 0) + this.whim.pull);
     N.update(dt, this.eyeW, Math.atan2(this.headF.x, this.headF.z), Math.asin(Math.max(-1, Math.min(1, this.headF.y))), T);
     // (the red dot come on: the click of the pointer, and the room's light changed; it looks
     // round for it wherever it is)
@@ -755,9 +760,12 @@ export class PixelAvatar implements Avatar {
   /** the brain's mode and the cat's feelings (set by the app each frame) */
   mode = 'sleep';
   mood: Mood = { ...NEUTRAL };
-  /** what it is doing of its own accord (behave.ts), and when to think of something else */
+  /** what it is doing of its own accord (behave.ts), and what it has in mind to do next (whim.ts:
+   *  urges fed by what its eyes are on, each looked at before it is done); whether it was at its
+   *  ease this frame (else whatever it had in mind is gone) */
   private act: Act | null = null;
-  private nextActIn = 6;
+  readonly whim = new Whim();
+  private easyNow = false;
   private dreamIn = 20;
   private scoot: { t: number; dx: number; dz: number; len: number } | null = null;
   private scootIn = 0.4;
@@ -1216,14 +1224,12 @@ export class PixelAvatar implements Avatar {
     }
     this.lieIn(this.mode === 'alert' ? 'sit' : this.rest, atHome, dt);
     if (this.act) return;
-    this.nextActIn -= dt;
-    if (this.nextActIn < 0) {
-      // (a cat at its ease mostly just sits there: something now and then, not one thing after
-      // another)
-      this.nextActIn = 6 + Math.random() * 12;
-      this.act = chooseAct(c, atHome, m.posture);
-      if (!this.act && Math.random() < 0.5) this.rest = restingPose(this.mood, this.mode);
-    }
+    // (a cat at its ease mostly just sits there: something now and then, not one thing after
+    // another; and what it does, it looks at first)
+    this.easyNow = true;
+    const w = this.whim.update(dt, () => idleOptions(c, atHome, m.posture), this.nerves);
+    if (w?.act) this.act = w.act;
+    else if (w && Math.random() < 0.5) this.rest = restingPose(this.mood, this.mode);
   }
 
   get hidden() {
@@ -1357,6 +1363,8 @@ export class PixelAvatar implements Avatar {
         cb?.();
       }
     }
+    if (!this.easyNow && this.whim.intent) this.whim.drop(this.nerves);
+    this.easyNow = false;
     // asleep, now and then it opens an eye to see what you are up to (the upper one, lying on
     // its side; the brain says when and how far)
     {
