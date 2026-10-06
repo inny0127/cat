@@ -220,6 +220,8 @@ export class PixelAvatar implements Avatar {
   private closeDone = false;
   private avertT = 0;
   private readonly lookAway = new THREE.Vector3();
+  /** a sound heard in its sleep: where, and how much longer an ear stays round to it (s) */
+  private earSound: { at: THREE.Vector3; t: number } | null = null;
   groove = 0;
   private grooveFor = 0;
   private grooveIn = 15 + Math.random() * 30;
@@ -401,6 +403,8 @@ export class PixelAvatar implements Avatar {
   hear(at: THREE.Vector3) {
     if (!this.alive || this.isHidden) return;
     if (this.sleep > 0.5) {
+      // (asleep, an ear goes round to it, the rest of it still asleep; and back in a moment)
+      this.earSound = { at: at.clone(), t: 1.4 + Math.random() * 1.8 };
       if (Math.random() < 0.4) this.cat.motor.flickEar(Math.random() < 0.5 ? 'L' : 'R', 0.5);
       return;
     }
@@ -687,7 +691,13 @@ export class PixelAvatar implements Avatar {
       const near = Math.min(1.3, Math.abs(az) * 0.9), far = Math.min(0.5, Math.abs(az) * 0.4);
       E.L = k * (az > 0 ? near : -far);
       E.R = k * (az > 0 ? -far : near);
-    } else { E.L = 0; E.R = 0; }
+    } else if (this.earSound && (this.earSound.t -= dt) > 0) {
+      const to = this.headLocal.copy(this.earSound.at).sub(this.eyeW).applyQuaternion(this.headInv.copy(this.headQ).invert());
+      const az = Math.atan2(to.x, to.z), k = 0.9 * Math.min(1, this.earSound.t / 0.6);
+      const near = Math.min(1.3, Math.abs(az) * 0.9), far = Math.min(0.3, Math.abs(az) * 0.25);
+      E.L = k * (az > 0 ? near : -far);
+      E.R = k * (az > 0 ? -far : near);
+    } else { E.L = 0; E.R = 0; this.earSound = null; }
     this.listen(dt, A && A.kind !== 'you' ? A.a : 0);
   }
 
