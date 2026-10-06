@@ -31,6 +31,7 @@ const report = await page.evaluate(async (minutes) => {
   let legDetail = null;
   // a cat that wants to go somewhere and does not move
   let stillFor = 0, lastAct = '', legIssues = 0;
+  const limbs = {};
   const lastPos = { x: 0, z: 0 };
   const ev = (x, y, t) => ({ preventDefault() {}, pointerId: 9, clientX: x, clientY: y, timeStamp: t * 1000, pointerType: 'touch', pressure: 0.5, width: 20, height: 20, buttons: 1 });
   app.brain.toAwake('rest');
@@ -210,6 +211,31 @@ const report = await page.evaluate(async (minutes) => {
         if (d < -0.02 && issues.length < 40) issues.push(`in a solid thing (${cc.x.toFixed(2)},${cc.z.toFixed(2)}) by ${(-d * 100).toFixed(1)} cm at ${i} (act ${app.avatar.doing}${app.avatar.act?.phase ? '/' + app.avatar.act.phase : ''}, ${k > 0 ? 'chest' : 'hips'}, at ${m.pos.x.toFixed(2)},${m.pos.z.toFixed(2)} facing ${m.yaw.toFixed(2)}, ${m.posture})`);
       }
     }
+    // (and no part of a leg, on the floor or not, well inside the trunk: the body's own cross-
+    // sections at the hips, the middle and the chest; a tally of where it happens)
+    if (!app.avatar.hidden && i % 3 === 1) {
+      const kin = c.kin, body = c.body, I = body.I;
+      const SECT = [[I.hips, -0.008, -0.03, 0.046, 0.05, 0.035], [I.spine2, -0.022, 0, 0.05, 0.06, 0.045], [I.chest, -0.03, 0.008, 0.048, 0.066, 0.045]];
+      let worst = null;
+      for (const leg of ['LF', 'RF', 'LH', 'RH']) {
+        const L = body.legs[leg];
+        for (const k of [1, 2, 3]) {
+          for (const [bone, cy, cz, rx, ry, hl] of SECT) {
+            if (k === 1 && ((leg[1] === 'F' && bone === I.chest) || (leg[1] === 'H' && bone === I.hips))) continue;
+            const P = kin.wp[L.b[k]].clone().sub(kin.wp[bone]).applyQuaternion(kin.wq[bone].clone().invert());
+            if (Math.abs(P.z - cz) > hl) continue;
+            const depth = 0.85 - Math.hypot(P.x / rx, (P.y - cy) / ry);
+            if (depth > 0.25 && (!worst || depth > worst.depth)) worst = { depth, what: `${leg} ${['', leg[1] === 'F' ? 'elbow' : 'knee', leg[1] === 'F' ? 'wrist' : 'hock', 'paw'][k]} in ${bone === I.chest ? 'chest' : bone === I.hips ? 'hips' : 'middle'}` };
+          }
+        }
+      }
+      if (worst) {
+        const key = `${app.avatar.doing ?? '-'}${app.avatar.act?.phase ? '/' + app.avatar.act.phase : ''} ${m.posture}: ${worst.what}`;
+        const e = limbs[key] ??= { n: 0, most: 0, at: i };
+        e.n++;
+        if (worst.depth > e.most) { e.most = +worst.depth.toFixed(2); e.at = i; }
+      }
+    }
     // (legs: a paw on the floor never across under the body to the other side, nor hanging off a
     // leg too short to reach it)
     if (!app.avatar.hidden && i % 3 === 0) {
@@ -240,7 +266,7 @@ const report = await page.evaluate(async (minutes) => {
     if (i % 2400 === 0) await new Promise((r) => setTimeout(r, 0));
   }
   app.stage.render();
-  return { issues: issues.slice(0, 20), legDetail, batch: app.room.batchCount, seen, drags, errands, laserUses, wandUses, returns, tosses, glasses, leans, hands, mug: app.room.mugUp ? 'up' : 'down', mode: app.brain.mode, doing: app.avatar.doing };
+  return { issues: issues.slice(0, 20), limbs: Object.entries(limbs).sort((a, b) => b[1].n * b[1].most - a[1].n * a[1].most).slice(0, 14).map(([k, v]) => `${k} x${v.n} up to ${v.most} (at ${v.at})`), legDetail, batch: app.room.batchCount, seen, drags, errands, laserUses, wandUses, returns, tosses, glasses, leans, hands, mug: app.room.mugUp ? 'up' : 'down', mode: app.brain.mode, doing: app.avatar.doing };
 }, minutes);
 console.log(JSON.stringify(report), 'errors:', errs.slice(0, 10));
 await b.close();
