@@ -60,3 +60,47 @@ describe('turning on the spot, the paws step round with it', () => {
     }
   });
 });
+
+describe('a shift of the feet begun standing still, and the body sets off round meanwhile', () => {
+  it('the paw comes down where it is wanted now, not across under the body where it was', () => {
+    for (const rate of [2.4, -2.4]) {
+      const st = new Stepper();
+      const home = { LF: new THREE.Vector3(), RF: new THREE.Vector3(), LH: new THREE.Vector3(), RH: new THREE.Vector3() };
+      const planted = { LF: 1, RF: 1, LH: 1, RH: 1 };
+      const centre = new THREE.Vector3(), vel = new THREE.Vector3();
+      let h = 0;
+      const place = () => {
+        for (const l of LEGS) {
+          const [x, y, z] = HOME[l];
+          home[l].set(x * Math.cos(h) + z * Math.sin(h), y, -x * Math.sin(h) + z * Math.cos(h));
+        }
+      };
+      place();
+      st.reset(home);
+      st.update(1 / 60, home, planted, vel, 0, centre, h, 0);
+      // (the paw on the inside of the coming turn a little out of its place: a shift of it, still)
+      const inner: Leg = rate > 0 ? 'LF' : 'RF';
+      st.feet[inner].pos.x += 0.05 * SIDE[inner];
+      const dt = 1 / 60;
+      let worst = -1, landed = false;
+      for (let t = 0; t < 1.5; t += dt) {
+        // (it sets off round a moment after the shift begins)
+        const r = t > 0.03 ? rate : 0;
+        h += r * dt;
+        place();
+        const was = st.feet[inner].stepping;
+        st.update(dt, home, planted, vel, r, centre, h, 0);
+        if (was && !st.feet[inner].stepping) landed = true;
+        if (landed && !st.feet[inner].stepping) {
+          const p = st.feet[inner].pos;
+          const x = p.x * Math.cos(h) - p.z * Math.sin(h);
+          worst = Math.max(worst, -x * SIDE[inner]);
+        }
+        if (landed) break;
+      }
+      expect(landed).toBe(true);
+      expect(worst).toBeLessThan(0.01);
+    }
+  });
+});
+

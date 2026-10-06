@@ -85,7 +85,7 @@ export class Cat3D {
   private lastYaw: number | null = null;
   private readonly lastPos = v();
   private readonly inv = new THREE.Matrix4();
-  private readonly tmp = { a: v(), b: v(), q: new THREE.Quaternion() };
+  private readonly tmp = { a: v(), b: v(), q: new THREE.Quaternion(), q2: new THREE.Quaternion() };
   /** the eyeball's radius (m) */
   private eyeRadius = 0.007;
   private breathT = 0;
@@ -433,7 +433,17 @@ export class Cat3D {
     }
     body.legsTo(p, this.targ, this.flex, this.ground);
     // (a paw on the floor the leg could not reach to: the stepper moves it, next frame)
-    for (const l of LEGS) stepper.strain[l] = this.planted[l] && !stepper.feet[l].stepping ? body.reached[l].distanceTo(this.targ[l]) : 0;
+    // (and one come across under the body, past the middle, in the frame of its own shoulders or
+    // hips as they are, turned and rolled: it steps out from there, next frame)
+    for (const l of LEGS) {
+      const down = this.planted[l] && !stepper.feet[l].stepping;
+      stepper.strain[l] = down ? body.reached[l].distanceTo(this.targ[l]) : 0;
+      if (down) {
+        const L = body.legs[l];
+        const g = tmp.b.copy(kin.wp[L.b[3]]).sub(kin.wp[L.girdle]).applyQuaternion(tmp.q2.copy(kin.wq[L.girdle]).invert());
+        stepper.cross[l] = -g.x * L.side;
+      } else stepper.cross[l] = -1;
+    }
     body.face(p, motor.twitch);
     for (let i = 0; i < this.tail.n; i++) this.tail.wave[i] = motor.tailWaveAt(i, this.tail.n);
     // body capsules first: the tail lies against them

@@ -105,6 +105,9 @@ export class Stepper {
   onLand: ((leg: Leg, settle: boolean) => void) | null = null;
   /** how far short of each planted paw its leg came last frame (m; the cat sets it after its IK) */
   readonly strain: Record<Leg, number> = { LF: 0, RF: 0, LH: 0, RH: 0 };
+  /** how far across under the body each planted paw was last frame, past the middle, in the frame
+   *  of its own shoulders or hips (m; below 0: on its own side; the cat sets it after its IK) */
+  readonly cross: Record<Leg, number> = { LF: -1, RF: -1, LH: -1, RH: -1 };
   private settleCooldown = 0;
   private moving = 0;
   private still = 1;
@@ -205,7 +208,10 @@ export class Stepper {
       if (F.stepping) {
         F.s = Math.min(1, F.s + dt / F.dur);
         const s = F.s;
-        if (!F.settle) {
+        // (a little shift of the feet begun standing still is aimed at its place as it is; set off
+        // meanwhile, round or along, the paw goes where it will be wanted, as any step does: not
+        // left to come down where the body has turned away from, across under it)
+        if (!F.settle || this.moving > 0.3) {
           // keep aiming where this paw's stance will be centred under the body, as speed and
           // heading change during the swing
           this.aim(F.to, home[l], vel, yawRate, centre, (1 - s) * F.dur + standT * 0.5);
@@ -235,7 +241,7 @@ export class Stepper {
         o.y = 0;
         const d = o.length();
         const inward = -SIDE[l] * o.dot(this.across);
-        if (inward > 0.03 || d > 0.075 + 0.5 * speed * standT || (this.strain[l] > 0.012 && d > 0.02)) {
+        if (inward > 0.03 || d > 0.075 + 0.5 * speed * standT || (this.strain[l] > 0.012 && d > 0.02) || (this.cross[l] > 0.015 && d > 0.012)) {
           if (this.moving > 0) F.last = Math.floor(this.clock - off);
           this.begin(F, home[l], vel, yawRate, centre, Math.min(swingT, 0.2), Math.min(swingT, 0.2) + (this.moving > 0.3 ? standT * 0.5 : 0),
             (FRONT[l] ? 0.02 : 0.016) + 0.01 * Math.min(1, speed), false);
