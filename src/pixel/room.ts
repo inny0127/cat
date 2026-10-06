@@ -339,6 +339,13 @@ int sparrow(ivec2 q, int pose) {
 }
 // how far a layer at a distance seems to slide as you move across the room (whole pixels)
 float slide(float f) { return floor(uPar * f / uPxSize + 0.5); }
+// the underside of a low ceiling of cloud along x, seen from under it: 0 at the creases between
+// its rolls, up to 1 at the lowest of a roll; the rolls rounded, of uneven widths and depths
+float rolls(float x, float period, float seed) {
+  float xw = x + period * (0.4 * sin(x / (period * 1.37) + seed) + 0.25 * sin(x / (period * 0.53) + 2.3 * seed));
+  float u = fract(xw / period) * 2.0 - 1.0;
+  return sqrt(max(0.0, 1.0 - u * u)) * (0.45 + 0.55 * h1(floor(xw / period) * 7.3 + seed));
+}
 // heaps of cloud drifting across: each a row of round puffs on a flat base, every puff lit on its
 // own from where the light comes (L), the belly in shade (or, with the sun low under it, lit).
 // Gives how lit the cloud is at p, or -9 where there is none
@@ -484,7 +491,9 @@ void main() {
   }
   // clouds drifting by: by day white with blue shade, lit from the sun's side; low sun lights their
   // bellies gold and pink; by night dark, a little moonlight on their tops and the town's glow
-  // under them; under rain, grey and many
+  // under them; under rain, grey and many, and going (the low ceiling of it below comes over them)
+  vec3 sky0 = c;
+  float wet = smoothstep(0.1, 0.85, uRain);
   {
     float sx = clamp((h - 12.75) / 6.35, -1.0, 1.0);
     float lowSun = max(gold * 0.6, dusk);
@@ -502,7 +511,56 @@ void main() {
                      pick(ti, hex(128.0, 118.0, 128.0), hex(154.0, 142.0, 150.0), hex(178.0, 166.0, 170.0), hex(200.0, 190.0, 190.0)),
                      pick(ti, hex(88.0, 78.0, 102.0), hex(108.0, 96.0, 120.0), hex(128.0, 114.0, 136.0), hex(148.0, 132.0, 150.0)),
                      pick(ti, hex(40.0, 34.0, 50.0), hex(36.0, 37.0, 56.0), hex(46.0, 47.0, 68.0), hex(58.0, 59.0, 82.0))), uRain);
+      c = mix(c, sky0, wet);
       a = 0.15;
+    }
+  }
+  // under rain, the sky one low grey ceiling of cloud, come down over the town as the rain comes
+  // on: seen from under it, in rolls, the near ones overhead big and dark and quickest by, the far
+  // ones small and pale and low over the town, every edge soft (a row or two of checks); by night
+  // the town's glow on the underside of it; and under it, rags of cloud blowing by
+  if (wet > 0.0) {
+    vec3 deep = tod(hex(74.0, 80.0, 98.0), hex(98.0, 84.0, 96.0), hex(66.0, 54.0, 82.0), hex(26.0, 25.0, 40.0));
+    vec3 under = tod(hex(196.0, 202.0, 214.0), hex(232.0, 200.0, 180.0), hex(206.0, 150.0, 150.0), hex(122.0, 86.0, 98.0));
+    float glowW = night + 0.6 * dusk + 0.4 * gold;
+    // (snow cloud paler)
+    deep = mix(deep, sky0 * 0.96, 0.45 * uSnowing);
+    // (all of it higher, out of the window, while the rain is light)
+    float lift = 0.6 * (1.0 - wet);
+    bool chk = mod(sp.x + sp.y, 2.0) < 1.0;
+    bool chk4 = mod(sp.x, 2.0) < 1.0 && mod(sp.y, 2.0) < 1.0;
+    for (int k = 0; k < 4; k++) {
+      float fl = float(k);
+      // (moving a whole pixel at a time, each roll as it is)
+      float x = sp.x - floor(uTime * (0.04 + 0.08 * fl) + 61.0 * fl);
+      float edge = floor(H * (0.52 + 0.12 * fl + lift) - H * (0.012 + 0.01 * fl * fl) * rolls(x, Wd * (0.08 + 0.05 * fl * fl), 1.7 + fl));
+      float d = sp.y - edge;
+      if (d >= 0.0 || (d >= -1.0 && chk) || (d >= -2.0 && chk4)) {
+        c = mix(sky0, deep, 0.2 + 0.22 * fl);
+        // (the far ones, low over the town, lit the most from under)
+        c = mix(c, under, (0.4 - 0.1 * fl) * glowW);
+        a = 0.15;
+      }
+    }
+    for (int k = 0; k < 3; k++) {
+      float fl = float(k);
+      float span = Wd * 1.7, len = Wd * (0.07 + 0.05 * h1(fl * 3.7));
+      float xc = floor(mod(fl * 0.41 * span + uTime * (0.3 + 0.25 * h1(fl + 0.5)), span) - 0.35 * Wd);
+      float yc = floor(H * (0.47 + 0.07 * fl + lift));
+      // (each rag three blobs, the middle one the biggest, torn at the edges)
+      float tall = 2.0 + 1.2 * h1(fl + 2.0), r = 9.0;
+      for (int j = 0; j < 3; j++) {
+        float u = float(j) - 1.0;
+        float big = j == 1 ? 1.0 : 0.5 + 0.15 * h1(fl * 5.0 + u);
+        vec2 q = vec2((sp.x - xc - u * len * (0.55 + 0.2 * h1(fl + u * 3.1))) / (len * big), (sp.y - yc - u * (1.0 + h1(fl * 2.0 + u))) / (tall * big));
+        r = min(r, dot(q, q));
+      }
+      r += 0.9 * (noise(vec2((sp.x - xc) * 0.3 + 17.0 * fl, sp.y * 0.7)) - 0.5) + 1.4 * (1.0 - wet);
+      if (r < 1.0 || (r < 1.3 && chk)) {
+        c = mix(sky0, deep, 0.42 + 0.08 * fl);
+        c = mix(c, under, 0.2 * glowW);
+        a = 0.15;
+      }
     }
   }
   // lightning: a bolt far off over the town, a jagged line down out of the cloud with a branch off

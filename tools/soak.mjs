@@ -104,7 +104,8 @@ const report = await page.evaluate(async (minutes) => {
       const [x, y] = scr(app.room.lureAt());
       app.input.down({ ...ev(x, y, t), pointerId: 14 });
       wand = { x, y, until: i + 120 + Math.floor(Math.random() * 240), vx: 0, vy: 0, took: !!app.wandFinger, why: `laser ${app.laser.held} credits ${app.creditsOpen} yarn ${!!app.toyFinger}` };
-      if (!wand.took) issues.push(`the wand not taken up at ${i} (${x.toFixed(0)},${y.toFixed(0)}; cat under the finger: ${app.input.h.hitCat(x, y, false)}; ${app.avatar.doing}; ${wand.why})`);
+      // (unless the ball of wool lies on its feathers: then the wool is what the finger takes, by design)
+      if (!wand.took && !app.toyFinger) issues.push(`the wand not taken up at ${i} (${x.toFixed(0)},${y.toFixed(0)}; cat under the finger: ${app.input.h.hitCat(x, y, false)}; ${app.avatar.doing}; ${wand.why})`);
       wandUses++;
     } else if (wand) {
       wand.vx += (Math.random() - 0.5) * 160; wand.vy += (Math.random() - 0.5) * 160;
