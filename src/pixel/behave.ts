@@ -185,6 +185,10 @@ export const homeward = (c: Ctx) => Math.random() < 0.3 + 0.55 * (c.mood?.sleepy
 const hump = (t: number, d: number, r: number) => ease(t / r) * ease((d - t) / r);
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
 const pick = <T>(xs: T[]) => xs[Math.floor(Math.random() * xs.length)];
+/** a living thing's own time for a rhythm (licks, treads, sniffs): now a little quicker, now a
+ *  little slower, a tenth or so either way over a second or two; never a metronome's. Monotonic,
+ *  and never more than a tenth of a second off the clock */
+export const lived = (t: number, s: number) => t + 0.06 * Math.sin(1.3 * t + s) + 0.04 * Math.sin(0.7 * t + 2.1 * s);
 
 /** an act it can look up from a moment (a wash, a scratch): its own time stopped while it looks,
  *  and on again where it left off */
@@ -203,6 +207,7 @@ class Layered implements Act, Glancing {
   private upFor = 0;
   private up = 0;
   letGo = 0.8;
+  private readonly seed = Math.random() * 10;
   constructor(readonly name: string, private readonly dur: number, private readonly ramp: number,
     private readonly shape: (t: number) => PoseLayer, private readonly posture: PoseName | null = null,
     private cue: { at: number; sound: string; gain: number } | null = null) {}
@@ -223,7 +228,7 @@ class Layered implements Act, Glancing {
       this.cue = null;
     }
     if (this.posture) c.m.setPosture(this.posture);
-    c.m.layer = { pose: this.shape(this.t), w: hump(this.t, this.dur, this.ramp) * (1 - this.letGo * this.up) };
+    c.m.layer = { pose: this.shape(lived(this.t, this.seed)), w: hump(this.t, this.dur, this.ramp) * (1 - this.letGo * this.up) };
     return this.t < this.dur;
   }
   stop(c: Ctx) {
@@ -1320,13 +1325,14 @@ export class PawGlass implements Act {
     m.setPosture('sit');
     if (this.phase === 'lick') {
       // the paw up to the mouth and licked a few times, the eyes half shut, and down
-      const reach = hump(this.t, 1.9, 0.3);
+      const reach = hump(this.t, 1.9, 0.3), sat = POSES.sit.LF;
+      const lk = this.t > 0.35 && this.t < 1.5 ? Math.sin(Math.PI * (this.t - 0.35) / 1.15) * Math.max(0, Math.sin(lived(this.t, 3) * 15)) : 0;
       m.lookAt(null);
       m.layer = {
         pose: {
-          [this.bout?.paw ?? 'LF']: { planted: 0, frame: 0, x: 0.012, y: 0.06 + 0.15 * reach, z: 0.08 + 0.055 * reach, flex: 0.85 },
-          headPitch: -0.32 - 0.25 * reach, neckPitch: -0.1 * reach, jaw: this.t > 0.35 && this.t < 1.5 ? 0.16 * Math.max(0, Math.sin(this.t * 15)) : 0.04,
-          tongue: this.t > 0.35 && this.t < 1.5 ? 0.9 * Math.max(0, Math.sin(this.t * 15)) : 0, tongueUp: -0.2,
+          [this.bout?.paw ?? 'LF']: { planted: 0, frame: 0, x: sat.x + (0.012 - sat.x) * reach, y: sat.y + (0.21 - sat.y) * reach, z: sat.z + (0.135 - sat.z) * reach, flex: 0.85 * reach },
+          headPitch: -0.32 - 0.25 * reach, neckPitch: -0.1 * reach, jaw: 0.04 + 0.12 * lk,
+          tongue: 0.9 * lk, tongueUp: -0.2,
           eyeOpen: 0.35, squint: 0.5,
         },
         w: 1,
@@ -2062,7 +2068,8 @@ export class TailChase implements Act {
     m.lookAt(this.t < 1.4 ? c.viewer() : null, 1);
     if (this.t > 1.4) {
       const u = this.t - 1.4;
-      m.layer = { pose: { neckPitch: -0.75, headPitch: -0.55 + 0.12 * Math.sin(u * 8.5), jaw: 0.1 * Math.max(0, Math.sin(u * 8.5)), eyeOpen: 0.4 }, w: ease(u / 0.4) * (1 - ease((u - 1.6) / 0.4)) };
+      const l = Math.sin(lived(u, 5) * 8.5);
+      m.layer = { pose: { neckPitch: -0.75, headPitch: -0.55 + 0.12 * l, jaw: 0.1 * Math.max(0, l), eyeOpen: 0.4 }, w: ease(u / 0.4) * (1 - ease((u - 1.6) / 0.4)) };
     }
     return this.t < 3.5;
   }
@@ -2848,7 +2855,8 @@ export class Play implements Act {
         m.lookAt(null);
         if (lured && this.ys > 0.1 && this.t > 0.5) { m.layer = null; this.next('go'); return true; }
         m.setPosture('sit');
-        m.layer = { pose: { neckPitch: -0.75, headPitch: -0.55 + 0.12 * Math.sin(this.t * 8.5), jaw: 0.1 * Math.max(0, Math.sin(this.t * 8.5)), eyeOpen: 0.4 }, w: hump(this.t, this.dur, 0.6) };
+        const l = Math.sin(lived(this.t, 7) * 8.5);
+        m.layer = { pose: { neckPitch: -0.75, headPitch: -0.55 + 0.12 * l, jaw: 0.1 * Math.max(0, l), eyeOpen: 0.4 }, w: hump(this.t, this.dur, 0.6) };
         if (this.t > this.dur) {
           m.layer = null;
           if (!homeward(c)) return false;

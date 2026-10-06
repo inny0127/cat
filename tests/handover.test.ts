@@ -56,3 +56,23 @@ describe('a paw is never in two places a frame apart', () => {
     expect(m.pose.LF.y).toBeLessThan(0.02);
   });
 });
+
+describe('a rhythm of its own', () => {
+  it('a living time: never back, never far off the clock, and not a metronome', async () => {
+    const { lived } = await import('../src/pixel/behave');
+    for (const seed of [0, 1.7, 6.2]) {
+      let was = lived(0, seed), fastest = 0, slowest = Infinity;
+      for (let t = 0.01; t < 60; t += 0.01) {
+        const x = lived(t, seed), rate = (x - was) / 0.01;
+        expect(rate).toBeGreaterThan(0);
+        expect(Math.abs(x - t)).toBeLessThanOrEqual(0.1 + 1e-9);
+        fastest = Math.max(fastest, rate);
+        slowest = Math.min(slowest, rate);
+        was = x;
+      }
+      // (a tenth or so quicker and slower by turns)
+      expect(fastest).toBeGreaterThan(1.06);
+      expect(slowest).toBeLessThan(0.94);
+    }
+  });
+});
