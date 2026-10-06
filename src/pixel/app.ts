@@ -423,6 +423,7 @@ export class PixelApp {
       lookFree: () => this.userZoom > 1.02,
       // three fingers at once: the cat's mind opened, or shut again
       threeFingers: () => this.mind.toggle(),
+      twoTapTwice: () => this.mind.toggle(),
       // two fingers: the view in or out, and along
       pinchStart: () => {
         if (this.creditsOpen) return false;
@@ -1839,7 +1840,7 @@ export class PixelApp {
     }
     if (s.hints.face && !s.hints.mind && !this.mind.open && !touching && !this.input.touching && (this.mindHintIn -= dt) < 0) {
       s.hints.mind = 1;
-      this.hintUi.show('세 손가락으로 화면을 누르면 고양이가 보고 생각하는 것이 보여요', 6000);
+      this.hintUi.show('두 손가락으로 화면을 두 번 톡톡 치면 고양이가 보고 생각하는 것이 보여요', 6000);
       return;
     }
     if (this.mind.open) s.hints.mind = 1;

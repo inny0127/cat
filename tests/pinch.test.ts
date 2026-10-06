@@ -19,6 +19,7 @@ function hand(onCat: (x: number) => boolean) {
     pinchStart: () => { said.push('pinch'); return true; },
     pinch: (k: number, mx: number, my: number, dx: number, dy: number) => { zoom.k *= k; zoom.mx = mx; zoom.my = my; zoom.dx += dx; zoom.dy += dy; },
     pinchEnd: () => said.push('pinch over'),
+    twoTapTwice: () => said.push('two taps'),
   } as Record<string, unknown>, { get: (t, k) => (k in t ? t[k as string] : () => {}) }) as unknown as InputHandlers;
   const el = { addEventListener() {}, setPointerCapture() {} } as unknown as HTMLElement;
   const input = new PointerInput(el, h) as unknown as { down(e: object): void; move(e: object): void; up(e: object, c: boolean): void; onCat(): unknown[] };
@@ -40,7 +41,18 @@ function hand(onCat: (x: number) => boolean) {
     t += 40;
     input.up(ev(2, ...b1), false);
   };
-  return { said, zoom, two, input };
+  /** both fingers down together and up again, still, after `gap` ms */
+  const tapTwo = (a: [number, number], b: [number, number], gap = 200) => {
+    t += gap;
+    input.down(ev(1, ...a));
+    t += 20;
+    input.down(ev(2, ...b));
+    t += 90;
+    input.up(ev(1, ...a), false);
+    t += 15;
+    input.up(ev(2, ...b), false);
+  };
+  return { said, zoom, two, tapTwo, input };
 }
 
 describe('two fingers take the view in and out', () => {
@@ -74,6 +86,23 @@ describe('two fingers take the view in and out', () => {
     f.two([150, 400], [190, 400], [150, 470], [190, 470]);
     expect(f.said.filter((s) => s === 'pinch')).toHaveLength(0);
     expect(f.said.filter((s) => s === 'pet')).toHaveLength(2);
+  });
+
+  it('two fingers tapped together twice running (the window on its mind): nothing else, on the glass or on the cat', () => {
+    const f = hand(() => false);
+    f.tapTwo([150, 400], [230, 420], 1000);
+    f.tapTwo([152, 402], [228, 418]);
+    expect(f.said).toEqual(['two taps']);
+    const g = hand(() => true);
+    g.tapTwo([150, 400], [230, 420], 1000);
+    g.tapTwo([152, 402], [228, 418]);
+    expect(g.said.filter((x) => x === 'two taps')).toHaveLength(1);
+    expect(g.said.filter((x) => x === 'pinch')).toHaveLength(0);
+    // (once only, or too far apart in time: not)
+    const h = hand(() => false);
+    h.tapTwo([150, 400], [230, 420], 1000);
+    h.tapTwo([150, 400], [230, 420], 900);
+    expect(h.said).toEqual([]);
   });
 
   it('spread over the cat: the strokes they began are over, and the view goes in', () => {

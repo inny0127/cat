@@ -64,6 +64,8 @@ export interface InputHandlers {
   pinchStart?(): boolean;
   /** three fingers on the glass at once */
   threeFingers?(): void;
+  /** two fingers tapped together twice running (they did nothing else) */
+  twoTapTwice?(): void;
   pinch?(k: number, mx: number, my: number, dx: number, dy: number): void;
   pinchEnd?(): void;
   /** looking round goes up and down as well as along (the view in close): any way the finger goes */
@@ -99,6 +101,10 @@ export class PointerInput {
   /** two fingers down together: which, how far apart and where between them at first and last
    *  time, and whether they have the view yet */
   private two: { a: number; b: number; d0: number; mx0: number; my0: number; d: number; mx: number; my: number; on: boolean } | null = null;
+  /** two fingers come down together, as a tap of the two: which, when, whether they are still a
+   *  tap (not moved, not held), and which have lifted; and when the last such tap was */
+  private duo: { ids: Set<number>; t0: number; ok: boolean; up: number } | null = null;
+  private lastDuo = -1e9;
 
   constructor(private el: HTMLElement, private h: InputHandlers) {
     el.addEventListener('pointerdown', (e) => this.down(e));
@@ -134,6 +140,11 @@ export class PointerInput {
     };
     this.contacts.set(e.pointerId, c);
     if (this.contacts.size === 3) this.h.threeFingers?.();
+    // (a second finger down hard on the first: the two may be a tap together)
+    if (this.contacts.size === 2) {
+      const [a, b] = [...this.contacts.values()];
+      this.duo = Math.abs(a.t0 - b.t0) < 160 ? { ids: new Set([a.id, b.id]), t0: Math.min(a.t0, b.t0), ok: true, up: 0 } : null;
+    } else if (this.contacts.size > 2 && this.duo) this.duo.ok = false;
     if (this.contacts.size === 2 && !this.two) {
       const [a, b] = [...this.contacts.values()];
       const d = Math.hypot(a.sx - b.sx, a.sy - b.sy), mx = (a.sx + b.sx) / 2, my = (a.sy + b.sy) / 2;
@@ -187,6 +198,7 @@ export class PointerInput {
     c.last = e.timeStamp;
     c.press = this.pressOf(e);
     c.maxSpeed = Math.max(c.maxSpeed, Math.hypot(c.vx, c.vy));
+    if (this.duo?.ids.has(e.pointerId) && c.travel > 14) this.duo.ok = false;
     if (this.twoFingers(e.pointerId)) return;
     const g = this.glass.get(e.pointerId);
     if (g?.pinched) return;
@@ -255,6 +267,19 @@ export class PointerInput {
       clearTimeout(g.holdTimer);
       if (g.pouring) this.h.pourEnd();
     }
+    // (one of two fingers that came down together as a tap: when both are up, quick and still, a
+    // tap of the two; and a second such tap soon after, a double)
+    const D = this.duo, ofDuo = !!D && D.ids.has(e.pointerId);
+    if (D && ofDuo) {
+      if (cancelled || e.timeStamp - D.t0 > 380 || c.travel > 14) D.ok = false;
+      if (++D.up === 2) {
+        this.duo = null;
+        if (D.ok) {
+          if (e.timeStamp - this.lastDuo < 480) { this.lastDuo = -1e9; this.h.twoTapTwice?.(); }
+          else this.lastDuo = e.timeStamp;
+        }
+      }
+    }
     const T = this.two;
     if (T && (T.a === e.pointerId || T.b === e.pointerId)) {
       this.two = null;
@@ -268,7 +293,7 @@ export class PointerInput {
     const tap = !cancelled && dur < 300 && c.travel < 14;
     this.h.lifting?.(!cancelled && dur < 700 && c.travel < 14);
     if (c.startedOnCat) {
-      this.h.catTouchEnd(c, tap);
+      this.h.catTouchEnd(c, tap && !ofDuo);
       return;
     }
     if (g?.toy) {
@@ -290,7 +315,8 @@ export class PointerInput {
       this.h.scoop();
       return;
     }
-    if (tap) {
+    // (a finger of two tapped together is not a tap on the glass of its own)
+    if (tap && !ofDuo) {
       const now = e.timeStamp;
       if (now - this.lastTap.t < 380 && Math.hypot(c.sx - this.lastTap.x, c.sy - this.lastTap.y) < 60) {
         this.h.glassKnock(c.sx, c.sy);
