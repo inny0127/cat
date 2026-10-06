@@ -755,7 +755,9 @@ export class PixelAvatar implements Avatar {
    *  turns round properly (lieIn, toBed) once it is let be */
   private sameWay(p: PoseName): PoseName {
     const now = this.cat.motor.targetPosture;
-    if (p === now) return p;
+    // (up on its feet, or sat, lying down any way is lying down: it is from lying one way round to
+    // lying the other that it would turn about where it lies)
+    if (p === now || !LYING.includes(now)) return p;
     return Math.abs(wrap(this.cat.footprint(p).face - this.cat.footprint(now).face)) > 0.7 ? now : p;
   }
 
@@ -899,9 +901,11 @@ export class PixelAvatar implements Avatar {
         if (!this.act!.update(dt, c)) this.act = null;
         return;
       }
-      // otherwise sleep is taken in bed: go back to it, turn round once and settle
-      if (this.act && this.act.name !== 'to bed') this.stopAct();
-      if (!this.act && !atHome) this.act = toBed(c, this.wanted());
+      // otherwise sleep is taken in bed: go back to it, turn round once and settle (a hand on it on
+      // the way, or as it turns round on the bed: it lies down there and then, under the hand,
+      // rather than go round and round under it; on to its bed once it is let be)
+      if (this.act && (this.act.name !== 'to bed' || this.hands.length)) this.stopAct();
+      if (!this.act && !atHome && !this.touched) this.act = toBed(c, this.wanted());
       if (this.act) {
         if (!this.act.update(dt, c)) this.act = null;
         return;
