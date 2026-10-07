@@ -30,6 +30,9 @@ export class Ears {
   on: Sound | null = null;
   /** an ear flicked at a sound out of a quiet: where, how hard (taken by whatever moves the ears) */
   flick: { at: THREE.Vector3; k: number } | null = null;
+  /** a sound that came hard at the neuron, out of a quiet, new or not heard for a while: worth a
+   *  look that way (taken by whatever turns the head) */
+  orient: { at: THREE.Vector3; k: number } | null = null;
   private flickRest = 0;
 
   private unit(id: string, at: THREE.Vector3) {
@@ -43,20 +46,24 @@ export class Ears {
 
   /**
    * A sound from something: how loud it is to the cat (0 .. 1); `fresh`, unlike what it has made
-   * lately (a new song on the radio), and so as good as new.
+   * lately (a new song on the radio), and so as good as new; `wear`, how much each one wears it
+   * in (a sound that comes every few seconds or so and is of no account, a bird, the street, more
+   * than a beat of the radio).
    */
-  sound(id: string, at: THREE.Vector3, loud: number, fresh = false) {
+  sound(id: string, at: THREE.Vector3, loud: number, fresh = false, wear = 0.08) {
     const u = this.unit(id, at);
     if (fresh) u.hab *= 0.25;
     const k = loud * (1 - 0.9 * u.hab);
-    // (out of a quiet, a sound it is not used to: an ear flicks to it)
+    // (out of a quiet, a sound it is not used to: an ear flicks to it; and come hard at it, after
+    // a while of nothing from there, a look)
     if (k > 0.3 && u.quiet > 1.5 && this.flickRest <= 0) {
       this.flick = { at: u.at, k: Math.min(1, k) };
       this.flickRest = 0.6;
     }
+    if (k > 0.5 && u.quiet > 3) this.orient = { at: u.at, k: Math.min(1, k) };
     u.quiet = 0;
     u.drive = Math.min(1.5, Math.max(0, u.drive) + k);
-    u.hab = Math.min(1, u.hab + 0.08 * loud);
+    u.hab = Math.min(1, u.hab + wear * loud);
   }
 
   /**

@@ -23,6 +23,7 @@ import { PixelAvatar } from './avatar';
 import { Mind } from './mind';
 import { Senses3D } from './senses';
 import { Room } from './room';
+import { Soundscape, type Heard } from './soundscape';
 import { rainAt } from '../cat3d/roomlight';
 import { Capacitor } from '@capacitor/core';
 import { App as CapApp } from '@capacitor/app';
@@ -1230,6 +1231,9 @@ export class PixelApp {
   /** the radio's beat as last heard, and the song it was in */
   private heardPulse = 0;
   private heardTrack = -1;
+  /** the little sounds of the place (soundscape.ts), and those heard this frame */
+  private sounds: Soundscape | null = null;
+  private readonly heardNow: Heard[] = [];
   private eyeLight(dt: number, base: number, dark: number) {
     const E = this.avatar.nerves.light, R = this.retina;
     const room = lumOfLight(base) * (this.room.lampLitNow ? 1 : 1 - 0.6 * dark);
@@ -1810,8 +1814,17 @@ export class PixelApp {
     this.audio.setRain(rain);
     // (and the rain on the glass, as the cat hears it: getting up, and going on)
     this.avatar.ears.level('rain', this.room.windowMiddle, rain, dt);
-    // a bird outside: the cat's ear goes to it, and if it is awake, a glance at the window
-    if (this.audio.setOutside(dt, { day: 1 - dark, hour, month: clock.getMonth(), rain })) this.avatar.hear(this.room.windowMiddle);
+    // the crickets of a summer night, for us; and the little sounds of the place the cat hears,
+    // whether or not we have the sound on (a bird outside, the street, the building, the pipes):
+    // its ears go to them, and a look at one that comes hard at it
+    const out = { day: 1 - dark, hour, month: clock.getMonth(), rain };
+    this.audio.setOutside(out);
+    this.heardNow.length = 0;
+    (this.sounds ??= new Soundscape({ window: this.room.windowMiddle, radiator: this.room.radiatorMiddle })).update(dt, out, this.heardNow);
+    for (const h of this.heardNow) {
+      if (h.play) this.audio.bird(h.play, h.loud);
+      this.avatar.ears.sound(h.id, h.at, h.loud, false, 0.25);
+    }
     this.avatar.rain = rain;
     this.avatar.snow = this.room.snowing;
     this.avatar.night = dark;

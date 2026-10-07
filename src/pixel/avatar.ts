@@ -471,17 +471,15 @@ export class PixelAvatar implements Avatar {
     this.puzzledFor = 1.4 + Math.random();
   }
 
-  /** a sound somewhere in the room or outside: an ear goes to it, and an idle cat awake glances
-   *  that way a moment */
+  /** a sound somewhere in the room (a knock, a click): an ear goes to it, and an idle cat awake
+   *  glances that way a moment, if it is not used to it (listen) */
   hear(at: THREE.Vector3) {
     if (!this.alive || this.isHidden) return;
     this.ears.sound('sound', at, 0.7);
     if (this.sleep > 0.5) {
       // (asleep, an ear goes round to it, the rest of it still asleep; and back in a moment)
       this.earSound = { at: at.clone(), t: 1.4 + Math.random() * 1.8 };
-      return;
     }
-    if (!this.act && !this.errand && !this.trip && Math.random() < 0.6) this.heard = { at: at.clone(), t: 0.9 + Math.random() * 0.8, tilt: this.puzzle() };
   }
   /** something seen out of the corner of its eye (a shooting star going down the window): awake
    *  and idle, the ears go up and it looks */
@@ -916,13 +914,19 @@ export class PixelAvatar implements Avatar {
   private listen(dt: number, busy: number) {
     const N = this.nerves, E = this.cat.motor.earTo, H = this.ears;
     H.update(dt);
-    if (!this.alive || this.isHidden) { H.flick = null; return; }
+    if (!this.alive || this.isHidden) { H.flick = H.orient = null; return; }
     const awake = N.awake >= 0.6;
-    const F = H.flick;
-    H.flick = null;
+    const F = H.flick, O = H.orient;
+    H.flick = H.orient = null;
     if (F && (awake || F.k > 0.6)) {
       const to = this.headLocal.copy(F.at).sub(this.eyeW).applyQuaternion(this.headInv.copy(this.headQ).invert());
       this.cat.motor.flickEar(Math.atan2(to.x, to.z) > 0 ? 'L' : 'R', 0.4 + 0.5 * F.k);
+    }
+    // (a sound come hard at it, awake and about nothing in particular: a look that way a moment,
+    // the harder the longer, and at the oddest the head tipped to it; one it is used to, the ear
+    // only)
+    if (O && awake && this.sleep < 0.3 && !this.act && !this.errand && !this.trip && !this.hands.length && !this.heard) {
+      this.heard = { at: O.at.clone(), t: 0.5 + 0.9 * O.k + 0.4 * Math.random(), tilt: O.k > 0.6 ? this.puzzle() : 0 };
     }
     const S = H.on;
     if (!S || (!awake && S.a < 0.6)) return;

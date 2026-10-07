@@ -3414,6 +3414,13 @@ export class Room {
   /** a morning mist (0 .. 1), whatever the date (the lab, tests) */
   fogOverride: number | null = null;
 
+  /** the middle of the radiator, along its pipes (where it ticks and knocks from as the heating
+   *  comes on) */
+  get radiatorMiddle() {
+    const R = this.radiator;
+    return new THREE.Vector3(R.x, 0.3, R.front - 0.03);
+  }
+
   /** the middle of the window (where the world outside is heard from) */
   get windowMiddle() {
     const { l, r, b, t, z } = this.win;
