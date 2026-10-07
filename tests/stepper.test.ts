@@ -146,3 +146,53 @@ describe('a paw in the air on its way to its place goes round the outside of its
     for (const rate of [4.2, -4.2]) expect(spin(rate)).toBeLessThan(0);
   });
 });
+
+describe('at a run, a hard turn one way and then the other', () => {
+  /** a cat running along, its turns as given (secs, m/s, rad/s): how far any forepaw on the floor
+   *  is ever across under its chest (m, past its shoulder's own side) */
+  function run(legs: { secs: number; speed: number; rate: number }[]) {
+    const st = new Stepper();
+    const home = { LF: new THREE.Vector3(), RF: new THREE.Vector3(), LH: new THREE.Vector3(), RH: new THREE.Vector3() };
+    const planted = { LF: 1, RF: 1, LH: 1, RH: 1 };
+    const pos = new THREE.Vector3(), vel = new THREE.Vector3();
+    let h = 0;
+    const place = () => {
+      for (const l of LEGS) {
+        const [x, y, z] = HOME[l];
+        home[l].set(pos.x + x * Math.cos(h) + z * Math.sin(h), y, pos.z - x * Math.sin(h) + z * Math.cos(h));
+        // (the shoulder or hip over it, and out to its side)
+        const G = st.girdle[l], gx = 0.6 * x;
+        G.at.set(pos.x + gx * Math.cos(h) + z * Math.sin(h), 0, pos.z - gx * Math.sin(h) + z * Math.cos(h));
+        G.out.set(SIDE[l] * Math.cos(h), 0, -SIDE[l] * Math.sin(h));
+        G.ok = true;
+      }
+    };
+    place();
+    st.reset(home);
+    let across = -1;
+    const dt = 1 / 60;
+    let speed = 0;
+    for (const L of legs) {
+      for (let t = 0; t < L.secs; t += dt) {
+        speed += (L.speed - speed) * Math.min(1, dt * 6);
+        h += L.rate * dt;
+        vel.set(Math.sin(h) * speed, 0, Math.cos(h) * speed);
+        pos.addScaledVector(vel, dt);
+        place();
+        st.update(dt, home, planted, vel, L.rate, pos, h, speed);
+        for (const l of ['LF', 'RF'] as const) {
+          const F = st.feet[l], G = st.girdle[l];
+          if (F.stepping) continue;
+          across = Math.max(across, -((F.pos.x - G.at.x) * G.out.x + (F.pos.z - G.at.z) * G.out.z));
+        }
+      }
+    }
+    return across;
+  }
+  it('no forepaw is put down across under the chest when the turn goes over the other way all at once', () => {
+    for (const r of [4.5, -4.5]) {
+      const a = run([{ secs: 0.8, speed: 1.3, rate: 0 }, { secs: 0.5, speed: 1.3, rate: r }, { secs: 0.6, speed: 1.0, rate: -0.3 * r }]);
+      expect(a).toBeLessThan(0.03);
+    }
+  });
+});

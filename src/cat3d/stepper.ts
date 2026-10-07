@@ -133,6 +133,7 @@ export class Stepper {
   private readonly tmp2 = new THREE.Vector3();
   private readonly tmp3 = new THREE.Vector3();
   private readonly tmp4 = new THREE.Vector3();
+  private readonly tmp5 = new THREE.Vector3();
   private readonly across = new THREE.Vector3();
 
   constructor() {
@@ -242,6 +243,13 @@ export class Stepper {
           this.ownSide(F.to, l, vel, yawRate, centre, (1 - s) * F.dur);
           const moved = F.to.distanceTo(was), most = (0.4 + 2.1 * (1 - s) * (1 - s)) * dt;
           if (moved > most) F.to.lerpVectors(was, F.to, most / moved);
+          // (and whatever the body has done meanwhile, a turn the other way all at once, it is
+          // never put down across under the body: swung out to its own side of the shoulder or hip
+          // as they will be when it lands, quickly, as a paw in the air is, but not in a jump)
+          const kept = this.tmp5.copy(F.to);
+          this.ownSide(F.to, l, vel, yawRate, centre, (1 - s) * F.dur);
+          const out = F.to.distanceTo(kept), fast = 1.0 * dt;
+          if (out > fast) F.to.lerpVectors(kept, F.to, fast / out);
         }
         F.pos.lerpVectors(F.from, F.to, ease(s));
         // (and round the outside of the leg's own shoulder or hip on its way, not straight across
