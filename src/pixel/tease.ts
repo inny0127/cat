@@ -202,6 +202,8 @@ export class Tease implements Act {
         m.layer = {
           pose: {
             ...keen, hipY: 0.15, hipPitch: -0.12, neckPitch: -0.45, headPitch: 0.1, hipYaw: 0.1 * wg, hipRoll: 0.07 * wg,
+            // (and the head swayed from side to side, the eyes kept on it, as a hunter judges how far)
+            neckYaw: 0.09 * twitch(this.t, 8), headYaw: -0.07 * twitch(this.t, 8),
             LH: { y: 0.012 + 0.012 * Math.max(0, wg) }, RH: { y: 0.012 + 0.012 * Math.max(0, -wg) },
             tailLift: -0.3, tailSide: 0.4 * twitch(this.t, 11), tailCurl: 0.9 * twitch(this.t, 13),
           },
