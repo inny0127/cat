@@ -220,9 +220,13 @@ void main() {
     // pupil, out on the iris, a spark of white in an eye a few art pixels across reads as the white
     // of an eye, and the cat looks as if it were looking off sideways, or cross-eyed; and only one
     // of them, but in an eye seen close)
-    vec2 gq = abs(ip - vec2(-0.13, 0.16)) * 0.12 / uGlint;
+    // (by day, on the slit itself, at the top of it and no wider: a spark of white beside a slit an
+    // art pixel wide, out on the iris of an eye six across, is the white of an eye, and the cat
+    // gives you a sidelong look)
+    vec2 gc = vec2(-0.13 * open, mix(0.2, 0.16, open));
+    vec2 gq = abs(ip - gc) / vec2(mix(min(uGlint, 0.5 * pxI), uGlint, open), uGlint);
     vec2 gq2 = abs(ip - vec2(0.2, -0.2));
-    float glint = max(step(max(gq.x, gq.y), 0.12) * step(0.3, uShine), step(max(gq2.x, gq2.y), 0.05) * step(0.75, uShine) * step(uGlint, 0.13));
+    float glint = max(step(max(gq.x, gq.y), 1.0) * step(0.3, uShine), step(max(gq2.x, gq2.y), 0.05) * step(0.75, uShine) * step(uGlint, 0.13));
     vec3 c = mix(iris, vec3(0.004), pupil);
     // in a dark room, what little light there is comes back out through the pupil off the mirror
     // at the back of a cat's eye: the pupils shine a soft green-gold (and glow a little)
