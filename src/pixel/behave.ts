@@ -2263,7 +2263,8 @@ export class TailChase implements Act {
     }
     if (this.phase === 'spin') {
       // round after it, the head leading and the tail swinging away out of reach
-      m.spin = d * 5.5 * ease(this.t / 0.5);
+      // (as fast as its feet can patter round under it: no faster, or they are left under its chest)
+      m.spin = d * 4.2 * ease(this.t / 0.5);
       this.turned += Math.abs(m.yawRate) * dt / (Math.PI * 2);
       m.layer = { pose: { neckYaw: d * 0.9, headYaw: d * 0.4, earFwd: 0.7, pupil: 1, eyeOpen: 1, tailSide: d * 1.3, tailLift: -0.05, tailCurl: 0.6, hipY: 0.15 }, w: 1 };
       // (round enough: off the brakes where it will come to rest more or less facing you, the way

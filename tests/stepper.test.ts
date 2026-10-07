@@ -104,3 +104,45 @@ describe('a shift of the feet begun standing still, and the body sets off round 
   });
 });
 
+
+describe('a paw in the air on its way to its place goes round the outside of its own shoulder or hip', () => {
+  /** spun round after its tail, the shoulders and hips where the body has them (as the cat tells
+   *  the stepper after its legs are set); how far any paw in the air ever got across under the
+   *  middle of the body (m, past the middle) */
+  function spin(rate: number) {
+    const st = new Stepper();
+    const home = { LF: new THREE.Vector3(), RF: new THREE.Vector3(), LH: new THREE.Vector3(), RH: new THREE.Vector3() };
+    const planted = { LF: 1, RF: 1, LH: 1, RH: 1 };
+    const centre = new THREE.Vector3(), vel = new THREE.Vector3();
+    let h = 0;
+    const place = () => {
+      for (const l of LEGS) {
+        const [x, y, z] = HOME[l];
+        home[l].set(x * Math.cos(h) + z * Math.sin(h), y, -x * Math.sin(h) + z * Math.cos(h));
+        const G = st.girdle[l], gx = 0.035 * SIDE[l], gz = l[1] === 'F' ? 0.1 : -0.15;
+        G.at.set(gx * Math.cos(h) + gz * Math.sin(h), 0.15, -gx * Math.sin(h) + gz * Math.cos(h));
+        G.out.set(SIDE[l] * Math.cos(h), 0, -SIDE[l] * Math.sin(h));
+        G.ok = true;
+      }
+    };
+    place();
+    st.reset(home);
+    let across = -1;
+    const dt = 1 / 60;
+    for (let t = 0; t < 2; t += dt) {
+      h += rate * dt;
+      place();
+      st.update(dt, home, planted, vel, rate, centre, h, 0);
+      for (const l of LEGS) {
+        const F = st.feet[l];
+        if (!F.stepping || F.s < 0.1 || F.s > 0.9) continue;
+        const x = F.pos.x * Math.cos(h) - F.pos.z * Math.sin(h);
+        across = Math.max(across, -x * SIDE[l]);
+      }
+    }
+    return across;
+  }
+  it('round and round after its tail as fast as it goes: no paw swung through under the middle of it', () => {
+    for (const rate of [4.2, -4.2]) expect(spin(rate)).toBeLessThan(0);
+  });
+});

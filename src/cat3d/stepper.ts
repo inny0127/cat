@@ -181,7 +181,7 @@ export class Stepper {
     // (round on the spot, or round a tight turn, the paws patter: quick short steps, each sweeping
     // no more than about half a radian round under the body, rather than long strides the body
     // turns out from over)
-    this.freq = Math.max(v / this.stride, Math.min(4.5, 1.25 * Math.abs(yawRate)));
+    this.freq = Math.max(v / this.stride, Math.min(6, 1.25 * Math.abs(yawRate)));
     // (bounding: the paws are on the floor only a third of the stride)
     const swingT = this.bound ? 0.6 / this.freq : Math.min(swingTimeAt(v), 0.58 / this.freq);
     this.duty = this.bound ? 0.36 : Math.min(0.82, Math.max(0.42, 1 - swingT * this.freq));
@@ -244,6 +244,18 @@ export class Stepper {
           if (moved > most) F.to.lerpVectors(was, F.to, most / moved);
         }
         F.pos.lerpVectors(F.from, F.to, ease(s));
+        // (and round the outside of the leg's own shoulder or hip on its way, not straight across
+        // under the body: a paw left in under the chest by a quick turn swings out and round to its
+        // place, not through the middle of the cat)
+        const G = this.girdle[l];
+        if (G.ok) {
+          const lat = (F.pos.x - G.at.x) * G.out.x + (F.pos.z - G.at.z) * G.out.z, least = FRONT[l] ? 0.016 : 0.02;
+          if (lat < least) {
+            const push = (least - lat) * Math.sin(Math.PI * s);
+            F.pos.x += G.out.x * push;
+            F.pos.z += G.out.z * push;
+          }
+        }
         // (up and over in an arc from the height it left to the height it lands at: a step up onto
         // the bed's cushion, or down off it, rises or falls through the swing, not at its start)
         F.pos.y = F.from.y + (F.to.y - F.from.y) * ease(s) + F.height * arc(s, FRONT[l] ? 0.38 : 0.45);
