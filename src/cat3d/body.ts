@@ -301,6 +301,31 @@ export class Body {
 
   private readonly sc = { chain: v(), bend: v(), fem: v(), axis: v(), d: v(), side: v() };
   private readonly cl = { a: v(), b: v(), p: v(), m: v() };
+  private readonly bc = { q: q(), p: v() };
+
+  /**
+   * A forepaw swung up in under the chest (model space), let down below it: a paw's breadth clear
+   * of the chest as it is posed (its cross-section along its length), where there is room for it
+   * over the floor (`floor`, the model-space height a paw stands at there). A step up over a bed's
+   * rim, a body kept low at a run: the paw goes under the chest, the wrist not up in the ribs, and
+   * the leg not folded so tight that the elbow is thrown out to the side.
+   */
+  belowChest(P: THREE.Vector3, floor: number) {
+    const { kin } = this, C = this.I.chest, { q: Q, p: L } = this.bc;
+    L.copy(P).sub(kin.wp[C]).applyQuaternion(Q.copy(kin.wq[C]).invert());
+    const cy = -0.03, rx = 0.068, ry = 0.086;
+    const along = 1 - THREE.MathUtils.smoothstep(Math.abs(L.z - 0.008), 0.045, 0.085);
+    if (along <= 0 || L.y >= cy || Math.abs(L.x) >= rx) return;
+    const under = cy - ry * Math.sqrt(1 - (L.x / rx) ** 2);
+    if (L.y <= under) return;
+    L.y = under;
+    L.applyQuaternion(kin.wq[C]).add(kin.wp[C]);
+    // (low to the floor, stalking, the chest all but on it: no room under it for a paw, which goes
+    // up and along beside it as it is)
+    const room = THREE.MathUtils.smoothstep(L.y - floor, 0.005, 0.03);
+    const k = along * room;
+    if (k > 0) P.lerp(L, k);
+  }
 
   /** is a point of a foreleg in through the trunk: inside the belly or the chest (the spine's two
    *  stretches as capsules, a little fattened for the fur) */

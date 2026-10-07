@@ -73,3 +73,50 @@ describe('the head turned to look', () => {
     expect(lookAt(-1) - own).toBeLessThan(-0.8);
   });
 });
+
+// a forepaw swung up high in under the chest (a step up over a bed's rim at a run, the body low):
+// let down under the chest, the wrist kept out of the ribs and the elbow in at the side; but with
+// the chest all but on the floor (stalking) there is no room under it, and the paw is let be
+describe('a forepaw swung up under the chest', () => {
+  const kin = new Kin(bones('fri.bin'));
+  const body = new Body(kin);
+  const I = body.I;
+  const flex = { LF: 0.41, RF: 0, LH: 0, RH: 0 };
+  const local = (P: THREE.Vector3) => P.clone().sub(kin.wp[I.chest]).applyQuaternion(kin.wq[I.chest].clone().invert());
+  const model = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z).applyQuaternion(kin.wq[I.chest]).add(kin.wp[I.chest]);
+  // (how far out of the chest's cross-section a point is: 1 at its skin, less inside)
+  const out = (P: THREE.Vector3) => { const L = local(P); return Math.abs(L.z - 0.008) > 0.045 ? 9 : Math.hypot(L.x / 0.048, (L.y + 0.03) / 0.066); };
+  const solve = (pose: PoseName, hipY: number, up: THREE.Vector3 | null) => {
+    const p = { ...POSES[pose], hipY };
+    body.trunk(p);
+    const targ = { LF: new THREE.Vector3(), RF: new THREE.Vector3(), LH: new THREE.Vector3(), RH: new THREE.Vector3() };
+    for (const l of LEGS) body.footTarget(p, l, targ[l]);
+    const asked = up ?? model(0.016, -0.055, -0.004);
+    targ.LF.copy(asked);
+    body.belowChest(targ.LF, 0.012);
+    const moved = targ.LF.distanceTo(asked);
+    body.legsTo(p, targ, flex, { LF: 1, RF: 1, LH: 1, RH: 1 });
+    const L = body.legs.LF;
+    return { moved, wrist: out(kin.wp[L.b[2]]), paw: out(kin.wp[L.b[3]]), elbowOut: Math.abs(local(kin.wp[L.b[1]]).x) };
+  };
+  it('a run, the body low: the paw under the chest, the wrist out of it', () => {
+    const r = solve('stand', 0.16, null);
+    expect(r.moved).toBeGreaterThan(0.03);
+    expect(r.paw).toBeGreaterThan(1.1);
+    expect(r.wrist).toBeGreaterThan(0.85);
+    // (the leg not folded up so tight that the elbow is thrown out to the side: 9 cm, it was)
+    expect(r.elbowOut).toBeLessThan(0.085);
+  });
+  it('stalking, the chest all but on the floor: let be', () => {
+    const r = solve('crouch', 0.12, null);
+    expect(r.moved).toBeLessThan(0.003);
+  });
+  it('a paw out beside the chest, or under it already: let be', () => {
+    body.trunk({ ...POSES.stand, hipY: 0.16 });
+    for (const P of [model(0.08, -0.05, 0), model(0.01, -0.13, 0)]) {
+      const was = P.clone();
+      body.belowChest(P, 0.012);
+      expect(P.distanceTo(was)).toBeLessThan(1e-9);
+    }
+  });
+});

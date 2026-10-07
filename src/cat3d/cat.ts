@@ -523,6 +523,12 @@ export class Cat3D {
       }
       (this.headWas ??= new THREE.Quaternion()).copy(rel);
     }
+    // (a forepaw swung up high, over a rim at a run with the body low, goes under the chest, never
+    // up into it)
+    for (const l of ['LF', 'RF'] as const) {
+      const F = stepper.feet[l];
+      if (this.planted[l] && F.stepping) body.belowChest(this.targ[l], (ground ? ground(F.pos.x, F.pos.z) : 0) + 0.012 - group.position.y);
+    }
     body.legsTo(p, this.targ, this.flex, this.ground);
     for (const l of LEGS) this.shown[l].copy(body.reached[l]).applyMatrix4(group.matrixWorld);
     // (a paw on the floor the leg could not reach to: the stepper moves it, next frame)
