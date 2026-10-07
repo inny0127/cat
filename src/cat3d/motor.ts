@@ -220,6 +220,8 @@ export class Motor {
   focus = 0;
   private blinkT = 2;
   private blinkPhase = -1;
+  /** how far the lids come down in this blink (now and then, of its own accord, only part way) */
+  private blinkDepth = 1;
   private blinkSlow = false;
   /** a slow blink (the cat's smile at someone) is under way */
   get slowBlinking() {
@@ -423,6 +425,7 @@ export class Motor {
   slowBlink() {
     this.blinkSlow = true;
     this.blinkPhase = 0;
+    this.blinkDepth = 1;
   }
 
   /** an ordinary blink, now */
@@ -430,6 +433,7 @@ export class Motor {
     if (this.blinkPhase < 0) {
       this.blinkPhase = 0;
       this.blinkSlow = false;
+      this.blinkDepth = 1;
     }
   }
 
@@ -1238,12 +1242,15 @@ export class Motor {
         this.slowBlinkIn = want.slowBlinkEvery * (0.7 + 0.6 * Math.random());
       }
     } else this.slowBlinkIn = Math.min(this.slowBlinkIn, 5);
-    // blinking (hardly at all, intent on something)
+    // blinking: a cat's eyes stay open a long while between blinks, and at no set pace (and hardly
+    // at all, intent on something); now and then the lids come only part way down (the blinks as
+    // its eyes go from one thing to another are the nerves' to give)
     this.blinkT -= dt * (1 - 0.8 * clamp(this.focus));
     if (this.blinkPhase < 0 && this.blinkT < 0) {
       this.blinkPhase = 0;
       this.blinkSlow = false;
-      this.blinkT = 2.5 + Math.random() * 6;
+      this.blinkDepth = Math.random() < 0.35 ? 0.55 + 0.3 * Math.random() : 1;
+      this.blinkT = 4 - Math.log(1 - 0.98 * Math.random()) * 14;
     }
     if (this.blinkPhase >= 0) {
       const dur = this.blinkSlow ? 1.4 + 0.6 * this.mood.sleepy : want.blinkTime;
@@ -1251,7 +1258,7 @@ export class Motor {
       const s = this.blinkPhase;
       this.blink = this.blinkSlow
         ? (s < 0.35 ? ease(s / 0.35) : s < 0.55 ? 1 : 1 - ease((s - 0.55) / 0.45))
-        : (s < 0.35 ? s / 0.35 : 1 - (s - 0.35) / 0.65);
+        : this.blinkDepth * (s < 0.35 ? s / 0.35 : 1 - (s - 0.35) / 0.65);
       if (s >= 1) { this.blinkPhase = -1; this.blink = 0; }
     }
   }
