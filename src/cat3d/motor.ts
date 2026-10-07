@@ -395,6 +395,7 @@ export class Motor {
     if (!this.goal || Math.hypot(p.x - this.goal.x, p.z - this.goal.z) > 0.02) {
       this.goalBest = Infinity;
       this.goalStall = 0;
+      this.turnWay = 0;
       this.goalPace = 0.9 + 0.2 * Math.random();
     }
     this.goal = p.clone();
@@ -584,6 +585,23 @@ export class Motor {
 
   /** the way to head to get round whatever is first in the way between here and the goal, along
    *  its near side (null: the way is clear) */
+  /** which way it is coming round on the spot (+1 left, -1 right; 0: not decided) */
+  private turnWay = 0;
+  /** does turning `dir` (+1 left) by `ang` from where it faces swing its chest through anything
+   *  solid (other than where it is going) */
+  private sweepClear(dir: number, ang: number) {
+    if (!this.solids || this.ghost) return true;
+    const solids = this.solids();
+    for (let a = 0.25; a < ang; a += 0.25) {
+      const y = this.yaw + dir * a, cx = this.pos.x + Math.sin(y) * 0.13, cz = this.pos.z + Math.cos(y) * 0.13;
+      for (const [c, R0] of solids) {
+        if (this.goal && Math.hypot(this.goal.x - c.x, this.goal.z - c.z) < R0 + 0.25) continue;
+        if (Math.hypot(cx - c.x, cz - c.z) < R0 + 0.07) return false;
+      }
+    }
+    return true;
+  }
+
   private roundAbout(dx: number, dz: number, dist: number): number | null {
     if (this.ghost || !this.obstacles || !this.goal) return null;
     const ux = dx / dist, uz = dz / dist, way = Math.atan2(ux, uz);
@@ -674,7 +692,13 @@ export class Motor {
         const meander = round === null && this.goalSpeed <= 0.35 && !this.goalPass
           ? 0.14 * noise1(this.time * 0.32 + this.wander) * clamp((dist - 0.15) / 0.45) : 0;
         const want_yaw = (round ?? Math.atan2(dx, dz)) + meander;
-        const e = wrap(want_yaw - this.yaw);
+        let e = wrap(want_yaw - this.yaw);
+        // (coming round a long way, all but on the spot: the way round that does not swing its chest
+        // into something solid beside it, the long way if need be, kept to till it is round)
+        if (Math.abs(e) > 1.2 && this.speed < 0.15) {
+          this.turnWay ||= this.sweepClear(Math.sign(e), Math.abs(e)) || !this.sweepClear(-Math.sign(e), 2 * Math.PI - Math.abs(e)) ? Math.sign(e) : -Math.sign(e);
+          if (this.turnWay !== Math.sign(e)) e -= Math.sign(e) * 2 * Math.PI;
+        } else if (Math.abs(e) < 0.6) this.turnWay = 0;
         // (on the spot a little slower than on the move; quicker at a run, but in an arc, not on
         // a pin; and quicker keen or keyed up)
         const maxTurn = (1.35 + 0.45 * clamp(this.speed / 0.2)) * (1 + 1.2 * this.zoom) * (1 + 0.6 * this.eager + 0.3 * this.mood.arousal);
@@ -690,6 +714,18 @@ export class Motor {
         const md = this.mood;
         const pace = this.goalSpeed <= 0.35 ? this.goalPace * clamp(1 - 0.25 * md.sleepy + 0.2 * md.arousal - 0.1 * this.lazy, 0.7, 1.25) : 1;
         want = this.goalSpeed * pace * steer * (this.goalPass ? 1 : clamp(dist / 0.14, 0.3, 1));
+        // (and a solid thing just ahead of its chest, turned toward it as it comes round: it turns
+        // on the spot before it goes on, not into it and shoved back out; unless that thing is where
+        // it is going)
+        if (this.solids && !this.ghost) {
+          const fx = Math.sin(this.yaw), fz = Math.cos(this.yaw);
+          for (const [c, R0] of this.solids()) {
+            if (Math.hypot(this.goal.x - c.x, this.goal.z - c.z) < R0 + 0.25) continue;
+            const ax = this.pos.x + fx * 0.16 - c.x, az = this.pos.z + fz * 0.16 - c.z, da = Math.hypot(ax, az);
+            const gap = da - (R0 + 0.075);
+            if (gap < 0.05 && ax * fx + az * fz < 0) want *= clamp(0.1 + 0.9 * gap / 0.05, 0.1, 1);
+          }
+        }
         // (to stop there, slowing in time to: not on past it at a run and round again)
         if (!this.goalPass) want = Math.min(want, Math.sqrt(2 * 0.8 * 1.4 * (1 + 2 * this.zoom) * Math.max(0, dist - 0.02)));
         if (dist < 0.025 || stuck) want = 0;
@@ -717,6 +753,32 @@ export class Motor {
   }
 
   /** the pose for this frame: posture blend + any layer + gait and life on top */
+  /** sat or stood still a while, now and then a forepaw is put down again a little forward or
+   *  back of where it was (its weight shifted, a paw drawn in or set out a touch), and now and
+   *  then back again: the stepper takes it there in a small step. How soon the next, and where each
+   *  forepaw is put (m, forward of the posture's own place) */
+  private shiftIn = 15 + 30 * Math.random();
+  private readonly shifted = { LF: 0, RF: 0 };
+  private shiftPaws(p: Pose, dt: number) {
+    let upright = 0;
+    for (const [name, wgt] of this.postureWeights()) if (name === 'sit' || name === 'stand' || name === 'alert') upright += wgt;
+    const still = !this.goal && this.speed < 0.02 && !this.layer && this.tt >= 1 && !this.path.length && upright > 0.95;
+    if (!still) {
+      this.shifted.LF = this.shifted.RF = 0;
+      this.shiftIn = Math.max(this.shiftIn, 6 + 10 * Math.random());
+      return;
+    }
+    // (a restless cat shifts about the more, a drowsy one hardly at all)
+    const md = this.mood;
+    if ((this.shiftIn -= dt * (0.5 + md.arousal) * (1 - 0.7 * md.sleepy)) <= 0) {
+      this.shiftIn = 12 + 40 * Math.random();
+      const l = Math.random() < 0.5 ? 'LF' : 'RF';
+      this.shifted[l] = this.shifted[l] !== 0 && Math.random() < 0.6 ? 0 : (Math.random() < 0.5 ? -1 : 1) * (0.025 + 0.01 * Math.random());
+    }
+    p.LF.z += this.shifted.LF;
+    p.RF.z += this.shifted.RF;
+  }
+
   private compose(dt: number) {
     const p = this.pose;
     copyPose(p, this.base);
@@ -801,6 +863,7 @@ export class Motor {
     p.chestYaw += 0.02 * noise1(t * 0.19 + 7) * still;
     p.headRoll += 0.05 * noise1(t * 0.13 + 11) * still;
     p.neckPitch += 0.03 * noise1(t * 0.17 + 5) * still;
+    this.shiftPaws(p, dt);
     // what the cat feels, in its ears, whiskers, tail, fur, mouth, head and breath (mood.ts):
     // ears and whiskers quick, the tail slower; fur bristles at once and lies down slowly
     const fb = bodyFor(this.mood), f = this.feel;

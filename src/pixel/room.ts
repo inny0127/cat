@@ -1956,7 +1956,8 @@ export class Room {
     const PS = this.postSway.at;
     cap(V(PS.x, 0.04, PS.z), V(PS.x, 0.58, PS.z), 0.05, 0.45);               // the scratching post
     this.yarnHome.set(yx, 0, yz);
-    this.things.push([V(px, 0, pz), 0.11], [V(lx, 0, lz), 0.08], [V(fx, 0, fz), 0.14], [this.yarnHome, 0.05], this.box.thing, [PS, 0.16]);
+    this.lampFoot.set(lx, 0, lz);
+    this.things.push([V(px, 0, pz), 0.11], [this.lampFoot, 0.08], [V(fx, 0, fz), 0.14], [this.yarnHome, 0.05], this.box.thing, [PS, 0.16]);
     this.hides.push([V(fx, 0, fz), 0.14]);
     // worth a sniff: the monstera's pot, the radiator, the yarn, the books with the mug on them
     const face = (from: THREE.Vector3, at: THREE.Vector3) => Math.atan2(at.x - from.x, at.z - from.z);
@@ -3254,11 +3255,21 @@ export class Room {
     const S = this.spots;
     return [[S.food, 0.07], [S.water, 0.07], [S.litter, 0.19], ...this.things.filter(([c, r]) => r > 0 && c !== this.yarnHome)];
   }
-  /** of those, the solid things a cat is never in: the plant's pot, the lamp's foot, the books, the
-   *  scratching post, the box when it is out */
+  /** of those, the solid things a cat is never in: the plant's pot, the lamp's pole, the books,
+   *  the scratching post, the box when it is out (the lamp's foot is a flat disc on the floor, gone
+   *  round on the way past, but the body passes over it: only its pole is in the way) */
   solids(): [THREE.Vector3, number][] {
-    return this.things.filter(([c, r]) => r > 0 && c !== this.yarnHome);
+    const out = this.solidList;
+    out.length = 0;
+    for (const t of this.things) {
+      if (t[1] <= 0 || t[0] === this.yarnHome) continue;
+      out.push(t[0] === this.lampFoot ? this.lampPole : t);
+    }
+    return out;
   }
+  private readonly lampFoot = new THREE.Vector3();
+  private readonly lampPole: [THREE.Vector3, number] = [this.lampFoot, 0.035];
+  private readonly solidList: [THREE.Vector3, number][] = [];
 
   /** what stands on the floor tall enough to hide a thing behind it from a cat's eyes (its middle,
    *  its radius, its height): the plant's pot, the books, the scratching post, the box when it is
