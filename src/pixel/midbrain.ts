@@ -342,7 +342,7 @@ export class Valence {
     for (let i = 0; i < 5; i++) o[i] = sig(y[i] + Valence.BIAS[i]);
     const ext = [
       2.4 * I.prey + 0.6 * I.arousal,
-      3.4 * I.loom + 3.0 * I.startle + 1.4 * I.fear,
+      4.5 * I.loom + 3.0 * I.startle + 1.4 * I.fear,
       1.8 * I.novel + 1.8 * I.startle,
       2.4 * I.novel * (1 - I.fear),
       0,

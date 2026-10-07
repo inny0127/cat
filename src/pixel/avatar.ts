@@ -802,7 +802,7 @@ export class PixelAvatar implements Avatar {
       const w = u.kind === 'hand' ? 1 : u.kind === 'toy' ? 0.8 : u.kind === 'you' ? 0.5 : u.kind === 'bird' || u.kind === 'bug' ? 0.3 : 0;
       const friend = u.kind === 'hand' || u.kind === 'you' ? Math.max(0, Math.min(1, (mood.trust - 0.2) / 0.6)) : 0;
       const rate = u.closing / Math.max(0.08, u.dist);
-      const l = Math.max(0, Math.min(1, (rate - 0.5) / 2)) * Math.max(0, Math.min(1, (0.7 - u.dist) / 0.5)) * u.vis * w * (1 - 0.85 * friend);
+      const l = Math.max(0, Math.min(1, (rate - 0.5) / 1.5)) * Math.max(0, Math.min(1, (0.9 - u.dist) / 0.6)) * u.vis * w * (1 - 0.85 * friend);
       loom = Math.max(loom, l);
       if (u.kind !== 'spot') novel = Math.max(novel, Math.min(1, u.onset) * u.vis);
     }
@@ -817,9 +817,13 @@ export class PixelAvatar implements Avatar {
     m.approach = k * V.approach;
     m.withdraw = k * V.withdraw;
     m.freeze = k * V.freeze;
-    // (a thing at its face: a blink, as any eye blinks at one)
-    if (k && V.withdraw > 0.45 && !this.shied) m.blinkNow();
-    this.shied = V.withdraw > 0.35;
+    // (a thing at its face: a blink, as any eye blinks at one; and coming hard at it, a flinch, the
+    // head jerked back)
+    if (k && V.withdraw > 0.45 && !this.shied) {
+      this.shied = true;
+      m.blinkNow();
+      if (loom > 0.3) m.jolt(0.4 + 0.5 * Math.min(1, (loom - 0.3) / 0.5));
+    } else if (V.withdraw < 0.3) this.shied = false;
   }
   private shied = false;
 
@@ -982,6 +986,8 @@ export class PixelAvatar implements Avatar {
       const at = this.where.get(id);
       if (at && (!best || k > best.k)) best = { id, at, k };
     }
+    // (the more so the more its midbrain is curious just now; afraid, hardly at all)
+    if (best) best.k *= 0.5 + this.valence.curious;
     return best;
   }
 
