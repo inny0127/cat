@@ -345,7 +345,10 @@ export function setLids(e: CatEye, lids: THREE.Vector4, open: number, squint = 0
   // drawn smile, which read as a cartoon)
   const arch = 0.22 * Math.max(0, Math.min(1, smile)) * Math.max(0, Math.min(1, (1 - o) / 0.6));
   const lower = -0.43 + 0.3 * Math.max(0, Math.min(1, squint)) + 0.15 * (1 - o) + arch;
-  const upper = lower - 0.04 + (0.5 - lower + 0.04) * o;
+  // (wide open, the upper lid well up over the iris: lower, its dark line straight across the top
+  // of the eye at the room's zoom reads as a sulk, half-lidded and judging, on a cat that is only
+  // looking at you)
+  const upper = lower - 0.04 + (0.6 - lower + 0.04) * o;
   e.eyeMat.uniforms.uLower.value = lower;
   e.eyeMat.uniforms.uUpper.value = upper;
   if (e.side > 0) { lids.x = upper; lids.y = lower; } else { lids.z = upper; lids.w = lower; }
