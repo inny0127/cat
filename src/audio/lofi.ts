@@ -82,6 +82,8 @@ export class Lofi {
   private motif: { at: number; deg: number; len: number }[] = [];
   private night = 0;
   private track: Track = Lofi.newTrack();
+  /** which song this is (one more each new one: for whoever listens, a new song is news) */
+  trackNo = 0;
   playing = false;
   /** when its beats fall (the audio clock, a little ahead of now as they are scheduled), and how
    *  hard each is (a kick on it, a snare, or only the hats) */
@@ -181,6 +183,7 @@ export class Lofi {
         this.vinylSrc = v;
       }
       this.track = Lofi.newTrack(this.track);
+      this.trackNo++;
       this.prog = this.track.progs[0];
       this.bar = 0;
       this.step = 0;
@@ -273,6 +276,7 @@ export class Lofi {
     this.bar++;
     if (this.bar < this.track.bars) return;
     this.track = Lofi.newTrack(this.track);
+    this.trackNo++;
     this.nextAt += rnd(2.5, 4.5);
     this.bar = 0;
     this.prog = this.track.progs[0];

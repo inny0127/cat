@@ -9,6 +9,7 @@ import { Chase, Startle, type LaserDot } from './chase';
 import { Tease, type Lure } from './tease';
 import { GOAL, Whim } from './whim';
 import { noise1 } from '../util/math';
+import { Ears } from './ears';
 import { Nerves, type Blocker, type Thing } from './nerves';
 import { Valence } from './midbrain';
 
@@ -474,13 +475,12 @@ export class PixelAvatar implements Avatar {
    *  that way a moment */
   hear(at: THREE.Vector3) {
     if (!this.alive || this.isHidden) return;
+    this.ears.sound('sound', at, 0.7);
     if (this.sleep > 0.5) {
       // (asleep, an ear goes round to it, the rest of it still asleep; and back in a moment)
       this.earSound = { at: at.clone(), t: 1.4 + Math.random() * 1.8 };
-      if (Math.random() < 0.4) this.cat.motor.flickEar(Math.random() < 0.5 ? 'L' : 'R', 0.5);
       return;
     }
-    this.cat.motor.flickEar('both', 0.6);
     if (!this.act && !this.errand && !this.trip && Math.random() < 0.6) this.heard = { at: at.clone(), t: 0.9 + Math.random() * 0.8, tilt: this.puzzle() };
   }
   /** something seen out of the corner of its eye (a shooting star going down the window): awake
@@ -904,32 +904,31 @@ export class PixelAvatar implements Avatar {
 
   /** where the radio stands (set by the app), for its ears */
   radioAt: THREE.Vector3 | null = null;
-  /** a sound it is listening to without looking: where, and how long yet; and when it next turns
-   *  an ear to one */
-  private listenT = 0;
-  private listenIn = 3;
-  private readonly listenAt = new THREE.Vector3();
+  /** its hearing (ears.ts): the radio's beats, the rain on the glass, a knock about the room,
+   *  each heard as it comes, and got used to */
+  readonly ears = new Ears();
   /**
-   * Listening: a sound it is not looking at turns an ear all the same, the one on that side round
-   * to it a moment, then back (the radio playing, the rain on the glass); its eyes on something,
-   * the ears are theirs.
+   * Listening: what its hearing has it listen to turns an ear all the same, the one on that side
+   * round to it while it lasts (a song just come on, the rain getting up, a knock), and a sound out
+   * of a quiet flicks one at once; its eyes on something, the ears are mostly theirs. Asleep, only
+   * a sound it is not used to gets as far as an ear.
    */
   private listen(dt: number, busy: number) {
-    const N = this.nerves, E = this.cat.motor.earTo;
-    if (N.awake < 0.6 || !this.alive || this.isHidden) { this.listenT = 0; return; }
-    if (this.listenT <= 0) {
-      if ((this.listenIn -= dt) > 0) return;
-      this.listenIn = 4 + Math.random() * 9;
-      const rain = this.ctx.rain > 0.4 && this.windowAt && Math.random() < 0.4;
-      if (rain) this.listenAt.copy(this.windowAt!);
-      else if (this.music && this.radioAt) this.listenAt.copy(this.radioAt);
-      else return;
-      this.listenT = 1.2 + Math.random() * 1.8;
+    const N = this.nerves, E = this.cat.motor.earTo, H = this.ears;
+    H.update(dt);
+    if (!this.alive || this.isHidden) { H.flick = null; return; }
+    const awake = N.awake >= 0.6;
+    const F = H.flick;
+    H.flick = null;
+    if (F && (awake || F.k > 0.6)) {
+      const to = this.headLocal.copy(F.at).sub(this.eyeW).applyQuaternion(this.headInv.copy(this.headQ).invert());
+      this.cat.motor.flickEar(Math.atan2(to.x, to.z) > 0 ? 'L' : 'R', 0.4 + 0.5 * F.k);
     }
-    this.listenT -= dt;
-    // (the ear on that side round to it, the more the further round it is; a little the other)
-    const to = this.headLocal.copy(this.listenAt).sub(this.eyeW).applyQuaternion(this.headInv.copy(this.headQ).invert());
-    const az = Math.atan2(to.x, to.z), k = (1 - busy) * Math.min(1, this.listenT / 0.3, 1);
+    const S = H.on;
+    if (!S || (!awake && S.a < 0.6)) return;
+    // (the ear on that side round to it, the more the further round it is)
+    const to = this.headLocal.copy(S.at).sub(this.eyeW).applyQuaternion(this.headInv.copy(this.headQ).invert());
+    const az = Math.atan2(to.x, to.z), k = (1 - busy) * Math.min(1, S.a * 1.6);
     const near = Math.min(1.3, Math.abs(az) * 0.9);
     if (az > 0) E.L += k * (near - E.L); else E.R += k * (near - E.R);
   }

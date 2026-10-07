@@ -111,6 +111,11 @@ export class CatAudio {
     return this.lofi?.pulse() ?? 0;
   }
 
+  /** which song the radio is on (one more for each new one) */
+  get trackNo() {
+    return this.lofi?.trackNo ?? 0;
+  }
+
   /** night: the radio slower and softer */
   setNight(n: number) {
     this.lofi?.setNight(n);

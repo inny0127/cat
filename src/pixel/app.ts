@@ -208,6 +208,7 @@ export class PixelApp {
       this.audio.play(loud > 0.6 ? 'thunderNear' : 'thunder', { out: true, gain: 0.3 + 0.6 * loud, pan: (Math.random() - 0.5) * 0.6 });
       this.brain?.thunder(loud);
       this.avatar.thunder(loud, this.room.windowMiddle);
+      this.avatar.ears.sound('thunder', this.room.windowMiddle, Math.min(1, 0.5 + loud));
     };
     // its paws on the boards: soft, and softer still for a shuffle of the feet; on the rug a
     // muffled pat, on the bed all but nothing
@@ -1226,6 +1227,9 @@ export class PixelApp {
    * slower to open them again; asleep, or eyes that cannot see, the hour's light.
    */
   private eyeLit = -1;
+  /** the radio's beat as last heard, and the song it was in */
+  private heardPulse = 0;
+  private heardTrack = -1;
   private eyeLight(dt: number, base: number, dark: number) {
     const E = this.avatar.nerves.light, R = this.retina;
     const room = lumOfLight(base) * (this.room.lampLitNow ? 1 : 1 - 0.6 * dark);
@@ -1740,7 +1744,14 @@ export class PixelApp {
       this.audio.play('thump', { gain: 0.07, rate: 0.8, pan: this.catPan() });
     }
     // (keeping time with the radio, when it is in the mood)
-    this.cat.motor.beat = this.avatar.groove > 0.01 ? this.avatar.groove * this.audio.beat() : 0;
+    // (what it hears of the radio: each beat as it falls, the first of a new song as news)
+    const pulse = this.audio.beat();
+    if (pulse > this.heardPulse + 0.2 && this.avatar.radioAt) {
+      this.avatar.ears.sound('radio', this.avatar.radioAt, 0.8 * pulse, this.audio.trackNo !== this.heardTrack);
+      this.heardTrack = this.audio.trackNo;
+    }
+    this.heardPulse = pulse;
+    this.cat.motor.beat = this.avatar.groove > 0.01 ? this.avatar.groove * pulse : 0;
     this.cat.update(dt);
     this.snoreStep(dt);
     // (its forehead put to your face: felt, a soft bump, and heard, just)
@@ -1797,6 +1808,8 @@ export class PixelApp {
     this.catDull += (this.avatar.desatTarget - this.catDull) * (1 - Math.exp(-dt * 0.5));
     this.stage.setCatDull(this.catDull);
     this.audio.setRain(rain);
+    // (and the rain on the glass, as the cat hears it: getting up, and going on)
+    this.avatar.ears.level('rain', this.room.windowMiddle, rain, dt);
     // a bird outside: the cat's ear goes to it, and if it is awake, a glance at the window
     if (this.audio.setOutside(dt, { day: 1 - dark, hour, month: clock.getMonth(), rain })) this.avatar.hear(this.room.windowMiddle);
     this.avatar.rain = rain;
