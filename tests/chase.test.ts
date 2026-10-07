@@ -1,10 +1,12 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import * as THREE from 'three';
 import { Motor } from '../src/cat3d/motor';
 import { NEUTRAL } from '../src/cat3d/mood';
 import { Chase, type LaserDot } from '../src/pixel/chase';
 import { Tease, type Lure } from '../src/pixel/tease';
 import type { Act, Ctx } from '../src/pixel/behave';
+
+afterEach(() => { vi.restoreAllMocks(); });
 
 /** a cat (its motor) sitting at the middle of an empty floor, facing +z, with only what the
  *  laser and the wand need of a room */
@@ -207,6 +209,10 @@ describe('the feather wand', () => {
   });
 
   it('lying on the floor, nobody playing: gone to, pounced on, and in a while left', () => {
+    // (the same dice every run: as a rule it is done with them well inside the time, and as a rule
+    // is not a test)
+    let seed = 2024;
+    vi.spyOn(Math, 'random').mockImplementation(() => (seed = (seed * 16807) % 2147483647) / 2147483647);
     const { c, m, world } = room();
     // (the feathers lie where they are: a paw on them lets go of them at once)
     world.lure = { p: new THREE.Vector3(0.1, 0.012, 0.7), v: new THREE.Vector3(), held: false, pinned: false };
