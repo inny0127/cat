@@ -421,6 +421,7 @@ export class Brain {
       if (this.s.trust > 0.2 && justSaid && this.chatN < most && chance(0.45 + 0.4 * voice)) {
         this.chatN++;
         this.chatAt = this.time;
+        this.chatted = true;
         const fond = this.s.trust > 0.55;
         this.say(chance(fond ? 0.45 : 0.2) ? 'trill' : chance(0.5) ? 'meowSoft' : fond ? 'chirp' : 'meow', { delay: rand(0.35, 1) });
         if (this.chatN >= most && fond) this.later(rand(1.4, 2.2), () => { if (this.mode === 'rest' || this.mode === 'alert') this.anim.doBlink(true); });
@@ -438,6 +439,8 @@ export class Brain {
   }
   /** when it last came to a knock on the glass */
   private calledAt = -1e9;
+  /** it has just answered you back through the glass (for whoever wants to say so, to clear) */
+  chatted = false;
   /** a chat through the glass: how many times it has answered you back, and when it last did */
   private chatN = 0;
   private chatAt = -1e9;

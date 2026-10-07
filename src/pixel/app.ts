@@ -2019,6 +2019,7 @@ export class PixelApp {
     if (a.airLicked) { a.airLicked = false; now.add('airlick'); }
     if (a.nuzzled) now.add('rub');
     if (this.brain.grumbled) { this.brain.grumbled = false; now.add('grumble'); }
+    if (this.brain.chatted) { this.brain.chatted = false; now.add('chat'); }
     // (its body saying how it is: ill, hunched; afraid and cross, arched; afraid, slinking)
     if (m.feel.hunch > 0.5 && !asleep) now.add('hunch');
     if (m.feel.arch > 0.5 && m.posture === 'stand') now.add('arch');
