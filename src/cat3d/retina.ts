@@ -15,6 +15,9 @@ import { NMAT, PIX_STEPS, RAMPS } from './pixclass';
 export interface EyeFrame {
   /** brightness at each receptor (0 .. 1), w across, h down, the top row first */
   lum: Float32Array;
+  /** 1 where there is nothing at all to see: out past the room's open front, where you are (no
+   *  movement, no edges there; only the dim of it) */
+  none?: Uint8Array;
   w: number;
   h: number;
   /** the way each receptor looked, in the world: its bearing (world yaw: atan2(x, z)) and its
@@ -176,11 +179,13 @@ export class Retina {
     const gl = r.getContext() as WebGL2RenderingContext;
     if (gl.PIXEL_PACK_BUFFER !== undefined) gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
     read.then(() => {
-      const lum = new Float32Array(n), px = this.px;
+      const lum = new Float32Array(n), none = new Uint8Array(n), px = this.px;
       for (let j = 0; j < H; j++) {
         const src = (H - 1 - j) * this.w;
         for (let i = 0; i < this.w; i++) {
-          lum[j * this.w + i] = this.bright(px, (src + i) * 4);
+          const o = (src + i) * 4;
+          lum[j * this.w + i] = this.bright(px, o);
+          none[j * this.w + i] = px[o + 3] < 8 ? 1 : 0;
         }
       }
       for (const k of marks) {
@@ -188,10 +193,10 @@ export class Retina {
         const ka = Math.atan2(dx, dz), ke = Math.atan2(dy, Math.hypot(dx, dz));
         for (let i = 0; i < n; i++) {
           const d = Math.hypot(Math.atan2(Math.sin(az[i] - ka), Math.cos(az[i] - ka)) * Math.cos(ke), el[i] - ke);
-          if (d < 0.075) lum[i] = Math.max(lum[i], k.lum * (1 - d / 0.075));
+          if (d < 0.075) { lum[i] = Math.max(lum[i], k.lum * (1 - d / 0.075)); none[i] = 0; }
         }
       }
-      this.latest = { lum, w: this.w, h: this.h, az, el, t: now };
+      this.latest = { lum, none, w: this.w, h: this.h, az, el, t: now };
       this.busy = false;
     }, () => {
       this.broken = true;

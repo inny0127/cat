@@ -40,19 +40,22 @@ describe('the colliculus: where its eyes go', () => {
     expect(elsewhere).toBeLessThan(25);
   });
 
-  it('two things alike: one patch wins and holds; the other is put out', () => {
-    const S = new Colliculus();
-    const eye = V(0, 0.2, 0);
-    const K: Known[] = [{ id: 'a', p: V(-0.3, 0, 0.8), a: 0.9, r: 0.04 }, { id: 'b', p: V(0.3, 0, 0.8), a: 0.9, r: 0.04 }];
-    let switches = 0, last: string | null = null;
-    for (let t = 0; t < 8; t += 1 / 60) {
-      S.update(1 / 60, eye, K, 1);
-      if (t > 0.3 && S.on && last && S.on !== last) switches++;
-      if (S.on) last = S.on;
+  it('two things alike: one patch wins and holds; the other is put out (whatever its noise)', () => {
+    for (let seed = 1; seed <= 24; seed++) {
+      const S = new Colliculus(seed * 7919);
+      const eye = V(0, 0.2, 0);
+      const K: Known[] = [{ id: 'a', p: V(-0.3, 0, 0.8), a: 0.9, r: 0.04 }, { id: 'b', p: V(0.3, 0, 0.8), a: 0.9, r: 0.04 }];
+      let switches = 0, last: string | null = null;
+      for (let t = 0; t < 8; t += 1 / 60) {
+        S.update(1 / 60, eye, K, 1);
+        if (S.on && last && S.on !== last) switches++;
+        if (S.on) last = S.on;
+      }
+      // (a glance at the one, and the other wins: no more than that)
+      expect(switches).toBeLessThan(2);
+      const other = last === 'a' ? K[1] : K[0];
+      expect(S.firing(Math.atan2(other.p.x, other.p.z), Math.atan2(-0.2, Math.hypot(other.p.x, other.p.z)))).toBeLessThan(0.1);
     }
-    expect(switches).toBeLessThan(2);
-    const other = last === 'a' ? K[1] : K[0];
-    expect(S.firing(Math.atan2(other.p.x, other.p.z), Math.atan2(-0.2, Math.hypot(other.p.x, other.p.z)))).toBeLessThan(0.1);
   });
 
   it('something it knows nothing of moves in a still room: the firing goes to it, on nothing it knows', () => {
@@ -102,6 +105,87 @@ describe('the colliculus: where its eyes go', () => {
     for (let k = 0; k < 5; k++) S.update(1 / 60, eye, [], 1);
     expect(S.flash).toBeGreaterThan(0.6);
     expect(S.peak).toBeLessThan(0.5);
+  });
+
+  it('alert in a still room: its eyes go from one thing that stands out to another, a second or few on each; drowsy, nowhere', () => {
+    // (a bright thing up to the left, a dark one down in front, on a plain wall)
+    const patch = (az: number, el: number, a0: number, e0: number, r: number) => (Math.abs(wrap(az - a0)) < r && Math.abs(el - e0) < r ? 1 : 0);
+    const still = (az: number, el: number) => 0.3 + 0.05 * Math.sin(az * 3) + 0.5 * patch(az, el, 0.9, 0.25, 0.12) - 0.2 * patch(az, el, 0.1, -0.5, 0.1);
+    const run = (look: number) => {
+      const S = new Colliculus();
+      S.look = look;
+      const eye = V(0, 0.2, 0);
+      const looks: { at: string; secs: number }[] = [];
+      let t = 0, cur: string | null = null;
+      for (let i = 0; i < 60 * 40; i++) {
+        t += 1 / 60;
+        if (i % 5 === 0) S.see(frame(0, t, still), 0);
+        S.update(1 / 60, eye, [], 1);
+        const at = S.peak > 0.5 ? (Math.abs(wrap(S.at.az - 0.9)) < 0.3 ? 'bright' : Math.abs(wrap(S.at.az - 0.1)) < 0.3 ? 'dark' : 'else') : null;
+        if (at !== cur) { if (at) looks.push({ at, secs: 0 }); cur = at; }
+        if (at) looks[looks.length - 1].secs += 1 / 60;
+      }
+      return looks;
+    };
+    const alert = run(0.9);
+    expect(alert.length).toBeGreaterThan(5);
+    expect(new Set(alert.map((l) => l.at)).has('dark')).toBe(true);
+    expect(alert.every((l) => l.at !== 'else')).toBe(true);
+    const mean = alert.reduce((a, l) => a + l.secs, 0) / alert.length;
+    expect(mean).toBeGreaterThan(0.8);
+    expect(mean).toBeLessThan(4);
+    expect(run(0).length).toBe(0);
+  });
+
+  it('out past the front of the room, where there is nothing, nothing moves and nothing stands out', () => {
+    const S = new Colliculus();
+    S.look = 1;
+    const eye = V(0, 0.2, 0);
+    let t = 0, most = 0;
+    for (let i = 0; i < 40; i++) {
+      t += 1 / 12;
+      // (a plain floor below, and above it nothing: flickering numbers that are no picture of anything)
+      const F = frame(0, t, (az, el) => (el < -0.2 ? 0.2 : 0.08 + 0.3 * ((i * 7 + Math.floor(az * 20)) % 3)));
+      F.none = new Uint8Array(F.w * F.h);
+      for (let k = 0; k < F.w * F.h; k++) F.none[k] = F.el[k] < -0.2 ? 0 : 1;
+      S.see(F, 0);
+      for (let k = 0; k < 5; k++) S.update(1 / 60, eye, [], 1);
+      if (i > 2) most = Math.max(most, S.peak);
+    }
+    expect(most).toBeLessThan(0.5);
+  });
+
+  it('its own shadow going about by its feet is no news; the same a few steps off is', () => {
+    const run = (x0: number) => {
+      const S = new Colliculus();
+      const eye = V(0, 0.2, 0);
+      const own = { eye, x: 0, y: 0, z: 0.1, r: 0.6 };
+      let t = 0, most = 0;
+      for (let i = 0; i < 30; i++) {
+        t += 1 / 12;
+        // (a dark patch on the floor, going to and fro, x0 ahead of it)
+        const az0 = 0.15 * Math.sin(t * 6), el0 = -Math.atan2(0.2, x0);
+        S.see(frame(0, t, (az, el) => room(az, el) - (Math.abs(wrap(az - az0)) < 0.1 && Math.abs(el - el0) < 0.08 ? 0.25 : 0)), 0, own);
+        for (let k = 0; k < 5; k++) S.update(1 / 60, eye, [], 1);
+        if (i > 4) most = Math.max(most, S.peak);
+      }
+      return most;
+    };
+    expect(run(0.3)).toBeLessThan(0.5);
+    expect(run(1.6)).toBeGreaterThan(0.6);
+  });
+
+  it('a thing that stood out, the cat turned away from it: gone from mind (a thing it knows stays)', () => {
+    const S = new Colliculus();
+    S.look = 0.9;
+    const eye = V(0, 0.2, 0);
+    const lit = (az: number, el: number) => 0.3 + (Math.abs(wrap(az - 0.4)) < 0.15 && Math.abs(el - 0.1) < 0.15 ? 0.5 : 0);
+    let t = 0;
+    for (let i = 0; i < 60; i++) { t += 1 / 60; if (i % 5 === 0) S.see(frame(0, t, lit), 0); S.update(1 / 60, eye, [], 1); }
+    expect(S.peak).toBeGreaterThan(0.6);
+    // (turned right round: the bright thing behind it now, the wall plain)
+    for (let i = 0; i < 60; i++) { t += 1 / 60; if (i % 5 === 0) S.see(frame(Math.PI, t, () => 0.3), 0); S.update(1 / 60, eye, [], 1); }
+    expect(S.firing(0.4, 0.1)).toBeLessThan(0.2);
   });
 
   it('asleep, the eyes give it nothing: a thing it knows fires nothing on it', () => {

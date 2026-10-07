@@ -37,6 +37,31 @@ const ss = (a: number, b: number, x: number) => {
   return t * t * (3 - 2 * t);
 };
 const sig = (x: number) => 1 / (1 + Math.exp(-x));
+/** the sheet spread a neuron either way (a Gaussian, round the way across, not off the top or the
+ *  bottom): `src` into `out`, by way of `tmp` */
+const W3 = [0.27, 0.46, 0.27];
+function blur3(src: Float32Array, tmp: Float32Array, out: Float32Array) {
+  for (let r = 0; r < SC_EL; r++) {
+    const o = r * SC_AZ;
+    for (let c = 0; c < SC_AZ; c++) tmp[o + c] = W3[0] * src[o + (c + SC_AZ - 1) % SC_AZ] + W3[1] * src[o + c] + W3[2] * src[o + (c + 1) % SC_AZ];
+  }
+  for (let r = 0; r < SC_EL; r++) {
+    for (let c = 0; c < SC_AZ; c++) {
+      const k = r * SC_AZ + c;
+      out[k] = W3[1] * tmp[k] + W3[0] * (r > 0 ? tmp[k - SC_AZ] : 0) + W3[2] * (r < SC_EL - 1 ? tmp[k + SC_AZ] : 0);
+    }
+  }
+}
+
+/** the cat itself, as far as its eyes go: where its eyes are, and where it stands (the middle of
+ *  it, on whatever it stands on), and how far round it its shadow may fall (m) */
+export interface Own {
+  eye: THREE.Vector3;
+  x: number;
+  y: number;
+  z: number;
+  r: number;
+}
 
 /** a thing it knows, as the colliculus takes it from the nerves: its id, where (world), how hard
  *  its neuron fires (0 .. 1), how big it is (m) */
@@ -63,6 +88,23 @@ export class Colliculus {
   readonly edge = new Float32Array(N);
   /** in view just now (0 .. 1) */
   readonly view = new Float32Array(N);
+  /** what stands out of the still view (0 .. 1: the most that does, in view, 1): a thing against
+   *  what is round it, and the brightest things there */
+  readonly sal = new Float32Array(N);
+  /** how used each neuron is to the still view where it is: looked at a while, nothing new there
+   *  (0 .. 1; it wears off, looking elsewhere, over half a minute or so) */
+  readonly used = new Float32Array(N);
+  /** how much the still view draws the eyes of itself (0: hardly, drowsy or contented or busy ..
+   *  1: an alert cat, looking about it); set from its mood */
+  look = 0;
+  /** how much of what drives the bump is movement there (0 .. 1: a thing that moved, or is still
+   *  moving; 0, a thing that only stands out, or one it knows) */
+  moving = 0;
+  /** the neuron at the middle of the patch it is on (-1: none) */
+  private lead = -1;
+  /** a slow wandering in how much the still view draws it (a brain is never quite still: now and
+   *  then this is what has it look at a thing, for no reason anyone could give) */
+  private drift = 0;
   /** the room as the eyes last had it, by bearing (brightness, adapted), and how well each cell
    *  was covered */
   private readonly img = new Float32Array(N);
@@ -86,7 +128,12 @@ export class Colliculus {
   on: string | null = null;
   /** how far the eyes moved the head's view since the last frame (for the eye's blur while it
    *  turns: a frame taken mid-turn is not trusted for movement) */
-  private seed = 7;
+  private seed: number;
+
+  /** `seed`: its own little noise, the same each time for the same seed */
+  constructor(seed = 7) {
+    this.seed = seed;
+  }
 
   private noise() {
     this.seed = (this.seed * 16807) % 2147483647;
@@ -106,14 +153,16 @@ export class Colliculus {
    * saw) is movement, the more the brighter the change against the light there is; a frame taken
    * as the body goes is trusted the less for it (the room slides by a walking cat's eyes).
    */
-  see(F: EyeFrame, moving: number) {
+  see(F: EyeFrame, moving: number, own?: Own) {
     const { sum, wsum, img, had } = this;
     sum.fill(0);
     wsum.fill(0);
-    let mean = 0;
-    const n = F.w * F.h;
-    for (let i = 0; i < n; i++) mean += F.lum[i];
-    mean = mean / n + 0.04;
+    const n = F.w * F.h, none = F.none;
+    // (out past the room's open front there is nothing to see: no light to come round to, nothing
+    // that moves, no edge; what there is to see is the room)
+    let mean = 0, seen = 0;
+    for (let i = 0; i < n; i++) if (!none?.[i]) { mean += F.lum[i]; seen++; }
+    mean = seen ? mean / seen + 0.04 : this.adapt > 0 ? this.adapt : 0.12;
     // (the eye comes round to the light there is over a second or so, not at once: a light put out
     // is a change to it, all over)
     const dt = this.lastFrame ? Math.max(0, Math.min(1, F.t - this.lastFrame.t)) : 1;
@@ -121,6 +170,7 @@ export class Colliculus {
     const light = this.adapt;
     // (each receptor spread over the four cells round where it looked)
     for (let i = 0; i < n; i++) {
+      if (none?.[i]) continue;
       const { c, r } = cellOf(F.az[i], F.el[i]);
       const c0 = Math.floor(c), r0 = Math.floor(r), fc = c - c0, fr = r - r0;
       // (the eye's own adaptation: brightness against the light there is)
@@ -153,6 +203,23 @@ export class Colliculus {
       img[k] = v;
       had[k] = cover;
     }
+    // (its own shadow on the floor by it, going as it goes: no news to it, as a thing it does
+    // itself never is)
+    const mine = this.tmpD;
+    mine.fill(0);
+    if (own) {
+      const h = own.eye.y - own.y;
+      for (let r = 0; r < SC_EL; r++) {
+        const el = EL0 + r * DE;
+        if (el > -0.05 || h <= 0) continue;
+        const d = h / Math.tan(-el);
+        for (let c = 0; c < SC_AZ; c++) {
+          const az = c * DA;
+          const fx = own.eye.x + Math.sin(az) * d - own.x, fz = own.eye.z + Math.cos(az) * d - own.z;
+          mine[r * SC_AZ + c] = ss(own.r, 0.6 * own.r, Math.hypot(fx, fz));
+        }
+      }
+    }
     // (all of it changed at once: not a thing moving but the light, or a flash; a start, and no
     // movement anywhere in particular)
     const whole = both > 30 ? changed / both : 0;
@@ -160,7 +227,16 @@ export class Colliculus {
     const local = whole > 0.06 ? 0 : 1;
     for (let k = 0; k < N; k++) {
       if (this.view[k] < 0.25) continue;
-      const m = ss(0.035, 0.2, this.tmpA[k] - 0.6 * whole) * trust * local;
+      // (at the edge of what it sees, against nothing or the side of its view, the least turn of
+      // the head takes in a little more or a little less: no movement in that)
+      const r = Math.floor(k / SC_AZ), c = k % SC_AZ;
+      let rim = false;
+      for (let dr = -1; dr <= 1 && !rim; dr++) {
+        const rr = r + dr;
+        if (rr < 0 || rr >= SC_EL) continue;
+        for (let dc = -1; dc <= 1; dc++) if (this.view[rr * SC_AZ + ((c + dc) % SC_AZ + SC_AZ) % SC_AZ] < 0.25) { rim = true; break; }
+      }
+      const m = ss(0.035, 0.2, this.tmpA[k] - 0.6 * whole) * trust * local * (1 - 0.9 * mine[k]) * (rim ? 0.15 : 1);
       this.move[k] = Math.max(this.move[k], m);
     }
     // contrast: a cell against the cells round it
@@ -182,6 +258,29 @@ export class Colliculus {
         this.edge[k] = ss(0.04, 0.3, Math.abs(img[k] - s / w));
       }
     }
+    // what stands out of it: a thing against what is round it, near (against the cells by it) and
+    // wider (against those half a dozen either way), and the brightest things in it (the window,
+    // the lamp); spread a neuron or so, as a patch of firing is wide
+    const raw = this.tmpB, A = this.tmpC;
+    for (let r = 0; r < SC_EL; r++) {
+      for (let c = 0; c < SC_AZ; c++) {
+        const k = r * SC_AZ + c;
+        if (had[k] < 0.25) { raw[k] = 0; continue; }
+        let s = 0, w = 0;
+        for (let dr = -2; dr <= 2; dr++) {
+          const rr = r + dr;
+          if (rr < 0 || rr >= SC_EL) continue;
+          for (let dc = -3; dc <= 3; dc++) {
+            const kk = rr * SC_AZ + ((c + dc) % SC_AZ + SC_AZ) % SC_AZ;
+            if (had[kk] < 0.25) continue;
+            s += img[kk];
+            w++;
+          }
+        }
+        raw[k] = (Math.max(this.edge[k], 0.8 * ss(0.03, 0.25, Math.abs(img[k] - s / w))) + 0.5 * ss(0.55, 0.8, img[k])) * (1 - 0.9 * mine[k]);
+      }
+    }
+    blur3(raw, A, this.sal);
     this.lastFrame = F;
   }
 
@@ -196,10 +295,22 @@ export class Colliculus {
    * neighbours and the whole sheet; and tiring where it fires. `awake` 0 .. 1.
    */
   update(dt: number, eye: THREE.Vector3, known: readonly Known[], awake: number) {
-    const { u, f, input, tire, move, edge } = this;
+    const { u, f, input, tire, move, sal, used } = this;
     input.fill(0);
     if (awake > 0.3) {
-      for (let k = 0; k < N; k++) input[k] = 1.1 * move[k] + 0.12 * edge[k] * this.view[k];
+      // (what moves, as it moves; and what stands out of the still view, as much as it is in the
+      // mood to look about it (that comes and goes a little of itself), the less the longer it has
+      // looked there, taken against the most that stands out of what it has not just looked at, so
+      // that its eyes go on to the next thing, unless nothing much is left)
+      const still = Math.max(0, 0.12 + 0.8 * Math.max(0, Math.min(1, this.look)) + 0.12 * this.drift);
+      let most = 0;
+      for (let k = 0; k < N; k++) {
+        const v = sal[k] * this.view[k] * (1 - used[k]);
+        this.tmpD[k] = v;
+        if (v > most) most = v;
+      }
+      const norm = still / Math.max(0.35, most);
+      for (let k = 0; k < N; k++) input[k] = 1.1 * move[k] + norm * this.tmpD[k];
       // what it knows, where it is: a bump of drive as wide as the thing looks (and never narrower
       // than about a neuron)
       for (const K of known) {
@@ -222,6 +333,7 @@ export class Colliculus {
         }
       }
     }
+    this.drift += -this.drift * dt / 4 + Math.sqrt(2 * dt / 4) * (this.noise() + this.noise() + this.noise()) * 2;
     // what the eyes gave fades between frames (a moment: what moved is still in mind a little after)
     const fade = Math.exp(-dt / 0.18);
     for (let k = 0; k < N; k++) move[k] *= fade;
@@ -254,15 +366,39 @@ export class Colliculus {
     }
     const tau = 0.06, kk = Math.min(1, dt / tau);
     const kt = 1 - Math.exp(-dt / 3.5), kr = 1 - Math.exp(-dt / 6);
+    const ku = 1 - Math.exp(-dt / 3.5), kv = 1 - Math.exp(-dt / 20);
     let best = -1, bestF = 0;
     for (let k = 0; k < N; k++) {
-      const drive = input[k] + 1.15 * B[k] - 0.12 * (total - M[k]) - 0.45 * tire[k] - 0.42 + 0.06 * this.noise();
+      const drive = input[k] + 1.15 * B[k] - 0.2 * (total - M[k]) - 0.45 * tire[k] - 0.42 + 0.06 * this.noise();
       u[k] += (drive - u[k]) * kk;
       f[k] = sig((u[k] - 0.35) * 9);
       // (tiring where it fires, a few seconds; rested again more slowly)
       tire[k] += f[k] > 0.3 ? (f[k] - tire[k]) * kt : -tire[k] * kr;
+      used[k] += f[k] > 0.3 ? (f[k] - used[k]) * ku : -used[k] * kv;
       if (f[k] > bestF) { bestF = f[k]; best = k; }
     }
+    // (the patch it was on it keeps to, as it moves, while it still fires and no other fires clearly
+    // harder: two things alike come up together, and for the moment both fire their hardest; the
+    // eyes do not jump to and fro between them while the one puts the other out)
+    if (this.lead >= 0) {
+      const r0 = Math.floor(this.lead / SC_AZ), c0 = this.lead % SC_AZ;
+      let lk = -1, lf = 0;
+      for (let dr = -2; dr <= 2; dr++) {
+        const rr = r0 + dr;
+        if (rr < 0 || rr >= SC_EL) continue;
+        for (let dc = -2; dc <= 2; dc++) {
+          const kk2 = rr * SC_AZ + ((c0 + dc) % SC_AZ + SC_AZ) % SC_AZ;
+          if (f[kk2] > lf) { lf = f[kk2]; lk = kk2; }
+        }
+      }
+      if (lf > 0.5 && bestF < lf + 0.15) { best = lk; bestF = lf; }
+    }
+    this.lead = bestF > 0.5 ? best : -1;
+    // (what drives it there: a thing that moved counts as one a while after it is still)
+    if (best >= 0 && bestF > 0.5) {
+      const mv = Math.min(1, (1.1 * move[best]) / Math.max(0.08, input[best]));
+      this.moving += (mv - this.moving) * (1 - Math.exp(-dt / (mv > this.moving ? 0.05 : 0.6)));
+    } else this.moving = 0;
     // the bump: where it is, the firing round its peak weighed together
     this.peak = bestF;
     this.on = null;

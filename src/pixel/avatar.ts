@@ -709,12 +709,17 @@ export class PixelAvatar implements Avatar {
     N.awake = this.alive && !this.isHidden ? Math.max(0, Math.min(1, 1 - this.sleep)) : 0;
     N.playful = Math.max(0, Math.min(1, 0.45 + 0.15 * this.temper.playful + 0.5 * mood.arousal - 0.5 * mood.sleepy - 0.4 * mood.fear));
     N.restless = 1 + 0.3 * this.temper.curious;
+    // (how much the room itself draws its eyes: keyed up, on edge, or curious by nature, it looks
+    // about it; sleepy or contented, hardly)
+    N.sc.look = Math.max(0, Math.min(1, 0.45 + 0.4 * mood.arousal + 0.12 * this.temper.curious + 0.25 * (mood.wary ?? 0) + 0.2 * mood.fear - 0.7 * mood.sleepy - 0.3 * mood.pleasure));
     N.fond = Math.max(0, Math.min(1, 0.2 + 0.8 * mood.trust));
     N.blockers = this.blockers ?? (() => []);
     // (what it is about colours what it watches: after the dot, the dot)
     N.bias.clear();
     N.bias.set('food', 0.35 * Math.max(0, this.needs.hunger - 0.4));
     N.bias.set('water', 0.35 * Math.max(0, this.needs.thirst - 0.4));
+    // (and you, the more lately you were about)
+    N.bias.set('you', 0.08 * Math.exp(-this.sinceYou / 30));
     // (the hour you mostly play with it: its eyes go to the pointer lying on the sill, the feathers,
     // the ball, as a cat's do to the door at the time someone comes home)
     const X = this.expects;
@@ -734,6 +739,7 @@ export class PixelAvatar implements Avatar {
     this.headYaw = Math.atan2(this.headF.x, this.headF.z);
     this.headPitch = Math.asin(Math.max(-1, Math.min(1, this.headF.y)));
     N.selfMotion = m.speed;
+    N.body.copy(m.pos);
     N.update(dt, this.eyeW, this.headYaw, this.headPitch, T);
     this.feelAbout(dt);
     // (a hand come down on it out of nowhere: felt, and its eyes go round to it)
@@ -774,6 +780,13 @@ export class PixelAvatar implements Avatar {
       const az = Math.atan2(to.x, to.z), k = Math.min(1, A.a * 1.2);
       // (the cat's left is +x: the left ear turns out to it, the right ear in)
       const near = Math.min(1.3, Math.abs(az) * 0.9), far = Math.min(0.5, Math.abs(az) * 0.4);
+      E.L = k * (az > 0 ? near : -far);
+      E.R = k * (az > 0 ? -far : near);
+    } else if (N.place === 'move' && N.awake > 0.5) {
+      // (something it knows nothing of moved: the ears round to it with the eyes)
+      const to = this.headLocal.copy(N.gazePoint).sub(this.eyeW).applyQuaternion(this.headInv.copy(this.headQ).invert());
+      const az = Math.atan2(to.x, to.z), k = 0.9;
+      const near = Math.min(1.3, Math.abs(az) * 0.9), far = Math.min(0.4, Math.abs(az) * 0.3);
       E.L = k * (az > 0 ? near : -far);
       E.R = k * (az > 0 ? -far : near);
     } else if (this.earSound && (this.earSound.t -= dt) > 0) {
@@ -1976,9 +1989,10 @@ export class PixelAvatar implements Avatar {
         this.chatterIn = 2.5 + Math.random() * 3;
         if (Math.random() < 0.6) this.outside?.chirp();
       }
-    } else if (N.sc.peak > 0.55 && !N.sc.on && N.awake > 0.6) {
+    } else if (N.place === 'move' && N.awake > 0.6) {
       // (something it knows nothing about moved, there in front of it: a curtain swinging, a
-      // shadow, a thing gone flying; its eyes go to it, and its head after them)
+      // shadow, a thing gone flying; its eyes go to it, and its head after them, and stay a moment
+      // after it is still)
       m.lookAt(N.gazePoint, 0.9);
       m.eyeAt = N.gazePoint;
     } else if (this.heard && (this.heard.t -= dt) > 0) {
@@ -1989,8 +2003,14 @@ export class PixelAvatar implements Avatar {
     else if (this.gazeTarget && this.screenToWorld(this.gazeTarget.x, this.gazeTarget.y, this.look)) m.lookAt(this.look, 0.9);
     else if (seen) { m.lookAt(N.gazePoint, this.trip ? 0.3 : 0.85); m.eyeAt = N.gazePoint; }
     else if (this.avertT > 0) m.lookAt(this.lookAway, 0.7);
-    else if (this.eyesOnYou(dt)) m.lookAt(this.viewer(), this.trip ? 0.3 : 0.85);
-    else m.lookAt(this.restingGaze(), 0.5);
+    // (your hands about, or a slow blink for you: on you)
+    else if (this.sinceYou < 4 || this.cat.motor.slowBlinking) m.lookAt(this.viewer(), this.trip ? 0.3 : 0.85);
+    else if (N.awake > 0.6 && (N.place === 'still' || (N.sc.on && N.sc.peak > 0.5))) {
+      // (a thing in the room that stands out, or a place it knows: its eyes on it a while, the head
+      // going a little way after them; then on to the next, or nowhere much)
+      m.lookAt(N.gazePoint, 0.6);
+      m.eyeAt = N.gazePoint;
+    } else m.lookAt(this.restingGaze(dt), 0.5);
     if (this.puzzledFor > 0) {
       this.puzzledFor -= dt;
       if (!busy && this.alive && this.sleep <= 0.5) tilt = this.puzzledTilt;
@@ -1998,24 +2018,19 @@ export class PixelAvatar implements Avatar {
     m.tilt = tilt;
   }
 
-  /** with nothing else to look at: you a while, then nowhere much a while (a cat does not stare
-   *  at anyone long); the more on you the fonder it is and the more lately you were about, and on
-   *  you whenever your hands are, and for a slow blink */
-  private readonly idleEyes = { you: true, t: 3 };
-  private eyesOnYou(dt: number) {
-    const E = this.idleEyes;
-    if ((E.t -= dt) <= 0) {
-      const fond = Math.max(0, Math.min(1, 0.5 + 0.6 * this.mood.trust)), lately = Math.exp(-this.sinceYou / 30);
-      E.you = Math.random() < (E.you ? 0.25 : 0.25 + 0.35 * fond + 0.35 * lately);
-      E.t = E.you ? 2 + Math.random() * (3 + 4 * lately) : (4 + Math.random() * 12) * (1 - 0.6 * lately);
-    }
-    return E.you || this.sinceYou < 4 || this.cat.motor.slowBlinking;
-  }
-  /** nowhere much: ahead of it and down a little, drifting slowly from side to side */
+  /** nowhere much: ahead of it and down a little, the eyes resting on one place a while, then on
+   *  another near it (eyes rest, or jump; they do not drift about) */
   private readonly restAt = new THREE.Vector3();
-  private restingGaze() {
-    const a = this.cat.motor.yaw + 0.35 * noise1(this.clock * 0.06 + 3);
-    return this.restAt.set(Math.sin(a), -0.3 + 0.12 * noise1(this.clock * 0.05 + 9), Math.cos(a)).multiplyScalar(1.1).add(this.eyeW);
+  private readonly restEyes = { yaw: 0, pitch: -0.3, t: 0 };
+  private restingGaze(dt: number) {
+    const R = this.restEyes;
+    if ((R.t -= dt) <= 0) {
+      R.t = 2.5 + Math.random() * 6;
+      R.yaw = 0.3 * (Math.random() * 2 - 1);
+      R.pitch = -0.18 - 0.2 * Math.random();
+    }
+    const a = this.cat.motor.yaw + R.yaw;
+    return this.restAt.set(Math.sin(a), R.pitch, Math.cos(a)).multiplyScalar(1.1).add(this.eyeW);
   }
 
   private glanceAside(of: object) {

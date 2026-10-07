@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { EyeFrame } from '../cat3d/retina';
-import { Colliculus, type Known } from './midbrain';
+import { Colliculus, type Known, type Own } from './midbrain';
 
 /**
  * The cat's nervous system, as far as its eyes go.
@@ -107,10 +107,13 @@ export class Unit {
   /** how tired its input is (0..1) */
   hab = 0;
   /** the neuron: what it has taken in, and how hard it fires (0..1); and its own slow wandering
-   *  (a brain is never quite still: now and then this is what tips a glance at a thing) */
+   *  (a brain is never quite still: now and then this is what tips a glance at a thing); and how
+   *  worn it is with firing (a neuron that has fired hard a while fires less for it, till it has
+   *  rested: a look at a thing that only sits there ends of itself) */
   u = 0;
   a = 0;
   wander = 0;
+  worn = 0;
   /** in the room this frame */
   here = false;
   felt = false;
@@ -233,6 +236,10 @@ export class Nerves {
    *  knows alone), and how fast it is going itself (m/s: a walking cat's view slides by) */
   frame: EyeFrame | null = null;
   selfMotion = 0;
+  /** where it stands (the middle of it, on whatever it stands on): its own shadow by it is no
+   *  news to its eyes */
+  readonly body = new THREE.Vector3(0, 0, 0);
+  private own: Own | null = null;
   private frameT = -1;
   private readonly known: Known[] = [];
   /** prey-like movement in what it attends to just now (0 .. 1) */
@@ -252,6 +259,16 @@ export class Nerves {
    *  one under way */
   jump = 0;
   private jumped = 0;
+  /** what its eyes are on, when it is no thing it knows: 'move', a thing that moved (or moves)
+   *  there; 'still', a thing there that stands out of the room; and how long they stay there yet
+   *  (s) once nothing fires there (a look does not snap back the moment the thing is still) */
+  place: 'move' | 'still' | null = null;
+  dwell = 0;
+  private hold = 0;
+  /** the light in its eyes, from the last picture: how bright the room is that it looks at
+   *  (weighed to the middle of the view), and how much of what it looks at is the room at all
+   *  (the rest is out past the room's open front, where you are) */
+  readonly light = { lum: 0, share: 0 };
   /** an act's interest in a thing: added to what drives its neuron (top-down: after the dot, the
    *  dot is what it watches) */
   readonly bias = new Map<string, number>();
@@ -345,7 +362,11 @@ export class Nerves {
       // (and the colliculus firing where it is: a thing its eyes are on holds them)
       const at = u.conf > 0.2 ? u.belief : u.seen;
       const back = this.sc.firing(Math.atan2(at.x - eye.x, at.z - eye.z), Math.atan2(at.y - eye.y, Math.hypot(at.x - eye.x, at.z - eye.z)));
-      const input = drive + (u.vis > 0.2 ? u.wander : 0) + 0.32 * u.a - 0.62 * rest + 0.18 * back + 0.05 * this.noise();
+      // (worn with firing: the less, the more like prey it is and the more it moves; a thing that
+      // only sits there, a few seconds of it and the eyes go elsewhere)
+      u.worn += (u.a - u.worn) * (1 - Math.exp(-dt / (u.a > u.worn ? 3 : 4)));
+      const worn = 0.5 * u.worn * (1 - 0.9 * K.prey) * (1 - u.motion);
+      const input = drive + (u.vis > 0.2 ? u.wander : 0) + 0.32 * u.a - 0.62 * rest + 0.18 * back - worn + 0.05 * this.noise();
       u.u += (input - u.u) * Math.min(1, dt / tau);
       u.a = 1 / (1 + Math.exp(-(u.u - 0.42) * 10));
       if (!u.here && u.conf < 0.05) u.a *= Math.exp(-dt * 6);
@@ -367,7 +388,12 @@ export class Nerves {
     const F = this.frame;
     if (F && F.t !== this.frameT && this.awake >= 0.3) {
       this.frameT = F.t;
-      this.sc.see(F, this.selfMotion);
+      const o = (this.own ??= { eye: this.eye, x: 0, y: 0, z: 0, r: 0.6 });
+      o.x = this.body.x;
+      o.y = this.body.y;
+      o.z = this.body.z;
+      this.sc.see(F, this.selfMotion, o);
+      this.lightIn(F);
     }
     const K = this.known;
     K.length = 0;
@@ -377,6 +403,24 @@ export class Nerves {
     }
     this.sc.update(dt, eye, K, this.awake);
     this.aim(dt);
+  }
+
+  /** the light in its eyes: the picture weighed to its middle (some twenty-five degrees either
+   *  way, and a little all over), what is out past the room left out */
+  private lightIn(F: EyeFrame) {
+    let s = 0, w = 0, all = 0;
+    const n = F.w * F.h;
+    for (let i = 0; i < n; i++) {
+      // (where in the view: across, -100 .. 100 degrees; down, -38 .. 38)
+      const x = (((i % F.w) + 0.5) / F.w * 2 - 1) * 100, y = ((Math.floor(i / F.w) + 0.5) / F.h * 2 - 1) * 38;
+      const k = 0.25 + Math.exp(-(x * x + y * y) / (2 * 26 * 26));
+      all += k;
+      if (F.none?.[i]) continue;
+      s += k * F.lum[i];
+      w += k;
+    }
+    this.light.lum = w > 0 ? s / w : 0;
+    this.light.share = all > 0 ? w / all : 0;
   }
 
   /** how well a point is seen from the eyes, the head facing `yaw` and pitched `pitch` */
@@ -415,11 +459,20 @@ export class Nerves {
     this.since += dt;
     this.jump = 0;
     // (the eyes go where the colliculus fires: on a thing it knows, to where it takes that to be; on
-    // something it knows nothing of, that way, to about where the floor or a wall would be; and
-    // with no patch of it firing, to what it attends to, if anything)
+    // something it knows nothing of, that way, to about where the floor or a wall would be, and
+    // there they stay a moment after it no longer fires (longer for a thing that moved than for
+    // one that only stands out); and with no patch of it firing, to what it attends to, if
+    // anything)
     const S = this.sc, on = S.on ? this.units.get(S.on) ?? null : null;
-    const A = on ?? (S.peak > 0.5 ? null : this.attending);
-    if (!A && S.peak <= 0.5) { this.sacc = 0; this.jumped = 0; return; }
+    const bare = S.peak > 0.5 && !on;
+    if (bare) {
+      const why = S.moving > 0.35 ? 'move' : 'still';
+      if (!this.place) this.hold = (why === 'move' ? 0.45 : 0.25) + 0.5 * (this.noise() + 0.5);
+      if (why === 'move' || !this.place) this.place = why;
+      this.dwell = this.hold;
+    } else if (this.place && (on || (this.dwell -= dt) <= 0)) this.place = null;
+    const A = on ?? (bare || this.place ? null : this.attending);
+    if (!A && !bare) { this.sacc = 0; this.jumped = 0; return; }
     const to = this.t.c;
     if (A) to.copy(A.conf < 0.4 && A.vis > 0.15 ? A.seen : A.belief).sub(this.eye);
     else {

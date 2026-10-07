@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { Cat3D } from '../cat3d/cat';
 import { Stage } from '../cat3d/stage';
 import { Retina } from '../cat3d/retina';
-import { moodFromBrain } from '../cat3d/mood';
+import { lightOfLum, lumOfLight, moodFromBrain } from '../cat3d/mood';
 import { PointerInput, type Contact } from '../input/pointer';
 import { MotionInput } from '../input/motion';
 import { CatAudio } from '../audio/audio';
@@ -1218,6 +1218,23 @@ export class PixelApp {
 
   /** the cat's mind, opened (mind.ts): three fingers on the glass, the M key, or ?mind */
   private readonly mind = (() => { const m = new Mind(); if (new URLSearchParams(location.search).has('mind')) m.toggle(true); return m; })();
+  /**
+   * The light in the cat's eyes (Mood.light): how bright the room is where it looks, as its own
+   * eyes have it (retina.ts), the middle of the view the most; out past the room's open front,
+   * where you are, as bright as the room is about then (`base`, by the hour), or much less with
+   * the lamp out after dark (`dark` 0 .. 1). Quick to close the pupils down at a bright thing,
+   * slower to open them again; asleep, or eyes that cannot see, the hour's light.
+   */
+  private eyeLit = -1;
+  private eyeLight(dt: number, base: number, dark: number) {
+    const E = this.avatar.nerves.light, R = this.retina;
+    const room = lumOfLight(base) * (this.room.lampLitNow ? 1 : 1 - 0.6 * dark);
+    const want = lightOfLum(R.on && R.latest ? E.share * E.lum + (1 - E.share) * room : room);
+    if (this.eyeLit < 0) this.eyeLit = want;
+    this.eyeLit += (want - this.eyeLit) * (1 - Math.exp(-dt / (want > this.eyeLit ? 0.3 : 1.2)));
+    return this.eyeLit;
+  }
+
   private seeMind() {
     const M = this.mind, av = this.avatar;
     // (what it is about just now, as it would put it: a face close, an ambush, a look up from its
@@ -1657,6 +1674,9 @@ export class PixelApp {
     // from being quite dark, but the pupils open in it
     const dark = Room.dark(hour);
     const mood = moodFromBrain(this.brain, sick, s.trust, 0.75 * dark);
+    // (and the light in its eyes is the light where it looks, by its own eyes: the window by day
+    // closes its pupils down, a dark corner opens them)
+    mood.light = this.eyeLight(dt, mood.light, dark);
     // (prey in its eyes: the will to hunt widens the pupils, as excitement does)
     mood.arousal = Math.max(mood.arousal, 0.8 * this.avatar.nerves.hunt);
     this.avatar.needs.hunger = s.hunger;

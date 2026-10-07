@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { NEUTRAL, MOODS, bodyFor, eyesFor, moodFromBrain, type Mood } from '../src/cat3d/mood';
+import { NEUTRAL, MOODS, bodyFor, eyesFor, lightOfLum, lumOfLight, moodFromBrain, type Mood } from '../src/cat3d/mood';
 import { POSES } from '../src/cat3d/pose';
 
 const eyes = (m: Partial<Mood>) => eyesFor({ ...NEUTRAL, ...m });
@@ -56,6 +56,20 @@ describe('feelings in the eyes', () => {
 });
 
 const body = (m: Partial<Mood>) => bodyFor({ ...NEUTRAL, ...m });
+
+describe('the light in its eyes', () => {
+  it('as bright as what it looks at: a room by day, by the lamp at night, a sunlit window; and back again', () => {
+    expect(lightOfLum(0.25)).toBeCloseTo(0.7, 1);
+    expect(lightOfLum(0.09)).toBeCloseTo(0.3, 1);
+    expect(lightOfLum(0.8)).toBe(1);
+    expect(lightOfLum(0.01)).toBe(0);
+    for (const x of [0.1, 0.3, 0.5, 0.7, 0.9]) expect(lightOfLum(lumOfLight(x))).toBeCloseTo(x, 5);
+    // (looking at the window by day, narrower pupils than at the room; into the dark, wider)
+    const at = (lum: number) => eyesFor({ ...NEUTRAL, light: lightOfLum(lum) }).pupil;
+    expect(at(0.6)).toBeLessThan(at(0.25) - 0.1);
+    expect(at(0.05)).toBeGreaterThan(at(0.25) + 0.1);
+  });
+});
 
 describe('feelings in the body', () => {
   it('a calm cat holds its posture as it is', () => {

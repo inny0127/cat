@@ -64,6 +64,13 @@ export interface EyeLook {
 
 const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
 
+/** the light in a cat's eyes (Mood.light: 0 dark .. 1 bright) for how bright what it looks at is
+ *  (as its retina has it, retina.ts: linear light), and back again: each time ten times as bright,
+ *  nine-tenths of the way from dark to bright (a room by day some 0.25, by the lamp at night some
+ *  0.09, a sunlit window several times the room) */
+export const lightOfLum = (lum: number) => clamp01(1.25 + 0.91 * Math.log10(Math.max(1e-4, lum)));
+export const lumOfLight = (light: number) => Math.pow(10, (light - 1.25) / 0.91);
+
 /** the eyes a feeling gives a cat that is awake and at ease in its body */
 export function eyesFor(m: Mood): EyeLook {
   const calm = 1 - m.fear;

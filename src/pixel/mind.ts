@@ -160,8 +160,9 @@ export class Mind {
     const looks = (m.expects[top] ?? 0) > 0.25 ? { laser: '레이저 놀이', wand: '깃털 놀이', yarn: '털실 놀이', pet: '쓰다듬기', food: '밥' }[top] : null;
     // (its mood in a word: keyed up, at its ease, drowsy, or quiet)
     const mood = m.pace === undefined ? null : m.pace > 0.85 ? '들뜸' : m.pace > 0.4 ? '느긋함' : (m.sleepy ?? 0) > 0.35 ? '나른함' : '차분함';
-    // (its eyes on something it knows nothing of: a thing that moved)
-    const eyesOn = S.peak > 0.5 && !S.on ? '움직임' : A ? NAMES[A.id] ?? A.id : '-';
+    // (its eyes on something it knows nothing of: a thing that moved, or one that stands out of the
+    // room; or on a thing it knows, its midbrain's or its attention's)
+    const eyesOn = N.place === 'move' ? '움직임' : N.place === 'still' ? '눈에 띄는 것' : S.on && S.peak > 0.5 ? NAMES[S.on] ?? S.on : A ? NAMES[A.id] ?? A.id : '-';
     const F = m.feel;
     const rows = [
       ...(mood ? [`기분  ${mood}`] : []),

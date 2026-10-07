@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
 import { Nerves, LATENCY, type Thing } from '../src/pixel/nerves';
+import type { EyeFrame } from '../src/cat3d/retina';
 
 const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 /** a cat with its eyes 0.2 m up at the middle of the room, facing `yaw`; the things as a function
@@ -128,6 +129,59 @@ describe('what the cat sees, and what it makes of it', () => {
     expect(n.hunt).toBeGreaterThan(0.2);
     watch(() => [], 8, () => 0, undefined, n);
     expect(n.hunt).toBeLessThan(0.1);
+  });
+
+  it('you, just sitting there: looked at a few seconds, then not, then again (no stare without end)', () => {
+    const n = new Nerves();
+    n.fond = 0.6;
+    const looks: number[] = [];
+    let cur = 0, on = false;
+    watch(() => [{ id: 'you', kind: 'you', p: V(0, 0.3, 1.5) }], 60, () => 0, (n) => {
+      const now = n.attending?.id === 'you';
+      if (now) cur += 1 / 60;
+      else if (on) { looks.push(cur); cur = 0; }
+      on = now;
+    }, n);
+    expect(looks.length).toBeGreaterThan(2);
+    expect(Math.max(...looks)).toBeLessThan(12);
+    expect(looks.reduce((a, b) => a + b, 0) / looks.length).toBeGreaterThan(1.5);
+  });
+
+  it('the red dot held still is watched most of the time: a thing like prey does not tire the eye so', () => {
+    let on = 0;
+    watch(() => [{ id: 'dot', kind: 'dot', p: V(0.2, 0, 0.8) }], 15, () => 0, (n, t) => { if (t > 1 && n.attending?.id === 'dot') on += 1 / 60; });
+    expect(on).toBeGreaterThan(9);
+  });
+
+  it('something it knows nothing of moved, and is still now: its eyes stay there a moment, then let go', () => {
+    const n = new Nerves();
+    const eye = V(0, 0.2, 0);
+    const D = Math.PI / 180, wrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
+    const frame = (t: number, x: number): EyeFrame => {
+      const w = 48, h = 16, k = w * h;
+      const F: EyeFrame = { lum: new Float32Array(k), w, h, az: new Float32Array(k), el: new Float32Array(k), t };
+      for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
+        const q = j * w + i, az = wrap((100 - ((i + 0.5) * 200) / w) * D), el = (38 - ((j + 0.5) * 77) / h) * D;
+        F.az[q] = az;
+        F.el[q] = el;
+        F.lum[q] = 0.35 + 0.1 * Math.sin(az * 3) - (Math.abs(wrap(az - x)) < 0.09 && Math.abs(el - 0.2) < 0.09 ? 0.3 : 0);
+      }
+      return F;
+    };
+    let gone = -1, letGo = -1, moved = false;
+    for (let i = 0; i < 60 * 5; i++) {
+      const t = i / 60;
+      // (a tassel swinging off to its right a second and a half, then still)
+      if (i % 5 === 0) n.frame = frame(t, -0.8 + (t < 1.5 ? 0.1 * Math.sin(t * 9) : 0.1 * Math.sin(1.5 * 9)));
+      n.update(1 / 60, eye, 0, 0, []);
+      if (n.place === 'move') moved = true;
+      if (moved && gone < 0 && n.sc.peak < 0.5) gone = t;
+      if (gone > 0 && letGo < 0 && !n.place) letGo = t;
+    }
+    expect(moved).toBe(true);
+    expect(gone).toBeGreaterThan(0);
+    expect(letGo - gone).toBeGreaterThan(0.25);
+    expect(letGo - gone).toBeLessThan(1.5);
   });
 
   it('asleep it sees nothing', () => {
