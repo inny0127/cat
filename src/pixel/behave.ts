@@ -3690,6 +3690,12 @@ export class Zoomies implements Act {
   private readonly lookDir = Math.random() < 0.5 ? -1 : 1;
   /** at the end: turning round to face you (1), turned (2) */
   private facing = 0;
+  /** pulled up short at a point for a turn too sharp to run round; and how long yet it holds
+   *  there, low, before it is off again */
+  private braking = false;
+  private freeze = 0;
+  /** how long since it last held still like that (s): not twice in a breath */
+  private unfrozen = 0;
 
   constructor(c: Ctx) {
     const h = c.home;
@@ -3697,10 +3703,10 @@ export class Zoomies implements Act {
     // zigzags over the open floor in front of the bed: the middle, out to the left of the bed, the
     // front right (clear of the books), ... (when the box is out on the left, the right only)
     const box = c.box() !== null;
-    const F = () => at(box ? rand(0.04, 0.12) : rand(-0.1, 0.1), rand(0.44, 0.5));
+    const F = () => at(box ? rand(0.02, 0.14) : rand(-0.14, 0.12), rand(0.4, 0.52));
     // (not so far out to the left that it runs out of the picture before the view can follow)
-    const L = () => at(-0.36, rand(0.14, 0.24));
-    const R = () => at(rand(0.14, 0.22), rand(0.5, 0.56));
+    const L = () => at(rand(-0.4, -0.3), rand(0.08, 0.3));
+    const R = () => at(rand(0.12, 0.24), rand(0.46, 0.58));
     const n = 3 + Math.floor(Math.random() * 3);
     const cycle = box ? [F, R] : Math.random() < 0.5 ? [F, L, R, L] : [L, F, R, F];
     for (let k = 0; k < n; k++) this.route.push(cycle[k % cycle.length]());
@@ -3744,7 +3750,17 @@ export class Zoomies implements Act {
       }
       return true;
     }
+    if (this.phase === 'dash' && this.freeze > 0) {
+      // stopped dead, low, eyes wide and the tail lashing, as if it had seen something; and off
+      // again
+      this.freeze -= dt;
+      m.setPosture('crouch');
+      m.layer = { pose: { hipY: 0.14, neckPitch: -0.25, earFwd: -0.45, earOut: 0.3, pupil: 1, eyeOpen: 1, whisker: 0.6, tailLift: 0.7, tailHook: 0.5, tailSide: 0.6 * twitch(this.t, 9), puff: 0.3 }, w: 1 };
+      if (this.freeze <= 0) this.leg(c);
+      return true;
+    }
     if (this.phase === 'dash') {
+      this.unfrozen += dt;
       // low and quick, the tail up and hooked, the ears back
       m.setPosture('stand');
       m.layer = { pose: { tailLift: 1.25, tailHook: 0.7, earFwd: -0.35, earOut: 0.25, hipY: 0.185, neckPitch: 0.1, puff: 0.2 }, w: ease(this.t / 0.2) };
@@ -3756,11 +3772,30 @@ export class Zoomies implements Act {
         this.kicked = true;
         c.kick(new THREE.Vector3(Math.sin(m.yaw), 0, Math.cos(m.yaw)), 0.9);
       }
+      // a turn at the point it is making for too sharp to run round (it would only go round and
+      // round it, a dog on a track): it pulls up short at it, claws skidding, to wheel round on the
+      // spot and be off the other way
+      const to = this.route[this.i], next = this.route[this.i + 1];
+      const dx = to.x - m.pos.x, dz = to.z - m.pos.z, d = Math.hypot(dx, dz);
+      const turn = next ? Math.abs(wrapA(Math.atan2(next.x - to.x, next.z - to.z) - Math.atan2(dx, dz))) : 0;
+      // (a sharpish one coming, it eases off going into it, to take it tight)
+      if (!this.braking && d < 0.4 && turn > 0.9) {
+        const u = Math.min(1, (turn - 0.9) / 0.85);
+        m.walkTo(to, this.speed * (1 - 0.55 * u * u * (3 - 2 * u) * (1 - d / 0.4)), null, null, true);
+      }
+      if (!this.braking && next && d < 0.45 && turn > 1.75) {
+        this.braking = true;
+        m.walkTo(to, this.speed, null, () => {
+          this.braking = false;
+          c.sound('scrabble', 0.22);
+          // (now and then it holds there a moment, low, before it is off again)
+          if (this.unfrozen > 2.5 && Math.random() < 0.25) { this.freeze = rand(0.45, 1); this.unfrozen = 0; }
+          else this.leg(c);
+        });
+      }
       // on to the next as soon as it is close, or has gone past it: at this speed it would only
       // circle round a point it missed
-      const to = this.route[this.i];
-      const dx = to.x - m.pos.x, dz = to.z - m.pos.z, d = Math.hypot(dx, dz);
-      if (d < 0.13 || (d < 0.3 && dx * Math.sin(m.yaw) + dz * Math.cos(m.yaw) < 0) || !m.goal) this.leg(c);
+      if (!this.braking && (d < 0.13 || (d < 0.3 && dx * Math.sin(m.yaw) + dz * Math.cos(m.yaw) < 0) || !m.goal)) this.leg(c);
       return true;
     }
     m.zoom = Math.max(0, m.zoom - dt * 2);
