@@ -386,15 +386,40 @@ export const huff = () => new Layered('huff', 1.8, 0.45, (t) => {
   return { neckPitch: -0.2 * k, headPitch: -0.1 * k, earOut: 0.25 * k, earFwd: -0.15 * k, eyeOpen: 0.95 - 0.35 * k };
 });
 
-/** a big yawn: the mouth wide, the tongue curled up at its tip in the bottom of it, eyes squeezed,
- *  head back, ears out; now and then you hear it */
-export const yawn = (heard = Math.random() < 0.5) => {
-  const L = new Layered('yawn', 2.4, 0.7, () => ({
-    jaw: 1, tongue: 0.5, tongueUp: 1, eyeOpen: 0.08, squint: 0.8, headPitch: 0.35, neckPitch: 0.1, earOut: 0.35, earFwd: -0.3,
-  }), null, heard ? { at: 0.45, sound: 'yawn', gain: 0.22 } : null);
+/**
+ * A yawn, never quite the same twice: now and then as wide as the mouth goes, now a smaller one
+ * half kept in, longer the bigger; the mouth opening slowly and shutting quicker, a quiver at the
+ * full of it, the tongue curled up at its tip in the bottom of it, the eyes squeezed shut and the
+ * ears out; sat or stood, the head back with it (lying, hardly lifted). And after it, now and then
+ * a quick shake of the head, or a lick of the lips. Now and then you hear it.
+ */
+const yawnOf = (lying: boolean, heard: boolean) => {
+  const big = rand(0.55, 1);
+  const peak = rand(0.6, 0.85) + 0.5 * big, hold = rand(0.08, 0.3), shut = peak + hold + rand(0.45, 0.75);
+  const after = Math.random() < 0.3 ? 'shake' : Math.random() < 0.45 ? 'lick' : null;
+  const dur = shut + (after ? 0.55 : 0.2);
+  const L = new Layered('yawn', dur, 0.25, (t) => {
+    const up = t < peak ? Math.pow(ease(t / peak), 1.3) : t < peak + hold ? 1 : 1 - ease((t - peak - hold) / (shut - peak - hold));
+    const open = up * (1 + (t > peak - 0.1 && t < peak + hold ? 0.03 * Math.sin(t * 41) : 0));
+    const shut2 = ease(Math.min(1, open * 1.6));
+    const pose: PoseLayer = {
+      jaw: big * open, tongue: 0.55 * open, tongueUp: 1, eyeOpen: 1 - 0.92 * shut2, squint: 0.8 * shut2,
+      headPitch: (lying ? 0.05 : 0.35) * big * open, neckPitch: lying ? -0.2 * up : 0.1 * open, earOut: 0.35 * open, earFwd: -0.3 * open,
+    };
+    const a = t - shut;
+    if (after === 'shake' && a > 0 && a < 0.45) pose.headRoll = 0.22 * Math.sin(a * 36) * (1 - a / 0.45);
+    if (after === 'lick' && a > 0.05 && a < 0.33) {
+      const k = Math.sin(Math.PI * (a - 0.05) / 0.28);
+      pose.tongue = 0.85 * k;
+      pose.tongueUp = 1.8;
+      pose.jaw = 0.08 * k;
+    }
+    return pose;
+  }, null, heard ? { at: 0.8 * peak, sound: 'yawn', gain: 0.14 + 0.1 * big } : null);
   L.brief = true;
   return L;
 };
+export const yawn = (heard = Math.random() < 0.5) => yawnOf(false, heard);
 
 /** one act after another */
 class Seq implements Act {
@@ -460,13 +485,7 @@ export const wakeUp = (c: Ctx) => {
   const post = c.scratcher?.();
   const atPost = !!post && Math.random() < 0.3;
   return new Seq('wake', [
-    () => {
-      const L = new Layered('yawn', 2.6, 0.8, () => ({
-        jaw: 1, tongue: 0.5, tongueUp: 1, eyeOpen: 0.08, squint: 0.8, neckPitch: -0.2, headPitch: 0, earOut: 0.35, earFwd: -0.3,
-      }), null, { at: 0.5, sound: 'yawn', gain: 0.22 });
-      L.brief = true;
-      return L;
-    },
+    () => yawnOf(true, true),
     atPost ? () => new Claw(post!) : () => stretchSideOn(c, 'loaf', Math.random() < 0.8, Math.random() < 0.35),
   ]);
 };

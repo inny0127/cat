@@ -193,6 +193,8 @@ describe('asking at the empty bowl', () => {
 
 describe('found waiting for you at the glass', () => {
   it('sat there looking out, it sees you: no walk to the glass, straight on to the hello', () => {
+    let seed = 23;
+    vi.spyOn(Math, 'random').mockImplementation(() => (seed = (seed * 16807) % 2147483647) / 2147483647);
     const { c, m, blinks } = room();
     m.snap('sit');
     m.pos.set(0, 0, 0.22);
