@@ -4,7 +4,7 @@ import { POSES, SIDE_TURN, type Leg, type PoseLayer, type PoseName } from '../ca
 import { NEUTRAL, type Mood } from '../cat3d/mood';
 import type { Avatar } from '../sim/avatar';
 import type { EarMood, TailMood } from '../rig/animator';
-import { boop, byYou, inTurn, shakeOff, canGlance, crab, coolOff, feel, huff, idleOptions, mealLayer, mealPlan, type MealPlan, groomChest, groomFlank, knead, lookWith, restingPose, sneeze, toBed, toWindow, wander, warmUp, washFace, yawn, type Act, type Ctx, sunbathe, Play, Sill, Hunt, Box, Zoomies, Walk, Stare, Rub, scratchEar, wakeUp, stretchSideOn, Greet, Gift, Snub, Beg, PawGlass, TailChase, Claw, Top, Fish, Bat, Trap, Sulk, Wrestle, isPerching, type Perching, type ScratchPost, type GlassFinger, type SillSpot, type SulkSpot } from './behave';
+import { boop, buryFood, lived, byYou, inTurn, shakeOff, canGlance, crab, coolOff, feel, huff, idleOptions, mealLayer, mealPlan, type MealPlan, groomChest, groomFlank, knead, lookWith, restingPose, sneeze, toBed, toWindow, wander, warmUp, washFace, yawn, type Act, type Ctx, sunbathe, Play, Sill, Hunt, Box, Zoomies, Walk, Stare, Rub, scratchEar, wakeUp, stretchSideOn, Greet, Gift, Snub, Beg, PawGlass, TailChase, Claw, Top, Fish, Bat, Trap, Sulk, Wrestle, isPerching, type Perching, type ScratchPost, type GlassFinger, type SillSpot, type SulkSpot } from './behave';
 import { Chase, Startle, type LaserDot } from './chase';
 import { Tease, type Lure } from './tease';
 import { GOAL, Whim } from './whim';
@@ -71,7 +71,7 @@ export class PixelAvatar implements Avatar {
   private trip: { kind: 'leave' | 'come' | 'errand'; onDone?: () => void } | null = null;
   /** an errand in the room: to the bowl (or the box), eat or drink there, and then about the room
    *  again (off: done, and waiting to be called back) */
-  private errand: { reason: string; phase: 'go' | 'do' | 'off'; t: number; dur: number; dir: number; plan?: MealPlan } | null = null;
+  private errand: { reason: string; phase: 'go' | 'do' | 'off'; t: number; dur: number; dir: number; plan?: MealPlan; after?: 'bury' | 'wash' } | null = null;
   /** the room's places (bowls, box), once there is a room */
   spots: { food: THREE.Vector3; water: THREE.Vector3; litter: THREE.Vector3; sniff?: { to: THREE.Vector3; face: number }[]; posts?: THREE.Vector3[]; scratcher?: ScratchPost; sulk?: SulkSpot[] } | null = null;
   /** a place in the sun on the floor, if there is one now */
@@ -2472,15 +2472,22 @@ export class PixelAvatar implements Avatar {
     e.t += dt;
     if (e.phase === 'do') {
       if (e.t > e.dur) {
-        // done eating: sat up from the bowl, a wash of the face first; then off
-        if (e.reason === 'eat' && !this.washAfter) {
-          this.washAfter = washFace();
+        // done eating: now and then the floor by the bowl scraped a few times first, as if to cover
+        // what is left; then sat up from the bowl, a wash of the face; then off
+        if (e.reason === 'eat' && !e.after) {
+          e.after = Math.random() < 0.25 ? 'bury' : 'wash';
+          this.washAfter = e.after === 'bury' ? buryFood() : washFace();
           m.layer = null;
         }
         if (this.washAfter) {
           if (this.washAfter.update(dt, this.ctx)) return;
           this.washAfter.stop(this.ctx);
           this.washAfter = null;
+          if (e.after === 'bury') {
+            e.after = 'wash';
+            this.washAfter = washFace();
+            return;
+          }
         }
         // done: up from it, and called back about the room (arrive)
         e.phase = 'off';
@@ -2493,7 +2500,7 @@ export class PixelAvatar implements Avatar {
         // squatting a while, the tail up out of the way; then turning the litter over the top of it
         // with a forepaw, a scrape or two
         const dig = e.t > e.dur - 2.5;
-        const sw = Math.sin(e.t * 9);
+        const sw = Math.sin(lived(e.t, 3.7) * 9);
         if (dig && Math.floor(e.t * 1.5) !== Math.floor((e.t - dt) * 1.5)) this.ctx.sound('scrabble', 0.12);
         m.layer = {
           pose: dig ? { neckPitch: -0.5, headPitch: -0.2, LF: { z: 0.03 + 0.03 * sw, y: 0.012 * Math.max(0, sw) } } : { hipY: 0.13, tailLift: 0.7, neckPitch: 0.05, earFwd: -0.15 },
@@ -2509,6 +2516,11 @@ export class PixelAvatar implements Avatar {
       // (done, and nobody waiting to call it back: about the room again of itself)
       this.arrive();
     }
+  }
+
+  /** done eating, scraping the floor by the bowl as if to cover what is left */
+  get burying() {
+    return this.washAfter?.name === 'bury';
   }
 
   /** the errand done where you can see it (at the bowl, up out of the box), and waiting to be

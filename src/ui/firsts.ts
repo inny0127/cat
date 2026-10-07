@@ -44,6 +44,7 @@ export const FIRSTS: Record<string, string> = {
   cool: '바닥에 길게 누웠어요. 더워서 시원한 곳을 찾았대요',
   shake: '몸을 부르르 털었어요. 헝클어진 털을 정리하는 중이에요',
   nose: '코를 날름 핥아요. 냄새를 맛보거나 마음을 다잡는 중이에요',
+  bury: '밥그릇 옆을 앞발로 긁어요. 남은 밥을 묻어 두려는 본능이에요',
 };
 
 /** the line at the foot of the screen, as far as the first words need it */

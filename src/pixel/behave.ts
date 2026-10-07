@@ -240,7 +240,7 @@ class Layered implements Act, Glancing {
   brief = false;
   private readonly seed = Math.random() * 10;
   constructor(readonly name: string, private readonly dur: number, private readonly ramp: number,
-    private readonly shape: (t: number) => PoseLayer, private readonly posture: PoseName | null = null,
+    private readonly shape: (t: number, c: Ctx) => PoseLayer, private readonly posture: PoseName | null = null,
     private cue: { at: number; sound: string; gain: number } | null = null) {}
   glance(s: number) {
     this.upFor = Math.max(this.upFor, s);
@@ -259,7 +259,7 @@ class Layered implements Act, Glancing {
       this.cue = null;
     }
     if (this.posture) c.m.setPosture(this.posture);
-    c.m.layer = { pose: this.shape(lived(this.t, this.seed)), w: hump(this.t, this.dur, this.ramp) * (1 - this.letGo * this.up) };
+    c.m.layer = { pose: this.shape(lived(this.t, this.seed), c), w: hump(this.t, this.dur, this.ramp) * (1 - this.letGo * this.up) };
     return this.t < this.dur;
   }
   stop(c: Ctx) {
@@ -546,6 +546,42 @@ export const groomChest = () => {
 /** washing the face: sitting up, a forepaw raised to the mouth and licked, then drawn up over the
  *  cheek to behind the ear with the head turned down into it, and again and again; then perhaps
  *  the other side. The eyes half shut all the while */
+/**
+ * Done eating, now and then: the floor beside the bowl scraped with a forepaw a few times, as if to
+ * cover what is left (a cat hides what it means to come back to). Crouched at the bowl as it ate,
+ * the head down over it: the paw reached out a little forward and put down, drawn back along the
+ * floor toward it, and down where it was; a few strokes in their own time, now one paw and now the
+ * other, each with its scrape.
+ */
+export const buryFood = () => {
+  const strokes: { t: number; paw: 'LF' | 'RF'; len: number }[] = [];
+  let t = rand(0.3, 0.6), paw: 'LF' | 'RF' = Math.random() < 0.5 ? 'LF' : 'RF';
+  for (let i = 3 + Math.floor(Math.random() * 4); i > 0; i--) {
+    const len = rand(0.38, 0.55);
+    strokes.push({ t, paw, len });
+    t += len + rand(0.05, 0.45);
+    if (Math.random() < 0.3) paw = paw === 'LF' ? 'RF' : 'LF';
+  }
+  const R = POSES.crouch.LF, heard = new Set<number>();
+  return new Layered('bury', t + 0.4, 0.3, (tt, c) => {
+    const pose: PoseLayer = { neckPitch: -0.6, headPitch: -0.3, earFwd: 0.05, whisker: 0.1, eyeOpen: 0.8 };
+    strokes.forEach((s, i) => {
+      const u = (tt - s.t) / s.len;
+      if (u <= 0 || u >= 1) return;
+      if (u > 0.45 && !heard.has(i)) { heard.add(i); c.sound('scrabble', 0.07 + 0.05 * Math.random()); }
+      // (up and out a little ahead; down on the floor; drawn back along it; and home where it was)
+      const k = (a: number, b: number) => ease((u - a) / (b - a));
+      const out = k(0, 0.3) * (1 - k(0.85, 1)), lift = k(0, 0.25) * (1 - k(0.25, 0.42)) + 0.25 * k(0.85, 0.93) * (1 - k(0.93, 1));
+      const reach = k(0, 0.3) * (1 - k(0.45, 0.85));
+      pose[s.paw] = {
+        planted: 1 - k(0, 0.06) * (1 - k(0.94, 1)), frame: 0,
+        x: R.x + 0.018 * out, y: R.y + 0.026 * lift, z: R.z - 0.02 * out * (1 - reach) + 0.05 * reach, flex: 0.35 * lift,
+      };
+    });
+    return pose;
+  }, 'crouch');
+};
+
 export const washFace = () => {
   const first = Math.random() < 0.5 ? 1 : -1;
   const cyc = rand(1.3, 1.7), n = 3 + Math.floor(Math.random() * 3);
