@@ -1326,6 +1326,13 @@ export class PixelAvatar implements Avatar {
       viewer: () => this.viewer(),
       laser: () => this.seenLaser(),
       gaze: (id) => (this.nerves.attending?.id === id ? this.nerves.gazePoint : null),
+      glimpse: () => {
+        const N = this.nerves;
+        if (N.awake < 0.6) return null;
+        if (N.place) return { at: N.gazePoint, k: N.place === 'move' ? 1 : 0.4 };
+        const A = N.attending;
+        return A && A.kind !== 'you' && A.kind !== 'spot' && A.onset > 0.3 ? { at: A.belief, k: Math.min(1, A.onset) } : null;
+      },
       curious: () => this.curiosity(),
       expects: () => this.expects,
       worth: (key) => this.worthOf?.(key) ?? 1,
@@ -1976,7 +1983,14 @@ export class PixelAvatar implements Avatar {
     m.eyeAt = this.act instanceof Chase && seen?.id === 'dot' ? N.gazePoint : null;
     let tilt = 0;
     if ((this.act instanceof Sill || this.act instanceof Play || this.act instanceof Hunt || this.act instanceof Box || this.act instanceof Zoomies || this.act instanceof Stare || this.act?.ownGaze) && this.mode !== 'enjoy') { /* the act decides */ }
-    else if (!this.alive || this.sleep > 0.5 || busy) m.lookAt(null);
+    else if (!this.alive || this.sleep > 0.5) m.lookAt(null);
+    else if (busy) {
+      // (on its way somewhere, its eyes still go to a thing that moves, and the head a little way
+      // after them; otherwise ahead, where it is going)
+      const going = (this.errand || this.act instanceof Walk) && m.goal && m.speed > 0.05;
+      if (going && N.place === 'move' && N.awake > 0.6) { m.lookAt(N.gazePoint, 0.5); m.eyeAt = N.gazePoint; }
+      else m.lookAt(null);
+    }
     else if (seen && seen.kind !== 'you' && seen.kind !== 'hand') {
       // whatever has its attention: the eyes on it in jumps, the head after them; and if it is
       // round further than the head will turn, a moment, and the body turns round to it

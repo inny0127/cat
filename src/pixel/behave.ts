@@ -96,6 +96,9 @@ export interface Ctx {
   laser: () => LaserDot | null;
   /** where its eyes are, while they are on this thing (nerves.ts): in jumps, a little behind it */
   gaze: (id: string) => THREE.Vector3 | null;
+  /** something that has just caught its eye, if anything (its midbrain's: a thing that moved, one
+   *  that stands out, a thing of its own just come into sight): where, and how much (0 .. 1) */
+  glimpse?: () => { at: THREE.Vector3; k: number } | null;
   /** where it believes a thing is (nerves.ts: seen a moment late, carried on a little when lost
    *  sight of), if it has a fair idea; what it goes for and aims at (a paw lands where the thing
    *  really is, or misses) */
@@ -852,6 +855,8 @@ export class Walk implements Act {
   /** a stop on the way, a look round (where at, how long yet), and whether this leg has had one */
   private pause: { t: number; at: THREE.Vector3 } | null = null;
   private paused = false;
+  /** something on the way has caught its eye (and been weighed: stop for it, or not) */
+  private glimpsed = false;
   /** the last leg it has asked itself whether to go home on (Leg.home) */
   private asked = -1;
   constructor(readonly name: string, private readonly legs: Leg[], private readonly speed = 0.25) {}
@@ -903,16 +908,19 @@ export class Walk implements Act {
         this.pause = null;
         c.m.lookAt(null);
       } else if (!this.paused && c.m.goal && this.name !== 'to bed' && this.speed <= 0.3) {
+        // (something catching its eye on the way, a thing that moved more than one that only
+        // stands out: stopped, a look at it, then on; once a leg, and not right at the end of it)
         const left = Math.hypot(leg.to.x - c.m.pos.x, leg.to.z - c.m.pos.z);
-        if (left > 0.35 && left < 0.6 && c.m.speed > 0.12) {
-          this.paused = true;
-          if (Math.random() < 0.35) {
-            const side = Math.random() < 0.5 ? -1 : 1, a = c.m.yaw + side * rand(0.6, 1.3);
-            this.pause = { t: rand(0.6, 1.6), at: new THREE.Vector3(c.m.pos.x + Math.sin(a), rand(0.2, 0.9), c.m.pos.z + Math.cos(a)) };
+        const g = c.glimpse?.() ?? null;
+        if (g && !this.glimpsed && left > 0.3 && c.m.speed > 0.12) {
+          this.glimpsed = true;
+          if (Math.random() < 0.75 * g.k) {
+            this.paused = true;
+            this.pause = { t: rand(0.6, 1.6), at: g.at.clone() };
             c.m.stop();
             return true;
           }
-        }
+        } else if (!g) this.glimpsed = false;
       }
       if (!c.m.goal) {
         // a waypoint with nothing to do there is walked through
