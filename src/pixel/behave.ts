@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { twitch } from '../util/math';
+import { noise1, twitch } from '../util/math';
 import type { Motor } from '../cat3d/motor';
 import type { Mood } from '../cat3d/mood';
 import { POSES, type PoseLayer, type PoseName } from '../cat3d/pose';
@@ -100,6 +100,9 @@ export interface Ctx {
   /** something that has just caught its eye, if anything (its midbrain's: a thing that moved, one
    *  that stands out, a thing of its own just come into sight): where, and how much (0 .. 1) */
   glimpse?: () => { at: THREE.Vector3; k: number } | null;
+  /** where its eyes are, when its midbrain has them on something (a thing it knows, a thing that
+   *  moved, a thing that stands out of what it sees); null, resting */
+  looking?: () => THREE.Vector3 | null;
   /** where it believes a thing is (nerves.ts: seen a moment late, carried on a little when lost
    *  sight of), if it has a fair idea; what it goes for and aims at (a paw lands where the thing
    *  really is, or misses) */
@@ -4389,13 +4392,17 @@ export class Sill implements Act {
         m.setPosture('sit');
         this.watch += dt;
         const birds = c.birds();
-        const look = birds ? 0 : 0.45 * Math.sin(this.watch * 0.37) + 0.2 * Math.sin(this.watch * 1.3);
+        // (nothing going by: its eyes where its midbrain has them, a thing that moved out there, a
+        // light or a roof that stands out, a while on each; or resting, the head hardly moving)
+        const eyes = birds ? null : c.looking?.() ?? null;
+        const look = birds || eyes ? 0 : 0.12 * noise1(this.watch * 0.15 + 5);
         if (birds) {
           // (they are far off: out through the glass and a little up, following them along)
           this.gaze.set(m.pos.x + (birds.x - m.pos.x) * 5, 1.9, m.pos.z - 4);
           m.lookAt(this.gaze, 1);
           if ((this.chirpIn -= dt) <= 0) { c.chirp(); this.chirpIn = rand(1.5, 3.5); }
-        } else m.lookAt(null);
+        } else if (eyes) m.lookAt(eyes, 0.9);
+        else m.lookAt(null);
         const chatter = birds ? 0.1 + 0.09 * Math.max(0, Math.sin(this.watch * Math.PI * 2 * 11)) : 0;
         // snow coming down past the glass: the head goes up to a flake, follows it down, and up
         // again to the next, this way and that
@@ -4441,9 +4448,9 @@ export class Sill implements Act {
         m.layer = {
           pose: {
             neckYaw: D ? 0 : snowing ? 0.7 * this.flake.yaw + 0.3 * look : look, headYaw: D ? 0 : snowing ? 0.4 * this.flake.yaw : 0.4 * look,
-            neckPitch: 0.1 + 0.4 * fall, headPitch: -0.05 + 0.05 * Math.sin(this.watch * 0.5) + 0.6 * fall,
+            neckPitch: 0.1 + 0.4 * fall, headPitch: -0.05 + 0.05 * noise1(this.watch * 0.3 + 2) + 0.6 * fall,
             earFwd: birds || D || snowing ? 1 : 0.6, pupil: birds || D ? 0.95 : snowing ? 0.85 : 0.6, whisker: birds || D ? 1 : snowing ? 0.5 : 0, jaw: chatter,
-            tailLift: -1.35, tailSide: 0.1, tailCurve: 0.25, tailCurl: (birds || D ? 0.8 : 0.35) * Math.sin(this.watch * (birds ? 3 : 0.8)), tailSag: 1,
+            tailLift: -1.35, tailSide: 0.1, tailCurve: 0.25, tailCurl: (birds || D ? 0.8 : 0.35) * twitch(this.watch, birds ? 3 : 0.8), tailSag: 1,
             ...patPaw,
           },
           w: Math.min(1, this.t / 1.2) * Math.min(1, Math.max(0, (this.dur - this.t) / 0.8)),

@@ -1326,6 +1326,10 @@ export class PixelAvatar implements Avatar {
       viewer: () => this.viewer(),
       laser: () => this.seenLaser(),
       gaze: (id) => (this.nerves.attending?.id === id ? this.nerves.gazePoint : null),
+      looking: () => {
+        const N = this.nerves;
+        return N.awake > 0.6 && (N.place || (N.sc.on && N.sc.peak > 0.5) || N.attending) ? N.gazePoint : null;
+      },
       glimpse: () => {
         const N = this.nerves;
         if (N.awake < 0.6) return null;
