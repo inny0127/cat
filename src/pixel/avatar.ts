@@ -1402,6 +1402,12 @@ export class PixelAvatar implements Avatar {
     return Math.abs(wrap(a.yaw - y)) <= Math.abs(wrap(b.yaw - y)) ? a : b;
   }
 
+  /** where the middle of the body is in posture p (on the floor), as the cat stands or lies now */
+  private middle(p: PoseName) {
+    const m = this.cat.motor, f = this.cat.footprint(p), s = Math.sin(m.yaw), c = Math.cos(m.yaw);
+    return { x: m.pos.x + f.x * c + f.z * s, z: m.pos.z - f.x * s + f.z * c };
+  }
+
   /** where to stand and which way to turn so that lying down in posture p puts the middle of the
    *  body at a point, the face turned to `face` */
   lieAt(p: PoseName, at: { x: number; z: number }, face: number) {
@@ -1617,8 +1623,12 @@ export class PixelAvatar implements Avatar {
       * (this.mode === 'alert' ? 1.4 : 1) * (1 + 0.6 * this.dusk) * bout));
     m.lazy = this.temper.lazy;
     c.kneading = this.kneading;
-    // at home: on the bed, wherever on it the body has settled
-    const atHome = Math.hypot(m.pos.x - c.home.x, m.pos.z - c.home.z) < 0.2;
+    // at home: on the bed, wherever on it the body has settled (the middle of the body as it lies,
+    // or is lying down to: curled up nose to tail, that is a good way from where it stood; judged
+    // by where it stood, a curl a step short of the middle would be away from home, and up it would
+    // get to go to bed again)
+    const mid = this.middle(m.targetPosture);
+    const atHome = Math.hypot(mid.x - c.home.x, mid.z - c.home.z) < 0.2;
     // (woken in the middle of a stretch in its sleep: that is over)
     if (this.stretchT > 0 && (this.sleep <= 0.3 || !this.alive)) this.sleepStretch(0, false);
     this.waking = Math.max(0, this.waking - dt);
