@@ -8,7 +8,17 @@ const RADIATOR = new THREE.Vector3(0, 0.3, -0.5);
 
 /** an hour (or `secs`) of the place's sounds at an hour of a day of the year: how many of each,
  *  and what a cat's ears made of them (flicks, and looks that way) */
-function listen(hour: number, month: number, secs = 3600, rain = 0) {
+function listen(hour: number, month: number, secs = 3600, rain = 0, seed = 7) {
+  // (the same hour each run: the place's sounds come at no set pace, and an hour of them is a
+  // throw of the dice)
+  let r = seed;
+  const rnd = Math.random;
+  Math.random = () => ((r = (r * 16807) % 2147483647) / 2147483647);
+  try {
+    return hear(hour, month, secs, rain);
+  } finally { Math.random = rnd; }
+}
+function hear(hour: number, month: number, secs: number, rain: number) {
   const S = new Soundscape({ window: WINDOW, radiator: RADIATOR }), E = new Ears();
   const day = hour > 6 && hour < 19 ? 1 : 0;
   const n: Record<string, number> = {};

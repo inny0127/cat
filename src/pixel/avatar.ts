@@ -2069,7 +2069,7 @@ export class PixelAvatar implements Avatar {
     // eyes on the finger, or on you (through the window); asleep, dead or busy, nowhere (up on
     // the sill it looks where it likes: out of the window)
     const busy = this.errand || (this.act && this.act.name !== 'window' && this.act.name !== 'knead' && this.act.name !== 'greet' && this.act.name !== 'gift'
-      && !(canGlance(this.act) && this.act.glancing) && !(this.act instanceof Walk && this.act.resting));
+      && !(canGlance(this.act) && this.act.glancing) && !this.act.resting);
     const N = this.nerves, seen = this.alive && this.sleep <= 0.5 ? N.attending : null;
     // (the eyes their own, ahead of the head, only while what it sees is what it looks at)
     m.eyeAt = this.act instanceof Chase && seen?.id === 'dot' ? N.gazePoint : null;

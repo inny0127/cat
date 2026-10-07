@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { noise1, twitch } from '../util/math';
+import { bouts, noise1, twitch } from '../util/math';
 import type { Motor } from '../cat3d/motor';
 import type { Mood } from '../cat3d/mood';
 import { POSES, type PoseLayer, type PoseName } from '../cat3d/pose';
@@ -188,6 +188,9 @@ export interface Act {
   stop(c: Ctx): void;
   /** it is looking at something of its own just now (the eyes are not to be taken off it) */
   readonly ownGaze?: boolean;
+  /** at its ease where it is a while, with nothing in particular to do there (lying in the sun, up
+   *  on the post): its eyes and its head its own, as anywhere it is at its ease */
+  readonly resting?: boolean;
   /** in the middle of something a cat sees through before it goes anywhere of its own accord (a
    *  stretch, a shake, a yawn): not to be cut short for a walk to its bowl */
   readonly brief?: boolean;
@@ -2177,10 +2180,16 @@ export class Top implements Act {
   private leaving = false;
   private readonly from = new THREE.Vector3();
   private look = Math.random() * 10;
+  /** till the tail's tip ticks again (s), and how far into a tick it is (s; < 0: none under way) */
+  private tickIn = rand(2, 8);
+  private tickT = -1;
   /** which way it lies up there: out over the room toward you, a little round toward the room */
   private readonly faceUp = rand(0.15, 0.6);
   private going = false;
   constructor(private readonly post: ScratchPost) {}
+  get resting() {
+    return this.phase === 'sit' && this.nap <= 0.3 && !this.leaving;
+  }
 
   /** asked down: down as soon as it can be */
   leave() {
@@ -2190,8 +2199,9 @@ export class Top implements Act {
   get up() {
     return this.phase !== 'go' && this.phase !== 'gather' && this.phase !== 'done';
   }
+  /** (its eyes the act's, but for the while it lies up there at its ease, looking about) */
   get ownGaze() {
-    return true;
+    return !this.resting;
   }
   /** where it springs from, and where it lands coming down: off the post's side toward the room */
   private launch() {
@@ -2271,17 +2281,23 @@ export class Top implements Act {
         return true;
       case 'sit': {
         // a loaf up there, the tail down over the edge, the tip of it ticking now and then; looking
-        // about over the room, or down at it; dozing if sleep comes, the head sinking
+        // about over the room, or down at it, as its eyes take it (resting: the eyes its own); dozing
+        // if sleep comes, the head sinking
         m.setPosture('loaf');
         this.look += dt;
         const deep = Math.min(1, Math.max(0, (this.nap - 0.3) / 0.5));
-        const glance = (1 - deep) * (0.45 * Math.sin(this.look * 0.37) + 0.2 * Math.sin(this.look * 1.13));
-        const down = (1 - deep) * Math.max(0, Math.sin(this.look * 0.21 + 1)) * 0.35;
-        const tick = Math.max(0, Math.sin(this.look * 0.6)) ** 6;
-        m.lookAt(null);
+        // (the tip ticking now and then, at no set pace: now twice close together, now not for a
+        // good while)
+        if (this.tickT < 0 && (this.tickIn -= dt) <= 0) { this.tickT = 0; this.tickIn = rand(2.5, 14); }
+        let tick = 0;
+        if (this.tickT >= 0) {
+          const u = (this.tickT += dt) / 0.9;
+          tick = u < 1 ? Math.sin(Math.PI * u) ** 2 : 0;
+          if (u >= 1) this.tickT = -1;
+        }
         m.layer = {
           pose: {
-            neckYaw: glance, headYaw: 0.5 * glance, neckPitch: -0.5 * deep - down, headPitch: -0.22 * deep - 0.3 * down, earFwd: 0.45 * (1 - deep),
+            neckPitch: -0.5 * deep, headPitch: -0.22 * deep, earFwd: 0.45 * (1 - deep),
             // (the tail out to the side over the edge, where it hangs down in sight of you)
             tailLift: -1.1, tailSide: -1.35, tailSag: 1, tailCurve: 0.1, tailCurl: 0.9 * tick * Math.sin(this.look * 9) * (1 - 0.7 * deep),
           },
@@ -4591,7 +4607,7 @@ export class Sill implements Act {
             neckYaw: D ? 0 : snowing ? 0.7 * this.flake.yaw + 0.3 * look : look, headYaw: D ? 0 : snowing ? 0.4 * this.flake.yaw : 0.4 * look,
             neckPitch: 0.1 + 0.4 * fall, headPitch: -0.05 + 0.05 * noise1(this.watch * 0.3 + 2) + 0.6 * fall,
             earFwd: birds || D || snowing ? 1 : 0.6, pupil: birds || D ? 0.95 : snowing ? 0.85 : 0.6, whisker: birds || D ? 1 : snowing ? 0.5 : 0, jaw: chatter,
-            tailLift: -1.35, tailSide: 0.1, tailCurve: 0.25, tailCurl: (birds || D ? 0.8 : 0.35) * twitch(this.watch, birds ? 3 : 0.8), tailSag: 1,
+            tailLift: -1.35, tailSide: 0.1, tailCurve: 0.25, tailCurl: (birds || D ? 0.8 : 0.35 * bouts(this.watch, 2)) * twitch(this.watch, birds ? 3 : 0.8), tailSag: 1,
             ...patPaw,
           },
           w: Math.min(1, this.t / 1.2) * Math.min(1, Math.max(0, (this.dur - this.t) / 0.8)),

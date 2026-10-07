@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { POSES, blendPose, clonePose, copyPose, GROUPS, type Foot, type Group, type Leg, type Pose, type PoseLayer, type PoseName } from './pose';
-import { Wobble, noise1, clamp } from '../util/math';
+import { Wobble, bouts, noise1, clamp } from '../util/math';
 import { NEUTRAL, bodyFor, eyesFor, type BodyLook, type Mood } from './mood';
 import type { GaitSignals } from './stepper';
 
@@ -1319,8 +1319,7 @@ export class Motor {
    *  a minute: not a metronome's sway that never stops), cross, all the time */
   private get waveAmp() {
     const a = Math.max(0, this.tailWave + this.feel.tailWave) * (1 - 0.7 * this.frNow);
-    const n = clamp((noise1(this.time * 0.09 + 11) + 0.5 * noise1(this.time * 0.23 + 4) + 0.05) / 0.5);
-    const bout = n * n * (3 - 2 * n);
+    const bout = bouts(this.time);
     return a * (bout + (1 - bout) * clamp(1.5 * this.feel.tailWave));
   }
 

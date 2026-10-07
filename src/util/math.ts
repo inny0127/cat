@@ -92,6 +92,16 @@ export function twitch(t: number, f: number): number {
   const burst = Math.max(0.1, Math.min(1, 0.55 + 0.7 * noise1(t * 0.8 + s + 31.7)));
   return Math.sin(f * t + 2.4 * noise1(t * 0.8 + s)) * burst;
 }
+/**
+ * How much of a thing done at its ease (a tail swishing, a tip ticking) is going on at time t: in
+ * bouts, now a while of it, now a while quite still (about half the time, a few seconds to the
+ * better part of half a minute at a stretch), never a metronome's that never stops. 0 .. 1; each
+ * `s` its own.
+ */
+export function bouts(t: number, s = 0): number {
+  const n = Math.max(0, Math.min(1, (noise1(t * 0.09 + 11 + s * 3.7) + 0.5 * noise1(t * 0.23 + 4 + s * 1.9) + 0.05) / 0.5));
+  return n * n * (3 - 2 * n);
+}
 /** fractal noise in about [-1, 1] */
 export function fbm1(x: number, oct = 3): number {
   let a = 0.5, s = 0, n = 0;
