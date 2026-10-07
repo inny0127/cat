@@ -699,15 +699,21 @@ export const knead = () => {
 
 /** booped on the nose: the face screwed up a moment, the eyes squeezed shut and the whiskers back,
  *  the head drawn back a little; then a lick of the nose and a quick shake of the head */
-export const boop = () => new Layered('boop', 1.6, 0.06, (t) => {
-  const scr = hump(t, 0.55, 0.08);
-  const lick = t > 0.6 && t < 1.05 ? Math.max(0, Math.sin((t - 0.6) * 28)) : 0;
-  const shake = t > 1.05 ? Math.sin((t - 1.05) * 42) * Math.max(0, 1 - (t - 1.05) / 0.45) : 0;
-  return {
-    eyeOpen: 1 - 0.92 * scr, squint: scr, whisker: -0.7 * scr, earFwd: -0.35 * scr,
-    headPitch: 0.18 * scr, neckPitch: -0.08 * scr, jaw: 0.13 * lick, tongue: lick, tongueUp: 1, headRoll: 0.2 * shake,
-  };
-});
+export const boop = () => {
+  // (never quite the same twice: how long the face stays screwed up, a lick or two of the nose,
+  // and now and then no shake of the head after)
+  const sq = rand(0.4, 0.7), licks = Math.random() < 0.65 ? 2 : 1, lickEnd = sq + 0.05 + 0.22 * licks;
+  const shakes = Math.random() < 0.75, dur = lickEnd + (shakes ? 0.5 : 0.15);
+  return new Layered('boop', dur, 0.06, (t) => {
+    const scr = hump(t, sq, 0.08);
+    const lick = t > sq + 0.05 && t < lickEnd ? Math.max(0, Math.sin((t - sq - 0.05) * Math.PI / 0.22)) : 0;
+    const shake = shakes && t > lickEnd ? Math.sin((t - lickEnd) * 42) * Math.max(0, 1 - (t - lickEnd) / 0.45) : 0;
+    return {
+      eyeOpen: 1 - 0.92 * scr, squint: scr, whisker: -0.7 * scr, earFwd: -0.35 * scr,
+      headPitch: 0.18 * scr, neckPitch: -0.08 * scr, jaw: 0.1 * lick, tongue: 0.9 * lick, tongueUp: 1.8, headRoll: 0.2 * shake,
+    };
+  });
+};
 
 /** a shake from head to tail, the coat put back as it should lie (rubbed the wrong way, up from a
  *  nap, a fright got over): on its feet for it (or sat, if it is sat up), braced a moment with the
