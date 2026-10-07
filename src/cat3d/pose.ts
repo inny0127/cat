@@ -62,7 +62,7 @@ const BASE: Pose = {
   pastern: 0.35, hindFlat: 0,
   tailLift: 0.25, tailSide: 0, tailCurve: -0.5, tailCurl: 0.3, tailHook: 0, tailSag: 0,
   earFwd: 0.2, earOut: 0, earFlat: 0,
-  eyeOpen: 0.95, squint: 0.03, pupil: 0.7, whisker: 0, jaw: 0, tongue: 0, tongueUp: 0,
+  eyeOpen: 0.95, squint: 0.03, pupil: 0.53, whisker: 0, jaw: 0, tongue: 0, tongueUp: 0,
   breath: 0.6, puff: 0,
 };
 
@@ -105,7 +105,7 @@ export const POSES = {
   /** alert stand, head up, tail up */
   alert: make({
     hipY: 0.222, chestPitch: 0.04, neckPitch: 0.25, headPitch: -0.12,
-    tailLift: 1.1, tailCurve: -0.9, tailCurl: 0.5, earFwd: 0.6, eyeOpen: 1, pupil: 0.66,
+    tailLift: 1.1, tailCurve: -0.9, tailCurl: 0.5, earFwd: 0.6, eyeOpen: 1, pupil: 0.5,
   }),
 
   /** sitting upright on the haunches, front legs straight, tail round the paws */
@@ -130,7 +130,7 @@ export const POSES = {
     LF: foot(0.028, 0.014, 0.075, 0, 0, 1), RF: foot(0.028, 0.014, 0.075, 0, 0, 1),
     LH: foot(0.044, 0.013, -0.1, 0, 0, 0), RH: foot(0.044, 0.013, -0.1, 0, 0, 0),
     pastern: 0.2, hindFlat: 1,
-    tailLift: -0.5, tailSide: 1.5, tailCurve: 0.3, tailCurl: 2.2, tailSag: 0.8,
+    tailLift: -0.85, tailSide: 1.5, tailCurve: 0.3, tailCurl: 2.2, tailSag: 1,
     eyeOpen: 0.92, squint: 0.05, earFwd: 0.2, breath: 0.5,
   }),
 
@@ -142,7 +142,7 @@ export const POSES = {
     LF: foot(0.03, 0.012, 0.19, 0, 0, 0), RF: foot(0.03, 0.012, 0.19, 0, 0, 0),
     LH: foot(0.042, 0.013, -0.06, 0, 0, 0), RH: foot(0.042, 0.013, -0.06, 0, 0, 0),
     pastern: 1.3, hindFlat: 1,
-    tailLift: -0.6, tailSide: -0.9, tailCurve: 0.6, tailCurl: -1.1, tailSag: 0.8,
+    tailLift: -0.85, tailSide: -0.9, tailCurve: 0.6, tailCurl: -1.1, tailSag: 1,
     eyeOpen: 0.8, breath: 0.5,
   }),
 
