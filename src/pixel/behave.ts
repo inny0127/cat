@@ -964,6 +964,12 @@ export class Walk implements Act {
   get ownGaze() {
     return !!this.pause;
   }
+  /** there, and a good while to be there with nothing in particular to do (lying in the sun, by
+   *  the radiator, near you): its eyes and its head its own, as anywhere it is at its ease */
+  get resting() {
+    const leg = this.legs[this.i];
+    return !!leg && this.arrived && !leg.layer && !leg.lip && leg.stay >= 3 && this.napT <= 0;
+  }
   /** lying somewhere it may doze off */
   get canNap() {
     const leg = this.legs[this.i];

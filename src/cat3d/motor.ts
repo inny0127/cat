@@ -1315,10 +1315,12 @@ export class Motor {
   private swayA = 0;
 
   /** the tail's sway: the motor's own, plus the feeling's; at its ease, in bouts (a few swishes,
-   *  then a while hardly at all), cross, all the time */
+   *  then a while quite still, half the time or so, now a few seconds, now the better part of half
+   *  a minute: not a metronome's sway that never stops), cross, all the time */
   private get waveAmp() {
     const a = Math.max(0, this.tailWave + this.feel.tailWave) * (1 - 0.7 * this.frNow);
-    const bout = 0.25 + 0.75 * clamp(0.5 + 0.9 * noise1(this.time * 0.21 + 11));
+    const n = clamp((noise1(this.time * 0.09 + 11) + 0.5 * noise1(this.time * 0.23 + 4) + 0.05) / 0.5);
+    const bout = n * n * (3 - 2 * n);
     return a * (bout + (1 - bout) * clamp(1.5 * this.feel.tailWave));
   }
 
