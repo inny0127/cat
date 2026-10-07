@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Brain } from '../src/sim/brain';
 import { newCat } from '../src/sim/state';
 import { moodFromBrain } from '../src/cat3d/mood';
@@ -38,6 +38,10 @@ function dropOff(seed: number) {
   } finally { Math.random = rnd; }
 }
 
+// (the same afternoon every run: how soon a cat drops off goes by the hour)
+beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(2026, 4, 4, 15, 0, 0)); });
+afterEach(() => { vi.useRealTimers(); });
+
 describe('dropping off', () => {
   it('not switched off: drowsy a while first, the lids heavier and heavier, and then asleep', () => {
     const { f } = dropOff(5);
@@ -57,9 +61,10 @@ describe('dropping off', () => {
   });
 
   it('as often as not, a yawn as it comes over it', () => {
+    // (twenty naps: more than a few with a yawn on the way, and not every one)
     let yawned = 0;
-    for (const s of [1, 2, 3, 4, 5, 6, 7, 8]) if (dropOff(s).yawns > 0) yawned++;
-    expect(yawned).toBeGreaterThanOrEqual(3);
-    expect(yawned).toBeLessThan(8);
+    for (let s = 1; s <= 20; s++) if (dropOff(s).yawns > 0) yawned++;
+    expect(yawned).toBeGreaterThanOrEqual(6);
+    expect(yawned).toBeLessThanOrEqual(18);
   });
 });

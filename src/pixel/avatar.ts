@@ -464,6 +464,28 @@ export class PixelAvatar implements Avatar {
     this.groove += ((this.grooveFor > 0 ? 1 : 0) - this.groove) * Math.min(1, dt * 1.5);
   }
 
+  /** down to lie (from its feet, or sat), awake and at its ease: now and then, once it is down, a
+   *  long breath out, a sigh of a cat comfortable where it is (the likelier, the more it has just
+   *  run about, or the happier it is) */
+  private lastTarget: string = 'stand';
+  private settleSighIn = -1;
+  private settleSigh(dt: number) {
+    const m = this.cat.motor, tp = m.targetPosture;
+    if (tp !== this.lastTarget) {
+      const down = LYING.includes(tp) && !LYING.includes(this.lastTarget as PoseName);
+      if (down && this.alive && this.sleep < 0.3 && (this.mode === 'rest' || this.mode === 'enjoy') && !this.hands.length
+        && Math.random() < 0.15 + 0.3 * this.mood.pleasure + 0.35 * m.exertion) this.settleSighIn = 1.2 + Math.random() * 1.8;
+      this.lastTarget = tp;
+    }
+    if (this.settleSighIn > 0 && (this.settleSighIn -= dt) <= 0) {
+      this.settleSighIn = -1;
+      if (m.settled && LYING.includes(m.posture) && !this.hands.length && !m.voicing && !this.isHidden) {
+        this.cat.sigh();
+        this.outside?.sound('sigh', 0.05);
+      }
+    }
+  }
+
   /** drowsy, a nap coming on: a big yawn where it is, if it is about nothing else */
   yawn() {
     if (!this.alive || this.isHidden || this.sleep > 0.3 || this.act || this.errand || this.trip || this.perched || this.hands.length) return false;
@@ -2074,6 +2096,7 @@ export class PixelAvatar implements Avatar {
     this.lickHand(dt);
     this.blepNow(dt);
     this.noseNow(dt);
+    this.settleSigh(dt);
     this.keepTime(dt);
     this.waryLook(dt);
     // (the lights out a moment ago, and the cat still free: off it goes)
