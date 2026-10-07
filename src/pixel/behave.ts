@@ -188,6 +188,9 @@ export interface Act {
   stop(c: Ctx): void;
   /** it is looking at something of its own just now (the eyes are not to be taken off it) */
   readonly ownGaze?: boolean;
+  /** in the middle of something a cat sees through before it goes anywhere of its own accord (a
+   *  stretch, a shake, a yawn): not to be cut short for a walk to its bowl */
+  readonly brief?: boolean;
 }
 
 const ease = (x: number) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x));
@@ -230,6 +233,8 @@ class Layered implements Act, Glancing {
   private upFor = 0;
   private up = 0;
   letGo = 0.8;
+  /** (a yawn, a sneeze: seen through) */
+  brief = false;
   private readonly seed = Math.random() * 10;
   constructor(readonly name: string, private readonly dur: number, private readonly ramp: number,
     private readonly shape: (t: number) => PoseLayer, private readonly posture: PoseName | null = null,
@@ -380,18 +385,26 @@ export const huff = () => new Layered('huff', 1.8, 0.45, (t) => {
 
 /** a big yawn: the mouth wide, the tongue curled up at its tip in the bottom of it, eyes squeezed,
  *  head back, ears out; now and then you hear it */
-export const yawn = (heard = Math.random() < 0.5) => new Layered('yawn', 2.4, 0.7, () => ({
-  jaw: 1, tongue: 0.5, tongueUp: 1, eyeOpen: 0.08, squint: 0.8, headPitch: 0.35, neckPitch: 0.1, earOut: 0.35, earFwd: -0.3,
-}), null, heard ? { at: 0.45, sound: 'yawn', gain: 0.22 } : null);
+export const yawn = (heard = Math.random() < 0.5) => {
+  const L = new Layered('yawn', 2.4, 0.7, () => ({
+    jaw: 1, tongue: 0.5, tongueUp: 1, eyeOpen: 0.08, squint: 0.8, headPitch: 0.35, neckPitch: 0.1, earOut: 0.35, earFwd: -0.3,
+  }), null, heard ? { at: 0.45, sound: 'yawn', gain: 0.22 } : null);
+  L.brief = true;
+  return L;
+};
 
 /** one act after another */
 class Seq implements Act {
   private i = 0;
   private cur: Act | null = null;
   constructor(readonly name: string, private readonly parts: (() => Act)[]) {}
-  /** (where it looks is the part's own business, if the part under way says so) */
+  /** (where it looks is the part's own business, if the part under way says so; and so is whether
+   *  it is seen through) */
   get ownGaze() {
     return this.cur?.ownGaze ?? false;
+  }
+  get brief() {
+    return this.cur?.brief ?? false;
   }
   update(dt: number, c: Ctx) {
     while (this.i < this.parts.length) {
@@ -444,9 +457,13 @@ export const wakeUp = (c: Ctx) => {
   const post = c.scratcher?.();
   const atPost = !!post && Math.random() < 0.3;
   return new Seq('wake', [
-    () => new Layered('yawn', 2.6, 0.8, () => ({
-      jaw: 1, tongue: 0.5, tongueUp: 1, eyeOpen: 0.08, squint: 0.8, neckPitch: -0.2, headPitch: 0, earOut: 0.35, earFwd: -0.3,
-    }), null, { at: 0.5, sound: 'yawn', gain: 0.22 }),
+    () => {
+      const L = new Layered('yawn', 2.6, 0.8, () => ({
+        jaw: 1, tongue: 0.5, tongueUp: 1, eyeOpen: 0.08, squint: 0.8, neckPitch: -0.2, headPitch: 0, earOut: 0.35, earFwd: -0.3,
+      }), null, { at: 0.5, sound: 'yawn', gain: 0.22 });
+      L.brief = true;
+      return L;
+    },
     atPost ? () => new Claw(post!) : () => stretchSideOn(c, 'loaf', Math.random() < 0.8, Math.random() < 0.35),
   ]);
 };
@@ -642,6 +659,7 @@ export const boop = () => new Layered('boop', 1.6, 0.06, (t) => {
  *  lick of the nose. Never quite the same twice, and not stopped halfway for a look about */
 class Shake implements Act {
   readonly name = 'shake';
+  readonly brief = true;
   private t = 0;
   private wait = 0;
   private sat: boolean | null = null;
@@ -849,6 +867,7 @@ export class Rub implements Act {
  *  drags its claws back through the rug (or the bed) a few times, one paw and then the other */
 export class Stretch implements Act {
   readonly name = 'stretch';
+  readonly brief = true;
   private t = 0;
   private readonly claws = Math.random() < 0.45;
   private pulls = 0;

@@ -1278,6 +1278,9 @@ export class PixelAvatar implements Avatar {
 
   /** something to do once it is down off the sill (asked to go somewhere while up there) */
   private afterPerch: (() => void) | null = null;
+  /** off to its bowl (or the tray) once it has seen through what it is in the middle of (a stretch,
+   *  a shake, a yawn) */
+  private afterBrief: (() => void) | null = null;
 
   /** up on the sill or in the box (or jumping to or from them): it has to come out before anything
    *  else */
@@ -1933,6 +1936,11 @@ export class PixelAvatar implements Avatar {
       if (isPerching(this.act)) { this.act.stop(this.ctx); this.act = null; }
       f();
     }
+    if (this.afterBrief && !this.act?.brief) {
+      const f = this.afterBrief;
+      this.afterBrief = null;
+      if (this.alive && !this.isHidden) f();
+    }
     if (this.errand) this.doErrand(dt);
     // (the trot to its dinner stopped on the way, by a hand or anything else: its keenness with it)
     if (this.keenWalk && this.errand?.phase !== 'go') {
@@ -2502,6 +2510,13 @@ export class PixelAvatar implements Avatar {
       return;
     }
     const m = this.cat.motor;
+    // (going of its own accord, it sees a stretch, a shake or a yawn through first; startled, it
+    // is off at once)
+    if (calm && this.act?.brief && !this.hands.length) {
+      this.afterBrief = () => this.bolt(dir, onDone, calm, reason, keen);
+      return;
+    }
+    this.afterBrief = null;
     // whatever it was doing is dropped first (stopping it later would stop this walk too)
     this.stopAct();
     m.layer = null;
