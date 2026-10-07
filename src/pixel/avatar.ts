@@ -1670,6 +1670,8 @@ export class PixelAvatar implements Avatar {
     this.whim.pace = Math.max(0.15, Math.min(1.6, (0.3 + 1.2 * md.arousal) * (1 - 0.6 * md.sleepy) * (1 - 0.25 * this.temper.lazy)
       * (this.mode === 'alert' ? 1.4 : 1) * (1 + 0.6 * this.dusk) * bout));
     m.lazy = this.temper.lazy;
+    // (a paw put out in front as it lies: not up on anything, in the box, or under a hand)
+    m.pawRoom = !this.perched && !this.hands.length && !this.touched;
     c.kneading = this.kneading;
     // at home: on the bed, wherever on it the body has settled (the middle of the body as it lies,
     // or is lying down to: curled up nose to tail, that is a good way from where it stood; judged

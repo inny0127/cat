@@ -787,6 +787,40 @@ export class Motor {
     p.RF.z += this.shifted.RF;
   }
 
+  /** lying in a loaf a while, now and then a forepaw put out in front of it (half a sphinx), and
+   *  in time tucked back under; not up on anything, nor under a hand (pawRoom, the avatar's say).
+   *  How soon the next; which paw is wanted out, and how far out each is (0 .. 1) */
+  pawRoom = true;
+  private outIn = 20 + 50 * Math.random();
+  private readonly outWant = { LF: 0, RF: 0 };
+  private readonly outK = { LF: 0, RF: 0 };
+  private pawOut(p: Pose, dt: number) {
+    let loaf = 0;
+    for (const [name, wgt] of this.postureWeights()) if (name === 'loaf') loaf += wgt;
+    const still = this.pawRoom && !this.goal && this.speed < 0.02 && !this.layer && this.tt >= 1 && !this.path.length && loaf > 0.95;
+    const W = this.outWant, K = this.outK;
+    if (!still) {
+      W.LF = W.RF = 0;
+      this.outIn = Math.max(this.outIn, 8 + 20 * Math.random());
+    } else if ((this.outIn -= dt * (0.6 + 0.6 * this.mood.arousal) * (1 - 0.5 * this.mood.sleepy)) <= 0) {
+      this.outIn = 25 + 70 * Math.random();
+      const out = W.LF > 0 ? 'LF' : W.RF > 0 ? 'RF' : null;
+      if (out) { if (Math.random() < 0.75) W[out] = 0; }
+      else W[Math.random() < 0.5 ? 'LF' : 'RF'] = 1;
+    }
+    for (const l of ['LF', 'RF'] as const) {
+      // (out or in over half a second or so, lifted a little off the bed on the way)
+      K[l] += Math.sign(W[l] - K[l]) * Math.min(Math.abs(W[l] - K[l]), dt / 0.55);
+      const u = K[l];
+      if (u <= 0) continue;
+      const k = u * u * (3 - 2 * u), S = POSES.sphinx[l], f = p[l];
+      f.x += (S.x - f.x) * k;
+      f.y += (S.y - f.y) * k + 0.014 * Math.sin(Math.PI * k);
+      f.z += (S.z - 0.04 - f.z) * k;
+      f.flex += (0.1 - f.flex) * k;
+    }
+  }
+
   private compose(dt: number) {
     const p = this.pose;
     copyPose(p, this.base);
@@ -872,6 +906,7 @@ export class Motor {
     p.headRoll += 0.05 * noise1(t * 0.13 + 11) * still;
     p.neckPitch += 0.03 * noise1(t * 0.17 + 5) * still;
     this.shiftPaws(p, dt);
+    this.pawOut(p, dt);
     // what the cat feels, in its ears, whiskers, tail, fur, mouth, head and breath (mood.ts):
     // ears and whiskers quick, the tail slower; fur bristles at once and lies down slowly
     const fb = bodyFor(this.mood), f = this.feel;
