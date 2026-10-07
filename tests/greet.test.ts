@@ -24,23 +24,36 @@ function room() {
 afterEach(() => { vi.restoreAllMocks(); });
 
 describe('a hello when you come back', () => {
-  it('up to the glass, sat there looking at you, a slow blink, and in a while about its business', () => {
-    const { c, m, blinks } = room();
-    m.pos.set(0.05, 0, -0.1);
-    const act = new Greet(0.3), seen = new Set<string>();
-    let t = 0, going = true;
-    for (; t < 40 && going; t += 0.02) {
-      going = act.update(0.02, c);
-      m.update(0.02);
-      seen.add(act.phase);
+  it('up to the glass, sat there looking at you, (as often as not) a slow blink, and in a while about its business', () => {
+    let seed = 4242;
+    vi.spyOn(Math, 'random').mockImplementation(() => (seed = (seed * 16807) % 2147483647) / 2147483647);
+    let blinked = 0;
+    const when: number[] = [];
+    for (let k = 0; k < 8; k++) {
+      const { c, m, blinks } = room();
+      m.pos.set(0.05, 0, -0.1);
+      const act = new Greet(0.3), seen = new Set<string>();
+      let t = 0, going = true, sat = -1;
+      for (; t < 40 && going; t += 0.02) {
+        const was = blinks.length;
+        going = act.update(0.02, c);
+        m.update(0.02);
+        seen.add(act.phase);
+        if (act.phase === 'sit' && sat < 0) sat = t;
+        if (blinks.length > was && when.length === blinked) when.push(+(t - sat).toFixed(1));
+      }
+      expect(seen.has('come')).toBe(true);
+      expect(seen.has('stay')).toBe(true);
+      // (sat down at the glass, about the middle of it, facing you)
+      expect(Math.hypot(m.pos.x - 0, m.pos.z - 0.2)).toBeLessThan(0.11);
+      expect(m.targetPosture).toBe('sit');
+      expect(going).toBe(false);
+      if (blinks[0] === true) blinked++;
     }
-    expect(seen.has('come')).toBe(true);
-    expect(seen.has('stay')).toBe(true);
-    // (sat down at the glass, about the middle of it, facing you)
-    expect(Math.hypot(m.pos.x - 0, m.pos.z - 0.2)).toBeLessThan(0.11);
-    expect(m.targetPosture).toBe('sit');
-    expect(blinks[0]).toBe(true);
-    expect(going).toBe(false);
+    // (most hellos with a slow blink in them, not every one; and not at the one moment each time)
+    expect(blinked).toBeGreaterThanOrEqual(4);
+    expect(blinked).toBeLessThan(8);
+    expect(new Set(when).size).toBeGreaterThan(2);
   });
 
   it('not to the same spot at the glass to the centimetre, nor sat at the same angle, every time', () => {

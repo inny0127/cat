@@ -1160,10 +1160,15 @@ export class Greet implements Act {
   roll = 1;
   /** waiting: found sat at the glass already, waiting for you (and there you are); at: where on
    *  the glass to come to (called there by a tap tap; else the middle of it) */
+  /** settled at the glass, when it slow-blinks at you (if it does, this time: the gladder the
+   *  likelier), and how long it sits before it does any more */
+  private readonly blinkAt: number;
+  private readonly sitFor = rand(2.2, 3.6);
   constructor(readonly glad: number, private readonly waiting = false, private readonly at: THREE.Vector3 | null = null) {
     this.bumps = glad > 0.5 && Math.random() < 0.8 ? (Math.random() < 0.4 ? 2 : 1) : 0;
     this.stay = rand(5, 9) + 8 * glad;
     this.flop = glad > 0.75 && Math.random() < 0.4 ? rand(4.5, 7) : 0;
+    this.blinkAt = Math.random() < 0.55 + 0.5 * glad ? rand(1.1, 2.4) : Infinity;
   }
   get ownGaze() {
     return this.waiting && this.phase === 'see' && this.t < 0.7;
@@ -1218,9 +1223,11 @@ export class Greet implements Act {
         w: ease(this.t / 0.4) || (this.phase === 'stay' ? 1 : 0),
       };
       // a slow blink at you once it is settled (and, gladder, another later on)
-      if (this.phase === 'sit' && this.t > 1.5 && this.blinks === 0) { this.blinks = 1; c.blink(true); }
+      if (this.phase === 'sit' && this.t > this.blinkAt && this.blinks === 0) { this.blinks = 1; c.blink(true); }
       if (this.phase === 'stay' && this.blinks === 1 && this.glad > 0.4 && this.t > this.stay * 0.6) { this.blinks = 2; c.blink(true); }
-      if (this.phase === 'sit' && this.t > 2.8) {
+      if (this.phase === 'sit' && this.t > this.sitFor) {
+        // (not slow-blinked yet, as glad as this: then, before it goes on)
+        if (this.blinks === 0 && this.blinkAt < Infinity) { this.blinks = 1; c.blink(true); }
         this.phase = this.bumps > 0 ? 'bump' : this.flop ? 'flop' : 'stay';
         this.t = 0;
       }
