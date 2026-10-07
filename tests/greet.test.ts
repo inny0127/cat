@@ -16,6 +16,7 @@ function room() {
     viewer: () => new THREE.Vector3(0, 1.4, 3), perch: () => {}, hold: () => {}, bump: () => {},
     blink: (slow: boolean) => blinks.push(slow),
     mouthAt: () => m.pos.clone().setY(0.2),
+    keepClear: (p: THREE.Vector3) => p,
   } as unknown as Ctx;
   return { c, m, blinks };
 }
@@ -35,11 +36,32 @@ describe('a hello when you come back', () => {
     }
     expect(seen.has('come')).toBe(true);
     expect(seen.has('stay')).toBe(true);
-    // (sat down at the glass, facing you)
-    expect(Math.hypot(m.pos.x - 0, m.pos.z - 0.2)).toBeLessThan(0.08);
+    // (sat down at the glass, about the middle of it, facing you)
+    expect(Math.hypot(m.pos.x - 0, m.pos.z - 0.2)).toBeLessThan(0.11);
     expect(m.targetPosture).toBe('sit');
     expect(blinks[0]).toBe(true);
     expect(going).toBe(false);
+  });
+
+  it('not to the same spot at the glass to the centimetre, nor sat at the same angle, every time', () => {
+    let seed = 777;
+    vi.spyOn(Math, 'random').mockImplementation(() => (seed = (seed * 16807) % 2147483647) / 2147483647);
+    const where: { x: number; z: number; yaw: number }[] = [];
+    for (let k = 0; k < 5; k++) {
+      const { c, m } = room();
+      m.pos.set(0.05, 0, -0.1);
+      const act = new Greet(0.3);
+      for (let t = 0; t < 8 && act.phase !== 'sit'; t += 0.02) {
+        act.update(0.02, c);
+        m.update(0.02);
+      }
+      where.push({ x: m.pos.x, z: m.pos.z, yaw: Math.abs(m.yaw) });
+    }
+    const spread = (xs: number[]) => Math.max(...xs) - Math.min(...xs);
+    expect(spread(where.map((w) => w.x))).toBeGreaterThan(0.03);
+    expect(spread(where.map((w) => w.yaw))).toBeGreaterThan(0.05);
+    // (but always at the glass, about the middle)
+    for (const w of where) expect(Math.hypot(w.x, w.z - 0.2)).toBeLessThan(0.11);
   });
 
   it('fond of you: a head pushed out to you, a cheek along it', () => {

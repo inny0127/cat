@@ -964,6 +964,15 @@ export class Walk implements Act {
   get setOff() {
     return this.i === 0 && !this.arrived;
   }
+  /** a sound come hard at it on the way (how hard, 0 .. 1): stopped short mid-stride, the head
+   *  round to it a moment, the harder the longer, then on (true if it stopped for it). Not on its
+   *  way at a run, nor stopped already */
+  heard(at: THREE.Vector3, k: number, m: Motor) {
+    if (this.arrived || this.pause || this.speed > 0.3 || !m.goal || m.speed < 0.08) return false;
+    this.pause = { t: 0.5 + 1.1 * k + rand(0, 0.4), at: at.clone() };
+    m.stop();
+    return true;
+  }
   get ownGaze() {
     return !!this.pause;
   }
@@ -1155,8 +1164,10 @@ export class Greet implements Act {
       m.layer = { pose: { earFwd: 0.35, tailSide: this.quiver(c) }, w: 1 };
       if (!this.set) {
         this.set = true;
-        // (sat a little side-on, the head turned to you: square on, a sitting cat is a pillar)
-        m.walkTo(this.at ?? c.window, 0.3, -this.side * 0.42, () => { this.phase = 'sit'; this.t = 0; this.set = false; m.eager = 0; });
+        // (sat a little side-on, the head turned to you: square on, a sitting cat is a pillar; at
+        // the glass about the middle of it, not on the one spot to the centimetre every time)
+        const to = this.at ?? c.keepClear(new THREE.Vector3(c.window.x + rand(-0.07, 0.07), 0, c.window.z - rand(0, 0.04)), 0.1);
+        m.walkTo(to, 0.3, -this.side * 0.42 + rand(-0.12, 0.12), () => { this.phase = 'sit'; this.t = 0; this.set = false; m.eager = 0; });
       }
       return true;
     }
@@ -3056,6 +3067,15 @@ const flehmen = (from: number, before: (t: number) => PoseLayer) => (t: number, 
   };
 };
 const flehmenLip = (from: number) => (t: number) => t < from ? 0 : ease((t - from) / 0.45) * (1 - ease((t - from - FLEHMEN + 1.0) / 0.5));
+/** a leg's layer, and (as often as p) a lick of the nose as the head comes up from it at the end:
+ *  after a good sniff at something, as a cat does */
+const thenLick = (layer: (t: number, m: Motor) => PoseLayer, stay: number, p: number) => {
+  let done = Math.random() >= p;
+  return (t: number, m: Motor): PoseLayer => {
+    if (!done && t > stay - 0.35) { done = true; m.noseLick(Math.random() < 0.4 ? 2 : 1); }
+    return layer(t, m);
+  };
+};
 
 /** potter about: a spot or two on the floor, a sniff there, home again */
 export const wander = (c: Ctx) => {
@@ -3072,8 +3092,8 @@ export const wander = (c: Ctx) => {
   const s1 = rand(1.5, 3);
   // (now and then something there worth more than a sniff: the flehmen after it)
   const legs: Leg[] = [Math.random() < 0.22
-    ? { to: first.to, face: first.face, stay: s1 + FLEHMEN, posture: 'stand', layer: flehmen(s1, sniff), lip: flehmenLip(s1) }
-    : { to: first.to, face: first.face, stay: s1, posture: 'stand', layer: sniff }];
+    ? { to: first.to, face: first.face, stay: s1 + FLEHMEN, posture: 'stand', layer: thenLick(flehmen(s1, sniff), s1 + FLEHMEN, 0.6), lip: flehmenLip(s1) }
+    : { to: first.to, face: first.face, stay: s1, posture: 'stand', layer: thenLick(sniff, s1, 0.35) }];
   if (Math.random() < 0.5) {
     const next = places.length > 1 && Math.random() < 0.6 ? places[1] : { to: spot(), face: null as number | null };
     legs.push({ to: next.to, face: next.face, stay: rand(2, 5), posture: pick<PoseName>(['sit', 'stand']) });
@@ -3094,13 +3114,14 @@ export const waitBy = (c: Ctx, at: THREE.Vector3) => {
   const dx = you.x - at.x, dz = you.z - at.z, d = Math.hypot(dx, dz) || 1;
   const to = c.keepClear(new THREE.Vector3(at.x + (dx / d) * 0.3, 0, at.z + (dz / d) * 0.3), 0.12);
   const face = Math.atan2(you.x - to.x, you.z - to.z) + (Math.random() < 0.5 ? -1 : 1) * 0.42;
-  const stay = rand(8, 20), say = rand(2, stay - 2);
+  const stay = rand(8, 20), say = rand(2, stay - 2), seed = rand(0, 50);
   let said = false;
   return new Walk('wait', [{
     to, face, stay, posture: 'sit',
     layer: (t, m) => {
       if (!said && t > say) { said = true; if (Math.random() < 0.6) m.vocalize(Math.random() < 0.5 ? 'meowSoft' : 'trill', 0.45); }
-      return { earFwd: 0.4, tailCurl: 0.4 * Math.sin(t * 3) };
+      // (the tip of the tail flicking with it, in fits, not swung to a beat)
+      return { earFwd: 0.4, tailCurl: 0.4 * twitch(t + seed, 3) };
     },
   }]);
 };
@@ -3122,7 +3143,8 @@ export const investigate = (c: Ctx, at: THREE.Vector3) => {
     neckPitch: low ? -0.95 : -0.35, headPitch: (low ? -0.35 : 0.05) + 0.05 * Math.sin(t * 14), whisker: 0.8, earFwd: 0.7,
     hipY: 0.18 + 0.01 * Math.sin(t * 1.3), tailLift: -0.25, eyeOpen: 1, pupil: 0.7,
   });
-  return new Walk('investigate', [{ to: stand, face, stay: rand(1.8, 3.4), posture: 'stand', layer: sniffAt }], 0.2);
+  const stay = rand(1.8, 3.4);
+  return new Walk('investigate', [{ to: stand, face, stay, posture: 'stand', layer: thenLick(sniffAt, stay, 0.4) }], 0.2);
 };
 
 /**
@@ -3148,7 +3170,7 @@ const bellyUp = (sd: number, t: number, D: number, rock: number): { pose: PoseLa
       [lh]: { planted: 0, frame: 0, x: -0.06, y: 0.025 + 0.04 * over, z: -0.24, flex: 0.2 },
       pastern: S.pastern, hindFlat: S.hindFlat,
       earFwd: 0.1, earOut: 0.15 + 0.15 * rock, eyeOpen: 0.8 - 0.35 * rock, squint: 0.3 + 0.3 * rock,
-      tailLift: S.tailLift, tailSide: 0.5 * Math.sin(t * 1.6), tailCurve: S.tailCurve, tailSag: 1,
+      tailLift: S.tailLift, tailSide: 0.5 * twitch(t + 7 * sd, 1.6), tailCurve: S.tailCurve, tailSag: 1,
     },
     w,
   };
@@ -3229,7 +3251,7 @@ export class Trap implements Act {
         [lh]: { planted: 0, frame: 0, x: -0.07 - 0.07 * k2, y: 0.03 + 0.04 * k2, z: -0.21 + 0.2 * k2, flex: 0.3 + 0.2 * k2 },
         pastern: S.pastern, hindFlat: S.hindFlat,
         earFwd: -0.3 * held + 0.3 * open, earOut: 0.35 * held, pupil: 1, eyeOpen: 0.9 + 0.1 * open, squint: 0, whisker: 0.8 * held,
-        tailLift: S.tailLift, tailSide: 0.8 * Math.sin(this.all * 7) * held, tailCurve: S.tailCurve, tailSag: 1,
+        tailLift: S.tailLift, tailSide: 0.8 * twitch(this.all, 7) * held, tailCurve: S.tailCurve, tailSag: 1,
       };
     } else {
       // on its back: all four paws up round the hand over its belly, the head lifted to it
@@ -3243,7 +3265,7 @@ export class Trap implements Act {
         RH: { planted: 0, frame: 0, x: 0.07, y: 0.15 + 0.05 * k2, z: -0.13 + 0.12 * k2, flex: 0.35 },
         pastern: B.pastern, hindFlat: B.hindFlat,
         earFwd: -0.3 * held + 0.3 * open, earOut: 0.35 * held, pupil: 1, eyeOpen: 0.9 + 0.1 * open, squint: 0, whisker: 0.8 * held,
-        tailLift: B.tailLift, tailSide: 0.8 * Math.sin(this.all * 7) * held + B.tailSide * open, tailCurve: B.tailCurve, tailSag: 1,
+        tailLift: B.tailLift, tailSide: 0.8 * twitch(this.all, 7) * held + B.tailSide * open, tailCurve: B.tailCurve, tailSag: 1,
       };
     }
     // (sprung from where it lay: out of that pose in a moment, quicker than the eye)
@@ -3314,11 +3336,12 @@ export const sunbathe = (c: Ctx) => {
     return c.lieAt(posture, s, f);
   };
   // (rolled over the side it will lie on after, so it comes out of the roll into it)
+  const D = rand(4.5, 6.8);
   const roll: Leg[] = rolls ? [{
-    to: place.to, face: place.yaw, stay: 5.5, posture: 'side',
+    to: place.to, face: place.yaw, stay: D, posture: 'side',
     layer: (t, m) => {
       if (t < 1) m.moment = 'flop';
-      return bellyUp(1, t, 5.5, 1).pose;
+      return bellyUp(1, t, D, 1).pose;
     },
   }] : [];
   return new Walk('sun', [
@@ -3375,8 +3398,9 @@ export const lookWith = (c: Ctx, x: number) => {
   const sniff = (t: number): PoseLayer => ({ neckPitch: -1.0, headPitch: -0.4 + 0.05 * Math.sin(t * 14), whisker: 0.6, earFwd: 0.4, hipY: 0.19 });
   // (sat a little side-on to you, the head turned up to you: square on, a sitting cat is a pillar)
   const v = c.viewer(), you = Math.atan2(v.x - at.x, v.z - at.z), side = Math.random() < 0.5 ? -1 : 1;
+  const s1 = rand(1.2, 2.4);
   return new Walk('look with you', [
-    { to: at, face: null, stay: rand(1.2, 2.4), posture: 'stand', layer: sniff },
+    { to: at, face: null, stay: s1, posture: 'stand', layer: thenLick(sniff, s1, 0.3) },
     { to: at, face: you + side * 0.42, stay: rand(4, 8), posture: 'sit' },
   ], 0.3);
 };
@@ -4798,11 +4822,14 @@ export const toBed = (c: Ctx, settle: PoseName) => {
     { to: spot, face: a + dir * 2.1, stay: 0.01, posture: 'stand' },
     { to: spot, face: a + dir * 4.2, stay: 0.01, posture: 'stand' },
   ];
-  // sometimes it treads the cushion a little before it lies down, as cats do
+  // sometimes it treads the cushion a little before it lies down, as cats do (in its own time, each
+  // tread not quite as deep as the last)
+  const seed = Math.random() * 10;
   const tread: Leg[] = Math.random() < 0.4 ? [{
     to: spot, face: bed.yaw, stay: 2 + Math.random() * 2, posture: 'stand',
     layer: (t) => {
-      const ph = t * Math.PI * 2 * 1.6, l = Math.max(0, Math.sin(ph)), rr = Math.max(0, Math.sin(ph + Math.PI));
+      const ph = lived(t, seed) * Math.PI * 2 * 1.6, k = 0.85 + 0.15 * noise1(t * 1.7 + seed);
+      const l = Math.max(0, Math.sin(ph)) * k, rr = Math.max(0, Math.sin(ph + Math.PI)) * k;
       return { LF: { planted: 0, y: 0.012 + 0.018 * l, flex: 0.35 * l }, RF: { planted: 0, y: 0.012 + 0.018 * rr, flex: 0.35 * rr }, neckPitch: -0.35, headPitch: -0.1, eyeOpen: 0.5 };
     },
   }] : [];

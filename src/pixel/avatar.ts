@@ -469,6 +469,32 @@ export class PixelAvatar implements Avatar {
     if (this.blepFor === 0 && Math.random() < p) this.blepFor = -(0.6 + Math.random());
   }
 
+  /** a lick of its own nose, quick, once or twice, as a cat licks it many times a day: after a
+   *  smell, after a start or a stare got over (a little uneasy, and settling itself), and now and
+   *  then, sat or lying awake at its ease, for nothing anyone could see (to come in so long; one
+   *  asked for, in so long) */
+  private noseIn = 60 + Math.random() * 150;
+  private noseAfter = -1;
+  lickNoseSoon(p: number, after = 0) {
+    if (Math.random() < p) this.noseAfter = Math.max(0.01, after);
+  }
+  private noseNow(dt: number) {
+    const m = this.cat.motor;
+    const can = this.alive && !this.isHidden && this.sleep < 0.2 && !m.licking && !m.hissNow && m.blep < 0.1 && !m.voicing && !this.hands.length;
+    if (this.noseAfter > 0 && (this.noseAfter -= dt) <= 0) {
+      this.noseAfter = -1;
+      if (can) m.noseLick(Math.random() < 0.35 ? 2 : 1);
+      return;
+    }
+    const easy = can && (this.mode === 'rest' || this.mode === 'alert') && m.speed < 0.05 && (!this.act || !!this.act.resting);
+    if (easy && (this.noseIn -= dt) <= 0) {
+      this.noseIn = 70 + Math.random() * 200;
+      m.noseLick(Math.random() < 0.3 ? 2 : 1);
+      // (and now and then the tip of the tongue left out after it)
+      this.maybeBlep(0.08);
+    }
+  }
+
   /** a sound it turned to: where, for how much longer it looks, and whether (and which way) it
    *  tips its head to it */
   private heard: { at: THREE.Vector3; t: number; tilt: number } | null = null;
@@ -904,6 +930,8 @@ export class PixelAvatar implements Avatar {
         this.closeDone = true;
         this.avertT = 3 + Math.random() * 3;
         m.blinkNow();
+        // (and as often as not, a lick of its nose a moment after: a little uneasy at it)
+        this.lickNoseSoon(0.5, 0.7 + Math.random() * 0.8);
         // (somewhere off to one side and down: anywhere but at you)
         const to = this.headLocal.copy(this.viewer()).sub(this.eyeW);
         const a = Math.atan2(to.x, to.z) + (Math.random() < 0.5 ? -1 : 1) * (0.9 + 0.5 * Math.random());
@@ -942,6 +970,8 @@ export class PixelAvatar implements Avatar {
     if (O && awake && this.sleep < 0.3 && !this.act && !this.errand && !this.trip && !this.hands.length && !this.heard) {
       this.heard = { at: O.at.clone(), t: 0.5 + 0.9 * O.k + 0.4 * Math.random(), tilt: O.k > 0.6 ? this.puzzle() : 0 };
     }
+    // (on its way somewhere at an easy walk, one that makes it jump: stopped short, a look that way)
+    if (O && awake && O.k > 0.45 && this.act instanceof Walk && !this.errand && !this.trip && !this.hands.length) this.act.heard(O.at, O.k, this.cat.motor);
     // (asleep, and one come hard at it that it is not used to, a door gone in the building, a horn
     // in the street: the head up off its paws a moment, its eyes open on it, the ears round, a look
     // that way, and down again to sleep; the deeper asleep, the louder it must be, and not one
@@ -1849,6 +1879,8 @@ export class PixelAvatar implements Avatar {
         if (this.act instanceof Chase) this.chaseRest = this.act.tired ? 90 : 2;
         if (this.act instanceof Tease) this.teaseRest = this.act.tired ? 60 : 2;
         if (this.act instanceof Hunt) this.huntRest = 40 + Math.random() * 60;
+        // (a start got over: as often as not, a lick of the nose as it settles itself)
+        if (this.act instanceof Startle) this.lickNoseSoon(0.5, 0.3 + Math.random() * 0.6);
         // (a wash done, or the nose licked: now and then the tip of the tongue stays out)
         if (/^(wash|groom|boop)/.test(this.act.name)) this.maybeBlep(this.act.name === 'boop' ? 0.3 : 0.15);
         // (gladdest to see you, now and then off to the scratching post with it after: claws dragged
@@ -2034,6 +2066,7 @@ export class PixelAvatar implements Avatar {
     this.askAfter(dt);
     this.lickHand(dt);
     this.blepNow(dt);
+    this.noseNow(dt);
     this.keepTime(dt);
     this.waryLook(dt);
     // (the lights out a moment ago, and the cat still free: off it goes)

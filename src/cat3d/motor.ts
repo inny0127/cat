@@ -484,6 +484,10 @@ export class Motor {
   vocalize(kind: string, dur: number, delay = 0) {
     this.voice = { kind, t: -delay, dur: Math.max(0.08, dur) };
   }
+  /** its mouth busy with a sound, or about to be */
+  get voicing() {
+    return this.voice !== null;
+  }
 
   /** licks (a hand held still by its face): how far through, how many, whether on the hand */
   private licks: { t: number; n: number; hand: boolean } | null = null;
@@ -493,7 +497,19 @@ export class Motor {
     this.licks = { t: 0, n, hand };
   }
   get licking() {
-    return this.licks !== null || this.nibbleT >= 0;
+    return this.licks !== null || this.nibbleT >= 0 || this.noseT >= 0;
+  }
+  /** a lick of its own nose: the tongue out and up over it and in again, quick, once or twice
+   *  (how far through, -1: none; how many) */
+  private noseT = -1;
+  private noseN = 1;
+  get noseLicking() {
+    return this.noseT >= 0;
+  }
+  noseLick(n = 1) {
+    if (this.licking) return;
+    this.noseT = 0;
+    this.noseN = n;
   }
   /** a love bite: the mouth opened on a finger, shut on it gently and held a moment, let go; and
    *  then the place licked, two or three times (how far into it; -1: none) */
@@ -1094,6 +1110,20 @@ export class Motor {
         p.jaw = Math.max(p.jaw, 0.13 * s);
         p.headPitch += 0.1 * s;
         p.eyeOpen = Math.min(p.eyeOpen, 0.5);
+      }
+    }
+    // a lick of the nose: the tongue flicked out and up over it (about a quarter of a second each),
+    // the mouth hardly open, the eyes a little narrowed
+    if (this.noseT >= 0) {
+      const per = 0.24, k = this.noseT / per;
+      this.noseT += dt;
+      if (k >= this.noseN) this.noseT = -1;
+      else {
+        const s = Math.sin(Math.PI * (k - Math.floor(k)));
+        p.tongue = Math.max(p.tongue, 0.9 * s);
+        p.tongueUp += (1.9 - p.tongueUp) * Math.min(1, 4 * s);
+        p.jaw = Math.max(p.jaw, 0.1 * s);
+        p.eyeOpen = Math.min(p.eyeOpen, 1 - 0.3 * s);
       }
     }
     // keeping time: the tip of the tail flicked to each beat

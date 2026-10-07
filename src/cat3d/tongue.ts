@@ -61,14 +61,17 @@ export function makeTongue(root: THREE.Vector3, jawRest: THREE.Vector3, shared: 
 }
 
 /** how far out it is (0 in .. 1 as far as it goes, about a centimetre and a half past the lips) and
- *  which way its tip curls (-1 down, lapping .. 1 up, to the nose) */
+ *  which way its tip curls (-1 down, lapping .. 1 up, to a finger or a paw .. 2 right up over the
+ *  nose, licking it) */
 export function poseTongue(t: Tongue, out: number, up: number) {
   const o = Math.max(0, Math.min(1, out));
   t.mesh.visible = o > 0.02;
   if (!t.mesh.visible) return;
-  t.mesh.position.set(t.rest.x, t.rest.y - 0.002 * o, t.rest.z + 0.016 * o);
+  // (licking the nose, the whole of it goes up the face, not only its tip)
+  const over = Math.max(0, Math.min(1, up - 1));
+  t.mesh.position.set(t.rest.x, t.rest.y - 0.002 * o + 0.003 * over * o, t.rest.z + 0.016 * o + 0.008 * over * o);
   // (a rotation about x by a positive angle takes the tip down)
-  t.mesh.rotation.x = -Math.max(-1, Math.min(1, up)) * 0.6 * o + 0.12 * o;
+  t.mesh.rotation.x = -Math.max(-1, Math.min(2, up)) * 0.6 * o + 0.12 * o;
   // (spread and lengthened as it comes out)
   t.mesh.scale.set(0.85 + 0.15 * o, 1, 0.7 + 0.3 * o);
 }
