@@ -52,6 +52,8 @@ export interface Avatar {
   /** woken of itself from a long sleep: the yawn and the stretch of a cat getting up, if the body
    *  can show them */
   wakeStretch?(): void;
+  /** drowsy, a nap coming on: a yawn, if the body is free to (true if it does) */
+  yawn?(): boolean;
   /** something it cannot make out (a tap on the glass): the head tipped to one side a moment */
   puzzled?(): void;
   /** you are back after a while away and it is awake: hello, if the body can say it (up to the

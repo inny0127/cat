@@ -73,6 +73,9 @@ export class Brain {
    *  easily for it; a hand it likes, or a nap, settles it */
   shaken = 0;
   sleepDepth = 1;
+  /** awake and at its ease, how near it is to dropping off (0 .. 1): the last minute or so before
+   *  a nap the lids grow heavy and it does less and less */
+  drowse = 0;
   purr = 0;
   /** awake, how long yet (s of nobody touching it, by night the quicker) before it nods off: a
    *  few minutes of sitting about, looking round, a thing or two of its own, by day; less at night */
@@ -1020,6 +1023,14 @@ export class Brain {
           this.wantSleepIn -= dt * tired;
           if (this.wantSleepIn <= 0) this.toSleep(0.45);
         }
+        {
+          // (the last minute or so before a nap, drowsy: and as it comes over it, now and then a
+          // yawn)
+          const near = this.mode === 'rest' && idle > 4 && !needs(s).food && !needs(s).water ? clamp(1 - this.wantSleepIn / Math.max(0.2, tired) / 75) : 0;
+          const was = this.drowse;
+          this.drowse += (near - this.drowse) * Math.min(1, dt * (near > this.drowse ? 0.5 : 2));
+          if (was < 0.55 && this.drowse >= 0.55 && chance(0.6)) this.anim.yawn?.();
+        }
         if (this.mode === 'alert' && this.modeT > rand(8, 14) && this.arousal < 0.2) this.setMode('rest');
         break;
       case 'doze':
@@ -1137,6 +1148,7 @@ export class Brain {
   private toAwake(m: 'rest' | 'alert', quiet = false) {
     this.sleepDepth = 0;
     this.drowsy = false;
+    this.drowse = 0;
     this.setMode(m);
     this.wantSleepIn = rand(120, 420);
     if (!quiet) this.anim.twitchEar('both', 0.5);
@@ -1183,7 +1195,7 @@ export class Brain {
     let eye = 0.75, squint = 0, pupil = 0.22 + night * 0.4;
     switch (m) {
       case 'sleep': case 'doze': eye = 0; break;
-      case 'rest': eye = 0.62 - sick * 0.25; squint = 0.1 + this.pleasure * 0.3; break;
+      case 'rest': eye = 0.62 - sick * 0.25 - 0.32 * this.drowse; squint = 0.1 + this.pleasure * 0.3 + 0.1 * this.drowse; break;
       case 'alert': eye = 0.95; pupil += 0.25 + this.arousal * 0.3; break;
       case 'enjoy': eye = this.pleasure > 0.85 ? 0.12 : 0.42; squint = 0.45; pupil -= 0.05; break;
       case 'annoyed': eye = 0.82; squint = 0.18; pupil += 0.15; break;

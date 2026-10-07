@@ -464,6 +464,13 @@ export class PixelAvatar implements Avatar {
     this.groove += ((this.grooveFor > 0 ? 1 : 0) - this.groove) * Math.min(1, dt * 1.5);
   }
 
+  /** drowsy, a nap coming on: a big yawn where it is, if it is about nothing else */
+  yawn() {
+    if (!this.alive || this.isHidden || this.sleep > 0.3 || this.act || this.errand || this.trip || this.perched || this.hands.length) return false;
+    this.act = yawn();
+    return true;
+  }
+
   /** after a wash (and, by the app, a lick of the nose), now and then a blep */
   maybeBlep(p = 0.15) {
     if (this.blepFor === 0 && Math.random() < p) this.blepFor = -(0.6 + Math.random());
