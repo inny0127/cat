@@ -307,7 +307,8 @@ export class Chase implements Act {
     this.selfOn = L?.self ? this.selfOn + dt : 0;
     // (not on the run after it, nor with it under its paws: then the dot on its coat is only the
     // beam crossing it on the way to the floor; and not again and again)
-    if (L?.self && this.selfOn > 0.45 && this.selfRest <= 0 && (this.phase === 'notice' || this.phase === 'stalk' || this.phase === 'wiggle' || this.phase === 'search')) {
+    if (L?.self && this.selfOn > 0.45 && this.selfRest <= 0 && (this.phase === 'notice' || this.phase === 'stalk' || this.phase === 'wiggle' || this.phase === 'search')
+      && (this.t > 0.3 || this.phase === 'notice')) {
       m.stop();
       m.zoom = 0;
       this.part = L.self;
@@ -404,7 +405,7 @@ export class Chase implements Act {
         const T = this.target(c, L!), d = Math.hypot(T.x - m.pos.x, T.z - m.pos.z);
         if (L!.on !== 'floor' && L!.on !== 'bed') { this.decide(c, L!); return true; }
         if (this.wants('frantic', this.frantic > 1.6 && d > 0.36, 0.2, dt)) { m.stop(); this.next('watch'); return true; }
-        if (this.wants('dash', this.ds > 0.6 || d > 0.95, d > 1.3 ? 0.08 : 0.16, dt)) { this.next('run'); return true; }
+        if (this.wants('dash', (this.ds > 0.6 && d > 0.75) || d > 0.95, d > 1.3 ? 0.08 : 0.16, dt)) { this.next('run'); return true; }
         if (d < 0.33 && !this.via) { m.stop(); this.next('wiggle', rand(0.35, 0.9)); return true; }
         m.setPosture('crouch');
         this.goAfter(c, L!, 0.27, 0.2, dt);
@@ -420,7 +421,7 @@ export class Chase implements Act {
         const flat = L!.on === 'floor' || L!.on === 'bed', books = L!.on === 'books';
         const short = flat ? 0.26 : books ? 0.02 : 0;
         // (there: down to it; only just up to run, a moment's look that it really is there first)
-        if (this.wants('here', d < short + 0.07 && !this.via && (m.speed < 0.3 || !m.goal), this.t > 0.3 ? 0 : 0.15, dt)) {
+        if (this.wants('here', d < short + 0.07 && !this.via && (m.speed < 0.3 || !m.goal), this.t > 0.45 ? 0 : 0.25, dt)) {
           m.zoom = 0;
           if (flat) this.next('wiggle', this.ds > 0.4 ? rand(0.1, 0.25) : rand(0.3, 0.75));
           else if (books) this.next('wiggle', rand(0.4, 0.8));
@@ -437,7 +438,9 @@ export class Chase implements Act {
         const err = Math.abs(wrapA(Math.atan2(L!.p.x - m.pos.x, L!.p.z - m.pos.z) - m.yaw));
         if (flat && d < 0.42 && d > 0.2 && m.speed > 0.55 && err < 0.3) { this.pounce(c); return true; }
         const fast = d > 0.5 || this.ds > 0.6;
-        m.setPosture('stand');
+        // (up out of a crouch into the run a moment after it is off, not in the same instant: a dot
+        // gone in that moment finds it still low)
+        if (this.t > 0.12 || m.targetPosture !== 'crouch') m.setPosture('stand');
         m.zoom = fast ? 0.8 : 0.3;
         this.goAfter(c, L!, short, fast ? rand(0.9, 1.1) : 0.5, dt);
         m.layer = { pose: { ...keen, hipY: 0.185, neckPitch: 0.05, tailLift: 0.45, tailCurve: -0.2 }, w: Math.min(1, this.t / 0.15) };
@@ -456,7 +459,8 @@ export class Chase implements Act {
         if (!books && L!.on !== 'floor' && L!.on !== 'bed') { this.decide(c, L!); return true; }
         // (gone off from it a moment, not a dart away and back: up and after it; the further it has
         // gone the sooner)
-        if (this.wants('away', d > (books ? 0.3 : 0.5), d > 1 ? 0.12 : 0.24, dt)) { this.next(this.ds > 0.5 ? 'run' : 'stalk'); return true; }
+        // (not far: after it low, creeping; up to run only for a dot well off and going)
+        if (this.wants('away', d > (books ? 0.3 : 0.5), d > 1 ? 0.16 : 0.34, dt)) { this.next(this.ds > 0.5 && d > 0.9 ? 'run' : 'stalk'); return true; }
         // (squared round to it, as a crouched cat does, a shuffle of the forepaws at a time: not
         // spun on a pin)
         m.stop();
@@ -663,7 +667,8 @@ export class Chase implements Act {
         // that; then at you, as if you might know
         if (L) { m.layer = null; this.next('notice', rand(0.08, 0.2)); return true; }
         const g = this.gone;
-        if (m.speed < 0.1 && !DOWN.has(m.targetPosture)) m.setPosture(g > 2.5 ? 'sit' : 'crouch');
+        // (stood still where it was when it lost it, a moment, before it goes down to look)
+        if (m.speed < 0.1 && !DOWN.has(m.targetPosture) && (g > 0.6 || m.targetPosture !== 'stand')) m.setPosture(g > 2.5 ? 'sit' : 'crouch');
         let pose: PoseLayer = { earFwd: 0.6, pupil: 0.85, eyeOpen: 1, whisker: 0.5 };
         if (g < 0.8) { m.lookAt(this.last, 1); this.turnTo(c, this.last); }
         else if (g < 3.4) {
@@ -726,7 +731,8 @@ export class Chase implements Act {
     if (L.on === 'floor' || L.on === 'bed') {
       if (d < 0.36) this.next('wiggle', rand(0.35, 0.8));
       else if (this.frantic > 1.6 && !watched) { m.stop(); m.zoom = 0; this.next('watch'); }
-      else if (this.ds > 0.45 || d > 0.85) this.next('run');
+      // (a dot not far off is crept up on, low, however it darts; run at only when well off)
+      else if ((this.ds > 0.45 && d > 0.7) || d > 0.85) this.next('run');
       else this.next('stalk');
       return;
     }
