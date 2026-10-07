@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { twitch } from '../util/math';
 import { POSES, type PoseLayer } from '../cat3d/pose';
 import { washFace, type Act, type Ctx } from './behave';
 
@@ -125,7 +126,7 @@ export class Tease implements Act {
     const dx = P.x - m.pos.x, dz = P.z - m.pos.z, dist = Math.hypot(dx, dz);
     const face = Math.atan2(dx, dz), h = P.y;
     if (this.phase !== 'sit') m.lookAt((!L.pinned && c.gaze('wand')) || P, 1);
-    const keen: PoseLayer = { earFwd: 0.95, pupil: 1, eyeOpen: 1, whisker: 0.9, tailCurl: 0.7 * Math.sin(this.total * 9) };
+    const keen: PoseLayer = { earFwd: 0.95, pupil: 1, eyeOpen: 1, whisker: 0.9, tailCurl: 0.7 * twitch(this.total, 9) };
     // had enough (not in the middle of a spring): off to sit and wash
     if ((this.tired || (!L.held && !this.alone && this.still > 4)) && (this.phase === 'watch' || this.phase === 'go')) {
       m.stop();
@@ -150,10 +151,10 @@ export class Tease implements Act {
         const wg = h < 0.12 && this.ls > 0.1 ? Math.sin(this.t * Math.PI * 2 * 4) : 0;
         m.layer = satUp ? {
           // (as it sits to swat: up on its haunches, a little forward, the forepaws down)
-          pose: { ...keen, chestPitch: -0.97, hipY: 0.064, neckPitch: h > 0.25 ? 0.3 : 0.05, headPitch: 0.05, tailSide: 0.35 * Math.sin(this.t * 6) },
+          pose: { ...keen, chestPitch: -0.97, hipY: 0.064, neckPitch: h > 0.25 ? 0.3 : 0.05, headPitch: 0.05, tailSide: 0.35 * twitch(this.t, 6) },
           w: 1,
         } : {
-          pose: { ...keen, hipY: 0.14, neckPitch: h > 0.25 ? 0.45 : -0.3, headPitch: h > 0.25 ? 0.1 : 0.05, hipYaw: 0.08 * wg, tailSide: 0.35 * Math.sin(this.t * 6) },
+          pose: { ...keen, hipY: 0.14, neckPitch: h > 0.25 ? 0.45 : -0.3, headPitch: h > 0.25 ? 0.1 : 0.05, hipYaw: 0.08 * wg, tailSide: 0.35 * twitch(this.t, 6) },
           w: Math.min(1, this.t / 0.25),
         };
         if (this.t < 0.25 || this.calm > 0 || m.goal) return true;
@@ -202,7 +203,7 @@ export class Tease implements Act {
           pose: {
             ...keen, hipY: 0.15, hipPitch: -0.12, neckPitch: -0.45, headPitch: 0.1, hipYaw: 0.1 * wg, hipRoll: 0.07 * wg,
             LH: { y: 0.012 + 0.012 * Math.max(0, wg) }, RH: { y: 0.012 + 0.012 * Math.max(0, -wg) },
-            tailLift: -0.3, tailSide: 0.4 * Math.sin(this.t * 11), tailCurl: 0.9 * Math.sin(this.t * 13),
+            tailLift: -0.3, tailSide: 0.4 * twitch(this.t, 11), tailCurl: 0.9 * twitch(this.t, 13),
           },
           w: 1,
         };
@@ -241,7 +242,7 @@ export class Tease implements Act {
           pose: {
             ...keen, hipY: 0.14, chestPitch: 0.1, neckPitch: -0.5, headPitch: -0.1 - 0.15 * bite, jaw: 0.3 * bite,
             LF: paw, RF: paw, LH: { y: 0.012 + 0.01 * Math.max(0, tread) }, RH: { y: 0.012 + 0.01 * Math.max(0, -tread) },
-            tailSide: 0.5 * Math.sin(this.t * 7), tailCurl: 0.8 * Math.sin(this.t * 9),
+            tailSide: 0.5 * twitch(this.t, 7), tailCurl: 0.8 * twitch(this.t, 9),
           },
           w: Math.min(1, this.t / 0.12),
         };
@@ -290,7 +291,7 @@ export class Tease implements Act {
             [lh]: { planted: 0, frame: 0, x: -0.08, y: 0.025, z: -0.2 + 0.16 * k2, flex: 0.35 },
             pastern: S.pastern, hindFlat: S.hindFlat,
             earFwd: -0.25, earOut: 0.3, pupil: 1, eyeOpen: 0.85, whisker: 0.8,
-            tailLift: S.tailLift, tailSide: 0.7 * Math.sin(this.t * 6), tailCurve: S.tailCurve, tailSag: 1,
+            tailLift: S.tailLift, tailSide: 0.7 * twitch(this.t, 6), tailCurve: S.tailCurve, tailSag: 1,
           },
           w,
         };
@@ -332,7 +333,7 @@ export class Tease implements Act {
         const clap = Math.sin(Math.PI * u), hy = clamp(h, 0.12, 0.42), out = clamp(L2.z, 0.08, 0.22);
         const pawL = { planted: 0, frame: 0, x: 0.05 - 0.04 * clap, y: 0.05 + (hy - 0.05) * up + 0.02 * clap, z: 0.07 + (out - 0.07) * up, flex: 0.3 + 0.3 * clap };
         const pawR = { ...pawL, y: pawL.y - (k % 2 ? 0.03 : 0) };
-        m.layer = { pose: { ...keen, chestPitch: -1.02 - 0.2 * up, hipY: 0.056 + 0.035 * up, neckPitch: 0.3 * up, headPitch: -0.05, LF: pawL, RF: pawR, tailSide: 0.5 * Math.sin(this.t * 6) }, w: 1 };
+        m.layer = { pose: { ...keen, chestPitch: -1.02 - 0.2 * up, hipY: 0.056 + 0.035 * up, neckPitch: 0.3 * up, headPitch: -0.05, LF: pawL, RF: pawR, tailSide: 0.5 * twitch(this.t, 6) }, w: 1 };
         if (u > 0.5 && !this.hit) {
           this.hit = true;
           const pawAt = m.pos.clone().addScaledVector(this.fwd, out).setY(hy);

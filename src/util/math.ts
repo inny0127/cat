@@ -82,6 +82,16 @@ export function noise1(x: number): number {
   const u = f * f * f * (f * (f * 6 - 15) + 10);
   return lerp(g0 * f, g1 * (f - 1), u) * 2;
 }
+/**
+ * A twitch, as a tail's tip twitches at something it is watching: to and fro at about `f` rad/s,
+ * but never quite in time (now quicker, now slower) and in bursts (now hard, now hardly at all),
+ * unlike a pendulum. About -1 .. 1; each `f` its own (two at once are not in step).
+ */
+export function twitch(t: number, f: number): number {
+  const s = f * 7.31;
+  const burst = Math.max(0.1, Math.min(1, 0.55 + 0.7 * noise1(t * 0.8 + s + 31.7)));
+  return Math.sin(f * t + 2.4 * noise1(t * 0.8 + s)) * burst;
+}
 /** fractal noise in about [-1, 1] */
 export function fbm1(x: number, oct = 3): number {
   let a = 0.5, s = 0, n = 0;

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { twitch } from '../util/math';
 import type { PoseLayer, PoseName } from '../cat3d/pose';
 import { washFace, wiggle, type Act, type Ctx, type SillSpot } from './behave';
 
@@ -277,7 +278,7 @@ export class Chase implements Act {
     if (this.leaving) return false;
     // eyes on it all the while it is there to see
     if (L && this.phase !== 'search') m.lookAt(c.gaze('dot') ?? L.p, 1);
-    const keen: PoseLayer = { earFwd: 0.95, pupil: 1, eyeOpen: 1, whisker: 0.9, tailCurl: 0.7 * Math.sin(this.total * 9) };
+    const keen: PoseLayer = { earFwd: 0.95, pupil: 1, eyeOpen: 1, whisker: 0.9, tailCurl: 0.7 * twitch(this.total, 9) };
     // gone (and not in the middle of a spring): where did it go?
     if (!L && this.phase !== 'search' && this.phase !== 'pounce' && !(this.phase === 'leap' && this.t > this.dur)) {
       m.stop();
@@ -381,7 +382,7 @@ export class Chase implements Act {
         this.low += dt;
         m.setPosture('crouch');
         m.layer = {
-          pose: { ...keen, hipY: 0.14, neckPitch: -0.4, headPitch: 0.12, tailLift: -0.4, tailSide: 0.15 * Math.sin(this.t * 5), tailCurl: 0.9 * Math.sin(this.total * 11) },
+          pose: { ...keen, hipY: 0.14, neckPitch: -0.4, headPitch: 0.12, tailLift: -0.4, tailSide: 0.15 * twitch(this.t, 5), tailCurl: 0.9 * twitch(this.total, 11) },
           w: Math.min(1, this.low / 0.35),
         };
         const err = Math.abs(wrapA(Math.atan2(L!.p.x - m.pos.x, L!.p.z - m.pos.z) - m.yaw));
@@ -399,7 +400,7 @@ export class Chase implements Act {
         m.setPosture('crouch');
         this.goAfter(c, L!, 0.27, 0.2, dt);
         m.layer = {
-          pose: { ...keen, hipY: 0.135, neckPitch: -0.45, headPitch: 0.1, tailLift: -0.35, tailSide: 0.3 * Math.sin(this.t * 6.5) },
+          pose: { ...keen, hipY: 0.135, neckPitch: -0.45, headPitch: 0.1, tailLift: -0.35, tailSide: 0.3 * twitch(this.t, 6.5) },
           w: Math.min(1, this.t / 0.3),
         };
         return true;
@@ -461,7 +462,7 @@ export class Chase implements Act {
           pose: {
             ...keen, hipY: 0.15, hipPitch: -0.12, neckPitch: -0.45, headPitch: 0.1, hipYaw: 0.1 * wg, hipRoll: 0.07 * wg,
             LH: { y: 0.012 + 0.012 * Math.max(0, wg) }, RH: { y: 0.012 + 0.012 * Math.max(0, -wg) },
-            tailLift: -0.3, tailSide: 0.4 * Math.sin(this.t * 11), tailCurl: 0.9 * Math.sin(this.t * 13),
+            tailLift: -0.3, tailSide: 0.4 * twitch(this.t, 11), tailCurl: 0.9 * twitch(this.t, 13),
           },
           // (down into it over a quarter of a second: from up on its haunches at the wall, not
           // dropped)
@@ -518,7 +519,7 @@ export class Chase implements Act {
         m.stop();
         m.setPosture('crouch');
         if (L) m.lookAt(c.gaze('dot') ?? L.p, 1);
-        m.layer = { pose: { ...keen, hipY: 0.135, neckPitch: -0.3, tailSide: 0.5 * Math.sin(this.t * 9) }, w: 1 };
+        m.layer = { pose: { ...keen, hipY: 0.135, neckPitch: -0.3, tailSide: 0.5 * twitch(this.t, 9) }, w: 1 };
         if (this.t > this.dur) {
           m.layer = null;
           if (L) this.decide(c, L);
@@ -543,7 +544,7 @@ export class Chase implements Act {
         m.layer = {
           pose: {
             ...keen, hipY: books ? 0.17 : 0.14, chestPitch: books ? 0.2 : 0.05, neckPitch: -0.65, headPitch: -0.2 - 0.1 * peek, headRoll: 0.3 * peek * this.side,
-            LF: this.side > 0 ? lift : paw, RF: this.side > 0 ? paw : lift, tailSide: 0.4 * Math.sin(this.t * 7),
+            LF: this.side > 0 ? lift : paw, RF: this.side > 0 ? paw : lift, tailSide: 0.4 * twitch(this.t, 7),
           },
           w: Math.min(1, this.t / 0.1),
         };
@@ -587,7 +588,7 @@ export class Chase implements Act {
         // (up onto its haunches, the forepaws coming off the floor, over a third of a second: a
         // body that weight does not jump up straight)
         m.layer = {
-          pose: { ...keen, chestPitch: -1.02 - 0.18 * up, hipY: 0.056 + 0.03 * up, neckPitch: 0.25 * up, headPitch: -0.1, LF: right ? rest : hit, RF: right ? hit : rest, tailSide: 0.5 * Math.sin(this.t * 6) },
+          pose: { ...keen, chestPitch: -1.02 - 0.18 * up, hipY: 0.056 + 0.03 * up, neckPitch: 0.25 * up, headPitch: -0.1, LF: right ? rest : hit, RF: right ? hit : rest, tailSide: 0.5 * twitch(this.t, 6) },
           w: smooth(Math.min(1, this.t / 0.3)),
         };
         return true;
@@ -671,7 +672,7 @@ export class Chase implements Act {
         const near = (L.on === 'floor' || L.on === 'bed') && d < 0.3 && d > 0.12;
         const swipe = near ? Math.max(0, Math.sin(this.t * 2.2)) : 0;
         m.layer = {
-          pose: { earFwd: 0.5, pupil: 0.8, eyeOpen: 0.75, tailCurl: 0.5 * Math.sin(this.t * 4), ...(swipe > 0.3 ? { LF: { planted: 0, frame: 0, x: 0.04, y: 0.012 + 0.04 * swipe, z: 0.2 + 0.05 * swipe, flex: 0.3 } } : {}) },
+          pose: { earFwd: 0.5, pupil: 0.8, eyeOpen: 0.75, tailCurl: 0.5 * twitch(this.t, 4), ...(swipe > 0.3 ? { LF: { planted: 0, frame: 0, x: 0.04, y: 0.012 + 0.04 * swipe, z: 0.2 + 0.05 * swipe, flex: 0.3 } } : {}) },
           w: Math.min(1, this.t / 0.6),
         };
         return true;
@@ -734,7 +735,7 @@ export class Chase implements Act {
    *  in the way goes over the edge), and down again when it has gone off the sill */
   private aloft(dt: number, c: Ctx, L: LaserDot | null): boolean {
     const m = c.m, S = this.sill!;
-    const keen: PoseLayer = { earFwd: 0.95, pupil: 1, eyeOpen: 1, whisker: 0.9, tailCurl: 0.7 * Math.sin(this.total * 9) };
+    const keen: PoseLayer = { earFwd: 0.95, pupil: 1, eyeOpen: 1, whisker: 0.9, tailCurl: 0.7 * twitch(this.total, 9) };
     if (L) m.lookAt(c.gaze('dot') ?? L.p, 1);
     // (the sill's length a cat can go along, its body clear of the plant at one end and the radio
     // at the other)
@@ -958,7 +959,7 @@ export class Startle implements Act {
         m.setPosture('crouch');
         m.lookAt(this.at, 1);
         const k = Math.min(1, this.t / this.dur);
-        m.layer = { pose: { puff: 0.6 * (1 - k), earFwd: -0.5 + 1.2 * k, earFlat: 0.6 * (1 - k), pupil: 1, eyeOpen: 1, hipY: 0.13, tailLift: -0.3, tailCurl: 0.6 * Math.sin(this.t * 5) }, w: 1 };
+        m.layer = { pose: { puff: 0.6 * (1 - k), earFwd: -0.5 + 1.2 * k, earFlat: 0.6 * (1 - k), pupil: 1, eyeOpen: 1, hipY: 0.13, tailLift: -0.3, tailCurl: 0.6 * twitch(this.t, 5) }, w: 1 };
         if (this.t > this.dur && !m.goal) {
           const d = Math.hypot(this.at.x - m.pos.x, this.at.z - m.pos.z) || 1;
           const stop = new THREE.Vector3(this.at.x - ((this.at.x - m.pos.x) / d) * 0.24, 0, this.at.z - ((this.at.z - m.pos.z) / d) * 0.24);

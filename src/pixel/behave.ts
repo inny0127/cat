@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { twitch } from '../util/math';
 import type { Motor } from '../cat3d/motor';
 import type { Mood } from '../cat3d/mood';
 import { POSES, type PoseLayer, type PoseName } from '../cat3d/pose';
@@ -663,7 +664,7 @@ export class Stare implements Act {
     const m = c.m;
     m.setPosture('sit');
     m.lookAt(this.at, 1);
-    m.layer = { pose: { earFwd: 0.55, pupil: 0.55, eyeOpen: 1, tailCurl: 0.6 * Math.sin(this.t * 6.5), whisker: 0.4 }, w: hump(this.t, this.dur, 0.5) };
+    m.layer = { pose: { earFwd: 0.55, pupil: 0.55, eyeOpen: 1, tailCurl: 0.6 * twitch(this.t, 6.5), whisker: 0.4 }, w: hump(this.t, this.dur, 0.5) };
     if (this.chirp && this.t > this.dur - 1.2) { this.chirp = false; c.chirp(); }
     return this.t < this.dur;
   }
@@ -1523,7 +1524,7 @@ export class PawGlass implements Act {
     this.landed = null;
     this.nuzzled = false;
     const f = this.finger();
-    const keen: PoseLayer = { earFwd: 0.85, pupil: 0.9, eyeOpen: 1, whisker: 0.8, tailCurl: 0.5 * Math.sin(this.t * 7) };
+    const keen: PoseLayer = { earFwd: 0.85, pupil: 0.9, eyeOpen: 1, whisker: 0.8, tailCurl: 0.5 * twitch(this.t, 7) };
     // asked, and here is a finger on the glass: the game is on
     if (this.invite && f && this.phase === 'ask') {
       this.invite = false;
@@ -1999,7 +2000,7 @@ export class Bat implements Act {
     }
     m.setPosture('sit');
     m.lookAt(B, 1);
-    const keen: PoseLayer = { earFwd: 0.9, pupil: 0.95, eyeOpen: 1, whisker: 0.7, tailCurl: 0.8 * Math.sin(this.t * 6), tailLift: -0.4 };
+    const keen: PoseLayer = { earFwd: 0.9, pupil: 0.95, eyeOpen: 1, whisker: 0.7, tailCurl: 0.8 * twitch(this.t, 6), tailLift: -0.4 };
     if (this.phase === 'watch') {
       m.layer = { pose: keen, w: ease(this.t / 0.3) };
       if (this.t > this.wait) {
@@ -2041,7 +2042,7 @@ export class Bat implements Act {
       return true;
     }
     // sat watching it come to rest, then a look round at you
-    m.layer = { pose: { ...keen, tailCurl: 0.3 * Math.sin(this.t * 3) }, w: 1 - ease((this.t - 1.6) / 0.4) };
+    m.layer = { pose: { ...keen, tailCurl: 0.3 * twitch(this.t, 3) }, w: 1 - ease((this.t - 1.6) / 0.4) };
     if (this.t > 1.8) m.lookAt(c.viewer(), 1);
     return this.t < 3;
   }
@@ -2119,7 +2120,7 @@ export class Top implements Act {
         m.lookAt(new THREE.Vector3(P.at.x, H, P.at.z), 1);
         const sh = Math.sin(this.t * 14);
         m.layer = {
-          pose: { neckPitch: 0.7, headPitch: 0.1, earFwd: 0.9, pupil: 0.8, eyeOpen: 1, hipY: 0.13, LH: { y: 0.013 + 0.008 * Math.max(0, sh) }, RH: { y: 0.013 + 0.008 * Math.max(0, -sh) }, tailLift: -0.2, tailCurl: 0.6 * Math.sin(this.t * 6) },
+          pose: { neckPitch: 0.7, headPitch: 0.1, earFwd: 0.9, pupil: 0.8, eyeOpen: 1, hipY: 0.13, LH: { y: 0.013 + 0.008 * Math.max(0, sh) }, RH: { y: 0.013 + 0.008 * Math.max(0, -sh) }, tailLift: -0.2, tailCurl: 0.6 * twitch(this.t, 6) },
           w: Math.min(1, this.t / 0.3),
         };
         if (this.t > this.dur) {
@@ -2263,7 +2264,7 @@ export class TailChase implements Act {
       m.setPosture('crouch');
       m.lookAt(null);
       m.layer = {
-        pose: { neckYaw: d * 1.1, headYaw: d * 0.6, headRoll: -d * 0.15, earFwd: 0.85, pupil: 0.95, eyeOpen: 1, whisker: 0.6, tailSide: d * 0.9, tailLift: -0.15, tailCurl: 1.4 * Math.sin(this.t * 17), hipY: 0.15, hipPitch: -0.08 },
+        pose: { neckYaw: d * 1.1, headYaw: d * 0.6, headRoll: -d * 0.15, earFwd: 0.85, pupil: 0.95, eyeOpen: 1, whisker: 0.6, tailSide: d * 0.9, tailLift: -0.15, tailCurl: 1.4 * twitch(this.t, 17), hipY: 0.15, hipPitch: -0.08 },
         w: ease(this.t / 0.3),
       };
       if (this.t > 1.1) { this.phase = 'spin'; this.t = 0; }
@@ -2377,7 +2378,7 @@ export class Fish implements Act {
       m.layer = {
         pose: {
           hipY: 0.17, neckPitch: -1.0, headPitch: -0.35, headRoll: side * 0.45, earFwd: 0.9, pupil: 0.95, eyeOpen: 1, whisker: 0.8,
-          tailLift: 0.5, tailCurl: 0.9 * Math.sin(this.t * 7),
+          tailLift: 0.5, tailCurl: 0.9 * twitch(this.t, 7),
         },
         w: k,
       };
@@ -2745,7 +2746,7 @@ export class Wrestle implements Act {
           pose: {
             hipY: 0.15, hipPitch: -0.12, neckPitch: -0.45, headPitch: 0.1, hipYaw: 0.1 * wg, hipRoll: 0.07 * wg,
             LH: { y: 0.012 + 0.012 * Math.max(0, wg) }, RH: { y: 0.012 + 0.012 * Math.max(0, -wg) },
-            earFwd: 0.9, pupil: 0.95, eyeOpen: 1, whisker: 0.8, tailLift: -0.3, tailSide: 0.4 * Math.sin(this.t * 11),
+            earFwd: 0.9, pupil: 0.95, eyeOpen: 1, whisker: 0.8, tailLift: -0.3, tailSide: 0.4 * twitch(this.t, 11),
           },
           w: Math.min(1, this.t / 0.25),
         };
@@ -3411,7 +3412,7 @@ export class Play implements Act {
         if (Math.abs(err) > 0.5 && !m.goal) m.walkTo(m.pos.clone(), 0.15, face);
         m.setPosture('crouch');
         m.layer = {
-          pose: { ...watch, hipY: 0.135, neckPitch: -0.45, headPitch: 0.1, tailLift: -0.35, tailSide: 0.3 * Math.sin(this.t * 6.5), tailCurl: 0.7 * Math.sin(this.t * 9) },
+          pose: { ...watch, hipY: 0.135, neckPitch: -0.45, headPitch: 0.1, tailLift: -0.35, tailSide: 0.3 * twitch(this.t, 6.5), tailCurl: 0.7 * twitch(this.t, 9) },
           w: Math.min(1, this.t / 0.4),
         };
         // it moves: the hunter cannot wait (brushed past close by, a swipe at it)
@@ -3429,7 +3430,7 @@ export class Play implements Act {
           pose: {
             ...watch, hipY: 0.15, hipPitch: -0.12, neckPitch: -0.45, headPitch: 0.1, hipYaw: 0.1 * wg, hipRoll: 0.07 * wg,
             LH: { y: 0.012 + 0.012 * Math.max(0, wg) }, RH: { y: 0.012 + 0.012 * Math.max(0, -wg) },
-            tailLift: -0.3, tailSide: 0.4 * Math.sin(this.t * 11), tailCurl: 0.9 * Math.sin(this.t * 13),
+            tailLift: -0.3, tailSide: 0.4 * twitch(this.t, 11), tailCurl: 0.9 * twitch(this.t, 13),
           },
           w: 1,
         };
@@ -3477,7 +3478,7 @@ export class Play implements Act {
           pose: {
             ...watch, hipY: 0.14, chestPitch: 0.1, neckPitch: -0.5, headPitch: -0.1 - 0.15 * bite, jaw: 0.3 * bite,
             LF: paw, RF: paw, LH: { y: 0.012 + 0.01 * Math.max(0, tread) }, RH: { y: 0.012 + 0.01 * Math.max(0, -tread) },
-            tailSide: 0.5 * Math.sin(this.t * 7), tailCurl: 0.8 * Math.sin(this.t * 9),
+            tailSide: 0.5 * twitch(this.t, 7), tailCurl: 0.8 * twitch(this.t, 9),
           },
           w: Math.min(1, this.t / 0.12),
         };
@@ -3505,7 +3506,7 @@ export class Play implements Act {
         const across = u < 0.45 ? 0.045 : 0.045 - 0.09 * (u - 0.45) / 0.55;
         const paw = { planted: 0, frame: 0, x: across, y: 0.012 + 0.07 * lift, z: 0.125 + 0.1 * lift, flex: 0.35 * lift };
         m.setPosture('crouch');
-        m.layer = { pose: { ...watch, hipY: 0.145, neckPitch: -0.35, headPitch: 0.05, [right ? 'RF' : 'LF']: paw, tailSide: 0.3 * Math.sin(this.t * 8) }, w: 1 };
+        m.layer = { pose: { ...watch, hipY: 0.145, neckPitch: -0.35, headPitch: 0.05, [right ? 'RF' : 'LF']: paw, tailSide: 0.3 * twitch(this.t, 8) }, w: 1 };
         if (!this.hits.has(k) && u > 0.55 && dT < 0.24) {
           this.hits.add(k);
           // on a finger, a claw snags it a moment; loose, the right paw sweeps it off to the
@@ -3731,7 +3732,7 @@ export class Zoomies implements Act {
       // low on the forelegs, the rump up and wiggling, eyes on nothing at all
       m.setPosture('crouch');
       const wg = wiggle(this.t, 0.9);
-      m.layer = { pose: { hipY: 0.15, hipPitch: -0.12, hipYaw: 0.1 * wg, hipRoll: 0.07 * wg, tailCurl: 0.8 * Math.sin(this.t * 13), earFwd: 0.4 }, w: ease(this.t / 0.25) };
+      m.layer = { pose: { hipY: 0.15, hipPitch: -0.12, hipYaw: 0.1 * wg, hipRoll: 0.07 * wg, tailCurl: 0.8 * twitch(this.t, 13), earFwd: 0.4 }, w: ease(this.t / 0.25) };
       if (this.t > 0.75) {
         this.phase = 'dash';
         this.t = 0;
@@ -3826,7 +3827,7 @@ export class Hunt implements Act {
       jaw = 0.1 + 0.1 * Math.max(0, Math.sin(this.chatter * Math.PI * 2 * 11));
       if (this.chatter > 0.7) this.chatter = -1;
     }
-    const keen: PoseLayer = { earFwd: 1, pupil: 0.95, eyeOpen: 1, whisker: 0.9, jaw, tailCurl: 0.6 * Math.sin(this.total * 9) };
+    const keen: PoseLayer = { earFwd: 1, pupil: 0.95, eyeOpen: 1, whisker: 0.9, jaw, tailCurl: 0.6 * twitch(this.total, 9) };
     this.calm = Math.max(0, this.calm - dt);
     switch (this.phase) {
       case 'watch': {
@@ -3994,7 +3995,7 @@ export class Box implements Act {
         m.lookAt(this.preyAt, 1);
         const w = Math.min(1, this.t / 0.3), wig = this.t > this.dur - 0.45 ? Math.sin(this.t * 26) : 0;
         m.layer = {
-          pose: { neckPitch: -0.6, headPitch: 0.45, hipY: 0.1, hipYaw: 0.08 * wig, earFwd: 0.9, earOut: 0.15, pupil: 1, eyeOpen: 1, whisker: 0.7, tailCurl: 0.8 * Math.sin(this.t * 9) },
+          pose: { neckPitch: -0.6, headPitch: 0.45, hipY: 0.1, hipYaw: 0.08 * wig, earFwd: 0.9, earOut: 0.15, pupil: 1, eyeOpen: 1, whisker: 0.7, tailCurl: 0.8 * twitch(this.t, 9) },
           w,
         };
         if (this.t > this.dur) {
@@ -4561,7 +4562,7 @@ export class Sill implements Act {
           if (K.t > K.len) { m.layer = null; m.lookAt(null); this.next('look', 0.6); return true; }
         }
         m.layer = {
-          pose: { earFwd: 0.8, pupil: 0.8, whisker: 0.5, tailCurl: 0.5 * Math.sin(this.t * 2.2), ...paw },
+          pose: { earFwd: 0.8, pupil: 0.8, whisker: 0.5, tailCurl: 0.5 * twitch(this.t, 2.2), ...paw },
           w: Math.min(1, this.t / 0.5),
         };
         return true;
