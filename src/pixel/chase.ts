@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { twitch } from '../util/math';
-import type { PoseLayer, PoseName } from '../cat3d/pose';
+import type { Foot, PoseLayer, PoseName } from '../cat3d/pose';
 import { washFace, wiggle, type Act, type Ctx, type SillSpot } from './behave';
 
 const ease = (x: number) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x));
@@ -97,6 +97,8 @@ export class Chase implements Act {
   /** looking round for it, gone: the way the head is turned, the way it is going to, and how long
    *  it looks there yet */
   private readonly peek = { a: 0, to: 0, t: 0 };
+  /** a pounce's forepaws: where they were as it sprang, if they were anywhere of their own */
+  private fromPaws: { LF?: Partial<Foot>; RF?: Partial<Foot> } | null = null;
   private selfRest = 0;
   /** how long the dot has been on its own coat (a beam it has only walked through is nothing) */
   private selfOn = 0;
@@ -106,8 +108,10 @@ export class Chase implements Act {
   private leapYaw = 0;
   private leapReach = 0;
   private lastPounce = -9;
-  /** the last pat that knocked at the wall, and whether this leap has */
+  /** the last pat that knocked at the wall, and whether this leap has; whose turn the pat is */
   private patK = -1;
+  private patTurn = -1;
+  private patRight = true;
   private patted = false;
 
   /** what it takes the dot to be on, and how long it has seemed to be on something else: run
@@ -151,6 +155,7 @@ export class Chase implements Act {
     this.best = 1e9;
     this.stuck = 0;
     this.urges.clear();
+    this.patTurn = -1;
     if (phase === 'search') { this.peek.a = 0; this.peek.to = 0; this.peek.t = 0; }
   }
 
@@ -495,13 +500,23 @@ export class Chase implements Act {
         m.pos.set(this.leapFrom.x + fx * this.leapReach * go, 0, this.leapFrom.z + fz * this.leapReach * go);
         const lift = (0.02 + 0.1 * this.leapReach / 0.5) * arc;
         const top = books ? 0.088 * smooth(u) : 0;
-        const fore = { planted: 0, frame: 0, x: 0.03, y: 0.012 + top + 0.09 * arc, z: 0.1 + 0.13 * Math.sin(Math.PI * Math.min(1, air * 1.1)) + (books ? 0.03 * u : 0), flex: 0.35 * arc - 0.2 * land };
+        // (the forepaws reach out as it leaves the floor, and come down as it lands: the reach
+        // gathers speed from nothing, not started at full speed)
+        const ra = 0.5 * (air + go), reachA = Math.sin(Math.PI * ra);
+        const fore = { planted: 0, frame: 0, x: 0.03, y: 0.012 + top + 0.09 * reachA, z: 0.1 + 0.13 * Math.sin(Math.PI * Math.min(1, ra * 1.1)) + (books ? 0.03 * u : 0), flex: 0.35 * reachA - 0.2 * land };
+        // (sprung from under its paws as they held the dot down: they gather from where they were,
+        // not jumped back into the crouch)
+        const from = this.fromPaws, gw = from ? 1 - ease(Math.min(1, u / 0.2)) : 0;
+        const paw = (f: Partial<Foot> | undefined) => (f && gw > 0 ? {
+          planted: 0, frame: 0, x: fore.x + ((f.x ?? fore.x) - fore.x) * gw, y: fore.y + ((f.y ?? fore.y) - fore.y) * gw,
+          z: fore.z + ((f.z ?? fore.z) - fore.z) * gw, flex: fore.flex + ((f.flex ?? fore.flex) - fore.flex) * gw,
+        } : fore);
         const hind = { planted: 0, frame: 0, x: 0.04, y: 0.013 + 0.03 * arc, z: -0.13 - 0.07 * Math.sin(Math.PI * Math.min(1, air * 1.6)) };
         m.layer = {
           pose: {
             ...keen, hipY: 0.15 - 0.025 * gather + lift + (books ? 0.04 * u : 0) - 0.02 * land, hipPitch: -0.15 * gather,
             chestPitch: 0.25 * arc - 0.12 * gather + (books ? 0.25 * u : 0) - 0.1 * land, neckPitch: -0.2 + 0.1 * arc, headPitch: 0.05,
-            LF: fore, RF: fore, LH: hind, RH: hind, tailLift: 0.35 * arc - 0.25, tailCurve: -0.3 * arc,
+            LF: paw(from?.LF), RF: paw(from?.RF), LH: hind, RH: hind, tailLift: 0.35 * arc - 0.25, tailCurve: -0.3 * arc,
           },
           w: 1,
         };
@@ -555,9 +570,8 @@ export class Chase implements Act {
           w: Math.min(1, this.t / 0.1),
         };
         if (this.t > this.dur + 1.1) {
-          // (still there, on the paw: at it again)
-          m.layer = null;
-          if (L) { this.side = -this.side; this.pounce(c); } else { this.asked = false; this.next('search'); }
+          // (still there, on the paw: at it again, the spring gathered from under its paws)
+          if (L) { this.side = -this.side; this.pounce(c); } else { m.layer = null; this.asked = false; this.next('search'); }
         }
         return true;
       }
@@ -587,10 +601,16 @@ export class Chase implements Act {
         const k = Math.floor(this.t / 0.36), u = (this.t % 0.36) / 0.36, pat = Math.sin(Math.PI * u);
         // (each pat a knock at whatever it is on: the pot shakes its leaves, a curtain swings)
         if (k !== this.patK && u > 0.45) { this.patK = k; c.bump(m.pos.clone().addScaledVector(this.fwd, out + 0.04).setY(h), 0.3); }
-        const right = (k + (lx > 0 ? 1 : 0)) % 2 === 0;
+        // (which paw's turn it is is settled as each pat begins: the dot going across in front of it
+        // mid-pat does not swap the paw that is up for the one that is down)
+        if (k !== this.patTurn) { this.patTurn = k; this.patRight = (k + (lx > 0 ? 1 : 0)) % 2 === 0; }
+        const right = this.patRight;
         const up = ease(this.t / 0.35);
-        const hit = { planted: 0, frame: 0, x: 0.02 + Math.abs(lx) * 0.5, y: 0.05 + (h + 0.02 * pat - 0.05) * up, z: 0.07 + (out - 0.07 - 0.015 * pat) * up, flex: 0.25 + 0.3 * pat };
+        // (each pat a paw up from where it rests against the wall to the dot and back down to rest,
+        // then the other's turn: at the turn both are at rest, and neither jumps)
         const rest = { planted: 0, frame: 0, x: 0.035, y: 0.05 + (h - 0.08) * up, z: 0.07 + (out - 0.09) * up, flex: 0.5 };
+        const top = { x: 0.02 + Math.abs(lx) * 0.5, y: 0.05 + (h + 0.02 - 0.05) * up, z: 0.07 + (out - 0.07 - 0.015) * up, flex: 0.55 };
+        const hit = { planted: 0, frame: 0, x: rest.x + (top.x - rest.x) * pat, y: rest.y + (top.y - rest.y) * pat, z: rest.z + (top.z - rest.z) * pat, flex: rest.flex + (top.flex - rest.flex) * pat };
         // (up onto its haunches, the forepaws coming off the floor, over a third of a second: a
         // body that weight does not jump up straight)
         m.layer = {
@@ -743,6 +763,9 @@ export class Chase implements Act {
     const clear = c.keepClear(to.clone(), 0.12);
     if (clear.distanceTo(to) > 0.02) this.leapReach = Math.max(0.04, this.leapReach - clear.distanceTo(to));
     this.lastPounce = this.total;
+    // (where its forepaws were, if the last thing it did had them somewhere of its own)
+    const was = m.layer?.pose;
+    this.fromPaws = was && (was.LF || was.RF) ? { LF: was.LF ? { ...was.LF } : undefined, RF: was.RF ? { ...was.RF } : undefined } : null;
     this.next('pounce', 0.3 + 0.32 * this.leapReach / 0.5);
   }
 

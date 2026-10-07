@@ -128,6 +128,7 @@ export class Motor {
    *  with: the hips lifted to a running height while the back is still sat upright would stand
    *  the cat on its tail); the face, the ears, the head and the tail answer at once */
   private readonly layerIn: Record<'hips' | 'chest' | 'front' | 'hind', number> = { hips: 1, chest: 1, front: 1, hind: 1 };
+  private readonly layerIn1: Record<'hips' | 'chest' | 'front' | 'hind', number> = { hips: 1, chest: 1, front: 1, hind: 1 };
 
   // locomotion
   goal: THREE.Vector3 | null = null;
@@ -720,10 +721,13 @@ export class Motor {
     const p = this.pose;
     copyPose(p, this.base);
     this.shut = 0;
-    const li = this.layerIn, kIn = 1 - Math.exp(-dt * 12);
+    // (and its say comes and goes smoothly, not off at once from a standstill: two easings, one
+    // after the other, so that a paw it held up starts down gently, not at full speed in a frame)
+    const li = this.layerIn, li1 = this.layerIn1, kIn = 1 - Math.exp(-dt * 24);
     for (const g of ['hips', 'chest', 'front', 'hind'] as const) {
       const want = this.tt >= 1 && !this.path.length ? 1 : this.path.length ? 0 : this.prog[g] ?? 1;
-      li[g] += (want - li[g]) * kIn;
+      li1[g] += (want - li1[g]) * kIn;
+      li[g] += (li1[g] - li[g]) * kIn;
     }
     const lay = (pose: PoseLayer, w0: number) => {
       for (const [k, val] of Object.entries(pose)) {
