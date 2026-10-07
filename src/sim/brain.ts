@@ -412,6 +412,22 @@ export class Brain {
     this.glassTap(sx, sy);
     if (this.mode === 'rest' || this.mode === 'alert') {
       this.attention = { x: sx, y: sy, until: this.time + 3 };
+      // (it has only just said something, and you knock back: as often as not it answers, and you
+      // again, and it again, a cat that likes a chat the longer; then a slow blink, and that will
+      // do for now)
+      if (this.time - this.chatAt > 30) this.chatN = 0;
+      const voice = this.s.personality.voice, most = 2 + Math.round(4 * voice);
+      const justSaid = this.time - this.lastSay < 4 || (this.anim.saidWithin?.(4) ?? false);
+      if (this.s.trust > 0.2 && justSaid && this.chatN < most && chance(0.45 + 0.4 * voice)) {
+        this.chatN++;
+        this.chatAt = this.time;
+        const fond = this.s.trust > 0.55;
+        this.say(chance(fond ? 0.45 : 0.2) ? 'trill' : chance(0.5) ? 'meowSoft' : fond ? 'chirp' : 'meow', { delay: rand(0.35, 1) });
+        if (this.chatN >= most && fond) this.later(rand(1.4, 2.2), () => { if (this.mode === 'rest' || this.mode === 'alert') this.anim.doBlink(true); });
+        return;
+      }
+      // (talked out, a little while: an ear to you, and nothing more)
+      if (this.chatN >= most && this.time - this.chatAt < 30) return;
       // (called: fond of you and at its ease, as often as not it comes to the glass where you
       // knocked to see what you want, with a word on the way; not every time you knock)
       if (this.s.trust > 0.3 && this.time - this.calledAt > 20 && chance(0.3 + 0.55 * clamp(this.s.trust)) && this.anim.called?.(sx, sy)) {
@@ -422,6 +438,9 @@ export class Brain {
   }
   /** when it last came to a knock on the glass */
   private calledAt = -1e9;
+  /** a chat through the glass: how many times it has answered you back, and when it last did */
+  private chatN = 0;
+  private chatAt = -1e9;
 
   /** a toy moved about before its eyes (the ball of wool under a finger, now at sx, sy): it wakes
    *  to it out of a light sleep, its eyes follow it, it stays up for it, and being played with is

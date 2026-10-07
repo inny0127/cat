@@ -2494,6 +2494,12 @@ export class PixelAvatar implements Avatar {
 
   vocalize(kind: 'trill' | 'meow' | 'meowSoft' | 'meowPlead' | 'chirp' | 'grumble', dur: number, delay: number) {
     if (!this.isHidden) this.cat.motor.vocalize(kind, dur, delay);
+    if (kind !== 'grumble') this.saidAt = this.clock + delay;
+  }
+  /** when it last said something of its own (its clock) */
+  private saidAt = -1e9;
+  saidWithin(sec: number) {
+    return this.clock - this.saidAt < sec && this.clock >= this.saidAt - 0.05;
   }
 
   /** eating and drinking where you can see: crouched with the head in the bowl, chewing or lapping */
