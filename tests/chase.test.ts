@@ -66,6 +66,29 @@ describe('the red dot of a laser pointer', () => {
     expect(fastest).toBeGreaterThan(0.6);
   });
 
+  it('crouched to spring, the dot darted off and straight back: still crouched, not up and down again', () => {
+    const { c, m, world } = room();
+    world.dot = floorDot(0, 0.3);
+    const act = new Chase(c), seen = new Set<string>();
+    const phase = () => (act as unknown as { phase: string }).phase;
+    // (till it is down in the wiggle before the spring)
+    for (let t = 0; t < 3 && phase() !== 'wiggle'; t += 0.02) { act.update(0.02, c); m.update(0.02); }
+    expect(phase()).toBe('wiggle');
+    // (a flick of the finger: off across the floor a tenth of a second, and back; it springs at it
+    // or stays down for it, but it does not get up to go after it)
+    const during = new Set<string>();
+    run(act, c, m, 0.4, during, (t) => {
+      world.dot = t < 0.1 ? floorDot(0.7, 0.9) : floorDot(0, 0.3);
+    });
+    expect(during.has('run')).toBe(false);
+    expect(during.has('stalk')).toBe(false);
+    // (but gone off and staying off, it is after it)
+    world.dot = floorDot(0.8, 1.0);
+    const after = new Set<string>();
+    run(act, c, m, 1.5, after);
+    expect(after.has('run') || after.has('stalk')).toBe(true);
+  });
+
   it('gone: looked for (and you looked at), and in the end given up on', () => {
     const { c, m, world } = room();
     world.dot = floorDot(0, 0.6);

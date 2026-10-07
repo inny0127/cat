@@ -146,6 +146,19 @@ export class Chase implements Act {
     this.dur = dur;
     this.best = 1e9;
     this.stuck = 0;
+    this.urges.clear();
+  }
+
+  /** the case for leaving off what it is about (the dot gone off from where it crouched, or along
+   *  the wall from where it reared, or come to it as it got up to go), each built up while it holds
+   *  and let go twice as fast while it does not: it changes what it does once the case has held a
+   *  moment (`secs`), not at every flicker of the dot (darted off and straight back, the dot finds
+   *  it still crouched where it was) */
+  private readonly urges = new Map<string, number>();
+  private wants(key: string, holds: boolean, secs: number, dt: number) {
+    const u = Math.max(0, (this.urges.get(key) ?? 0) + (holds ? dt : -2 * dt));
+    this.urges.set(key, u);
+    return holds && u >= secs;
   }
 
   /** the dot as it goes by it: on what it has been on a moment (a fifth of a second) */
@@ -380,8 +393,8 @@ export class Chase implements Act {
         // low to the floor, creeping up on it, the tip of the tail going
         const T = this.target(c, L!), d = Math.hypot(T.x - m.pos.x, T.z - m.pos.z);
         if (L!.on !== 'floor' && L!.on !== 'bed') { this.decide(c, L!); return true; }
-        if (this.frantic > 1.6 && d > 0.36) { m.stop(); this.next('watch'); return true; }
-        if (this.ds > 0.6 || d > 0.95) { this.next('run'); return true; }
+        if (this.wants('frantic', this.frantic > 1.6 && d > 0.36, 0.2, dt)) { m.stop(); this.next('watch'); return true; }
+        if (this.wants('dash', this.ds > 0.6 || d > 0.95, d > 1.3 ? 0.08 : 0.16, dt)) { this.next('run'); return true; }
         if (d < 0.33 && !this.via) { m.stop(); this.next('wiggle', rand(0.35, 0.9)); return true; }
         m.setPosture('crouch');
         this.goAfter(c, L!, 0.27, 0.2, dt);
@@ -396,7 +409,8 @@ export class Chase implements Act {
         const T = this.target(c, L!), d = Math.hypot(T.x - m.pos.x, T.z - m.pos.z);
         const flat = L!.on === 'floor' || L!.on === 'bed', books = L!.on === 'books';
         const short = flat ? 0.26 : books ? 0.02 : 0;
-        if (d < short + 0.07 && !this.via && (m.speed < 0.3 || !m.goal)) {
+        // (there: down to it; only just up to run, a moment's look that it really is there first)
+        if (this.wants('here', d < short + 0.07 && !this.via && (m.speed < 0.3 || !m.goal), this.t > 0.3 ? 0 : 0.15, dt)) {
           m.zoom = 0;
           if (flat) this.next('wiggle', this.ds > 0.4 ? rand(0.1, 0.25) : rand(0.3, 0.75));
           else if (books) this.next('wiggle', rand(0.4, 0.8));
@@ -430,14 +444,16 @@ export class Chase implements Act {
         const T = this.target(c, L!), d = Math.hypot(T.x - m.pos.x, T.z - m.pos.z);
         const books = L!.on === 'books';
         if (!books && L!.on !== 'floor' && L!.on !== 'bed') { this.decide(c, L!); return true; }
-        if (d > (books ? 0.3 : 0.5)) { this.next(this.ds > 0.5 ? 'run' : 'stalk'); return true; }
+        // (gone off from it a moment, not a dart away and back: up and after it; the further it has
+        // gone the sooner)
+        if (this.wants('away', d > (books ? 0.3 : 0.5), d > 1 ? 0.12 : 0.24, dt)) { this.next(this.ds > 0.5 ? 'run' : 'stalk'); return true; }
         // (squared round to it, as a crouched cat does, a shuffle of the forepaws at a time: not
         // spun on a pin)
         m.stop();
         const err = wrapA(Math.atan2(L!.p.x - m.pos.x, L!.p.z - m.pos.z) - m.yaw);
         // (gone off round to the side of it: no swivelling round after it crouched; round to it
         // again with its feet, low)
-        if (Math.abs(err) > 0.7 && this.t > 0.15) { m.layer = null; this.next(this.frantic > 1.6 ? 'watch' : 'stalk'); return true; }
+        if (this.wants('round', Math.abs(err) > 0.7 && this.t > 0.15, 0.2, dt)) { m.layer = null; this.next(this.frantic > 1.6 ? 'watch' : 'stalk'); return true; }
         m.yaw = wrapA(m.yaw + clamp(err * 3, -0.9, 0.9) * dt);
         m.setPosture('crouch');
         const wg = wiggle(this.t, this.dur);
@@ -513,7 +529,7 @@ export class Chase implements Act {
       case 'hold': {
         // both forepaws pressed down on it, the head down between them; then one paw lifted a
         // little, the head on one side, a look under it (the dot on top of the paw all the while)
-        if (L && (Math.hypot(L.p.x - this.pinAt.x, L.p.z - this.pinAt.z) > 0.1 || (L.on !== 'floor' && L.on !== 'bed' && L.on !== 'books'))) {
+        if (L && this.wants('off', Math.hypot(L.p.x - this.pinAt.x, L.p.z - this.pinAt.z) > 0.1 || (L.on !== 'floor' && L.on !== 'bed' && L.on !== 'books'), 0.1, dt)) {
           m.layer = null;
           this.decide(c, L);
           return true;
@@ -544,8 +560,9 @@ export class Chase implements Act {
         const D = L!;
         if (D.on === 'floor' || D.on === 'bed' || D.on === 'books') { m.layer = null; this.decide(c, D); return true; }
         const T = this.target(c, D);
-        // (gone along the wall, or up out of reach: after it, or a leap)
-        if (Math.hypot(T.x - m.pos.x, T.z - m.pos.z) > 0.12) { m.layer = null; this.next('run'); return true; }
+        // (gone along the wall a moment, or up out of reach: after it, or a leap)
+        const along = Math.hypot(T.x - m.pos.x, T.z - m.pos.z);
+        if (this.wants('along', along > 0.12, along > 0.4 ? 0.1 : 0.25, dt)) { m.layer = null; this.next('run'); return true; }
         if (D.on === 'up' && D.p.y > 0.42) { m.layer = null; this.leaps = 0; this.next('leap', rand(0.4, 0.8)); return true; }
         // on the sill and out of reach of a paw over its edge, a while: up after it
         if (D.on === 'sill' && this.sill && this.t > 1.2 && (D.p.z < this.sill.launch.z - 0.26 || this.t > 2.6)) { m.layer = null; this.next('gather', rand(0.35, 0.6)); return true; }
@@ -582,7 +599,7 @@ export class Chase implements Act {
         if (D && D.on !== 'up') { m.layer = null; this.decide(c, D); return true; }
         if (D) {
           const T = this.target(c, D);
-          if (Math.hypot(T.x - m.pos.x, T.z - m.pos.z) > 0.15 && this.t < this.dur) { m.layer = null; this.next('run'); return true; }
+          if (this.wants('along', Math.hypot(T.x - m.pos.x, T.z - m.pos.z) > 0.15 && this.t < this.dur, 0.2, dt)) { m.layer = null; this.next('run'); return true; }
         }
         const at = D ? D.p : this.last;
         const face = Math.atan2(at.x - m.pos.x, at.z - m.pos.z);
