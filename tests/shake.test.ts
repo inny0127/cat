@@ -65,9 +65,15 @@ describe('a shake from head to tail', () => {
   });
 
   it('never quite the same twice: the beat and the length of it', () => {
-    const lens = new Set<number>();
-    for (let i = 0; i < 5; i++) lens.add(Math.round(shake('stand').t * 20));
-    expect(lens.size).toBeGreaterThan(2);
+    // (the same dice every run)
+    let r = 31337;
+    const rnd = Math.random;
+    Math.random = () => ((r = (r * 16807) % 2147483647) / 2147483647);
+    try {
+      const lens = new Set<number>();
+      for (let i = 0; i < 6; i++) lens.add(Math.round(shake('stand').t * 20));
+      expect(lens.size).toBeGreaterThan(2);
+    } finally { Math.random = rnd; }
   });
 });
 

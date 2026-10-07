@@ -4358,6 +4358,8 @@ export class Sill implements Act {
     /** caught at it (a tap on the glass): whether it goes ahead anyway, holding your eye; the paw
      *  where it was when it froze */
     defiant: false, held: {} as Record<string, unknown>, last: {} as Record<string, unknown>,
+    /** (looking away as if it had never been near it, a lick of the nose: a little uneasy at it) */
+    licked: false,
   };
   constructor(private readonly spot: SillSpot) {}
 
@@ -4373,6 +4375,7 @@ export class Sill implements Act {
     if (this.phase !== 'knock' || (K.step !== 'eye' && K.step !== 'you' && K.step !== 'paw' && K.step !== 'to')) return false;
     K.held = K.step === 'paw' ? K.last : {};
     K.defiant = Math.random() < 0.5;
+    K.licked = false;
     K.step = 'caught';
     K.t = 0;
     K.len = rand(1.1, 1.6);
@@ -4768,8 +4771,9 @@ export class Sill implements Act {
             paw[leg] = { ...f, x: 0.036 + (f.x - 0.036) * (1 - back), y: 0.012 + (f.y - 0.012) * (1 - back), z: 0.068 + (f.z - 0.068) * (1 - back), flex: (f.flex ?? 0) * (1 - back) };
           }
           if (!K.defiant && K.t > K.len) {
-            // (looking away, out of the window, at nothing)
+            // (looking away, out of the window, at nothing; and as often as not a lick of the nose)
             if (K.t > K.len + 0.5) m.lookAt(new THREE.Vector3(m.pos.x - 0.6, 0.9, m.pos.z - 1.5), 1);
+            if (!K.licked && K.t > K.len + 0.9) { K.licked = true; if (Math.random() < 0.6) m.noseLick(Math.random() < 0.3 ? 2 : 1); }
           }
           m.layer = {
             pose: { earFwd: 0.1 - 0.4 * (1 - back), earOut: 0.25 * (1 - back), pupil: 1, eyeOpen: 1, whisker: 0.2, tailCurl: 0.3, ...paw },

@@ -4,7 +4,14 @@ import { POSES } from '../src/cat3d/pose';
 
 /** a cat lying in a loaf (or sat) for `secs`: how often a forepaw goes out in front, whether both
  *  ever are at once, and how far out one goes */
-function lieFor(secs: number, posture: 'loaf' | 'sit' | 'sphinx' = 'loaf', room = true) {
+function lieFor(secs: number, posture: 'loaf' | 'sit' | 'sphinx' = 'loaf', room = true, seed = 4321) {
+  // (the same dice every run: how often is a matter of chance, and chance is no test)
+  let r = seed;
+  const rnd = Math.random;
+  Math.random = () => ((r = (r * 16807) % 2147483647) / 2147483647);
+  try { return lie(secs, posture, room); } finally { Math.random = rnd; }
+}
+function lie(secs: number, posture: 'loaf' | 'sit' | 'sphinx', room: boolean) {
   const m = new Motor();
   m.snap(posture);
   m.pawRoom = room;

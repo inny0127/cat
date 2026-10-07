@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import * as THREE from 'three';
 import { Motor } from '../src/cat3d/motor';
 import { Walk, type Ctx } from '../src/pixel/behave';
@@ -22,6 +22,8 @@ function walk(glimpse: (t: number) => { at: THREE.Vector3; k: number } | null) {
   return { stood, lookedAt, arrived };
 }
 
+afterEach(() => { vi.restoreAllMocks(); });
+
 describe('on its way somewhere', () => {
   it('nothing catching its eye: straight there', () => {
     const r = walk(() => null);
@@ -29,6 +31,9 @@ describe('on its way somewhere', () => {
     expect(r.arrived).toBeGreaterThan(0);
   });
   it('a thing moving off to its side on the way: it stops, looks at it a moment, and goes on', () => {
+    // (the same dice every run: three times in four it stops for it, and that is no test)
+    let seed = 777;
+    vi.spyOn(Math, 'random').mockImplementation(() => (seed = (seed * 16807) % 2147483647) / 2147483647);
     let stops = 0;
     for (let k = 0; k < 8; k++) {
       const thing = new THREE.Vector3(0.8, 0.1, 0.5);
