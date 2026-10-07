@@ -3776,7 +3776,9 @@ export class Zoomies implements Act {
       return true;
     }
     m.setPosture('sit');
-    const look = this.lookDir * 0.7 * Math.sin(Math.min(1, this.t / 2.2) * Math.PI * 2);
+    // (a look one way, held, and the other, held: in looks, not a sweep)
+    const A = this.lookDir * 0.65, B = -this.lookDir * 0.5, u = this.t;
+    const look = u < 1 ? A * ease(u / 0.25) : u < 2 ? A + (B - A) * ease((u - 1) / 0.3) : B * (1 - ease((u - 2) / 0.3));
     m.layer = { pose: { headYaw: look, neckYaw: 0.5 * look, earFwd: 0.3 }, w: hump(this.t, 2.6, 0.4) };
     if (this.t > 2.8) {
       m.layer = null;
