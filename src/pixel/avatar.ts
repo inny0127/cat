@@ -78,6 +78,8 @@ export class PixelAvatar implements Avatar {
   sunSpot: (() => THREE.Vector3 | null) | null = null;
   /** is a circle on the floor clear of the room's things */
   floorClear: ((p: THREE.Vector3, r: number) => boolean) | null = null;
+  /** off the floor that way, a point is past a wall, or past the front of the room toward you */
+  offFloor: ((p: THREE.Vector3) => 'wall' | 'front' | null) | null = null;
   /** is a point on the floor in the sun */
   sunlitAt: ((p: THREE.Vector3) => boolean) | null = null;
   /** by the radiator, while the heating is on */
@@ -1522,6 +1524,48 @@ export class PixelAvatar implements Avatar {
   }
   private readonly restEnd = new THREE.Vector3();
 
+  /** away from its bed, about to lie down (or sit: `sit`) where it is: which way round it would
+   *  rather be first (null: as it is will do). A cat settles where it can see the room: not its
+   *  nose to a wall, the radiator or a thing, but open floor before it, and mostly your side of
+   *  the room (out past the front of it is you, not a wall); its back to the wall, if anything */
+  private settleFace(sit: boolean): number | null {
+    const m = this.cat.motor, c = this.ctx, you = c.viewer(), q = this.settleQ, tall = this.blockers?.() ?? [];
+    // (how far along the floor it can see that way, up to most of a metre: over the bed and the
+    // bowls, not through a wall or the plant's pot; out past the front of the room, all the way)
+    const view = (yaw: number) => {
+      const fx = Math.sin(yaw), fz = Math.cos(yaw);
+      let d = 0.1;
+      for (; d <= 0.8; d += 0.1) {
+        q.set(m.pos.x + fx * (0.12 + d), 0, m.pos.z + fz * (0.12 + d));
+        const off = this.offFloor?.(q) ?? null;
+        if (off === 'front') return 0.8;
+        if (off === 'wall' || tall.some((b) => Math.hypot(q.x - b.c.x, q.z - b.c.z) < b.r + 0.03)) break;
+      }
+      return d - 0.1;
+    };
+    const toYou = Math.atan2(you.x - m.pos.x, you.z - m.pos.z);
+    // (as it is will do, with room before it and not its back square to you; and now and then even
+    // that, a cat looking out at the wall under the window. To sit up, it is looking at something,
+    // the way it is: only not its nose to a wall)
+    const ahead = view(m.yaw);
+    if (sit ? ahead >= 0.25 : ahead >= 0.4 && (Math.abs(wrap(toYou - m.yaw)) < 2.2 || Math.random() < 0.25)) return null;
+    // (otherwise round to one of the ways with room before it, more likely your way than not, and
+    // the nearer round the likelier: not the one way every time)
+    const ways: [number, number][] = [];
+    let sum = 0;
+    for (let i = 1; i < 12; i++) {
+      const y = wrap(m.yaw + (i + Math.random() - 0.5) * Math.PI / 6);
+      const w = Math.max(0, view(y) - 0.25) * (1 + 0.6 * Math.cos(wrap(toYou - y))) * Math.exp(-0.3 * Math.abs(wrap(y - m.yaw)));
+      if (w > 0) { ways.push([y, w]); sum += w; }
+    }
+    let r = Math.random() * sum;
+    for (const [y, w] of ways) if ((r -= w) <= 0) return y;
+    return null;
+  }
+  private readonly settleQ = new THREE.Vector3();
+  /** where it last looked about it for the way to face, settling (away from its bed) */
+  private readonly settledAt = new THREE.Vector3(1e3, 0, 1e3);
+
   /** p, unless going into it from the posture it is in now would turn it round where it lies:
    *  curled up nose to tail, its face is the other way from a loaf's, and it would rise and turn
    *  under the hand, the close view going round with it. Then it stays as it is, and gets up and
@@ -1857,7 +1901,22 @@ export class PixelAvatar implements Avatar {
       this.act = new Hunt();
       return;
     }
-    this.lieIn(this.mode === 'alert' ? 'sit' : atHome ? this.rest : this.restHere(this.rest), atHome, dt);
+    const lie = this.mode === 'alert' ? 'sit' : atHome ? this.rest : this.restHere(this.rest);
+    // (on its feet away from its bed, about to lie down (or sit) where it is, its nose to a wall or
+    // a thing; or sat down so, at the end of something: round on the spot first, to face the room.
+    // Once at a place: not round and round again there)
+    if (!atHome && this.mode === 'rest' && !this.touched && !this.hands.length && !m.goal && (m.targetPosture === 'sit' || m.targetPosture === 'stand')
+      && Math.hypot(m.pos.x - this.settledAt.x, m.pos.z - this.settledAt.z) > 0.1) {
+      this.settledAt.copy(m.pos);
+      const face = this.settleFace(lie === 'sit');
+      if (face !== null) {
+        // (and then down as it is to lie the way it now faces: on its side only with room for it)
+        this.act = new Walk('settle', [{ to: m.pos.clone(), face, stay: 0.05, posture: 'stand' }], 0.2);
+        this.act.update(dt, c);
+        return;
+      }
+    }
+    this.lieIn(lie, atHome, dt);
     if (this.act) return;
     // (a cat at its ease mostly just sits there: something now and then, not one thing after
     // another; and what it does, it looks at first)
@@ -1969,6 +2028,8 @@ export class PixelAvatar implements Avatar {
     m.ghost = !!this.errand || this.perched || this.isHidden || this.act instanceof Claw || this.act instanceof Rub || this.act instanceof Top
       || this.act instanceof Sill || this.act instanceof Box || this.act instanceof Bat || this.act instanceof Fish || (this.act instanceof Chase && this.act.up);
     this.lyingFor = (LYING.includes(m.posture) || m.posture === 'sit') && m.targetPosture === m.posture && !m.goal ? this.lyingFor + dt : 0;
+    // (off somewhere: wherever it comes to settle next, it looks about it for the way to face afresh)
+    if (m.speed > 0.1) this.settledAt.set(1e3, 0, 1e3);
     this.leanIntoHand(dt);
     this.askAfter(dt);
     this.lickHand(dt);

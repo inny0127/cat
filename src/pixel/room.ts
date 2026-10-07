@@ -3242,6 +3242,16 @@ export class Room {
     return x > l + 0.03 && x < r - 0.03 && y > b + 0.03 && y < t - 0.03;
   }
 
+  /** off the floor that way, a point is past one of the walls (either end of the room, or the one
+   *  under the window, the radiator out from it) or past the front of the room, toward you (null:
+   *  on the floor) */
+  offFloor(p: THREE.Vector3): 'wall' | 'front' | null {
+    const B = this.yarnBounds, w = this.win;
+    if (p.z > B.maxZ) return 'front';
+    const back = w.z + (Math.abs(p.x - (w.l + w.r) / 2) < 0.3 ? 0.21 : 0.1);
+    return p.x < B.minX || p.x > B.maxX || p.z < back ? 'wall' : null;
+  }
+
   /** is a circle on the floor clear of the bed, the bowls, the litter tray and the room's things */
   floorClear(p: THREE.Vector3, r: number) {
     const S = this.spots;
