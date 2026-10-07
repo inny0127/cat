@@ -64,6 +64,12 @@ export class Retina {
   private busy = false;
   private due = 0;
   private broken = false;
+  /** which half is to be drawn next (0 the left, 1 the right): one a frame, so that no one frame
+   *  of the room's has two more drawings of it to make than the others (a hitch every so often in
+   *  a quick game reads as a jerk) */
+  private half = 0;
+  private az = new Float32Array(0);
+  private el = new Float32Array(0);
   private readonly tmp = new THREE.Vector3();
   private readonly to = new THREE.Vector3();
   private readonly up = new THREE.Vector3(0, 1, 0);
@@ -91,13 +97,15 @@ export class Retina {
    * room drawn from the eyes (both halves) and sent to be read back. `now` is the app's clock (s).
    */
   capture(r: THREE.WebGLRenderer, scene: THREE.Scene, now: number) {
-    if (!this.on || this.broken || this.busy || now < this.due) return;
-    this.due = now + 1 / this.rate;
+    if (!this.on || this.broken || this.busy || (this.half === 0 && now < this.due)) return;
+    if (this.half === 0) this.due = now + 1 / this.rate;
     if (!this.rt) {
       this.rt = new THREE.WebGLRenderTarget(this.w, this.h, { minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, depthBuffer: true });
       this.rt.scissorTest = true;
     }
-    const rt = this.rt;
+    const n = this.w * this.h;
+    if (this.az.length !== n) { this.az = new Float32Array(n); this.el = new Float32Array(n); }
+    const rt = this.rt, k = this.half;
     // (each half turned off to its own side of the way the head faces, level: a cat holds its head
     // level, and so the view)
     const yaw = Math.atan2(this.fwd.x, this.fwd.z), pitch = Math.asin(Math.max(-1, Math.min(1, this.fwd.y)));
@@ -108,31 +116,28 @@ export class Retina {
     r.setClearColor(0x000000, 0);
     if (this.hide) this.hide.visible = false;
     r.shadowMap.autoUpdate = false;
+    const c = this.cams[k], a = yaw + (k === 0 ? TURN : -TURN);
     try {
-      for (let k = 0; k < 2; k++) {
-        const c = this.cams[k], a = yaw + (k === 0 ? TURN : -TURN);
-        c.position.copy(this.eye);
-        c.up.copy(this.up);
-        c.lookAt(this.to.set(Math.sin(a) * Math.cos(pitch), Math.sin(pitch), Math.cos(a) * Math.cos(pitch)).add(this.eye));
-        c.updateMatrixWorld();
-        // (the cat's left half on the left of the frame: the left one turned to +x, which from
-        // behind the cat is its left)
-        const x = k === 0 ? 0 : HW;
-        rt.viewport.set(x, 0, HW, H);
-        rt.scissor.set(x, 0, HW, H);
-        r.setRenderTarget(rt);
-        r.render(scene, c);
-      }
+      c.position.copy(this.eye);
+      c.up.copy(this.up);
+      c.lookAt(this.to.set(Math.sin(a) * Math.cos(pitch), Math.sin(pitch), Math.cos(a) * Math.cos(pitch)).add(this.eye));
+      c.updateMatrixWorld();
+      // (the cat's left half on the left of the frame: the left one turned to +x, which from behind
+      // the cat is its left)
+      const x = k === 0 ? 0 : HW;
+      rt.viewport.set(x, 0, HW, H);
+      rt.scissor.set(x, 0, HW, H);
+      r.setRenderTarget(rt);
+      r.render(scene, c);
     } finally {
       r.shadowMap.autoUpdate = shadows;
       if (this.hide) this.hide.visible = was;
       scene.background = bg;
       r.setClearColor(clear, alpha);
     }
-    // the way each receptor looked, as the halves stood when they were drawn
-    const n = this.w * this.h, az = new Float32Array(n), el = new Float32Array(n);
-    for (let k = 0; k < 2; k++) {
-      const q = this.cams[k].quaternion;
+    // the way each receptor of this half looked, as it stood when it was drawn
+    {
+      const q = c.quaternion, az = this.az, el = this.el;
       for (let j = 0; j < H; j++) {
         // (read back from the bottom row up: row j of the frame is drawn row H-1-j)
         const ny = 1 - ((j + 0.5) / H) * 2;
@@ -145,6 +150,14 @@ export class Retina {
         }
       }
     }
+    // (the left half drawn: the right one next frame, and then the two read back together)
+    if (k === 0) {
+      this.half = 1;
+      r.setRenderTarget(target);
+      return;
+    }
+    this.half = 0;
+    const az = this.az.slice(), el = this.el.slice();
     // (and the small bright things, as the eye had them when it looked)
     const eye = this.eye.clone(), marks = this.marks.map((k) => ({ p: k.p.clone(), lum: k.lum }));
     this.busy = true;
