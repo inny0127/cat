@@ -253,6 +253,11 @@ export class PixelAvatar implements Avatar {
   private readonly lookAway = new THREE.Vector3();
   /** a sound heard in its sleep: where, and how much longer an ear stays round to it (s) */
   private earSound: { at: THREE.Vector3; t: number } | null = null;
+  /** roused in its sleep by a sound come hard at it: where it came from, how long into it, how
+   *  long the head stays up; how far up it is (0 .. 1); and how long till it may be again (s) */
+  private rouse: { at: THREE.Vector3; t: number; len: number } | null = null;
+  private rouseK = 0;
+  private rouseRest = 0;
   /** lying down as near you as it can get, and there now */
   get byYouNow() {
     return this.act instanceof Walk && this.act.name === 'by you' && this.act.canNap;
@@ -935,6 +940,27 @@ export class PixelAvatar implements Avatar {
     if (O && awake && this.sleep < 0.3 && !this.act && !this.errand && !this.trip && !this.hands.length && !this.heard) {
       this.heard = { at: O.at.clone(), t: 0.5 + 0.9 * O.k + 0.4 * Math.random(), tilt: O.k > 0.6 ? this.puzzle() : 0 };
     }
+    // (asleep, and one come hard at it that it is not used to, a door gone in the building, a horn
+    // in the street: the head up off its paws a moment, its eyes open on it, the ears round, a look
+    // that way, and down again to sleep; the deeper asleep, the louder it must be, and not one
+    // after another)
+    this.rouseRest = Math.max(0, this.rouseRest - dt);
+    const m = this.cat.motor;
+    if (O && !awake && this.sleep > 0.5 && !this.rouse && this.rouseRest <= 0 && !this.hands.length && !this.act && this.stretchT <= 0
+      && this.shade.u <= 0 && m.settled && m.targetPosture === m.posture && O.k * (1.25 - 0.6 * this.sleep) > 0.42) {
+      this.rouse = { at: O.at.clone(), t: 0, len: 1.2 + 1.6 * Math.random() + O.k };
+      this.rouseRest = 30 + 60 * Math.random();
+      this.earSound = { at: O.at.clone(), t: this.rouse.len + 1 };
+    }
+    const R = this.rouse;
+    if (R) {
+      R.t += dt;
+      // (up at once, as a start; held while it listens; down slowly, settling again)
+      const up = Math.min(1, R.t / 0.3), down = Math.max(0, Math.min(1, (R.t - R.len) / 1.4));
+      this.rouseK = up * up * (3 - 2 * up) * (1 - down * down * (3 - 2 * down));
+      if (R.t > R.len + 1.4 || this.sleep <= 0.5 || this.hands.length || this.act) { this.rouse = null; this.rouseK = 0; }
+    } else this.rouseK = 0;
+    this.cat.peekBoth = 0.55 * this.rouseK;
     const S = H.on;
     if (!S || (!awake && S.a < 0.6)) return;
     // (the ear on that side round to it, the more the further round it is)
@@ -2023,7 +2049,7 @@ export class PixelAvatar implements Avatar {
     m.eyeAt = this.act instanceof Chase && seen?.id === 'dot' ? N.gazePoint : null;
     let tilt = 0;
     if ((this.act instanceof Sill || this.act instanceof Play || this.act instanceof Hunt || this.act instanceof Box || this.act instanceof Zoomies || this.act instanceof Stare || this.act?.ownGaze) && this.mode !== 'enjoy') { /* the act decides */ }
-    else if (!this.alive || this.sleep > 0.5) m.lookAt(null);
+    else if (!this.alive || this.sleep > 0.5) m.lookAt(this.rouse && this.alive ? this.rouse.at : null, 0.8 * this.rouseK);
     else if (busy) {
       // (on its way somewhere, its eyes still go to a thing that moves, and the head a little way
       // after them; otherwise ahead, where it is going)

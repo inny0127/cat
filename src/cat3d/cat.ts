@@ -243,6 +243,8 @@ export class Cat3D {
   /** one eye opened a little in its sleep (how far, and which: 0 the left, 1 the right) */
   peek = 0;
   peekEye = 0;
+  /** both eyes opened so far in its sleep (roused a moment by a sound) */
+  peekBoth = 0;
   /** awake (0 .. 1, eased by the avatar): in a posture made for sleep, its eyes open all the same */
   awake = 1;
   /** a breath in just begun (for whoever wants to hear it, to clear) */
@@ -583,7 +585,8 @@ export class Cat3D {
     for (let i = 0; i < this.eyes.length; i++) {
       const e = this.eyes[i];
       // (asleep, one eye a little open to see what you are up to)
-      setLids(e, this.shared.uLids.value, i === this.peekEye ? Math.max(open, this.peek * (1 - motor.blink)) : open, c01(p.squint + ey.squint), smile);
+      const peek = Math.max(i === this.peekEye ? this.peek : 0, this.peekBoth);
+      setLids(e, this.shared.uLids.value, peek > 0 ? Math.max(open, peek * (1 - motor.blink)) : open, c01(p.squint + ey.squint), smile);
       e.eyeMat.uniforms.uPupil.value = c01(p.pupil + ey.pupil);
       e.eyeMat.uniforms.uShine.value = ey.shine;
     }
