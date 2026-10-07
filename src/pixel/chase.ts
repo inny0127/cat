@@ -48,6 +48,10 @@ export class Chase implements Act {
   /** the floor under the dot, or in front of what it is on; where the run after it was aimed */
   private readonly T = new THREE.Vector3();
   private readonly aim = new THREE.Vector3(NaN, 0, 0);
+  /** how long since it last took fresh aim at where the dot is (s) */
+  private aimT = 0;
+  /** up on its haunches at the wall, how fast it is turning round to the dot (rad/s) */
+  private rearRate = 0;
   /** the dot a frame ago, how fast it is going (m/s, smoothed), how long since it was seen, and
    *  where and on what it was last */
   private readonly was = new THREE.Vector3(NaN, 0, 0);
@@ -138,6 +142,7 @@ export class Chase implements Act {
     this.phase = phase;
     this.t = 0;
     this.low = 0;
+    this.rearRate = 0;
     this.dur = dur;
     this.best = 1e9;
     this.stuck = 0;
@@ -219,8 +224,14 @@ export class Chase implements Act {
       this.via = null;
       this.aim.set(NaN, 0, 0);
     }
-    if (m.goal && Math.hypot(T.x - this.aim.x, T.z - this.aim.z) < 0.05) return;
+    // (going for where it saw it, it keeps to that a moment rather than swerving after every
+    // twitch of it: fresh aim when it has gone well off from there, the more so the further off
+    // the cat still is, or after a moment; near, it is quick to correct)
+    this.aimT += dt;
+    const off = Math.hypot(T.x - this.aim.x, T.z - this.aim.z), far = Math.hypot(T.x - m.pos.x, T.z - m.pos.z);
+    if (m.goal && (off < 0.05 || (off < 0.05 + 0.3 * Math.max(0, far - 0.3) && this.aimT < 0.3))) return;
     this.aim.copy(T);
+    this.aimT = 0;
     const dx = T.x - m.pos.x, dz = T.z - m.pos.z, d = Math.hypot(dx, dz) || 1;
     const stop = d > short ? new THREE.Vector3(T.x - (dx / d) * short, 0, T.z - (dz / d) * short) : m.pos.clone();
     c.keepClear(stop, 0.13);
@@ -279,7 +290,7 @@ export class Chase implements Act {
       this.part = L.self;
       const lx = L.selfAt ? (L.selfAt.x - m.pos.x) * Math.cos(m.yaw) - (L.selfAt.z - m.pos.z) * Math.sin(m.yaw) : 0;
       this.side = Math.abs(lx) > 0.01 ? Math.sign(lx) : Math.random() < 0.5 ? 1 : -1;
-      this.next('self', this.part === 'rear' ? rand(1.3, 2.1) : rand(1.2, 1.8));
+      this.next('self', this.part === 'rear' ? rand(2, 2.7) : rand(1.2, 1.8));
       if (this.part === 'rear') c.sound('scrabble', 0.18);
     }
     switch (this.phase) {
@@ -296,7 +307,10 @@ export class Chase implements Act {
           const spin = u < 0.72;
           if (spin) {
             m.setPosture('stand');
-            m.yaw = wrapA(m.yaw + s * 5 * Math.min(1, this.t / 0.25) * dt);
+            // (as fast as its feet can patter round under it, and slowing into the stop, not pulled up
+            // dead)
+            const out = Math.min(1, ((0.72 - u) * this.dur) / 0.3);
+            m.yaw = wrapA(m.yaw + s * 4.2 * Math.min(1, this.t / 0.25) * out * dt);
             pose = { ...keen, hipY: 0.17, neckYaw: s * 0.95, headYaw: s * 0.55, headRoll: -s * 0.2, lumbarYaw: s * 0.4, chestYaw: s * 0.3, tailSide: s * 1.2, tailCurl: s * 0.8, tailLift: 0.2 };
           } else {
             m.setPosture('sit');
@@ -401,7 +415,7 @@ export class Chase implements Act {
         const fast = d > 0.5 || this.ds > 0.6;
         m.setPosture('stand');
         m.zoom = fast ? 0.8 : 0.3;
-        this.goAfter(c, L!, short, fast ? rand(1.05, 1.3) : 0.5, dt);
+        this.goAfter(c, L!, short, fast ? rand(0.9, 1.1) : 0.5, dt);
         m.layer = { pose: { ...keen, hipY: 0.185, neckPitch: 0.05, tailLift: 0.45, tailCurve: -0.2 }, w: Math.min(1, this.t / 0.15) };
         // (brushing past things at a run)
         if (m.speed > 0.6) c.bump(m.pos.clone().setY(0.12), dt * 1.2);
@@ -433,7 +447,9 @@ export class Chase implements Act {
             LH: { y: 0.012 + 0.012 * Math.max(0, wg) }, RH: { y: 0.012 + 0.012 * Math.max(0, -wg) },
             tailLift: -0.3, tailSide: 0.4 * Math.sin(this.t * 11), tailCurl: 0.9 * Math.sin(this.t * 13),
           },
-          w: 1,
+          // (down into it over a quarter of a second: from up on its haunches at the wall, not
+          // dropped)
+          w: smooth(Math.min(1, this.t / 0.25)),
         };
         // (once square to it, and its last spring a moment behind it: off, when the wiggle is done,
         // or at once if it moves, in reach: the hunter cannot wait)
@@ -452,7 +468,7 @@ export class Chase implements Act {
         const air = clamp((u - 0.2) / 0.6, 0, 1), go = smooth(air), arc = Math.sin(Math.PI * air);
         const gather = u < 0.2 ? ease(u / 0.2) : 1 - ease((u - 0.2) / 0.15);
         const land = u > 0.8 ? Math.sin(Math.PI * (u - 0.8) / 0.2) : 0;
-        m.yaw = this.leapYaw;
+        m.yaw = wrapA(m.yaw + wrapA(this.leapYaw - m.yaw) * Math.min(1, dt * 14));
         m.pos.set(this.leapFrom.x + fx * this.leapReach * go, 0, this.leapFrom.z + fz * this.leapReach * go);
         const lift = (0.02 + 0.1 * this.leapReach / 0.5) * arc;
         const top = books ? 0.088 * smooth(u) : 0;
@@ -534,7 +550,11 @@ export class Chase implements Act {
         // on the sill and out of reach of a paw over its edge, a while: up after it
         if (D.on === 'sill' && this.sill && this.t > 1.2 && (D.p.z < this.sill.launch.z - 0.26 || this.t > 2.6)) { m.layer = null; this.next('gather', rand(0.35, 0.6)); return true; }
         const face = Math.atan2(D.p.x - m.pos.x, D.p.z - m.pos.z);
-        m.yaw = wrapA(m.yaw + clamp(wrapA(face - m.yaw), -2, 2) * Math.min(1, dt * 5));
+        // (round to it on its haunches, no quicker than it can shuffle round, and not swung the other
+        // way all at once if it goes round behind)
+        const want = clamp(wrapA(face - m.yaw), -2, 2) * 5;
+        this.rearRate += (want - this.rearRate) * Math.min(1, dt * 8);
+        m.yaw = wrapA(m.yaw + clamp(this.rearRate, -2.5, 2.5) * dt);
         m.stop();
         m.setPosture('sit');
         const h = clamp(D.p.y, 0.1, 0.37);
@@ -679,7 +699,9 @@ export class Chase implements Act {
     // (the run's way on is in the leap now)
     m.speed = 0;
     this.leapFrom.copy(m.pos);
-    this.leapYaw = m.yaw;
+    // (the way it was turning carries on into the leap a little: it springs off out of the turn, not
+    // pulled straight from it)
+    this.leapYaw = wrapA(m.yaw + m.yawRate * 0.07);
     const at = L ? L.p : this.last, books = (L ? L.on : this.lastOn) === 'books';
     const along = (at.x - m.pos.x) * Math.sin(m.yaw) + (at.z - m.pos.z) * Math.cos(m.yaw);
     this.leapReach = books ? 0.04 : clamp(along - 0.19 + rand(-0.03, 0.03), 0.04, 0.5);
