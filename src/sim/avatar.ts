@@ -67,6 +67,10 @@ export interface Avatar {
   beg?(what: 'food' | 'water', urgent: boolean, empty: () => boolean): boolean;
   /** the hands gone, it puts its coat to rights where they were, if the body can show it */
   tidy?(where: 'face' | 'flank' | 'chest'): boolean | void;
+  /** the hands gone (or a fright over, or up from a nap), a shake from head to tail, the coat put
+   *  back as it should lie; and then a lick at it where it was touched, if `then` says where (true
+   *  if it does) */
+  shakeOff?(then: 'face' | 'flank' | 'chest' | null): boolean | void;
   /** a love bite on the finger stroking it, gently, and a lick (true if it did) */
   loveBite?(): boolean;
   /** scratched at the base of its tail: the nose up and a few licks at the air, as cats do for it

@@ -2041,6 +2041,7 @@ export class PixelApp {
     if (doing === 'box' && phase === 'duck') now.add('ambush');
     if (a.glancing) now.add('glance');
     if (a.earToSound) now.add('earsound');
+    if (m.whipFor > 0 && !asleep) now.add('shake');
     // (a loaf: lying with its paws tucked under, awake and easy, a good while)
     this.loafFor = m.posture === 'loaf' && !asleep && !doing && m.speed < 0.02 ? this.loafFor + dt : 0;
     if (this.loafFor > 20) now.add('loaf');

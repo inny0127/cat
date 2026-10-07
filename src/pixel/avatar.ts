@@ -4,7 +4,7 @@ import { POSES, SIDE_TURN, type Leg, type PoseLayer, type PoseName } from '../ca
 import { NEUTRAL, type Mood } from '../cat3d/mood';
 import type { Avatar } from '../sim/avatar';
 import type { EarMood, TailMood } from '../rig/animator';
-import { boop, byYou, canGlance, crab, coolOff, feel, huff, idleOptions, mealLayer, mealPlan, type MealPlan, groomChest, groomFlank, knead, lookWith, restingPose, sneeze, toBed, toWindow, wander, warmUp, washFace, yawn, type Act, type Ctx, sunbathe, Play, Sill, Hunt, Box, Zoomies, Walk, Stare, Rub, scratchEar, wakeUp, stretchSideOn, Greet, Gift, Snub, Beg, PawGlass, TailChase, Claw, Top, Fish, Bat, Trap, Sulk, Wrestle, isPerching, type Perching, type ScratchPost, type GlassFinger, type SillSpot, type SulkSpot } from './behave';
+import { boop, byYou, inTurn, shakeOff, canGlance, crab, coolOff, feel, huff, idleOptions, mealLayer, mealPlan, type MealPlan, groomChest, groomFlank, knead, lookWith, restingPose, sneeze, toBed, toWindow, wander, warmUp, washFace, yawn, type Act, type Ctx, sunbathe, Play, Sill, Hunt, Box, Zoomies, Walk, Stare, Rub, scratchEar, wakeUp, stretchSideOn, Greet, Gift, Snub, Beg, PawGlass, TailChase, Claw, Top, Fish, Bat, Trap, Sulk, Wrestle, isPerching, type Perching, type ScratchPost, type GlassFinger, type SillSpot, type SulkSpot } from './behave';
 import { Chase, Startle, type LaserDot } from './chase';
 import { Tease, type Lure } from './tease';
 import { GOAL, Whim } from './whim';
@@ -1174,6 +1174,14 @@ export class PixelAvatar implements Avatar {
     this.act = this.tidying = where === 'face' ? washFace() : where === 'chest' ? groomChest() : groomFlank();
     return true;
   }
+  shakeOff(then: 'face' | 'flank' | 'chest' | null) {
+    if (!this.alive || this.isHidden || this.sleep > 0.3 || this.errand || this.trip || this.perched || this.hands.length) return false;
+    if (this.act && this.act.name !== 'knead') return false;
+    this.stopAct();
+    const tidy = then === 'face' ? washFace : then === 'chest' ? groomChest : then === 'flank' ? groomFlank : null;
+    this.act = this.tidying = tidy ? inTurn('shake', [shakeOff, tidy]) : shakeOff();
+    return true;
+  }
   /** a tidy-up of the coat under way (it carries on in the minute or so the hands' pleasure
    *  lingers, as long as none come back) */
   private tidying: Act | null = null;
@@ -1431,7 +1439,7 @@ export class PixelAvatar implements Avatar {
    * once and lies down again, unless a hand is on it; otherwise it shuffles and turns a little into
    * the middle of the bed.
    */
-  /** how long it has lain as it is, settled (s) */
+  /** how long it has lain (or sat) as it is, settled (s) */
   private lyingFor = 0;
   private lieIn(p: PoseName, atHome: boolean, dt: number) {
     const m = this.cat.motor;
@@ -1443,8 +1451,8 @@ export class PixelAvatar implements Avatar {
     const e = wrap(b.yaw - m.yaw);
     if (atHome && !this.touched && Math.abs(e) > 0.8) {
       // (only just lain down, it does not get straight up again to lie another way: it lies as it
-      // is a while first)
-      if (LYING.includes(m.posture) && this.lyingFor < 12) return;
+      // is a while first; only just sat down, it sits a moment before it gets up to curl round)
+      if (this.lyingFor < (LYING.includes(m.posture) ? 12 : m.posture === 'sit' ? 4 : 0)) return;
       this.act = toBed(this.ctx, p);
       this.act.update(dt, this.ctx);
       return;
@@ -1511,7 +1519,7 @@ export class PixelAvatar implements Avatar {
   }
 
   /** start one of its acts now (for the lab and tests) */
-  startAct(name: 'yawn' | 'groom' | 'groom chest' | 'wash' | 'stretch' | 'window' | 'wander' | 'knead' | 'bed' | 'sun' | 'play' | 'sill' | 'box' | 'zoomies' | 'warm' | 'sneeze' | 'stare' | 'rub' | 'scratch' | 'greet' | 'gift' | 'ask' | 'tail' | 'by you' | 'claw' | 'top' | 'fish' | 'pompom' | 'cool' | 'wrestle' | 'crab') {
+  startAct(name: 'yawn' | 'groom' | 'groom chest' | 'wash' | 'stretch' | 'window' | 'wander' | 'knead' | 'bed' | 'sun' | 'play' | 'sill' | 'box' | 'zoomies' | 'warm' | 'sneeze' | 'stare' | 'rub' | 'scratch' | 'greet' | 'gift' | 'ask' | 'tail' | 'by you' | 'claw' | 'top' | 'fish' | 'pompom' | 'cool' | 'wrestle' | 'crab' | 'shake') {
     // (not on its way somewhere, to the bowls or out of the room: the walk there is its business)
     if (this.perched || this.trip) return;
     this.stopAct();
@@ -1521,7 +1529,7 @@ export class PixelAvatar implements Avatar {
         : name === 'knead' ? knead() : name === 'sun' ? sunbathe(c) : name === 'play' ? new Play()
           : name === 'sill' && this.sillSpot ? new Sill(this.sillSpot())
             : name === 'box' && this.boxSpot?.() ? new Box(this.boxSpot()!) : name === 'zoomies' ? new Zoomies(c) : name === 'warm' ? warmUp(c) ?? toBed(c, 'loaf') : name === 'cool' ? coolOff(c) ?? toBed(c, 'loaf') : name === 'sneeze' ? sneeze(c) : name === 'stare' ? new Stare(c)
-              : name === 'rub' && c.posts().length ? new Rub(c, c.posts()[0]) : name === 'scratch' ? scratchEar() : name === 'greet' ? new Greet(0.9) : name === 'gift' ? new Gift() : name === 'ask' ? new PawGlass(c.finger, true) : name === 'tail' ? new TailChase() : name === 'by you' ? byYou(c) : name === 'claw' && c.scratcher() ? new Claw(c.scratcher()!) : name === 'top' && c.scratcher() ? new Top(c.scratcher()!) : name === 'fish' && c.mouse()?.under ? new Fish() : name === 'pompom' && c.pompom() ? new Bat() : name === 'wrestle' && c.mouse() && !c.mouse()!.under ? new Wrestle() : name === 'crab' ? crab(c) : toBed(c, 'loaf');
+              : name === 'rub' && c.posts().length ? new Rub(c, c.posts()[0]) : name === 'scratch' ? scratchEar() : name === 'greet' ? new Greet(0.9) : name === 'gift' ? new Gift() : name === 'ask' ? new PawGlass(c.finger, true) : name === 'tail' ? new TailChase() : name === 'by you' ? byYou(c) : name === 'claw' && c.scratcher() ? new Claw(c.scratcher()!) : name === 'top' && c.scratcher() ? new Top(c.scratcher()!) : name === 'fish' && c.mouse()?.under ? new Fish() : name === 'pompom' && c.pompom() ? new Bat() : name === 'wrestle' && c.mouse() && !c.mouse()!.under ? new Wrestle() : name === 'crab' ? crab(c) : name === 'shake' ? shakeOff() : toBed(c, 'loaf');
   }
 
   /** you looking round the room at something over there (x along the room): awake, at its ease
@@ -1905,7 +1913,7 @@ export class PixelAvatar implements Avatar {
     // (right up against a thing or in it on purpose, or up off the floor: no keeping clear of it)
     m.ghost = !!this.errand || this.perched || this.isHidden || this.act instanceof Claw || this.act instanceof Rub || this.act instanceof Top
       || this.act instanceof Sill || this.act instanceof Box || this.act instanceof Bat || this.act instanceof Fish || (this.act instanceof Chase && this.act.up);
-    this.lyingFor = LYING.includes(m.posture) && m.targetPosture === m.posture && !m.goal ? this.lyingFor + dt : 0;
+    this.lyingFor = (LYING.includes(m.posture) || m.posture === 'sit') && m.targetPosture === m.posture && !m.goal ? this.lyingFor + dt : 0;
     this.leanIntoHand(dt);
     this.askAfter(dt);
     this.lickHand(dt);

@@ -409,24 +409,28 @@ class Seq implements Act {
     this.cur = null;
   }
 }
+export const inTurn = (name: string, parts: (() => Act)[]): Act => new Seq(name, parts);
 
 /** a stretch where it can be seen for one: side on to you (round to it first, whichever way is the
  *  less of a turn, if it is facing you or away), then, at home, round again to lie down in the
  *  middle of its bed facing you */
-export const stretchSideOn = (c: Ctx, then: PoseName, hind?: boolean) => {
+export const stretchSideOn = (c: Ctx, then: PoseName, hind?: boolean, shake = false) => {
   const make = (end: PoseName) => {
     const s = new Stretch(end);
     if (hind !== undefined) s.hind = hind;
     return s;
   };
+  // (and now and then a shake from head to tail after it, on its feet)
+  const after = shake ? [shakeOff] : [];
   // (you are straight ahead of a cat at yaw 0)
-  if (Math.abs(Math.sin(c.m.yaw)) > 0.6) return make(then);
+  if (Math.abs(Math.sin(c.m.yaw)) > 0.6) return shake ? new Seq('stretch', [() => make('stand'), ...after]) : make(then);
   const a = Math.PI / 2, b = -Math.PI / 2;
   const face = Math.abs(wrapA(a - c.m.yaw)) < Math.abs(wrapA(b - c.m.yaw)) ? a : b;
   const home = Math.hypot(c.m.pos.x - c.home.x, c.m.pos.z - c.home.z) < 0.2;
   return new Seq('stretch', [
     () => new Walk('stretch', [{ to: c.m.pos.clone(), face, stay: 0.3, posture: 'stand' }], 0.22),
     () => make('stand'),
+    ...after,
     ...(home ? [() => toBed(c, then === 'sit' ? 'sit' : 'loaf')] : []),
   ]);
 };
@@ -443,7 +447,7 @@ export const wakeUp = (c: Ctx) => {
     () => new Layered('yawn', 2.6, 0.8, () => ({
       jaw: 1, tongue: 0.5, tongueUp: 1, eyeOpen: 0.08, squint: 0.8, neckPitch: -0.2, headPitch: 0, earOut: 0.35, earFwd: -0.3,
     }), null, { at: 0.5, sound: 'yawn', gain: 0.22 }),
-    atPost ? () => new Claw(post!) : () => stretchSideOn(c, 'loaf', Math.random() < 0.8),
+    atPost ? () => new Claw(post!) : () => stretchSideOn(c, 'loaf', Math.random() < 0.8, Math.random() < 0.35),
   ]);
 };
 
@@ -629,6 +633,74 @@ export const boop = () => new Layered('boop', 1.6, 0.06, (t) => {
     headPitch: 0.18 * scr, neckPitch: -0.08 * scr, jaw: 0.13 * lick, tongue: lick, tongueUp: 1, headRoll: 0.2 * shake,
   };
 });
+
+/** a shake from head to tail, the coat put back as it should lie (rubbed the wrong way, up from a
+ *  nap, a fright got over): on its feet for it (or sat, if it is sat up), braced a moment with the
+ *  head a little down and the eyes shut, then the head whipped round and the shake running back
+ *  down it, the shoulders, the hips, the tail last, the ears flung out and the fur stood up with
+ *  it, six or seven times over in a second or less; the fur goes down after, and now and then a
+ *  lick of the nose. Never quite the same twice, and not stopped halfway for a look about */
+class Shake implements Act {
+  readonly name = 'shake';
+  private t = 0;
+  private wait = 0;
+  private sat: boolean | null = null;
+  private flapped = 0;
+  private readonly side = Math.random() < 0.5 ? 1 : -1;
+  private readonly w = 2 * Math.PI * rand(6, 7.2);
+  private readonly brace = rand(0.25, 0.45);
+  private readonly len = rand(0.7, 1);
+  private readonly big = rand(0.85, 1.1);
+  private readonly lick = Math.random() < 0.45;
+  /** how long all told, from its feet under it (s) */
+  get dur() {
+    return this.brace + this.len + (this.lick ? 0.9 : 0.5);
+  }
+  update(dt: number, c: Ctx) {
+    const m = c.m;
+    this.sat ??= m.posture === 'sit' && m.targetPosture === 'sit';
+    const post: PoseName = this.sat ? 'sit' : 'stand';
+    m.setPosture(post);
+    // (up first, if it is lying; if it cannot get there, it gives up on it)
+    if (this.t === 0 && !(m.settled && m.posture === post)) {
+      m.layer = null;
+      return (this.wait += dt) < 4;
+    }
+    this.t += dt;
+    // (the ears flung out as the shake takes the head, and again as it lets go)
+    if (this.flapped === 0 && this.t > this.brace) { this.flapped = 1; m.flickEar('both', 0.8); }
+    if (this.flapped === 1 && this.t > this.brace + this.len - 0.15) { this.flapped = 2; m.flickEar('both', 0.5); }
+    m.layer = { pose: this.pose(this.t), w: hump(this.t, this.dur, 0.2) };
+    if (this.t > this.brace - 0.1 && this.t < this.brace + this.len + 0.2) m.whipFor = 0.1;
+    return this.t < this.dur;
+  }
+  /** t s in (from braced) */
+  pose(t: number): PoseLayer {
+    const u = t - this.brace, L = this.len, s = this.side * this.big;
+    // (the shake where it is down the body, so far behind the head: quick to start, dying away)
+    const at = (lag: number) => {
+      const v = u - lag;
+      return v <= 0 || v >= L ? 0 : ease(v / 0.08) * ease((L - v) / 0.3) * Math.sin(this.w * v);
+    };
+    const on = ease(u / 0.1) * (1 - ease((u - L + 0.2) / 0.3));
+    const braced = ease(t / this.brace) * (1 - ease((u - L) / 0.35));
+    const fur = ease(u / 0.15) * (1 - ease((u - L - 0.05) / 0.45));
+    const v = u - L - 0.3, lick = this.lick && v > 0 && v < 0.4 ? Math.max(0, Math.sin(v * Math.PI / 0.4)) : 0;
+    const hips = this.sat ? 0 : 1;
+    // (the eased pose takes about half of each swing at this pace: these are twice what is seen)
+    return {
+      headRoll: 1 * s * at(0), neckYaw: 0.16 * s * at(0.03), chestRoll: 0.45 * s * at(0.05) * (this.sat ? 0.6 : 1), hipRoll: 0.3 * s * at(0.1) * hips,
+      tailSide: 0.9 * s * at(0.16),
+      neckPitch: -0.14 * braced, headPitch: 0.06 * braced, earFwd: -0.25 * braced, earOut: 0.45 * on,
+      eyeOpen: 0.95 - 0.65 * Math.max(on, 0.6 * braced), squint: 0.55 * on, whisker: -0.35 * on,
+      puff: 0.35 * fur, jaw: 0.1 * lick, tongue: lick, tongueUp: 1,
+    };
+  }
+  stop(c: Ctx) {
+    c.m.layer = null;
+  }
+}
+export const shakeOff = () => new Shake();
 
 /** a sneeze: a breath in with the head up a little and the eyes squeezing shut, then a sharp
  *  little nod down with the sound of it; now and then two */
@@ -4764,7 +4836,7 @@ export function idleOptions(c: Ctx, atHome: boolean, posture: PoseName): Option[
       add('groom chest', 0.6, groomChest);
       add('wash', 0.8, washFace);
     }
-    add('stretch', 0.35, () => stretchSideOn(c, posture === 'sit' ? 'sit' : 'loaf'));
+    add('stretch', 0.35, () => stretchSideOn(c, posture === 'sit' ? 'sit' : 'loaf', undefined, Math.random() < 0.15));
     add('sneeze', 0.1, () => sneeze(c));
     add('scent', 0.3 * (0.6 + m.arousal) * (1 - 0.5 * m.sleepy) * (1 + 0.4 * T.curious), scent);
     add('scratch', 0.22, scratchEar);

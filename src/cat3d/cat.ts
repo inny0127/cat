@@ -93,6 +93,8 @@ export class Cat3D {
   private readonly ground = { LF: 1, RF: 1, LH: 1, RH: 1 };
   /** how fast the head is turning on the neck (rad/s, the last frame) */
   private headVel = 0;
+  /** how far the head and neck are let go for a shake (0 .. 1, eased) */
+  private whip = 0;
   private first = true;
   /** how fast the body really turns and goes (rad/s, m/s), whatever moves it: the motor's own
    *  steering, or an act that squares it round to something or carries it directly. The legs
@@ -487,6 +489,10 @@ export class Cat3D {
     // or pulling up all at once; a flick of the eyes is quicker than any turn of the head)
     {
       const H = this.headI ??= kin.i('head'), C = this.chestI ??= kin.i('chest');
+      // (a shake is the one time it goes faster: a whip of the head as quick as a shake, and as
+      // quickly reversed)
+      this.whip += ((motor.whipFor > 0 ? 1 : 0) - this.whip) * (1 - Math.exp(-dt * 10));
+      const wv = 1 + 2 * this.whip, wa = 1 + 9 * this.whip;
       // (the neck first: each joint of it turns on the one before no faster than a neck can, the
       // rest of the neck and the head carried round with it; the head is not swung from one
       // shoulder to the other in a frame on a neck that whips across)
@@ -497,7 +503,7 @@ export class Cat3D {
         const was = this.neckWas[j];
         if (was && dt > 0) {
           const ang = rel.angleTo(was);
-          const v = Math.min(NECK_MAX, this.neckVel[j] + NECK_ACC * dt, Math.sqrt(2 * NECK_ACC * ang) + NECK_ACC * dt * 0.5);
+          const v = Math.min(NECK_MAX * wv, this.neckVel[j] + NECK_ACC * wa * dt, Math.sqrt(2 * NECK_ACC * wa * ang) + NECK_ACC * wa * dt * 0.5);
           if (ang > v * dt) {
             rel.copy(was).slerp(tmp.q3.copy(kin.wq[P]).invert().multiply(kin.wq[J]), (v * dt) / ang);
             kin.setWorld(J, tmp.q3.copy(kin.wq[P]).multiply(rel));
@@ -512,7 +518,7 @@ export class Cat3D {
         const ang = rel.angleTo(this.headWas);
         // (as fast as it can be and still pull up in time: about 10 rad/s at most, got up to in a
         // tenth of a second)
-        const v = Math.min(HEAD_MAX, this.headVel + HEAD_ACC * dt, Math.sqrt(2 * HEAD_ACC * ang) + HEAD_ACC * dt * 0.5);
+        const v = Math.min(HEAD_MAX * wv, this.headVel + HEAD_ACC * wa * dt, Math.sqrt(2 * HEAD_ACC * wa * ang) + HEAD_ACC * wa * dt * 0.5);
         const most = v * dt;
         if (ang > most) {
           rel.copy(this.headWas).slerp(tmp.q3.copy(kin.wq[C]).invert().multiply(kin.wq[H]), most / ang);

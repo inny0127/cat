@@ -416,6 +416,9 @@ export class Motor {
   /** round on the spot this fast, with nowhere to go (rad/s, + to the left; 0 to stop): after its
    *  own tail */
   spin = 0;
+  /** a shake under way, for so long yet (s; an act shaking itself keeps it up): the head flung
+   *  round as fast as a shake goes, not held to the pace a head turns at of itself */
+  whipFor = 0;
 
   lookAt(p: THREE.Vector3 | null, weight = 1) {
     this.lookTarget = p ? p.clone() : null;
@@ -548,6 +551,7 @@ export class Motor {
 
   update(dt: number) {
     this.time += dt;
+    this.whipFor = Math.max(0, this.whipFor - dt);
     // (an act that squares the body round to something itself, all at once: no quicker than a
     // body can turn, and the rest of the turn next time)
     if (this.yawWas !== null && dt > 0) {

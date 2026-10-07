@@ -1063,7 +1063,8 @@ export class Brain {
     // (long ago now: that one is forgotten)
     if (F.since > 45) { F.peak = this.fear; F.since = 0; return; }
     if (F.peak < 0.3 || this.fear > 0.12 || F.since < 3 || touching || (this.mode !== 'rest' && this.mode !== 'alert')) return;
-    if (!F.will || this.anim.tidy?.(chance(0.65) ? 'flank' : 'chest')) F.peak = this.fear;
+    // (now and then a shake from head to tail instead, as if to be rid of it)
+    if (!F.will || (chance(0.3) && this.anim.shakeOff?.(chance(0.3) ? 'flank' : null)) || this.anim.tidy?.(chance(0.65) ? 'flank' : 'chest')) F.peak = this.fear;
   }
 
   /** the hands gone a moment after a good while on it: as often as not the cat puts its coat to
@@ -1085,11 +1086,14 @@ export class Brain {
       this.say(chance(0.65) ? 'trill' : 'meowSoft', { delay: 0.6 });
       return;
     }
-    if (!chance(0.35 + 0.45 * clamp(against / 1.5) + 0.15 * clamp(t / 15))) return;
     let most: Zone = 'back', mt = 0;
     for (const [z, zt] of Object.entries(zones) as [Zone, number][]) if (zt > mt) { mt = zt; most = z; }
     const where = most === 'belly' || most === 'paw' ? 'chest'
       : most === 'face' || most === 'chin' || most === 'cheek' || most === 'head' || most === 'ear' ? 'face' : 'flank';
+    // (rubbed the wrong way a good while: often a shake from head to tail first, the coat put back
+    // as it should lie, and now and then a lick at it after)
+    if (against > 0.8 && chance(0.3 + 0.4 * clamp((against - 0.8) / 2)) && this.anim.shakeOff?.(chance(0.4) ? where : null)) return;
+    if (!chance(0.35 + 0.45 * clamp(against / 1.5) + 0.15 * clamp(t / 15))) return;
     this.anim.tidy?.(where);
   }
 
