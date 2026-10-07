@@ -31,6 +31,24 @@ export function temperament(): Pick<Personality, 'bold' | 'playful' | 'lazy' | '
   return { bold: t(), playful: t(), lazy: t(), curious: t() };
 }
 
+/**
+ * A cat has its days: livelier one day than the next, lazier, more curious about things, a little
+ * bolder or shyer; all one day by the date where you are, something else the day after; round its
+ * own nature, never far from it (born: the cat's own, so that two cats' days are not the same).
+ */
+export function ofTheDay(p: Pick<Personality, 'bold' | 'playful' | 'lazy' | 'curious'>, born: number, when: Date) {
+  let h = (Math.floor(born / 1000) ^ (when.getFullYear() * 400 + when.getMonth() * 32 + when.getDate())) >>> 0;
+  const r = () => {
+    // (a hash stirred along: the same numbers for the same day, any day)
+    h = Math.imul(h ^ (h >>> 15), 0x2c1b3c6d) >>> 0;
+    h = Math.imul(h ^ (h >>> 12), 0x297a2d39) >>> 0;
+    h = (h ^ (h >>> 15)) >>> 0;
+    return (h / 4294967296) * 2 - 1;
+  };
+  const c = (x: number) => Math.max(-1, Math.min(1, x));
+  return { bold: c(p.bold + 0.12 * r()), playful: c(p.playful + 0.35 * r()), lazy: c(p.lazy + 0.35 * r()), curious: c(p.curious + 0.25 * r()) };
+}
+
 export interface CatState {
   v: 1;
   generation: number;

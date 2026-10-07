@@ -13,7 +13,7 @@ import { Hint } from '../ui/hint';
 import { Firsts } from '../ui/firsts';
 import { SlowWatch } from './pace';
 import { Brain } from '../sim/brain';
-import { loadState, newCat, saveState, type CatState } from '../sim/state';
+import { loadState, newCat, ofTheDay, saveState, type CatState } from '../sim/state';
 import { HABITS, expectation, note, type Habit } from '../sim/habits';
 import { learn, lessons, worth } from '../sim/learn';
 import { crepuscular, stepLife, THRESH } from '../sim/life';
@@ -1692,7 +1692,10 @@ export class PixelApp {
     this.cat.motor.setMood(mood, true);
     this.avatar.mode = this.brain.mode;
     this.avatar.mood = mood;
-    this.avatar.temper = s.personality;
+    // (its nature as it is today: a cat has its days)
+    const day = this.clock().toDateString();
+    if (day !== this.tempered.day) this.tempered = { day, t: ofTheDay(s.personality, s.born, this.clock()) };
+    this.avatar.temper = this.tempered.t;
     // (what it learns comes of what it does: a game offered it, the red dot, the feathers, the ball
     // under your finger, is a good thing come of it)
     const offered = this.laser.held || !!this.wandFinger || !!this.toyFinger;
@@ -1999,6 +2002,8 @@ export class PixelApp {
     this.cat.breathed = false;
   }
   private loafFor = 0;
+  /** its nature as it is today, and the day it is for */
+  private tempered: { day: string; t: ReturnType<typeof ofTheDay> } = { day: '', t: { bold: 0, playful: 0, lazy: 0, curious: 0 } };
 
   /** the first time it does each of the things in FIRSTS, a word on what it means */
   private firsts(dt: number) {
