@@ -732,6 +732,9 @@ export class PixelAvatar implements Avatar {
     else if (this.act instanceof Tease) N.bias.set('wand', 0.4);
     else if (this.act?.name === 'play') N.bias.set('yarn', 0.35);
     else if (this.act?.name === 'pompom') N.bias.set('pompom', 0.35);
+    // (come to say hello, or sat by a present for you: it is you it is about, and its eyes keep
+    // coming back to you; a glance away now and then, as the look tires, and back)
+    if ((this.act instanceof Greet && this.act.phase !== 'see') || this.presenting) N.bias.set('you', (N.bias.get('you') ?? 0) + 0.35);
     if (I) N.bias.set(I.id, (N.bias.get(I.id) ?? 0) + this.whim.pull);
     for (const [id, k] of this.wonder) N.bias.set(id, (N.bias.get(id) ?? 0) + 0.3 * k);
     // (a face up close: hard to look away from; one it is not sure of, its eyes kept off it a
@@ -2053,8 +2056,8 @@ export class PixelAvatar implements Avatar {
     else if (this.gazeTarget && this.screenToWorld(this.gazeTarget.x, this.gazeTarget.y, this.look)) m.lookAt(this.look, 0.9);
     else if (seen) { m.lookAt(N.gazePoint, this.trip ? 0.3 : 0.85); m.eyeAt = N.gazePoint; }
     else if (this.avertT > 0) m.lookAt(this.lookAway, 0.7);
-    // (your hands about, or a slow blink for you: on you)
-    else if (this.sinceYou < 4 || this.cat.motor.slowBlinking) m.lookAt(this.viewer(), this.trip ? 0.3 : 0.85);
+    // (your hands about, or a slow blink for you, or come to say hello: on you)
+    else if (this.sinceYou < 4 || this.cat.motor.slowBlinking || (this.act instanceof Greet && this.act.phase !== 'see') || this.presenting) m.lookAt(this.viewer(), this.trip ? 0.3 : 0.85);
     else if (N.awake > 0.6 && (N.place === 'still' || (N.sc.on && N.sc.peak > 0.5))) {
       // (a thing in the room that stands out, or a place it knows: its eyes on it a while, the head
       // going a little way after them; then on to the next, or nowhere much)

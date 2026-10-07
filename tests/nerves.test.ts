@@ -190,4 +190,30 @@ describe('what the cat sees, and what it makes of it', () => {
     watch(() => [{ id: 'dot', kind: 'dot', p: V(0, 0, 0.8) }], 1, () => 0, undefined, n);
     expect(n.attending).toBeNull();
   });
+
+  it('come to say hello (you its business): its eyes mostly on you, a glance at a toy now and then', () => {
+    // (you through the glass ahead, a toy mouse and the feathers lying about to one side; a while of
+    // it, without and with the act's interest in you)
+    const things = (): Thing[] => [
+      { id: 'you', kind: 'you', p: V(0, 1.2, 2.5) },
+      { id: 'mouse', kind: 'toy', p: V(-0.3, 0, 0.5) },
+      { id: 'wand', kind: 'toy', p: V(0.3, 0, 0.7) },
+    ];
+    const share = (bias: number) => {
+      const n = new Nerves();
+      n.fond = 0.6;
+      let on = 0, steps = 0;
+      watch(things, 20, () => 0, (n) => {
+        n.bias.set('you', bias);
+        steps++;
+        if (n.attending?.id === 'you') on++;
+      }, n);
+      return on / steps;
+    };
+    const idle = share(0), hello = share(0.35);
+    expect(hello).toBeGreaterThan(0.6);
+    expect(hello).toBeGreaterThan(idle + 0.15);
+    // (not a stare fixed on you: it looks away now and then)
+    expect(hello).toBeLessThan(0.98);
+  });
 });
