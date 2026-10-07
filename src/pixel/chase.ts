@@ -94,6 +94,9 @@ export class Chase implements Act {
   private offSill = 0;
   /** the dot on its own body: which part of it, and a moment between goes after it there */
   private part: NonNullable<LaserDot['self']> = 'rear';
+  /** looking round for it, gone: the way the head is turned, the way it is going to, and how long
+   *  it looks there yet */
+  private readonly peek = { a: 0, to: 0, t: 0 };
   private selfRest = 0;
   /** how long the dot has been on its own coat (a beam it has only walked through is nothing) */
   private selfOn = 0;
@@ -148,6 +151,7 @@ export class Chase implements Act {
     this.best = 1e9;
     this.stuck = 0;
     this.urges.clear();
+    if (phase === 'search') { this.peek.a = 0; this.peek.to = 0; this.peek.t = 0; }
   }
 
   /** the case for leaving off what it is about (the dot gone off from where it crouched, or along
@@ -644,7 +648,16 @@ export class Chase implements Act {
         if (g < 0.8) { m.lookAt(this.last, 1); this.turnTo(c, this.last); }
         else if (g < 3.4) {
           m.lookAt(null);
-          const a = Math.sin((g - 0.8) * 2.4) * 0.85 * this.side;
+          // (in looks, not a sweep: the head turned quickly to one place, held there a moment while
+          // it looks, then to another, mostly the other way)
+          const P = this.peek;
+          if ((P.t -= dt) <= 0) {
+            P.t = rand(0.35, 0.85);
+            const away = P.to === 0 ? this.side : Math.random() < 0.75 ? -Math.sign(P.to) : Math.sign(P.to);
+            P.to = away * rand(0.35, 0.95);
+          }
+          P.a += (P.to - P.a) * Math.min(1, dt / 0.08);
+          const a = P.a;
           pose = { ...pose, neckYaw: a, headYaw: 0.5 * a, headRoll: -0.12 * a, neckPitch: -0.15 };
           // (and round on the spot, one way and then the other: a look behind it too)
           if (!m.goal && ((g > 1.3 && g - dt <= 1.3) || (g > 2.4 && g - dt <= 2.4))) {
