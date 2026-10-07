@@ -4078,6 +4078,10 @@ export class Box implements Act {
       || this.phase === 'duck' || this.phase === 'spring';
   }
   /** its eyes on the game over the rim, getting ready: they are its own */
+  /** (sat down in it at its ease, the head over the side: its eyes its own, looking about) */
+  get resting() {
+    return this.phase === 'sit' && this.nap <= 0.3 && !this.leaving;
+  }
   get ownGaze() {
     return this.phase === 'duck';
   }
@@ -4137,8 +4141,7 @@ export class Box implements Act {
         m.setPosture('loaf');
         this.look += dt;
         const deep = Math.min(1, Math.max(0, (this.nap - 0.3) / 0.5));
-        const glance = (1 - deep) * (0.4 * Math.sin(this.look * 0.4) + 0.2 * Math.sin(this.look * 1.1));
-        m.layer = { pose: { neckYaw: glance, headYaw: 0.5 * glance, neckPitch: -0.45 * deep, headPitch: -0.2 * deep, earFwd: 0.5 * (1 - deep) }, w: Math.min(1, this.t / 1.2) };
+        m.layer = { pose: { neckPitch: -0.45 * deep, headPitch: -0.2 * deep, earFwd: 0.5 * (1 - deep) }, w: Math.min(1, this.t / 1.2) };
         // (a game out there: down after it, out of sight, unless it is too sleepy for that)
         const P = this.prey?.();
         if (this.leaving && P && deep < 0.3) { this.preyAt.copy(P); this.next('duck', rand(0.8, 1.8)); return true; }

@@ -2074,7 +2074,7 @@ export class PixelAvatar implements Avatar {
     // (the eyes their own, ahead of the head, only while what it sees is what it looks at)
     m.eyeAt = this.act instanceof Chase && seen?.id === 'dot' ? N.gazePoint : null;
     let tilt = 0;
-    if ((this.act instanceof Sill || this.act instanceof Play || this.act instanceof Hunt || this.act instanceof Box || this.act instanceof Zoomies || this.act instanceof Stare || this.act?.ownGaze) && this.mode !== 'enjoy') { /* the act decides */ }
+    if ((this.act instanceof Sill || this.act instanceof Play || this.act instanceof Hunt || (this.act instanceof Box && !this.act.resting) || this.act instanceof Zoomies || this.act instanceof Stare || this.act?.ownGaze) && this.mode !== 'enjoy') { /* the act decides */ }
     else if (!this.alive || this.sleep > 0.5) m.lookAt(this.rouse && this.alive ? this.rouse.at : null, 0.8 * this.rouseK);
     else if (busy) {
       // (on its way somewhere, its eyes still go to a thing that moves, and the head a little way
