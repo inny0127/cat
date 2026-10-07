@@ -169,6 +169,16 @@ export class Motor {
   shy = 0;
   private noseNow = 0;
   private shyNow = 0;
+  /** what its midbrain makes of what it looks at (midbrain.ts; 0 .. 1 each): drawn toward it (the
+   *  head and the whiskers put out at it, the ears forward, the pupils opening), shying from it
+   *  (the head drawn back and the chin in, the ears going back and flat, lower on its legs, the
+   *  pupils wide), stock still (the tail and the drift of the head stopped, the ears up) */
+  approach = 0;
+  withdraw = 0;
+  freeze = 0;
+  private apNow = 0;
+  private wdNow = 0;
+  private frNow = 0;
   /** a head bump at that face, a cat's hello to one it loves: how far into it (s; less than
    *  nothing: none), and which cheek it draws along after */
   private bonkT = -1;
@@ -781,11 +791,12 @@ export class Motor {
     p.tailCurl += (0 - p.tailCurl) * wl;
     this.swayW = moving;
     this.swayA = g ? g.angle : 0;
-    // alive: slow weight shifts and head drift
-    p.hipRoll += 0.012 * noise1(t * 0.23 + 3);
-    p.chestYaw += 0.02 * noise1(t * 0.19 + 7);
-    p.headRoll += 0.05 * noise1(t * 0.13 + 11);
-    p.neckPitch += 0.03 * noise1(t * 0.17 + 5);
+    // alive: slow weight shifts and head drift (stock still, held)
+    const still = 1 - 0.8 * this.frNow;
+    p.hipRoll += 0.012 * noise1(t * 0.23 + 3) * still;
+    p.chestYaw += 0.02 * noise1(t * 0.19 + 7) * still;
+    p.headRoll += 0.05 * noise1(t * 0.13 + 11) * still;
+    p.neckPitch += 0.03 * noise1(t * 0.17 + 5) * still;
     // what the cat feels, in its ears, whiskers, tail, fur, mouth, head and breath (mood.ts):
     // ears and whiskers quick, the tail slower; fur bristles at once and lies down slowly
     const fb = bodyFor(this.mood), f = this.feel;
@@ -1025,6 +1036,27 @@ export class Motor {
       p.headPitch -= 0.14 * s;
       p.pupil = clamp(p.pupil + 0.35 * s);
     }
+    // what its midbrain makes of what it looks at: a shy is quick and comes off slowly; drawn
+    // toward a thing, it leans to it over a moment
+    this.apNow += (this.approach - this.apNow) * (1 - Math.exp(-dt * 4));
+    this.wdNow += (this.withdraw - this.wdNow) * (1 - Math.exp(-dt * (this.withdraw > this.wdNow ? 14 : 2.5)));
+    this.frNow += (this.freeze - this.frNow) * (1 - Math.exp(-dt * (this.freeze > this.frNow ? 10 : 2)));
+    if (this.apNow > 0.01 || this.wdNow > 0.01 || this.frNow > 0.01) {
+      const a = this.apNow, w = this.wdNow, fz = this.frNow;
+      let up = 0;
+      for (const [name, wgt] of this.postureWeights()) if (name === 'stand' || name === 'alert' || name === 'crouch' || name === 'sit') up += wgt;
+      p.whisker = clamp(p.whisker + 0.45 * a - 0.6 * w, -1, 1);
+      p.earFwd += 0.35 * a - 0.9 * w + 0.25 * fz;
+      p.earFlat = clamp(p.earFlat + 0.65 * w);
+      p.earOut += 0.25 * w;
+      p.neckPitch += -0.05 * a + 0.16 * w;
+      p.headPitch -= 0.12 * w;
+      // (lower on its legs, on its feet or sat up; lying down, it has nowhere lower to go)
+      p.hipY -= 0.012 * w * up;
+      p.pupil = clamp(p.pupil + 0.25 * a + 0.45 * w);
+      p.tailLift -= 0.25 * w;
+      p.eyeOpen = clamp(p.eyeOpen + 0.15 * w + 0.1 * fz);
+    }
     // a head bump at that face: the forehead put out at it, quick, the eyes shut, a moment against
     // it, and the cheek drawn along it after; then back
     if (this.bonkT >= 0) {
@@ -1172,7 +1204,7 @@ export class Motor {
   /** the tail's sway: the motor's own, plus the feeling's; at its ease, in bouts (a few swishes,
    *  then a while hardly at all), cross, all the time */
   private get waveAmp() {
-    const a = Math.max(0, this.tailWave + this.feel.tailWave);
+    const a = Math.max(0, this.tailWave + this.feel.tailWave) * (1 - 0.7 * this.frNow);
     const bout = 0.25 + 0.75 * clamp(0.5 + 0.9 * noise1(this.time * 0.21 + 11));
     return a * (bout + (1 - bout) * clamp(1.5 * this.feel.tailWave));
   }

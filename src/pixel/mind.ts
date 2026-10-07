@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { Nerves } from './nerves';
+import { SC_AZ, SC_EL, dirOf } from './midbrain';
 
 /** what each thing it sees is called, in a word or two */
 const NAMES: Record<string, string> = {
@@ -38,6 +39,8 @@ export interface MindState {
   /** how lively it is (what it takes into its head, how often: whim.ts), and how drowsy */
   pace?: number;
   sleepy?: number;
+  /** what its midbrain makes of what it looks at (midbrain.ts's Valence: 0 .. 1 each) */
+  feel?: { approach: number; withdraw: number; freeze: number; curious: number };
 }
 
 /**
@@ -117,6 +120,23 @@ export class Mind {
     if (!g) return;
     const W = this.marks.width, H = this.marks.height;
     g.clearRect(0, 0, W, H);
+    // the colliculus: where its neurons fire, warm over the view, as wide as each neuron's bit of it
+    const S = N.sc;
+    if (N.awake >= 0.3) {
+      const cell = Math.max(2, Math.round((5 / cam.fov) * H));
+      for (let r = 0; r < SC_EL; r++) {
+        for (let c = 0; c < SC_AZ; c++) {
+          const f = S.f[r * SC_AZ + c];
+          if (f < 0.12) continue;
+          const d = dirOf(c, r);
+          const q = this.p.set(Math.sin(d.az) * Math.cos(d.el), Math.sin(d.el), Math.cos(d.az) * Math.cos(d.el)).add(N.eye).project(cam);
+          if (q.z > 1 || Math.abs(q.x) > 1.1 || Math.abs(q.y) > 1.1) continue;
+          const x = Math.round((q.x * 0.5 + 0.5) * W), y = Math.round((-q.y * 0.5 + 0.5) * H);
+          g.fillStyle = `rgba(255,128,64,${(0.12 + 0.4 * f).toFixed(2)})`;
+          g.fillRect(x - (cell >> 1), y - (cell >> 1), cell, cell);
+        }
+      }
+    }
     for (const u of N.units.values()) {
       if (N.awake < 0.3 || u.a < 0.04 || (!u.here && u.conf < 0.05)) continue;
       const q = this.p.copy(u.conf > 0.2 ? u.belief : u.seen).project(cam);
@@ -140,9 +160,13 @@ export class Mind {
     const looks = (m.expects[top] ?? 0) > 0.25 ? { laser: '레이저 놀이', wand: '깃털 놀이', yarn: '털실 놀이', pet: '쓰다듬기', food: '밥' }[top] : null;
     // (its mood in a word: keyed up, at its ease, drowsy, or quiet)
     const mood = m.pace === undefined ? null : m.pace > 0.85 ? '들뜸' : m.pace > 0.4 ? '느긋함' : (m.sleepy ?? 0) > 0.35 ? '나른함' : '차분함';
+    // (its eyes on something it knows nothing of: a thing that moved)
+    const eyesOn = S.peak > 0.5 && !S.on ? '움직임' : A ? NAMES[A.id] ?? A.id : '-';
+    const F = m.feel;
     const rows = [
       ...(mood ? [`기분  ${mood}`] : []),
-      `보는 것  ${A ? NAMES[A.id] ?? A.id : '-'}`,
+      `보는 것  ${eyesOn}`,
+      ...(F && N.awake >= 0.3 ? [`신경망  다가감 ${pct(F.approach)} · 물러섬 ${pct(F.withdraw)} · 멈춤 ${pct(F.freeze)} · 호기심 ${pct(F.curious)}`] : []),
       `사냥 욕구  ${pct(N.hunt)}`,
       `하려는 것  ${m.intent ? DOING[m.intent] ?? m.intent : m.doing ? DOING[m.doing] ?? m.doing : '-'}`,
     ];

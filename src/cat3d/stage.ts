@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { Cat3D } from './cat';
+import type { Retina } from './retina';
 import { NMAT, PIX, PIX_GLSL, PIX_STEPS, rampTexture, setCoatRamps } from './pixclass';
 import { ROOM_LIGHT_GLSL, roomLightUniforms, type DayLight } from './roomlight';
 
@@ -828,9 +829,12 @@ export class Stage {
   }
 
   /** draw the scene: straight to the screen, or small and then as pixel art */
+  /** the cat's own eyes (retina.ts): the room drawn from them now and then, once the frame is */
+  retina: Retina | null = null;
   private draw() {
     this.drawMain();
     if (this.inset) this.drawInset();
+    this.retina?.capture(this.renderer, this.scene, performance.now() / 1000);
   }
   private drawMain() {
     if (!this.pixel) { this.renderer.render(this.scene, this.camera); return; }

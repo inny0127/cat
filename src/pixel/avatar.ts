@@ -10,6 +10,7 @@ import { Tease, type Lure } from './tease';
 import { GOAL, Whim } from './whim';
 import { noise1 } from '../util/math';
 import { Nerves, type Blocker, type Thing } from './nerves';
+import { Valence } from './midbrain';
 
 const LYING: PoseName[] = ['loaf', 'sphinx', 'side', 'back', 'curl', 'curlL'];
 const CURLED = (p: PoseName) => p === 'curl' || p === 'curlL';
@@ -96,6 +97,10 @@ export class PixelAvatar implements Avatar {
    *  eyes are, and what of that holds its attention; the room's say in what hides what (set by
    *  the app) */
   readonly nerves = new Nerves();
+  /** and what to do about what it looks at (midbrain.ts): go toward it, shy from it, freeze, wonder */
+  readonly valence = new Valence();
+  /** a start just now, other than by sight (a hand out of nowhere): fades */
+  private startled = 0;
   blockers: (() => readonly Blocker[]) | null = null;
   /** your hand, while a finger is on the screen: just in front of the room (set by the app) */
   userHand: THREE.Vector3 | null = null;
@@ -106,6 +111,14 @@ export class PixelAvatar implements Avatar {
   private readonly eyeW = new THREE.Vector3();
   private readonly headQ = new THREE.Quaternion();
   private readonly headF = new THREE.Vector3();
+  /** where its eyes are and the way its head faces (world), as of the last look round (for the
+   *  retina: retina.ts) */
+  get eyes(): Readonly<THREE.Vector3> {
+    return this.eyeW;
+  }
+  get facing(): Readonly<THREE.Vector3> {
+    return this.headF;
+  }
   /** the red dot as it has it: where it believes the dot is (lost: none) */
   private readonly dotSeen: LaserDot = { p: new THREE.Vector3(), on: 'floor', n: new THREE.Vector3(0, 1, 0) };
   private dotLost = true;
@@ -720,7 +733,9 @@ export class PixelAvatar implements Avatar {
     else if (this.closeT >= 0) N.bias.set('you', 0.4);
     this.headYaw = Math.atan2(this.headF.x, this.headF.z);
     this.headPitch = Math.asin(Math.max(-1, Math.min(1, this.headF.y)));
+    N.selfMotion = m.speed;
     N.update(dt, this.eyeW, this.headYaw, this.headPitch, T);
+    this.feelAbout(dt);
     // (a hand come down on it out of nowhere: felt, and its eyes go round to it)
     if (this.handCue > 0 && N.unit('hand')) { N.cue('hand', this.handCue); this.handCue = 0; }
     // (a start, a moment ago: a look at you)
@@ -770,6 +785,43 @@ export class PixelAvatar implements Avatar {
     } else { E.L = 0; E.R = 0; this.earSound = null; }
     this.listen(dt, A && A.kind !== 'you' ? A.a : 0);
   }
+
+  /**
+   * What to do about what it sees (midbrain.ts's Valence), from moment to moment: prey-like movement
+   * draws it on (the head and whiskers put out, the ears forward); a thing coming at its face, the
+   * faster and the nearer the more, makes it shy (a friend's hand much less so, to a cat that
+   * trusts you); something new, a flash or a hand out of nowhere stops it dead a moment; and a
+   * thing new to it it wonders at, if it is not afraid.
+   */
+  private feelAbout(dt: number) {
+    const N = this.nerves, m = this.cat.motor, mood = this.mood;
+    let loom = 0, novel = 0;
+    for (const u of N.units.values()) {
+      if (!u.here || u.vis < 0.2) continue;
+      // (a thing that could hit it: not a spot of light)
+      const w = u.kind === 'hand' ? 1 : u.kind === 'toy' ? 0.8 : u.kind === 'you' ? 0.5 : u.kind === 'bird' || u.kind === 'bug' ? 0.3 : 0;
+      const friend = u.kind === 'hand' || u.kind === 'you' ? Math.max(0, Math.min(1, (mood.trust - 0.2) / 0.6)) : 0;
+      const rate = u.closing / Math.max(0.08, u.dist);
+      const l = Math.max(0, Math.min(1, (rate - 0.5) / 2)) * Math.max(0, Math.min(1, (0.7 - u.dist) / 0.5)) * u.vis * w * (1 - 0.85 * friend);
+      loom = Math.max(loom, l);
+      if (u.kind !== 'spot') novel = Math.max(novel, Math.min(1, u.onset) * u.vis);
+    }
+    this.startled *= Math.exp(-dt / 0.3);
+    const awake = this.alive && !this.isHidden ? N.awake : 0;
+    const V = this.valence;
+    V.update(dt, {
+      prey: N.prey * awake, loom: loom * awake, novel: novel * awake, startle: Math.min(1, N.sc.flash + this.startled) * awake,
+      fear: mood.fear, arousal: mood.arousal,
+    });
+    const k = awake > 0.5 ? 1 : 0;
+    m.approach = k * V.approach;
+    m.withdraw = k * V.withdraw;
+    m.freeze = k * V.freeze;
+    // (a thing at its face: a blink, as any eye blinks at one)
+    if (k && V.withdraw > 0.45 && !this.shied) m.blinkNow();
+    this.shied = V.withdraw > 0.35;
+  }
+  private shied = false;
 
   /**
    * Your face come up close in front of it (the view taken right in on it): its eyes go to you;
@@ -956,6 +1008,7 @@ export class PixelAvatar implements Avatar {
       seen = Math.max(seen, N.visible(q, this.headYaw, this.headPitch, blockers));
     }
     this.handCue = 0.6 + 0.9 * (1 - seen);
+    this.startled = Math.max(this.startled, 1 - seen);
     return 1 - seen;
   }
 
@@ -1917,6 +1970,11 @@ export class PixelAvatar implements Avatar {
         this.chatterIn = 2.5 + Math.random() * 3;
         if (Math.random() < 0.6) this.outside?.chirp();
       }
+    } else if (N.sc.peak > 0.55 && !N.sc.on && N.awake > 0.6) {
+      // (something it knows nothing about moved, there in front of it: a curtain swinging, a
+      // shadow, a thing gone flying; its eyes go to it, and its head after them)
+      m.lookAt(N.gazePoint, 0.9);
+      m.eyeAt = N.gazePoint;
     } else if (this.heard && (this.heard.t -= dt) > 0) {
       m.lookAt(this.heard.at, 0.8);
       tilt = this.heard.tilt;

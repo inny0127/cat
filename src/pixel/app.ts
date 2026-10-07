@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { Cat3D } from '../cat3d/cat';
 import { Stage } from '../cat3d/stage';
+import { Retina } from '../cat3d/retina';
 import { moodFromBrain } from '../cat3d/mood';
 import { PointerInput, type Contact } from '../input/pointer';
 import { MotionInput } from '../input/motion';
@@ -58,6 +59,8 @@ export class PixelApp {
   readonly senses: Senses3D;
   readonly avatar: PixelAvatar;
   readonly room: Room;
+  /** the cat's own eyes: the room drawn from them, for its midbrain (retina.ts, midbrain.ts) */
+  readonly retina = new Retina();
   state: CatState;
   brain!: Brain;
   private last = 0;
@@ -83,6 +86,10 @@ export class PixelApp {
   constructor(readonly canvas: HTMLCanvasElement, hintEl: HTMLDivElement, readonly cat: Cat3D) {
     this.stage = new Stage({ pixel: PixelApp.artWidth(), paper: '#f4eee4', shadowSize: 2.6 }, canvas);
     this.stage.add(cat);
+    this.stage.retina = this.retina;
+    this.retina.hide = cat.group;
+    // (a phone found slow: its eyes looked through half as often)
+    if (PixelApp.pxWanted() === PixelApp.COARSE) this.retina.rate = 6;
     this.hintUi = new Hint(hintEl);
     this.firstWords = new Firsts(() => this.state.hints, this.hintUi);
     this.senses = new Senses3D(cat, this.stage.camera, canvas);
@@ -570,6 +577,7 @@ export class PixelApp {
     if (!this.coarseDue || this.input.touching || this.focus > 0.02) return;
     this.coarseDue = false;
     this.stage.setArtWidth(PixelApp.artWidth(PixelApp.COARSE));
+    this.retina.rate = 6;
     try { localStorage.setItem(PixelApp.COARSE_KEY, '1'); } catch { /* not remembered, then */ }
   }
 
@@ -1219,6 +1227,7 @@ export class PixelApp {
       intent: av.whim.intent?.o.key ?? null, doing, wonder: av.wondering, expects: av.expects, dream: av.dreaming,
       urges: M.open ? av.whim.urges(av.nerves, 2) : undefined, lessons: M.open ? lessons(this.state, this.clock().getTime()) : undefined,
       pace: av.whim.pace, sleepy: av.mood.sleepy,
+      feel: { approach: av.valence.approach, withdraw: av.valence.withdraw, freeze: av.valence.freeze, curious: av.valence.curious },
     });
     // (its lids down as far as sleep has them)
     this.stage.inset = M.open && !av.hidden ? { cam: M.cam, rect: M.rect, hide: this.cat.group, lids: 1 - av.nerves.awake } : null;
@@ -1689,6 +1698,20 @@ export class PixelApp {
     this.avatar.lean = this.leanIn();
     this.learnHabits(clock.getTime(), dt, contacts.length > 0);
     this.avatar.update(dt);
+    // (its eyes where they are, the way its head faces, for the next look; what they last saw, to
+    // its midbrain: awake and in the room, and the room on the screen)
+    const R = this.retina, av = this.avatar;
+    R.on = this.visible && !av.hidden && av.nerves.awake > 0.3;
+    R.eye.copy(av.eyes);
+    R.fwd.copy(av.facing);
+    // (the red dot, a moth or a fly, a glint of sun are drawn over the picture, not in the room: put
+    // into what its eyes see where they are)
+    R.marks.length = 0;
+    if (av.laser) R.marks.push({ p: av.laser.p, lum: 0.9 });
+    if (av.glint) R.marks.push({ p: av.glint, lum: 0.8 });
+    const moth = av.outside?.bug?.();
+    if (moth) R.marks.push({ p: moth.p, lum: 0.5 });
+    av.nerves.frame = R.on ? R.latest : null;
     this.seeMind();
     const landed = this.avatar.pawLanded;
     // (its cheek rubbed on the glass at your finger: felt, a soft bump each time)

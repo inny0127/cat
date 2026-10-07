@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import type { EyeFrame } from '../cat3d/retina';
+import { Colliculus, type Known } from './midbrain';
 
 /**
  * The cat's nervous system, as far as its eyes go.
@@ -20,6 +22,12 @@ import * as THREE from 'three';
  * the thing is, is what it goes after: where it last saw it, carried on the way it was going for
  * a moment, and less and less sure the longer it is out of sight. Prey in its attention builds a
  * drive to hunt; slowly, and slowly gone again.
+ *
+ * Where its eyes go is the colliculus's (midbrain.ts): a sheet of neurons laid out as the way round
+ * it is, driven by these neurons where their things are and, when there is a picture from its eyes
+ * (retina.ts), by anything that moves or changes in it, known to it or not; its firing feeds back
+ * on the neurons whose things it is on. The eyes go where its one patch of firing is: to a thing
+ * it knows, or to a curtain swinging, a flicker, a shadow, that it knows nothing about.
  */
 
 /** what sort of thing it is, to a cat */
@@ -55,6 +63,9 @@ const KIND: Record<Kind, { look: number; prey: number }> = {
   spot: { look: 0.14, prey: 0 },
 };
 
+/** about how big each kind of thing is (m: its bump on the colliculus is as wide as it looks) */
+const SIZE: Record<Kind, number> = { dot: 0.01, toy: 0.04, bug: 0.01, bird: 0.06, hand: 0.06, you: 0.15, glint: 0.03, spot: 0.08 };
+
 /** the eye and the brain: how late what it sees is (s) */
 export const LATENCY = 0.09;
 /** frames of a thing's whereabouts kept (enough for the lateness at any frame rate a phone runs) */
@@ -89,6 +100,10 @@ export class Unit {
   blur = 0;
   /** just come into sight (0..1, fading) */
   onset = 0;
+  /** how far from the eyes (m), and how fast it is coming at them (m/s; going away, less than
+   *  nothing), as seen */
+  dist = 1;
+  closing = 0;
   /** how tired its input is (0..1) */
   hab = 0;
   /** the neuron: what it has taken in, and how hard it fires (0..1); and its own slow wandering
@@ -153,7 +168,11 @@ export class Unit {
     // for, as eyes and brains do; and nothing seems to go faster than it would a hand's breadth
     // off, however close under the nose it is)
     const d = tmp.copy(this.seen).sub(eye);
-    const dist = Math.max(0.25, d.length());
+    const near = d.length();
+    // (how fast it comes at the eyes, over a few hundredths of a second)
+    if (this.haveDir && dt > 0) this.closing += ((this.dist - near) / dt - this.closing) * (1 - Math.exp(-dt / 0.06));
+    this.dist = near;
+    const dist = Math.max(0.25, near);
     d.normalize();
     // (a tremble from frame to frame is not movement: the motion detectors take its way and speed
     // over a few hundredths of a second)
@@ -208,6 +227,16 @@ export class Unit {
 
 export class Nerves {
   readonly units = new Map<string, Unit>();
+  /** the colliculus: where the eyes go (midbrain.ts) */
+  readonly sc = new Colliculus();
+  /** the latest picture from its eyes (retina.ts; null: none, the eyes' work done from what it
+   *  knows alone), and how fast it is going itself (m/s: a walking cat's view slides by) */
+  frame: EyeFrame | null = null;
+  selfMotion = 0;
+  private frameT = -1;
+  private readonly known: Known[] = [];
+  /** prey-like movement in what it attends to just now (0 .. 1) */
+  prey = 0;
   /** what it attends to (null: nothing in particular) */
   attending: Unit | null = null;
   /** the drive to hunt, built by prey in its attention (0..1) */
@@ -313,7 +342,10 @@ export class Nerves {
       const rest = total - u.a;
       // (its wandering: a slow drift, a few seconds long, about nothing in particular)
       u.wander += -u.wander * dt / 2.5 + 0.16 * this.restless * Math.sqrt(2 * dt / 2.5) * (this.noise() + this.noise()) * 1.7;
-      const input = drive + (u.vis > 0.2 ? u.wander : 0) + 0.32 * u.a - 0.62 * rest + 0.05 * this.noise();
+      // (and the colliculus firing where it is: a thing its eyes are on holds them)
+      const at = u.conf > 0.2 ? u.belief : u.seen;
+      const back = this.sc.firing(Math.atan2(at.x - eye.x, at.z - eye.z), Math.atan2(at.y - eye.y, Math.hypot(at.x - eye.x, at.z - eye.z)));
+      const input = drive + (u.vis > 0.2 ? u.wander : 0) + 0.32 * u.a - 0.62 * rest + 0.18 * back + 0.05 * this.noise();
       u.u += (input - u.u) * Math.min(1, dt / tau);
       u.a = 1 / (1 + Math.exp(-(u.u - 0.42) * 10));
       if (!u.here && u.conf < 0.05) u.a *= Math.exp(-dt * 6);
@@ -327,8 +359,23 @@ export class Nerves {
     // the drive to hunt
     let prey = 0;
     for (const u of this.units.values()) prey += u.a * KIND[u.kind].prey * (0.35 + 0.65 * u.motion) * Math.max(u.vis, u.conf * 0.5);
+    this.prey = Math.min(1, prey);
     const want = Math.min(1, prey * (0.4 + 0.8 * this.playful));
     this.hunt += (want - this.hunt) * (1 - Math.exp(-dt / (want > this.hunt ? 0.5 : 3)));
+    // the colliculus: what the eyes give, if there is a fresh picture; the things it knows, where it
+    // takes them to be, each as hard as its neuron fires
+    const F = this.frame;
+    if (F && F.t !== this.frameT && this.awake >= 0.3) {
+      this.frameT = F.t;
+      this.sc.see(F, this.selfMotion);
+    }
+    const K = this.known;
+    K.length = 0;
+    for (const u of this.units.values()) {
+      if (u.a < 0.02 || (!u.here && u.conf < 0.05)) continue;
+      K.push({ id: u.id, p: u.conf > 0.2 ? u.belief : u.seen, a: u.a, r: SIZE[u.kind] });
+    }
+    this.sc.update(dt, eye, K, this.awake);
     this.aim(dt);
   }
 
@@ -367,10 +414,20 @@ export class Nerves {
   private aim(dt: number) {
     this.since += dt;
     this.jump = 0;
-    const A = this.attending;
-    if (!A) { this.sacc = 0; this.jumped = 0; return; }
-    // (unsure where it is but seeing it go, the eyes go after the movement itself)
-    const to = this.t.c.copy(A.conf < 0.4 && A.vis > 0.15 ? A.seen : A.belief).sub(this.eye);
+    // (the eyes go where the colliculus fires: on a thing it knows, to where it takes that to be; on
+    // something it knows nothing of, that way, to about where the floor or a wall would be; and
+    // with no patch of it firing, to what it attends to, if anything)
+    const S = this.sc, on = S.on ? this.units.get(S.on) ?? null : null;
+    const A = on ?? (S.peak > 0.5 ? null : this.attending);
+    if (!A && S.peak <= 0.5) { this.sacc = 0; this.jumped = 0; return; }
+    const to = this.t.c;
+    if (A) to.copy(A.conf < 0.4 && A.vis > 0.15 ? A.seen : A.belief).sub(this.eye);
+    else {
+      S.dir(to);
+      // (down at the floor: as far as the floor is that way; level or up, a wall's way off)
+      to.multiplyScalar(to.y < -0.05 ? Math.min(2.5, this.eye.y / -to.y) : 1.5);
+    }
+    const sweep = A ? A.sweep : 0;
     const dist = Math.max(0.05, to.length());
     to.divideScalar(dist);
     const err = this.gaze.angleTo(to);
@@ -385,7 +442,7 @@ export class Nerves {
       this.jumped = this.turn(to, err * (1 - Math.exp(-dt / 0.025)));
     } else {
       // following: about as fast as it goes, a little behind, and never very fast
-      this.turn(to, Math.min(err, (0.85 * A.sweep + 2.2 * err) * dt, 1.6 * dt));
+      this.turn(to, Math.min(err, (0.85 * sweep + 2.2 * err) * dt, 1.6 * dt));
     }
     // (never nearer than a hand's breadth: the eyes would cross on a thing under the chin)
     this.gazePoint.copy(this.eye).addScaledVector(this.gaze, Math.max(0.2, dist));

@@ -1,0 +1,173 @@
+import { describe, it, expect } from 'vitest';
+import * as THREE from 'three';
+import { Colliculus, Valence, type Known, type ValenceIn } from '../src/pixel/midbrain';
+import type { EyeFrame } from '../src/cat3d/retina';
+
+const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+const D = Math.PI / 180;
+const wrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
+
+/** a picture from the eyes as the retina makes one: 48 across the two hundred degrees in front of
+ *  a head facing `yaw`, 16 down; brightness from `lum(az, el)` */
+function frame(yaw: number, t: number, lum: (az: number, el: number) => number): EyeFrame {
+  const w = 48, h = 16, n = w * h;
+  const F: EyeFrame = { lum: new Float32Array(n), w, h, az: new Float32Array(n), el: new Float32Array(n), t };
+  for (let j = 0; j < h; j++) {
+    for (let i = 0; i < w; i++) {
+      const k = j * w + i, az = wrap(yaw + (100 - ((i + 0.5) * 200) / w) * D), el = (38 - ((j + 0.5) * 77) / h) * D;
+      F.az[k] = az;
+      F.el[k] = el;
+      F.lum[k] = lum(az, el);
+    }
+  }
+  return F;
+}
+/** a room of plain walls with a few still things in it: some brightness everywhere, darker below */
+const room = (az: number, el: number) => 0.35 + 0.1 * Math.sin(az * 3) + 0.15 * Math.max(0, el) + (Math.abs(wrap(az - 0.9)) < 0.12 && el > 0.1 && el < 0.4 ? 0.4 : 0);
+
+describe('the colliculus: where its eyes go', () => {
+  it('a thing it knows: the firing gathers on it, in one patch, as wide as it is', () => {
+    const S = new Colliculus();
+    const eye = V(0, 0.2, 0), p = V(0.4, 0, 0.6);
+    for (let t = 0; t < 1; t += 1 / 60) S.update(1 / 60, eye, [{ id: 'a', p, a: 0.9, r: 0.04 }], 1);
+    expect(S.on).toBe('a');
+    expect(S.peak).toBeGreaterThan(0.9);
+    expect(Math.abs(wrap(S.at.az - Math.atan2(0.4, 0.6)))).toBeLessThan(0.06);
+    expect(Math.abs(S.at.el - Math.atan2(-0.2, Math.hypot(0.4, 0.6)))).toBeLessThan(0.06);
+    // (and nowhere else on the sheet does it fire)
+    let elsewhere = 0;
+    for (let k = 0; k < S.f.length; k++) if (S.f[k] > 0.3) elsewhere++;
+    expect(elsewhere).toBeLessThan(25);
+  });
+
+  it('two things alike: one patch wins and holds; the other is put out', () => {
+    const S = new Colliculus();
+    const eye = V(0, 0.2, 0);
+    const K: Known[] = [{ id: 'a', p: V(-0.3, 0, 0.8), a: 0.9, r: 0.04 }, { id: 'b', p: V(0.3, 0, 0.8), a: 0.9, r: 0.04 }];
+    let switches = 0, last: string | null = null;
+    for (let t = 0; t < 8; t += 1 / 60) {
+      S.update(1 / 60, eye, K, 1);
+      if (t > 0.3 && S.on && last && S.on !== last) switches++;
+      if (S.on) last = S.on;
+    }
+    expect(switches).toBeLessThan(2);
+    const other = last === 'a' ? K[1] : K[0];
+    expect(S.firing(Math.atan2(other.p.x, other.p.z), Math.atan2(-0.2, Math.hypot(other.p.x, other.p.z)))).toBeLessThan(0.1);
+  });
+
+  it('something it knows nothing of moves in a still room: the firing goes to it, on nothing it knows', () => {
+    const S = new Colliculus();
+    const eye = V(0, 0.2, 0);
+    let t = 0;
+    for (let i = 0; i < 12; i++) {
+      t += 1 / 12;
+      S.see(frame(0, t, room), 0);
+      for (let k = 0; k < 5; k++) S.update(1 / 60, eye, [], 1);
+    }
+    expect(S.peak).toBeLessThan(0.5);
+    // (a small dark thing swinging to and fro, off to its right and a little up: a curtain's tassel)
+    const at = (tt: number) => -0.8 + 0.1 * Math.sin(tt * 9);
+    for (let i = 0; i < 18; i++) {
+      t += 1 / 12;
+      const x = at(t);
+      S.see(frame(0, t, (az, el) => room(az, el) - (Math.abs(wrap(az - x)) < 0.09 && Math.abs(el - 0.2) < 0.09 ? 0.3 : 0)), 0);
+      for (let k = 0; k < 5; k++) S.update(1 / 60, eye, [], 1);
+    }
+    expect(S.peak).toBeGreaterThan(0.6);
+    expect(S.on).toBeNull();
+    expect(Math.abs(wrap(S.at.az + 0.8))).toBeLessThan(0.2);
+    expect(Math.abs(S.at.el - 0.2)).toBeLessThan(0.15);
+  });
+
+  it('turning its own head round a still room is no movement to it', () => {
+    const S = new Colliculus();
+    const eye = V(0, 0.2, 0);
+    let t = 0, most = 0;
+    for (let i = 0; i < 36; i++) {
+      t += 1 / 12;
+      S.see(frame(0.9 * Math.sin(t * 2.5), t, room), 0);
+      for (let k = 0; k < 5; k++) S.update(1 / 60, eye, [], 1);
+      if (i > 2) most = Math.max(most, S.peak);
+    }
+    expect(most).toBeLessThan(0.5);
+  });
+
+  it('the whole view changes at once (the light switched off, lightning): a start, and no movement anywhere', () => {
+    const S = new Colliculus();
+    const eye = V(0, 0.2, 0);
+    let t = 0;
+    for (let i = 0; i < 6; i++) { t += 1 / 12; S.see(frame(0, t, room), 0); S.update(1 / 60, eye, [], 1); }
+    t += 1 / 12;
+    S.see(frame(0, t, (az, el) => room(az, el) * 0.3), 0);
+    for (let k = 0; k < 5; k++) S.update(1 / 60, eye, [], 1);
+    expect(S.flash).toBeGreaterThan(0.6);
+    expect(S.peak).toBeLessThan(0.5);
+  });
+
+  it('asleep, the eyes give it nothing: a thing it knows fires nothing on it', () => {
+    const S = new Colliculus();
+    for (let t = 0; t < 1; t += 1 / 60) S.update(1 / 60, V(0, 0.2, 0), [{ id: 'a', p: V(0.4, 0, 0.6), a: 0.9, r: 0.04 }], 0);
+    expect(S.peak).toBeLessThan(0.1);
+  });
+});
+
+describe('what to do about it: go toward it, shy, freeze, wonder', () => {
+  const calm: ValenceIn = { prey: 0, loom: 0, novel: 0, startle: 0, fear: 0, arousal: 0.2 };
+  const run = (V0: Valence, secs: number, I: Partial<ValenceIn>, each?: (v: Valence, t: number) => void) => {
+    for (let t = 0; t < secs; t += 1 / 60) { V0.update(1 / 60, { ...calm, ...I }); each?.(V0, t); }
+  };
+
+  it('at rest: none of it much', () => {
+    const v = new Valence();
+    run(v, 5, {});
+    expect(v.approach).toBeLessThan(0.25);
+    expect(v.withdraw).toBeLessThan(0.15);
+    expect(v.freeze).toBeLessThan(0.2);
+  });
+
+  it('a thing coming at its face: a shy in a tenth of a second or so, and over a while after', () => {
+    const v = new Valence();
+    run(v, 3, {});
+    let rose = -1;
+    run(v, 0.4, { loom: 1 }, (x, t) => { if (rose < 0 && x.withdraw > 0.5) rose = t; });
+    expect(rose).toBeGreaterThan(0);
+    expect(rose).toBeLessThan(0.2);
+    run(v, 3, {});
+    expect(v.withdraw).toBeLessThan(0.3);
+  });
+
+  it('prey-like movement draws it on, and a shy puts that out', () => {
+    const v = new Valence();
+    run(v, 2, { prey: 0.9, arousal: 0.6 });
+    expect(v.approach).toBeGreaterThan(0.6);
+    run(v, 0.3, { prey: 0.9, arousal: 0.6, loom: 1 });
+    expect(v.withdraw).toBeGreaterThan(0.5);
+    expect(v.approach).toBeLessThan(0.5);
+  });
+
+  it('a start that comes to nothing, again and again: less of a start each time', () => {
+    const v = new Valence();
+    const peaks: number[] = [];
+    for (let k = 0; k < 4; k++) {
+      let peak = 0;
+      run(v, 0.25, { startle: 1 }, (x) => { peak = Math.max(peak, x.withdraw); });
+      run(v, 1.5, {});
+      peaks.push(peak);
+    }
+    expect(peaks[3]).toBeLessThan(peaks[0] - 0.08);
+  });
+
+  it('something new, and not afraid: a moment stock still, then curious about it', () => {
+    const v = new Valence();
+    run(v, 2, {});
+    let froze = 0;
+    run(v, 0.6, { novel: 1 }, (x) => { froze = Math.max(froze, x.freeze); });
+    run(v, 2, { novel: 0.6 });
+    expect(froze).toBeGreaterThan(0.45);
+    expect(v.curious).toBeGreaterThan(0.45);
+    const afraid = new Valence();
+    run(afraid, 2, { fear: 0.9 });
+    run(afraid, 2.6, { novel: 0.8, fear: 0.9 });
+    expect(afraid.curious).toBeLessThan(v.curious - 0.2);
+  });
+});
