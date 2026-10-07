@@ -48,6 +48,10 @@ export class PixelAvatar implements Avatar {
   earMood: EarMood = 'sleep';
   tailMood: TailMood = 'still';
   headLift = 0;
+  /** how far up it holds itself, as it comes to it (quicker up than down), and whether it is sat
+   *  up by that, or down in a loaf */
+  private liftSlow = -1;
+  private satUp = false;
   headLean = { x: 0, y: 0 };
   headRecoil = 0;
   kneading = false;
@@ -1659,6 +1663,10 @@ export class PixelAvatar implements Avatar {
       // the way, or as it turns round on the bed: it lies down there and then, under the hand,
       // rather than go round and round under it; on to its bed once it is let be)
       if (this.act && (this.act.name !== 'to bed' || this.hands.length)) this.stopAct();
+      // (sent to bed awake and sleepy by the time it is on its way: it means to lie down as it now
+      // wants to, curled up, not as it did when it set off, sat up, and up again a moment after to
+      // lie down right)
+      if (this.act instanceof Walk && this.act.settle && this.act.setOff && this.act.settle !== this.wanted()) this.act = toBed(c, this.wanted());
       if (!this.act && !atHome && !this.touched) this.act = toBed(c, this.wanted());
       if (this.act) {
         if (!this.act.update(dt, c)) this.act = null;
@@ -1862,12 +1870,15 @@ export class PixelAvatar implements Avatar {
     }
     if (this.sleep < 0.5) this.deep = false;
     if (this.sleep > 0.3) return 'loaf';
-    if (this.headLift > 0.8) return 'sit';
-    return 'loaf';
+    // (sat up on the alert, down in a loaf at its ease: a moment's ease between two alarms does
+    // not have it half down and straight back up)
+    this.satUp = (this.liftSlow < 0 ? this.headLift : this.liftSlow) > (this.satUp ? 0.55 : 0.75);
+    return this.satUp ? 'sit' : 'loaf';
   }
 
   update(dt: number) {
     const m = this.cat.motor;
+    this.liftSlow = this.liftSlow < 0 ? this.headLift : this.liftSlow + (this.headLift - this.liftSlow) * (1 - Math.exp(-dt / (this.headLift > this.liftSlow ? 0.5 : 1.5)));
     // (the skin of its back twitching under a hand it has had about enough of)
     this.cat.ripple = this.alive ? this.rippleTarget : 0;
     if (this.fading) {

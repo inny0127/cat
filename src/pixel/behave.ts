@@ -863,7 +863,13 @@ export class Walk implements Act {
   private glimpsed = false;
   /** the last leg it has asked itself whether to go home on (Leg.home) */
   private asked = -1;
+  /** the way it means to lie down at the end of it, if it is off to lie down (to bed) */
+  settle: PoseName | null = null;
   constructor(readonly name: string, private readonly legs: Leg[], private readonly speed = 0.25) {}
+  /** still on its way to the first place, not yet there */
+  get setOff() {
+    return this.i === 0 && !this.arrived;
+  }
   get ownGaze() {
     return !!this.pause;
   }
@@ -4683,11 +4689,13 @@ export const toBed = (c: Ctx, settle: PoseName) => {
       return { LF: { planted: 0, y: 0.012 + 0.018 * l, flex: 0.35 * l }, RF: { planted: 0, y: 0.012 + 0.018 * rr, flex: 0.35 * rr }, neckPitch: -0.35, headPitch: -0.1, eyeOpen: 0.5 };
     },
   }] : [];
-  return new Walk('to bed', [
+  const w = new Walk('to bed', [
     ...ring,
     ...tread,
     { to: spot, face: bed.yaw, stay: 0.1, posture: settle },
   ], 0.22);
+  w.settle = settle;
+  return w;
 };
 
 /** how hot (0 .. 1: from a warm room up to a hot one) and how cold (from a cool one down) the
