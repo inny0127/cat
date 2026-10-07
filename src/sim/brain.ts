@@ -409,9 +409,16 @@ export class Brain {
     this.glassTap(sx, sy);
     if (this.mode === 'rest' || this.mode === 'alert') {
       this.attention = { x: sx, y: sy, until: this.time + 3 };
-      if (this.s.trust > 0.3 && chance(0.4)) this.say('chirp');
+      // (called: fond of you and at its ease, as often as not it comes to the glass where you
+      // knocked to see what you want, with a word on the way; not every time you knock)
+      if (this.s.trust > 0.3 && this.time - this.calledAt > 20 && chance(0.3 + 0.55 * clamp(this.s.trust)) && this.anim.called?.(sx, sy)) {
+        this.calledAt = this.time;
+        this.say(chance(0.6) ? 'trill' : 'chirp', { delay: rand(0.4, 0.9) });
+      } else if (this.s.trust > 0.3 && chance(0.4)) this.say('chirp');
     }
   }
+  /** when it last came to a knock on the glass */
+  private calledAt = -1e9;
 
   /** a toy moved about before its eyes (the ball of wool under a finger, now at sx, sy): it wakes
    *  to it out of a light sleep, its eyes follow it, it stays up for it, and being played with is

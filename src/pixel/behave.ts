@@ -1104,8 +1104,9 @@ export class Greet implements Act {
    *  it is lying on) */
   private readonly flop: number;
   roll = 1;
-  /** waiting: found sat at the glass already, waiting for you (and there you are) */
-  constructor(readonly glad: number, private readonly waiting = false) {
+  /** waiting: found sat at the glass already, waiting for you (and there you are); at: where on
+   *  the glass to come to (called there by a tap tap; else the middle of it) */
+  constructor(readonly glad: number, private readonly waiting = false, private readonly at: THREE.Vector3 | null = null) {
     this.bumps = glad > 0.5 && Math.random() < 0.8 ? (Math.random() < 0.4 ? 2 : 1) : 0;
     this.stay = rand(5, 9) + 8 * glad;
     this.flop = glad > 0.75 && Math.random() < 0.4 ? rand(4.5, 7) : 0;
@@ -1146,7 +1147,7 @@ export class Greet implements Act {
       if (!this.set) {
         this.set = true;
         // (sat a little side-on, the head turned to you: square on, a sitting cat is a pillar)
-        m.walkTo(c.window, 0.3, -this.side * 0.42, () => { this.phase = 'sit'; this.t = 0; this.set = false; m.eager = 0; });
+        m.walkTo(this.at ?? c.window, 0.3, -this.side * 0.42, () => { this.phase = 'sit'; this.t = 0; this.set = false; m.eager = 0; });
       }
       return true;
     }

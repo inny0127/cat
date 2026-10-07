@@ -1566,6 +1566,22 @@ export class PixelAvatar implements Avatar {
 
   /** you looking round the room at something over there (x along the room): awake, at its ease
    *  and curious, it strolls over to see for itself, and sits and looks up at you (true if it goes) */
+  /** called with a knock on the glass: awake, at its ease, and not set on anything, it comes to the
+   *  glass where you knocked, sits there looking up at you (fond of you, a push of its head at the
+   *  glass), and a while after is about its business */
+  private readonly callAt = new THREE.Vector3();
+  called(sx: number, sy: number) {
+    if (!this.alive || this.isHidden || this.sleep > 0.3 || this.errand || this.trip || this.perched || this.hands.length) return false;
+    if (this.mode !== 'rest' && this.mode !== 'alert') return false;
+    if (this.act && !/^(to bed|wander|yawn|groom|wash|look with you|stare)/.test(this.act.name)) return false;
+    const p = this.screenToWorld(sx, sy, this.callAt);
+    if (!p) return false;
+    const c = this.ctx;
+    const at = c.keepClear(new THREE.Vector3(Math.max(-0.72, Math.min(0.7, p.x)), 0, c.window.z), 0.1);
+    this.stopAct();
+    this.act = new Greet(Math.min(0.6, 0.2 + 0.45 * Math.max(0, this.mood.trust)), false, at);
+    return true;
+  }
   comeSee(x: number) {
     if (!this.alive || this.isHidden || this.sleep > 0.3 || this.errand || this.trip || this.perched || this.hands.length) return false;
     if (this.mode !== 'rest' && this.mode !== 'alert') return false;

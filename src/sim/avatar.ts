@@ -67,6 +67,9 @@ export interface Avatar {
   beg?(what: 'food' | 'water', urgent: boolean, empty: () => boolean): boolean;
   /** the hands gone, it puts its coat to rights where they were, if the body can show it */
   tidy?(where: 'face' | 'flank' | 'chest'): boolean | void;
+  /** called with a knock on the glass (at sx, sy on the screen): it comes to the glass there, sits
+   *  and looks up at you, if the body can and is free to (true if it comes) */
+  called?(sx: number, sy: number): boolean;
   /** the hands gone (or a fright over, or up from a nap), a shake from head to tail, the coat put
    *  back as it should lie; and then a lick at it where it was touched, if `then` says where (true
    *  if it does) */
