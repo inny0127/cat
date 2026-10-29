@@ -4,7 +4,7 @@ import { POSES, SIDE_TURN, type Leg, type PoseLayer, type PoseName } from '../ca
 import { NEUTRAL, type Mood } from '../cat3d/mood';
 import type { Avatar } from '../sim/avatar';
 import type { EarMood, TailMood } from '../rig/animator';
-import { boop, buryFood, lived, byYou, inTurn, shakeOff, canGlance, crab, coolOff, feel, huff, idleOptions, mealLayer, mealPlan, type MealPlan, groomChest, groomFlank, knead, lookWith, restingPose, sneeze, toBed, toWindow, wander, warmUp, washFace, yawn, type Act, type Ctx, sunbathe, Play, Sill, Hunt, Box, Zoomies, Walk, Stare, Rub, scratchEar, wakeUp, stretchSideOn, Greet, Gift, Snub, Beg, PawGlass, TailChase, Claw, Top, Fish, Bat, Trap, Sulk, Wrestle, isPerching, type Perching, type ScratchPost, type GlassFinger, type SillSpot, type SulkSpot } from './behave';
+import { boop, buryFood, lived, byYou, inTurn, shakeOff, canGlance, crab, coolOff, feel, huff, idleOptions, mealLayer, mealPlan, type MealPlan, groomChest, groomFlank, knead, lookWith, restingPose, sneeze, toBed, toWindow, wander, warmUp, washFace, yawn, type Act, type Ctx, sunbathe, Play, Sill, Hunt, Box, Zoomies, Walk, Stare, Rub, scratchEar, wakeUp, stretchSideOn, Greet, Gift, Snub, Beg, PawGlass, TailChase, Claw, Top, Fish, Bat, Trap, Sulk, Wrestle, Nip, nipMeh, investigate, isPerching, type Perching, type ScratchPost, type GlassFinger, type SillSpot, type SulkSpot } from './behave';
 import { Chase, Startle, type LaserDot } from './chase';
 import { Tease, type Lure } from './tease';
 import { GOAL, Whim } from './whim';
@@ -151,6 +151,7 @@ export class PixelAvatar implements Avatar {
     batPompom: (v: THREE.Vector3) => void;
     carry: (at: THREE.Vector3 | null, yaw?: number) => void;
     kickMouse?: (dir: THREE.Vector3, speed: number, up: number) => void;
+    scatterNip?: (from: THREE.Vector3, k: number) => void;
   } | null = null;
   /** the feathers of the wand (set by the app): dangled by a hand, a moment's watching and it has
    *  to have them; after a long game, a while before it will play again */
@@ -260,6 +261,10 @@ export class PixelAvatar implements Avatar {
   private rouse: { at: THREE.Vector3; t: number; len: number } | null = null;
   private rouseK = 0;
   private rouseRest = 0;
+  /** high on catnip just now (0 .. 1) */
+  get nipHigh() {
+    return this.act instanceof Nip ? this.act.high : 0;
+  }
   /** lying down as near you as it can get, and there now */
   get byYouNow() {
     return this.act instanceof Walk && this.act.name === 'by you' && this.act.canNap;
@@ -1466,6 +1471,7 @@ export class PixelAvatar implements Avatar {
       blink: (slow) => this.doBlink(slow),
       mouse: () => this.ground?.mouse() ?? null,
       hookMouse: (toward) => this.ground?.hookMouse(toward),
+      scatterNip: (from, k) => this.ground?.scatterNip?.(from, k),
       pompom: () => this.ground?.pompom() ?? null,
       batPompom: (v) => this.ground?.batPompom(v),
       carry: (at, yaw) => this.ground?.carry(at, yaw),
@@ -1720,6 +1726,27 @@ export class PixelAvatar implements Avatar {
     }
     this.stopAct();
     this.act = new Chase(this.ctx);
+    return true;
+  }
+
+  /**
+   * Catnip on the floor (the smell come to it): awake and its own master, it goes to it ('high':
+   * a cat it works on, and not had it lately; 'meh': a cat it does nothing for; 'done': had it
+   * lately, a sniff is all). Up on something, it comes down first (asked again after)
+   */
+  nipNow(at: THREE.Vector3, how: 'high' | 'meh' | 'done') {
+    if (!this.alive || this.isHidden || this.sleep > 0.3 || this.errand || this.trip || this.hands.length) return false;
+    if (this.mode !== 'rest' && this.mode !== 'alert') return false;
+    if (this.act instanceof Chase || this.act instanceof Tease || this.act instanceof Startle || this.act instanceof Nip || this.act instanceof Trap) return false;
+    if (this.perched) {
+      if (!this.afterPerch) {
+        this.afterPerch = () => {};
+        (this.act as Perching).leave();
+      }
+      return false;
+    }
+    this.stopAct();
+    this.act = how === 'high' ? new Nip(this.ctx, at) : how === 'meh' ? nipMeh(this.ctx, at) : investigate(this.ctx, at);
     return true;
   }
 

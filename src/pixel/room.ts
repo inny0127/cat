@@ -1162,15 +1162,22 @@ export class Room {
     bar(0.02, wh, 0.03, bx, winB + wh / 2, wallZ - 0.04);                 // glazing bars
     bar(ww, 0.02, 0.03, bx, winB + wh * 0.62, wallZ - 0.04);
     bar(ww + 0.14, 0.03, 0.3, bx, winB - 0.015, wallZ + 0.11, paint);     // the sill, deep enough for a cat to sleep on
-    // on the sill: a little succulent in a pot and a candle in a jar
-    add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.028, 0.05, 24), this.mat('paint', { tone: -0.04, pattern: 9 }))), winL + 0.11, winB + 0.025, wallZ + 0.02);
-    for (let i = 0; i < 7; i++) {
-      const a = (i / 7) * Math.PI * 2;
-      const l = shadowy(new THREE.Mesh(new THREE.SphereGeometry(0.016, 6, 4), this.mat('leaf', { tone: 0.08 * (i % 2) })));
-      l.scale.set(0.7, 1.4, 0.7);
-      l.rotation.z = Math.cos(a) * 0.5;
-      l.rotation.x = Math.sin(a) * 0.5;
-      add(l, winL + 0.11 + Math.cos(a) * 0.014, winB + 0.06, wallZ + 0.02 + Math.sin(a) * 0.014);
+    // on the sill: a little pot of catnip (tapped, a pinch of it scattered on the floor: see
+    // sprinkleNip) and a candle in a jar
+    {
+      const pot = new THREE.Group();
+      pot.add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.028, 0.05, 24), this.mat('paint', { tone: -0.04, pattern: 9 }))));
+      // (a soft mound of pale leaves, a mint's, the middle ones highest)
+      for (let i = 0; i < 12; i++) {
+        const a = i * 2.39996, r = 0.024 * Math.sqrt((i + 0.5) / 12);
+        const l = shadowy(new THREE.Mesh(new THREE.SphereGeometry(0.013, 6, 4), this.mat('leaf', { tone: 0.14 + 0.06 * (i % 2) })));
+        l.scale.set(1, 0.55, 0.8);
+        l.rotation.set(Math.sin(a) * 0.5, a, Math.cos(a) * 0.5);
+        l.position.set(Math.cos(a) * r, 0.034 + 0.03 * (1 - r / 0.024) + 0.004 * (i % 3), Math.sin(a) * r);
+        pot.add(l);
+      }
+      add(pot, winL + 0.11, winB + 0.025, wallZ + 0.02);
+      this.nipPot = pot;
     }
     const jar = this.mat('bookMustard', { tone: 0.1 });
     add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.06, 14), jar)), winR - 0.12, winB + 0.03, wallZ + 0.02);
@@ -2920,6 +2927,80 @@ export class Room {
     this.onMug?.('tip', M.position.clone(), 1);
   }
 
+  /** the pot of catnip on the sill */
+  nipPot!: THREE.Object3D;
+  /** catnip on the floor: where the pinch of it fell, how much of it is left to it (1 fresh .. 0
+   *  gone: rolled in, scattered, its smell spent), how long since, and the bits of it */
+  private readonly nip = { at: new THREE.Vector3(), left: 0, t: 0, bits: [] as { m: THREE.Mesh; from: THREE.Vector3; to: THREE.Vector3; dur: number; spin: number; yaw: number }[] };
+
+  /** a pinch of catnip from the pot, crumbled and let fall on the floor at a point: the bits drift
+   *  down from a hand's height on your side of it and lie scattered a few centimetres about it */
+  sprinkleNip(at: THREE.Vector3) {
+    const N = this.nip;
+    if (!N.bits.length) {
+      for (let i = 0; i < 16; i++) {
+        const m = new THREE.Mesh(new THREE.BoxGeometry(0.011, 0.0025, 0.008), this.mat('leaf', { tone: -0.14 + 0.08 * (i % 3) }));
+        m.visible = false;
+        this.group.add(m);
+        N.bits.push({ m, from: new THREE.Vector3(), to: new THREE.Vector3(), dur: 1, spin: 0, yaw: 0 });
+      }
+    }
+    N.at.copy(at).setY(0);
+    N.left = 1;
+    N.t = 0;
+    for (const b of N.bits) {
+      const a = Math.random() * Math.PI * 2, r = 0.055 * Math.sqrt(Math.random());
+      const x = at.x + Math.cos(a) * r, z = at.z + Math.sin(a) * r * 0.8;
+      b.to.set(x, this.groundAt(x, z) + 0.004, z);
+      b.from.set(at.x + (Math.random() - 0.5) * 0.03, 0.42 + Math.random() * 0.08, at.z + 0.12 + Math.random() * 0.05);
+      b.dur = 0.55 + Math.random() * 0.45;
+      b.spin = (Math.random() - 0.5) * 14;
+      b.yaw = Math.random() * Math.PI * 2;
+      b.m.position.copy(b.from);
+      b.m.scale.setScalar(1);
+      b.m.visible = true;
+    }
+  }
+
+  /** catnip lying on the floor and still fresh, all of it down (null: none) */
+  get nipAt(): THREE.Vector3 | null {
+    const N = this.nip;
+    return N.left > 0.4 && N.t > 1 ? N.at : null;
+  }
+
+  /** a cat rolling in it: the bits near a point pushed out a little from under it (k: how hard) */
+  scatterNip(from: THREE.Vector3, k: number) {
+    const N = this.nip;
+    if (N.left <= 0 || N.t < 1) return;
+    for (const b of N.bits) {
+      const dx = b.to.x - from.x, dz = b.to.z - from.z, d = Math.hypot(dx, dz);
+      if (d > 0.13 || Math.random() > 0.3) continue;
+      const push = k * (0.13 - d) * 0.25 / Math.max(d, 0.01);
+      b.to.x += dx * push + (Math.random() - 0.5) * 0.004 * k;
+      b.to.z += dz * push + (Math.random() - 0.5) * 0.004 * k;
+      b.yaw += (Math.random() - 0.5) * k;
+    }
+  }
+
+  /** the pinch of catnip coming down, and lying there; going, the minutes after (rolled in, its
+   *  smell spent, the bits worked into the rug), the bits smaller and fewer till there are none */
+  private moveNip(dt: number) {
+    const N = this.nip;
+    if (N.left <= 0) return;
+    N.t += dt;
+    if (N.t > 420) N.left = Math.max(0, 1 - (N.t - 420) / 150);
+    N.bits.forEach((b, i) => {
+      const u = Math.min(1, N.t / b.dur), f = 1 - u;
+      // (fluttering a little as they come down, faster as they go, and flat where they land)
+      b.m.position.set(b.from.x + (b.to.x - b.from.x) * u + 0.008 * Math.sin(u * 11 + b.spin) * f,
+        b.from.y + (b.to.y - b.from.y) * u * u, b.from.z + (b.to.z - b.from.z) * u);
+      b.m.rotation.set(b.spin * 0.3 * f * Math.sin(u * 7), b.yaw + b.spin * f, b.spin * 0.2 * f);
+      const keep = N.left * N.bits.length > i;
+      b.m.visible = keep;
+      b.m.scale.setScalar(0.6 + 0.4 * N.left);
+    });
+  }
+
   /** the pieces on the floor, to tap and sweep up (null: there are none) */
   get mess(): THREE.Object3D | null {
     return this.cup.state === 'broken' ? this.cup.bits : null;
@@ -3666,6 +3747,7 @@ export class Room {
     this.time += dt;
     this.movePencil(dt);
     this.moveMug(dt);
+    this.moveNip(dt);
     this.moveWand(dt);
     this.timeU.value = this.time;
     const flash = this.lightning(dt, this.stormOverride ?? stormAt(date, rain));

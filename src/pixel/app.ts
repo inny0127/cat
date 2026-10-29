@@ -137,6 +137,7 @@ export class PixelApp {
       carry: (at, yaw) => this.room.carryMouse(at, yaw),
       kickMouse: (dir, speed, up) => this.room.tossMouse(dir, speed, up),
       hookMouse: (toward) => this.room.hookMouse(toward),
+      scatterNip: (from, k) => this.room.scatterNip(from, k),
       pompom: () => this.room.pompom(),
       batPompom: (v) => this.room.batPompom(v),
       pinLure: (sec, at) => {
@@ -301,6 +302,11 @@ export class PixelApp {
             if (Room.dark(ck.getHours() + ck.getMinutes() / 60) > 0.6) this.avatar.lightsOn();
           }
           this.haptic.tap?.();
+          return;
+        }
+        // the pot of catnip: a pinch of it crumbled onto the floor for the cat
+        if (this.hitThing(this.room.nipPot, x, y, 22)) {
+          this.giveNip();
           return;
         }
         if (this.hitThing(this.room.radio, x, y, 24)) {
@@ -1762,6 +1768,7 @@ export class PixelApp {
     this.cat.motor.beat = this.avatar.groove > 0.01 ? this.avatar.groove * pulse : 0;
     this.cat.update(dt);
     this.snoreStep(dt);
+    this.nipStep(dt);
     // (its forehead put to your face: felt, a soft bump, and heard, just)
     if (this.bumpT >= 0 && (this.bumpT += dt) > 0.3) this.bumpT = -1;
     if (this.cat.motor.bonked) {
@@ -1881,6 +1888,7 @@ export class PixelApp {
   private faceHintIn = 240;
   private mindHintIn = 420;
   private lampHintIn = 40;
+  private nipHintIn = 300;
 
   private hints(dt: number, touching: boolean) {
     const s = this.state;
@@ -1946,6 +1954,13 @@ export class PixelApp {
       return;
     }
     if (this.mind.open) s.hints.mind = 1;
+    // a good while after that, the cat up and about: that there is catnip on the sill for it (not
+    // if you have found it already)
+    if (s.hints.mind && !s.hints.nip && up && !this.avatar.hidden && !this.avatar.doing && !touching && !this.input.touching && (this.nipHintIn -= dt) < 0) {
+      s.hints.nip = 1;
+      this.hintUi.show('창턱의 작은 화분은 캣닢이에요. 톡 누르면 고양이에게 조금 뿌려 줘요', 6000);
+      return;
+    }
     if (touching || this.input.touching) {
       this.idleHintAt = 1e9;
       return;
@@ -2003,6 +2018,62 @@ export class PixelApp {
     this.cat.breathed = false;
   }
   private loafFor = 0;
+
+  /** catnip put down on the floor: where, how long ago, and whether the cat has been to it yet */
+  private nipLaid: { at: THREE.Vector3; t: number; had: boolean } | null = null;
+
+  /** a pinch of catnip from the pot on the sill, crumbled onto the floor between the cat and you
+   *  (a second pinch before it has been to the first: onto the first) */
+  private giveNip() {
+    const R = this.room, m = this.cat.motor;
+    let at: THREE.Vector3;
+    if (this.nipLaid && !this.nipLaid.had && R.nipAt) at = this.nipLaid.at.clone();
+    else {
+      // (a little way off it, out in the open: your side of it, if there is room there, else round
+      // to one side or the other; not at its feet)
+      const cam = this.stage.camera.position;
+      const from = this.avatar.hidden || this.cat.perch !== null ? R.spots.bed.clone() : m.pos.clone();
+      // (and room by it, off the bed, for the cat to stand and lie in it side on to you)
+      const toYou = Math.atan2(cam.x - from.x, cam.z - from.z);
+      const open = (p: THREE.Vector3) => R.surfaceAt(p.x, p.z) !== 'bed' && R.keepClear(p.clone(), 0.1).distanceTo(p) < 0.015;
+      at = R.keepClear(new THREE.Vector3(R.spots.bed.x, 0, R.spots.bed.z + 0.36), 0.12);
+      found: for (const r of [0.32, 0.45, 0.24]) {
+        for (const da of [0, 0.5, -0.5, 1, -1, 1.6, -1.6, 2.3, -2.3, Math.PI]) {
+          const a = toYou + da, p = new THREE.Vector3(from.x + Math.sin(a) * r, 0, from.z + Math.cos(a) * r);
+          // (room for it to one side or the other of it, side on to you)
+          const ux = p.x - cam.x, uz = p.z - cam.z, u = Math.hypot(ux, uz) || 1;
+          const by = (k: number) => open(new THREE.Vector3(p.x - (uz / u) * 0.17 * k, 0, p.z + (ux / u) * 0.17 * k));
+          if (open(p) && (by(1) || by(-1))) { at = p; break found; }
+        }
+      }
+      this.nipLaid = { at, t: 0, had: false };
+    }
+    R.sprinkleNip(at);
+    this.state.hints.nip = 1;
+    this.audio.play('rustle', { gain: 0.12, rate: 1.4, pan: -0.45 });
+    this.haptic.tap?.();
+  }
+
+  /** catnip on the floor: once its smell has had time to cross the room to the cat (and the cat
+   *  is up, and free), it goes to it. Two cats in three have it in them (which ones, by their
+   *  make); one that has, and has had some in the last hour and a half, gives it a sniff only */
+  private nipStep(dt: number) {
+    const N = this.nipLaid;
+    if (!N || N.had) return;
+    N.t += dt;
+    if (!this.room.nipAt) { if (N.t > 2) this.nipLaid = null; return; }
+    const m = this.cat.motor;
+    if (N.t < 0.8 + Math.hypot(N.at.x - m.pos.x, N.at.z - m.pos.z) / 0.5) return;
+    const s = this.state;
+    const has = ((s.personality.pitch ?? 1) * 7919) % 1 >= 0.33;
+    const lately = s.nipAt !== undefined && Date.now() - s.nipAt < 90 * 60e3;
+    const how = !has ? 'meh' : lately ? 'done' : 'high';
+    if (this.avatar.nipNow(N.at, how)) {
+      N.had = true;
+      if (how === 'high') s.nipAt = Date.now();
+    }
+  }
+
   /** its nature as it is today, and the day it is for */
   private tempered: { day: string; t: ReturnType<typeof ofTheDay> } = { day: '', t: { bold: 0, playful: 0, lazy: 0, curious: 0 } };
 

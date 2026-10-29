@@ -83,6 +83,8 @@ export interface CatState {
   habits: Habits;
   /** what it has learnt comes of the things it does of its own accord (learn.ts) */
   learned: Learned;
+  /** when it last had catnip (ms): for an hour or two after, catnip is nothing to it */
+  nipAt?: number;
 }
 
 const KEY = 'cat-window.v1';

@@ -101,6 +101,8 @@ export interface Avatar {
   readonly inRoom?: boolean;
   /** lying down as near you as it can get, there now (a nap by you: content just to be there) */
   readonly byYouNow?: boolean;
+  /** high on catnip just now (0 .. 1): it purrs with it */
+  readonly nipHigh?: number;
   /** (in the room) the errand done in view, and the cat waiting to be called back about the room */
   readonly errandDone?: boolean;
   /** (in the room) found away as the window is opened: where in the room it is, at what (the

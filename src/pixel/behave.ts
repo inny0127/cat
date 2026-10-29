@@ -155,6 +155,8 @@ export interface Ctx {
   hidden?: (p: THREE.Vector3) => boolean;
   /** a finger on the glass, if there is one (GlassFinger) */
   finger: () => GlassFinger | null;
+  /** catnip on the floor, rolled in: the bits near a point pushed out from under it (k: how hard) */
+  scatterNip?: (from: THREE.Vector3, k: number) => void;
 }
 
 export interface ScratchPost {
@@ -3213,6 +3215,219 @@ export const investigate = (c: Ctx, at: THREE.Vector3) => {
   });
   const stay = rand(1.8, 3.4);
   return new Walk('investigate', [{ to: stand, face, stay, posture: 'stand', layer: thenLick(sniffAt, stay, 0.4) }], 0.2);
+};
+
+/**
+ * Catnip on the floor, to a cat it works on (two in three have it in them) and has not had it for a
+ * while: over to it nose first, slower as it comes; a long sniff; the leaves chewed at with the side
+ * teeth, the head turned on one side; the head right down and the chin and the cheeks rubbed along
+ * the floor in it, the eyes half shut, purring; then over onto its side and its back in it,
+ * wriggling, the forepaws pawing at the air and now and then the hind feet kicking hard, a little
+ * cry or two. And after that, either a mad dash round the room, or lying there in a daze a good
+ * while, the eyes half shut and the pupils black. Then it is over, and for an hour or two catnip
+ * is nothing to it.
+ */
+export class Nip implements Act {
+  readonly name = 'nip';
+  phase: 'go' | 'sniff' | 'chew' | 'rub' | 'roll' | 'after' = 'go';
+  private t = 0;
+  private all = 0;
+  private set = false;
+  private readonly to: THREE.Vector3;
+  private readonly face: number;
+  private readonly lasts = { sniff: rand(1.6, 2.6), chew: rand(1.8, 3.2), rub: rand(2.8, 4.4), roll: rand(6.5, 10) };
+  /** after the roll: off round the room, or dazed where it lies (how long) */
+  readonly dash: boolean;
+  private readonly daze = rand(22, 45);
+  private after: Act | null = null;
+  /** the head turned the one way or the other to chew (and to rub, starting) */
+  private readonly sd = Math.random() < 0.5 ? 1 : -1;
+  /** bursts of kicking in the roll: when each starts, and how long */
+  private readonly kicks: [number, number][] = [];
+  private cries = Math.random() < 0.7 ? (Math.random() < 0.4 ? 2 : 1) : 0;
+  private cryAt = rand(1.2, 3);
+  /** the pose the last phase left it in, eased out of (the phases run into each other) */
+  private from: PoseLayer | null = null;
+  private last: PoseLayer | null = null;
+  private lastKick = -1;
+  constructor(c: Ctx, private readonly at: THREE.Vector3) {
+    // (side on to you, where it can: seen from above, a cat facing you with its nose to the floor
+    // shows you the top of its head, and what it does there is all in its face; side on, a cheek
+    // rolled to the floor turns the face up to you. The side it is nearer first)
+    const you = c.viewer(), dx = at.x - you.x, dz = at.z - you.z, d = Math.hypot(dx, dz) || 1;
+    const side = (k: number) => standTo(c, at, new THREE.Vector3(at.x - (dz / d) * 0.5 * k, 0, at.z + (dx / d) * 0.5 * k), 0.17);
+    const near = (c.m.pos.x - at.x) * -(dz / d) + (c.m.pos.z - at.z) * (dx / d) > 0 ? 1 : -1;
+    const p = side(near) ?? side(-near) ?? standTo(c, at, c.m.pos, 0.17);
+    this.to = p?.to ?? c.keepClear(at.clone(), 0.12);
+    this.face = p?.face ?? Math.atan2(at.x - this.to.x, at.z - this.to.z);
+    const T = c.temper;
+    this.dash = Math.random() < 0.3 + 0.25 * Math.max(0, T?.playful ?? 0) - 0.2 * Math.max(0, T?.lazy ?? 0) + 0.25 * (1 - (c.mood?.sleepy ?? 0)) - 0.15;
+    for (let k = rand(1.4, 2.4); k < this.lasts.roll - 1.5; k += rand(2, 3.4)) this.kicks.push([k, rand(0.9, 1.6)]);
+  }
+  /** how high it is just now (0 .. 1): the purr, the eyes */
+  get high() {
+    if (this.phase === 'go' || this.phase === 'sniff') return 0;
+    if (this.phase === 'chew') return 0.3 * ease(this.t / 1.5);
+    if (this.phase === 'rub') return 0.3 + 0.5 * ease(this.t / 2);
+    if (this.phase === 'roll') return 0.8 + 0.2 * ease(this.t / 2);
+    // (off round the room, it has no breath to purr with)
+    return this.dash ? 0.15 : 1 - 0.6 * ease(this.t / this.daze);
+  }
+  get ownGaze() {
+    return this.phase !== 'go' && this.phase !== 'after';
+  }
+  private next(p: Nip['phase']) {
+    this.phase = p;
+    this.t = 0;
+    this.from = this.last;
+  }
+  update(dt: number, c: Ctx) {
+    const m = c.m;
+    this.t += dt;
+    this.all += dt;
+    if (this.phase === 'after') {
+      if (this.dash) {
+        this.after ??= new Zoomies(c);
+        return this.after.update(dt, c);
+      }
+      // dazed: up off its side onto its chest and melted there, quite still, the head low and
+      // swaying a little, the eyes half shut and black, the ears out to the sides; a lick of the
+      // lips; then up, and itself again (now and then a shake first)
+      if (this.t < this.daze) {
+        m.setPosture('sphinx');
+        const e = ease(this.t / 1.2), lol = Math.sin(this.t * 0.7) * Math.sin(this.t * 0.31);
+        // (staring at nothing: the lids heavy over black pupils, not shut, as in sleep)
+        const pose: PoseLayer = {
+          neckPitch: -0.06, headPitch: 0.04, headRoll: 0.2 * lol, neckYaw: 0.18 * lol,
+          eyeOpen: 0.6 - 0.08 * Math.max(0, Math.sin(this.t * 0.4)), squint: 0.08,
+          pupil: 1, earOut: 0.4, earFwd: -0.2, whisker: -0.3, tailSide: 0.25 * twitch(this.t, 5),
+        };
+        if (this.from && e < 1) blendFrom(pose, this.from, e);
+        if (Math.random() < dt / 9) m.noseLick(1);
+        m.layer = { pose, w: 1 - ease((this.t - this.daze + 0.8) / 0.8) };
+        this.last = pose;
+        return true;
+      }
+      m.layer = null;
+      this.after ??= Math.random() < 0.35 ? shakeOff() : new Layered('up', 1.2, 0.4, () => ({}), 'sit');
+      return this.after.update(dt, c);
+    }
+    if (this.phase === 'go') {
+      m.setPosture('stand');
+      // (slower as it comes, the head low and out to the smell)
+      if (!this.set) {
+        this.set = true;
+        m.walkTo(this.to, 0.2, this.face, () => this.next('sniff'));
+      }
+      const near = Math.hypot(this.at.x - m.pos.x, this.at.z - m.pos.z);
+      const k = 1 - ease((near - 0.2) / 0.4);
+      m.layer = { pose: { neckPitch: -0.45 * k, headPitch: -0.1 * k, whisker: 0.6 * k, earFwd: 0.5 }, w: k };
+      m.lookAt(this.at, 1);
+      return true;
+    }
+    m.lookAt(null);
+    let pose: PoseLayer;
+    const L = this.lasts;
+    if (this.phase === 'sniff') {
+      m.setPosture('stand');
+      pose = { neckPitch: -0.95, headPitch: -0.35 + 0.05 * Math.sin(this.t * 14), whisker: 0.8, earFwd: 0.7, hipY: 0.18, tailLift: -0.1, eyeOpen: 1, pupil: 0.85 };
+      if (this.t > L.sniff) this.next('chew');
+    } else if (this.phase === 'chew') {
+      // down on it, the head on one side, chewing at the leaves with the side teeth
+      m.setPosture('crouch');
+      // (the head turned well over on its side to get the side teeth to them: the face to one side,
+      // not buried under the head)
+      const chew = 0.5 + 0.5 * Math.sin(lived(this.t, 3) * 15);
+      pose = {
+        neckPitch: -0.62, headPitch: -0.35, headRoll: this.sd * 0.8, headYaw: this.sd * 0.45, neckYaw: this.sd * 0.25, jaw: 0.04 + 0.11 * chew,
+        eyeOpen: 0.7, squint: 0.35, earOut: 0.15, whisker: 0.3, pupil: 0.9, tailSide: 0.3 * twitch(this.t, 2),
+      };
+      if (this.t > L.chew) this.next('rub');
+    } else if (this.phase === 'rub') {
+      // the chin and the cheeks rubbed along the floor in it, side to side, slow; the rump up a
+      // little, the eyes half shut
+      m.setPosture('crouch');
+      // (the head rolled right over, a cheek to the floor, then the other: the face turned up to
+      // one side and the other as it goes)
+      const sw = Math.sin(lived(this.t, 5) * 2.2 + this.sd * 1.2);
+      pose = {
+        hipY: 0.17, chestPitch: 0.1, neckPitch: -0.78, headPitch: -0.3, headRoll: 1.1 * sw, headYaw: 0.4 * sw, neckYaw: 0.45 * sw,
+        eyeOpen: 0.5, squint: 0.6, earOut: 0.35, earFwd: -0.1, whisker: -0.2, pupil: 1, tailLift: 0.3, tailSide: 0.5 * twitch(this.t, 4),
+      };
+      if (Math.random() < dt * 3) c.scatterNip?.(this.at, 0.4);
+      if (this.t > L.rub) {
+        this.next('roll');
+        m.moment = 'nip';
+      }
+    } else {
+      // over onto its side and its back in it, wriggling, the paws at the air, bursts of kicks
+      m.setPosture('side');
+      const b = bellyUp(1, this.t, L.roll, 1);
+      pose = b.pose;
+      const [uf, lf, uh, lh] = ['LF', 'RF', 'LH', 'RH'] as const;
+      // (the forepaws batting at nothing, by turns)
+      const pa = Math.sin(this.t * 5.3), pb = Math.sin(this.t * 5.3 + 2.1);
+      const F = pose as Record<string, { y: number; z: number; flex: number } | number>;
+      const fu = F[uf] as { y: number; z: number; flex: number }, fl = F[lf] as { y: number; z: number; flex: number };
+      fu.y += 0.025 * pa; fu.z += 0.02 * pa;
+      fl.y += 0.02 * pb; fl.z += 0.015 * pb;
+      // (the hind feet kicking, together, hard: in bursts)
+      const burst = this.kicks.find(([s, d]) => this.t >= s && this.t < s + d);
+      if (burst) {
+        const on = ease((this.t - burst[0]) / 0.12) * (1 - ease((this.t - burst[0] - burst[1] + 0.12) / 0.12));
+        const ph = (this.t - burst[0]) * Math.PI * 2 * 4.2;
+        const k1 = Math.max(0, Math.sin(ph)) * on, k2 = Math.max(0, Math.sin(ph + 0.7)) * on;
+        const hu = F[uh] as { y: number; z: number; flex: number }, hl = F[lh] as { y: number; z: number; flex: number };
+        hu.y += 0.05 * k1; hu.z += 0.16 * k1;
+        hl.y += 0.04 * k2; hl.z += 0.15 * k2;
+        const n = Math.floor((this.t - burst[0]) * 4.2);
+        if (n !== this.lastKick) { this.lastKick = n; c.sound('rugScratch', 0.08); }
+      }
+      // (the head rubbed this way and that on the floor; the eyes half shut, the pupils black)
+      Object.assign(pose, {
+        headRoll: (pose.headRoll ?? 0) + 0.25 * Math.sin(lived(this.t, 2) * 1.9), neckYaw: 0.2 * Math.sin(lived(this.t, 4) * 1.3),
+        eyeOpen: 0.45, squint: 0.45, pupil: 1, earOut: 0.3, whisker: -0.2,
+      });
+      if (this.cries > 0 && this.t > this.cryAt) {
+        this.cries--;
+        this.cryAt = this.t + rand(1.5, 3);
+        c.say(pick(['meowSoft', 'trill', 'chirp']));
+      }
+      if (Math.random() < dt * 2) c.scatterNip?.(this.at, 0.8);
+      if (this.t > L.roll) this.next('after');
+    }
+    const e = this.from ? ease(this.t / 0.45) : 1;
+    if (this.from && e < 1) blendFrom(pose, this.from, e);
+    this.last = pose;
+    m.layer = { pose, w: Math.min(1, this.all / 0.4) };
+    return true;
+  }
+  stop(c: Ctx) {
+    this.after?.stop(c);
+    c.m.layer = null;
+    c.m.lookAt(null);
+    c.m.stop();
+  }
+}
+
+/** catnip on the floor, to a cat it does nothing for (or that has had it lately): over to it, a
+ *  good sniff, a lick of the nose, and a look at you as if to ask what that was for */
+export const nipMeh = (c: Ctx, at: THREE.Vector3) => {
+  const p = standTo(c, at, c.m.pos, 0.17);
+  const to = p?.to ?? c.keepClear(at.clone(), 0.12), face = p?.face ?? Math.atan2(at.x - to.x, at.z - to.z);
+  const s1 = rand(1.6, 2.6);
+  const sniffAt = (t: number): PoseLayer => ({ neckPitch: -0.95, headPitch: -0.35 + 0.05 * Math.sin(t * 14), whisker: 0.8, earFwd: 0.7, hipY: 0.18, tailLift: -0.1 });
+  const you = c.viewer();
+  return new Walk('nip meh', [
+    { to, face, stay: s1, posture: 'stand', layer: thenLick(sniffAt, s1, 0.8) },
+    {
+      to, face: Math.atan2(you.x - to.x, you.z - to.z) + rand(-0.5, 0.5), stay: rand(2.5, 5), posture: 'sit',
+      layer: (t, m) => {
+        if (t < 0.1) m.moment = 'nipmeh';
+        return { earFwd: 0.35, headRoll: 0.18 * ease((t - 0.6) / 0.5) * (1 - ease((t - 2.2) / 0.5)) };
+      },
+    },
+  ], 0.22);
 };
 
 /**
