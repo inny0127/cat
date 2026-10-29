@@ -965,7 +965,50 @@ void main() {
   gl_FragColor = vec4(mix(off, on, uOn), uOn > 0.5 ? 0.2 : 0.15);
 }`;
 
+/** a photograph on the fairy lights: its picture as it is, in the room's light (dim at night, but
+ *  for the bulbs over it); a new one still coming up, from a dark olive, the picture rising
+ *  through it */
+const PRINT_FRAG = /* glsl */ `
+uniform sampler2D uTex;
+uniform float uDev;
+uniform float uDay;
+uniform float uOn;
+varying vec2 vUv;
+void main() {
+  vec3 c = texture2D(uTex, vUv).rgb;
+  float d = smoothstep(0.0, 1.0, uDev);
+  vec3 dev = mix(vec3(0.17, 0.18, 0.15), c, d * mix(0.55, 1.0, d));
+  float lit = mix(0.4, 0.92, uDay) + 0.2 * uOn * (1.0 - uDay);
+  // alpha 0.15: shown as it is
+  gl_FragColor = vec4(min(dev * lit, vec3(0.8)), 0.15);
+}`;
+
 const ss = (a: number, b: number, x: number) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+
+/** a picture drawn small onto a canvas, each of its pixels the average of the picture's under it
+ *  (false: it could not be read) */
+function shrink(img: HTMLImageElement, to: HTMLCanvasElement) {
+  const w = img.naturalWidth, h = img.naturalHeight, n = to.width;
+  const src = document.createElement('canvas');
+  src.width = w;
+  src.height = h;
+  const g = src.getContext('2d'), o = to.getContext('2d');
+  if (!g || !o || !w || !h) return false;
+  g.drawImage(img, 0, 0);
+  const d = g.getImageData(0, 0, w, h).data, out = o.createImageData(n, n);
+  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+    const x0 = Math.floor((x * w) / n), x1 = Math.floor(((x + 1) * w) / n), y0 = Math.floor((y * h) / n), y1 = Math.floor(((y + 1) * h) / n);
+    let r = 0, gg = 0, b = 0, k = 0;
+    for (let yy = y0; yy < y1; yy++) for (let xx = x0; xx < x1; xx++) {
+      const i = (yy * w + xx) * 4;
+      r += d[i]; gg += d[i + 1]; b += d[i + 2]; k++;
+    }
+    const j = (y * n + x) * 4;
+    out.data[j] = r / k; out.data[j + 1] = gg / k; out.data[j + 2] = b / k; out.data[j + 3] = 255;
+  }
+  o.putImageData(out, 0, 0);
+  return true;
+}
 
 export interface Spots {
   bed: THREE.Vector3;
@@ -1479,6 +1522,7 @@ export class Room {
       wire.push(new THREE.Vector3(winL - 0.06 + t * (ww + 0.12), winT - 0.02 - 0.07 * Math.sin(Math.PI * ((t * 2) % 1)), wallZ + 0.1));
     }
     add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(wire), 60, 0.0025, 4), this.mat('brown', { tone: 0.12 })), 0, 0, 0);
+    this.wire = new THREE.CatmullRomCurve3(wire);
     const bulbCols = [[1, 0.86, 0.55], [1, 0.72, 0.5], [1, 0.95, 0.75], [1, 0.62, 0.62]];
     for (let i = 0; i < n; i++) {
       const t = (i + 0.5) / n;
@@ -2981,6 +3025,74 @@ export class Room {
   nipPot!: THREE.Object3D;
   /** the bottle of bubble mixture on the sill */
   bubbleJar!: THREE.Object3D;
+  /** the fairy lights' wire */
+  private wire: THREE.CatmullRomCurve3 | null = null;
+  /** the photographs hung on the fairy lights' wire, by little wooden pegs: the newest few, the
+   *  oldest of them on the left (which photograph each is, and how far it has come up) */
+  readonly prints: { group: THREE.Group; i: number; dev: { value: number }; tex: THREE.Texture }[] = [];
+  /** where along the wire they hang (clear of the lamp's shade on the left, and the curtain) */
+  private static readonly PEGS = [0.3, 0.43, 0.57, 0.7, 0.84];
+  /** how many pixels across a print's picture is, seen from across the room */
+  private static readonly PRINT_PX = 12;
+
+  /** the photographs on the wire: the last few of these (pictures as data urls, and which of all
+   *  the photographs each is); the newest, if fresh, still coming up */
+  hangPhotos(list: { url: string; i: number }[], fresh = false) {
+    const W = this.wire;
+    if (!W) return;
+    for (const p of this.prints) {
+      this.group.remove(p.group);
+      p.tex.dispose();
+      p.group.traverse((o) => { if (o instanceof THREE.Mesh) { o.geometry.dispose(); if (o.material instanceof THREE.ShaderMaterial && o.material.uniforms.uTex) o.material.dispose(); } });
+    }
+    this.prints.length = 0;
+    const shown = list.slice(-Room.PEGS.length), first = Room.PEGS.length - shown.length;
+    shown.forEach((ph, j) => {
+      const t = Room.PEGS[first + j], at = W.getPoint(t);
+      // (as small as it shows from across the room, each of its pixels the average of the
+      // picture's under it: a tiny picture, crisp, as the rest of the room is, not a blur nor a
+      // scatter of odd pixels)
+      const small = document.createElement('canvas');
+      small.width = small.height = Room.PRINT_PX;
+      const tex = new THREE.CanvasTexture(small);
+      tex.magFilter = THREE.NearestFilter;
+      tex.minFilter = THREE.NearestFilter;
+      tex.generateMipmaps = false;
+      const img = new Image();
+      img.onload = () => { if (shrink(img, small)) tex.needsUpdate = true; };
+      img.src = ph.url;
+      const dev = { value: fresh && j === shown.length - 1 ? 0 : 1 };
+      const g = new THREE.Group();
+      // (a print: the white card, the picture on it nearer the top, a wooden peg at the wire)
+      const card = new THREE.Mesh(new THREE.BoxGeometry(0.062, 0.074, 0.002), this.mat('paint', { tone: 0.32 }));
+      card.position.y = -0.043;
+      g.add(card);
+      const pic = new THREE.Mesh(new THREE.PlaneGeometry(0.052, 0.052), new THREE.ShaderMaterial({
+        uniforms: { uTex: { value: tex }, uDev: dev, uDay: this.lights.uDay, uOn: this.nightU },
+        vertexShader: SKY_VERT, fragmentShader: PRINT_FRAG,
+      }));
+      pic.position.set(0, -0.037, 0.0012);
+      g.add(pic);
+      const peg = new THREE.Mesh(new THREE.BoxGeometry(0.007, 0.017, 0.006), this.mat('brown', { tone: 0.3 }));
+      peg.position.set(0, -0.006, 0.002);
+      g.add(peg);
+      g.position.set(at.x, at.y - 0.002, at.z + 0.004);
+      // (each hanging a little askew, its own way)
+      g.rotation.z = (((ph.i * 0.618) % 1) - 0.5) * 0.18;
+      g.userData.tilt = g.rotation.z;
+      this.group.add(g);
+      this.prints.push({ group: g, i: ph.i, dev, tex });
+    });
+  }
+
+  /** the prints: a new one coming up, over some seconds; all of them stirring a little on the wire */
+  private movePrints(dt: number) {
+    for (const p of this.prints) {
+      if (p.dev.value < 1) p.dev.value = Math.min(1, p.dev.value + dt / 8);
+      p.group.rotation.z = p.group.userData.tilt + 0.025 * Math.sin(this.time * 0.6 + p.i * 2.1);
+    }
+  }
+
   /** the jar of treats on the sill */
   treatJar!: THREE.Object3D;
   /** a treat tossed into the room: in the air (from, to, how far through), lying on the floor, or
@@ -3854,6 +3966,7 @@ export class Room {
     this.moveMug(dt);
     this.moveNip(dt);
     this.moveTreat(dt);
+    this.movePrints(dt);
     this.moveWand(dt);
     this.timeU.value = this.time;
     const flash = this.lightning(dt, this.stormOverride ?? stormAt(date, rain));

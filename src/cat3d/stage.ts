@@ -864,6 +864,60 @@ export class Stage {
     r.setViewport(0, 0, size.x, size.y);
   }
 
+  /**
+   * A photograph: the room from another camera, painted as the room is, size art pixels square
+   * (the overlays left out: the steam, the motes and the like are placed for the main view). Its
+   * pixels, rgba, rows from the top (null: the room is not pixel art).
+   */
+  snapshot(cam: THREE.PerspectiveCamera, size: number) {
+    const P = this.pixel, r = this.renderer;
+    if (!P) return null;
+    if (!this.snap || this.snap.rt.width !== size) {
+      this.snap?.rt.dispose();
+      this.snap?.art.dispose();
+      const rt = new THREE.WebGLRenderTarget(size, size, {
+        type: THREE.HalfFloatType, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, depthTexture: new THREE.DepthTexture(size, size, THREE.FloatType),
+      });
+      const art = new THREE.WebGLRenderTarget(size, size, { minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter });
+      const off = {
+        uSteam: { value: new THREE.Vector4() }, uGlintK: { value: new THREE.Vector2() }, uMotes: { value: Array.from({ length: 16 }, () => new THREE.Vector3()) },
+        uNotes: { value: Array.from({ length: 4 }, () => new THREE.Vector3()) }, uBug: { value: new THREE.Vector4() }, uLaser: { value: new THREE.Vector3() },
+        uBub: { value: Array.from({ length: 8 }, () => new THREE.Vector4()) }, uStrSag: { value: new THREE.Vector2() },
+      };
+      const paint = new THREE.ShaderMaterial({
+        uniforms: {
+          ...P.mat.uniforms, ...off, uColor: { value: rt.texture }, uDepth: { value: rt.depthTexture }, uSize: { value: new THREE.Vector2(size, size) },
+          uProjInv: { value: new THREE.Matrix4() }, uViewInv: { value: new THREE.Matrix4() }, uNear: { value: cam.near }, uFar: { value: cam.far }, uDetail: { value: 1 },
+        },
+        vertexShader: PIXEL_VERT, fragmentShader: ART_FRAG, depthTest: false, depthWrite: false, toneMapped: false,
+      });
+      this.snap = { rt, art, paint };
+    }
+    const S = this.snap, shadows = r.shadowMap.autoUpdate;
+    cam.updateMatrixWorld();
+    r.shadowMap.autoUpdate = false;
+    r.setRenderTarget(S.rt);
+    r.render(this.scene, cam);
+    r.shadowMap.autoUpdate = shadows;
+    const u = S.paint.uniforms;
+    u.uProjInv.value.copy(cam.projectionMatrixInverse);
+    u.uViewInv.value.copy(cam.matrixWorld);
+    u.uNear.value = cam.near;
+    u.uFar.value = cam.far;
+    const main = P.quad.material;
+    P.quad.material = S.paint;
+    r.setRenderTarget(S.art);
+    r.render(P.scene, P.cam);
+    P.quad.material = main;
+    const raw = new Uint8Array(size * size * 4), data = new Uint8Array(size * size * 4);
+    r.readRenderTargetPixels(S.art, 0, 0, size, size, raw);
+    r.setRenderTarget(null);
+    // (read from the bottom up: turned the right way up)
+    for (let y = 0; y < size; y++) data.set(raw.subarray((size - 1 - y) * size * 4, (size - y) * size * 4), y * size * 4);
+    return { w: size, h: size, data };
+  }
+  private snap: { rt: THREE.WebGLRenderTarget; art: THREE.WebGLRenderTarget; paint: THREE.ShaderMaterial } | null = null;
+
   /** draw the scene: straight to the screen, or small and then as pixel art */
   /** the cat's own eyes (retina.ts): the room drawn from them now and then, once the frame is */
   retina: Retina | null = null;

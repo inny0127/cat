@@ -10,7 +10,8 @@ import { Haptic } from '../platform/haptics';
 import { KeepAwake } from '../platform/awake';
 import { Notifier, forecast } from '../platform/notify';
 import { Hint } from '../ui/hint';
-import { Firsts } from '../ui/firsts';
+import { Firsts, FIRSTS } from '../ui/firsts';
+import { Album, loadPhotos, savePhotos, toPng, type Photo } from '../ui/photos';
 import { SlowWatch } from './pace';
 import { Brain } from '../sim/brain';
 import { loadState, newCat, ofTheDay, saveState, type CatState } from '../sim/state';
@@ -128,6 +129,8 @@ export class PixelApp {
     // (what the cat's eyes cannot see past; the window it looks out of now and then)
     this.avatar.blockers = () => this.room.blockers();
     this.avatar.windowAt = this.room.windowMiddle;
+    // (the photographs taken so far, on the fairy lights)
+    this.hangPrints(false);
     this.avatar.ground = {
       keepClear: (p, r) => this.room.keepClear(p, r),
       detour: (from, to, r) => this.room.detour(from, to, r),
@@ -259,6 +262,8 @@ export class PixelApp {
         this.gestureEnd();
         if (this.creditsOpen) { this.showCredits(false); return; }
         if (this.hitPrint(x, y)) { this.showCredits(true); return; }
+        // a photograph on the fairy lights: the album, open at it
+        if (this.openPhoto(x, y)) return;
         // the broken mug on the floor: tapped, swept up
         const mess = this.room.mess;
         if (mess && this.hitThing(mess, x, y, 30)) {
@@ -1523,6 +1528,63 @@ export class PixelApp {
   }
 
   /** is the little print on the sill under a screen point */
+  /** the photographs: one taken the first time it does each of the things in FIRSTS, kept */
+  private readonly photos: Photo[] = loadPhotos();
+  private readonly album: Album | null = (() => {
+    const el = document.getElementById('album');
+    return el ? new Album(el) : null;
+  })();
+  private photoCam: THREE.PerspectiveCamera | null = null;
+
+  /** the last few photographs on the fairy lights (the newest, if fresh, still coming up) */
+  private hangPrints(fresh: boolean) {
+    this.room.hangPhotos(this.photos.map((p, i) => ({ url: p.url, i })), fresh);
+  }
+
+  /**
+   * The cat doing a thing for the first time: a photograph of it, then and there, taken from your
+   * side of the room with the cat filling it (whichever way you are looking round the room), in
+   * the room's own pixels; kept with the word on what it means and the day, and hung on the fairy
+   * lights, where it comes up as a print does. A soft click of the shutter.
+   */
+  private snapPhoto(k: string) {
+    if (!FIRSTS[k] || this.avatar.hidden) return;
+    const cam = this.photoCam ??= new THREE.PerspectiveCamera(30, 1, 0.05, 30);
+    // (round the cat: its bones, all but the end of its tail)
+    const box = new THREE.Box3(), v = new THREE.Vector3();
+    this.cat.group.updateMatrixWorld();
+    for (const [name, b] of this.cat.byName) if (!/^tail[5-9]/.test(name)) box.expandByPoint(b.getWorldPosition(v));
+    if (box.isEmpty()) return;
+    const mid = box.getCenter(new THREE.Vector3()), size = box.getSize(new THREE.Vector3());
+    const span = Math.max(0.32, Math.min(0.9, Math.max(size.x, size.y, size.z) + 0.16));
+    const dir = this.stage.camera.position.clone().sub(mid).normalize(), dist = span / 2 / Math.tan(THREE.MathUtils.degToRad(15));
+    cam.position.copy(mid).addScaledVector(dir, dist);
+    cam.lookAt(mid);
+    // (nothing between it and the lens: whatever stands nearer, the box, a chair leg, left out)
+    cam.near = Math.max(0.05, dist - span * 0.8);
+    cam.updateProjectionMatrix();
+    const px = this.stage.snapshot(cam, 112);
+    const url = px && toPng(px);
+    if (!url) return;
+    this.photos.push({ k, text: FIRSTS[k], at: this.clock().getTime(), url });
+    savePhotos(this.photos);
+    this.hangPrints(true);
+    this.audio.play('pencil', { gain: 0.03, rate: 3.3 });
+  }
+
+  /** a tap on a photograph on the fairy lights: the album, open at that one */
+  private openPhoto(sx: number, sy: number) {
+    if (!this.album) return false;
+    for (const p of [...this.room.prints].reverse()) {
+      if (!this.hitThing(p.group, sx, sy, 14)) continue;
+      this.album.show(this.photos, p.i);
+      this.state.hints.album = 1;
+      this.haptic.tap?.();
+      return true;
+    }
+    return false;
+  }
+
   private hitPrint(sx: number, sy: number) {
     const ray = new THREE.Raycaster();
     ray.setFromCamera(new THREE.Vector2((sx / innerWidth) * 2 - 1, -(sy / innerHeight) * 2 + 1), this.stage.camera);
@@ -1540,6 +1602,7 @@ export class PixelApp {
     if (!Capacitor.isNativePlatform()) return;
     void CapApp.addListener('backButton', () => {
       if (this.creditsOpen) this.showCredits(false);
+      else if (this.album?.open) this.album.close();
       else void CapApp.minimizeApp();
     });
     // (if the page has not already been told)
@@ -1627,6 +1690,7 @@ export class PixelApp {
     if (k === 'escape') {
       if (this.laser.held) this.takeLaser(false);
       if (this.creditsOpen) this.showCredits(false);
+      if (this.album?.open) this.album.close();
       return;
     }
     if (k === 'm') { this.mind.toggle(); return; }
@@ -1908,6 +1972,7 @@ export class PixelApp {
   private nipHintIn = 300;
   private bubbleHintIn = 420;
   private treatHintIn = 480;
+  private albumHintIn = 12;
 
   private hints(dt: number, touching: boolean) {
     const s = this.state;
@@ -1957,6 +2022,12 @@ export class PixelApp {
     if (s.hints.look && !s.hints.zoom && !touching && !this.input.touching && (this.zoomHintIn -= dt) < 0) {
       s.hints.zoom = 1;
       this.hintUi.show('두 손가락을 벌리면 가까이, 오므리면 멀리 볼 수 있어요', 5500);
+      return;
+    }
+    // a photograph hung on the fairy lights, a little while after: that it is there to be seen
+    if (this.photos.length && !s.hints.album && !touching && !this.input.touching && (this.albumHintIn -= dt) < 0) {
+      s.hints.album = 1;
+      this.hintUi.show('처음 보는 모습은 사진으로 찍어 창가 전구 줄에 걸어 둬요. 누르면 크게 보여요', 7000);
       return;
     }
     // a good while after that, the cat awake: that it answers a face come close (not if you have
@@ -2321,7 +2392,8 @@ export class PixelApp {
     // (a loaf: lying with its paws tucked under, awake and easy, a good while)
     this.loafFor = m.posture === 'loaf' && !asleep && !doing && m.speed < 0.02 ? this.loafFor + dt : 0;
     if (this.loafFor > 20) now.add('loaf');
-    this.firstWords.update(dt, now, this.state.alive && !a.hidden && this.visible);
+    const said = this.firstWords.update(dt, now, this.state.alive && !a.hidden && this.visible);
+    if (said) this.snapPhoto(said);
     now.clear();
   }
 }

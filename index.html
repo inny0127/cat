@@ -126,6 +126,46 @@
     #credits p { margin: 0 0 8px; }
     #credits a { color: #a3b4d4; text-decoration: none; border-bottom: 1px solid rgba(163, 180, 212, 0.4); }
     #credits .small { color: #bdb2c0; margin: 10px 0 0; }
+    /* the photographs, opened from the prints on the fairy lights: one at a time, as a print */
+    #album {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      background: rgba(30, 22, 34, 0.72);
+      opacity: 0;
+      transition: opacity 0.45s ease;
+      pointer-events: none;
+      z-index: 6;
+      touch-action: none;
+    }
+    #album.on { opacity: 1; pointer-events: auto; }
+    #album .card {
+      width: min(264px, calc(100vw - 64px));
+      padding: 12px 12px 10px;
+      background: #f6f1e7;
+      box-shadow: 0 0 0 2px #d9cfc0, 4px 6px 0 rgba(20, 14, 22, 0.35);
+      transform: rotate(-1.2deg);
+      color: #4a3a40;
+      font: 400 calc(12 * var(--fpx)) / 1.55 var(--pixel-font);
+      letter-spacing: 0;
+      word-break: keep-all;
+      overflow-wrap: anywhere;
+    }
+    #album img {
+      display: block;
+      width: 100%;
+      aspect-ratio: 1;
+      image-rendering: crisp-edges;
+      image-rendering: pixelated;
+      background: #2c2430;
+    }
+    #album .words { margin: 10px 2px 2px; min-height: 3.1em; }
+    #album .day { text-align: right; color: #9a8790; margin: 0 2px; }
+    #album .count { color: #e8dccf; font: 400 calc(12 * var(--fpx)) / 1 var(--pixel-font); min-height: 1em; }
     noscript, #fallback {
       position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
       font: 14px/1.6 -apple-system, "Apple SD Gothic Neo", sans-serif; color: var(--ink); text-align: center; padding: 24px;
@@ -137,6 +177,7 @@
   <canvas id="stage" aria-label="방 안의 고양이. 손가락으로 쓰다듬을 수 있어요." role="img"></canvas>
   <div id="hint" aria-live="polite"></div>
   <div id="credits" role="dialog" aria-label="만든 것들"></div>
+  <div id="album" role="dialog" aria-label="사진"></div>
   <noscript>고양이를 보려면 자바스크립트를 켜 주세요.</noscript>
   <script type="module" src="/src/pixel/main.ts"></script>
 </body>
