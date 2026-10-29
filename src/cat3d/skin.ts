@@ -187,12 +187,12 @@ bool omega(vec3 P, vec3 N) {
   if (uMouthRest.x <= 0.0 || N.z < 0.15 || P.z < uMouthRest.z - 0.008 || P.y > uNoseRest.y) return false;
   float ax = abs(P.x);
   float px = max(fwidth(P.x), fwidth(P.y));
-  // (seen from across the room, a face a couple of dozen art pixels across, a pixel artist leaves
-  // the mouth out: a line there is a moustache, or a grin full of teeth)
-  if (px > 0.0021) return false;
-  float hw = max(0.55 * px, 0.0004);
+  // (seen from across the room, a face a few dozen art pixels across, a pixel artist leaves the
+  // mouth out: a line there is a moustache, or a grin full of teeth, or comes out in bits)
+  if (px > 0.0016) return false;
+  float hw = max(0.66 * px, 0.0004);
   float top = uMouthRest.y + 0.0035;          // the middle of the lip line
-  float wide = mix(0.5, 0.36, smoothstep(0.0011, 0.0021, px)) * uMouthRest.x;
+  float wide = mix(0.5, 0.4, smoothstep(0.001, 0.0016, px)) * uMouthRest.x;
   // (the line down from the nose leather to the lips)
   if (ax < hw && P.y > top && P.y < uNoseRest.y - 0.005) return true;
   if (ax > wide + hw) return false;
@@ -210,7 +210,9 @@ void main() {
     int cls = vReg > 1.5 ? ${PIX.teeth} : vReg > 0.5 && !shut ? (vAux.y > 0.5 ? ${PIX.tongue} : ${PIX.mouth})
       : !gl_FrontFacing && !shut ? ${PIX.mouth} : pads(tabby(pixClass(texture2D(uPixMap, vUv).rgb), vRest), vRest, vRestN);
     if (vReg > 0.5 && vReg < 1.5 && shut) cls = ${PIX.white};
-    bool drawn = shut && gl_FrontFacing && vReg < 0.5 && omega(vRest, vRestN);
+    // (the line runs along the shut lips' seam, so the slit's walls carry it too: seen from a
+    // little way off, an art pixel there is as likely to be on the wall as on the lip)
+    bool drawn = shut && vReg < 1.5 && omega(vRest, vReg > 0.5 || !gl_FrontFacing ? vec3(0.0, 0.0, 1.0) : vRestN);
     if (drawn) cls = ${PIX.dark};
     float shp = keyShadow(vWorld, Np);
     vec3 Vp = normalize(cameraPosition - vWorld);
@@ -256,8 +258,8 @@ void main() {
     // the mouth darkens toward the throat
     if (vReg > 0.5 && vReg < 1.5 && !shut) lt.x *= mix(1.0, 0.15, smoothstep(0.3, 0.95, vAux.x));
     if (!gl_FrontFacing && vReg < 0.5 && !shut) lt.x *= 0.5;
-    // (the drawn mouth a warm dark brown, not black)
-    if (drawn) lt.x = max(lt.x, 0.45);
+    // (the drawn mouth one warm dark brown all along, not black, and not mottled by the light)
+    if (drawn) lt = vec3(0.42, 0.0, 0.0);
     // where the body turns away from you (the edge of a leg against the chest, of the head against
     // the shoulders) a shade darker in its own colour, as a pixel artist outlines a form from within;
     // not where the light from behind catches the edge
