@@ -98,6 +98,8 @@ uniform vec3 uSkyCol;
 uniform vec3 uGroundCol;
 uniform float uSpec;   // the hair shading below wants it declared
 uniform float uJawOpen;
+uniform vec3 uNoseRest;   // the tip of the nose, at rest
+uniform vec3 uMouthRest;  // a corner of the mouth (the left), at rest
 uniform float uRoomLit;
 uniform float uGround;
 ${GRADE_GLSL}
@@ -177,12 +179,39 @@ int pads(int cls, vec3 P, vec3 N) {
   }
   return cls;
 }
+// the mouth shut, as a pixel artist draws a cat's: a little w under the nose (a short line down from
+// it, and the lips curving away either side and up a little at their ends), a line an art pixel
+// wide however close the view. The sculpt's own is a long slit across the muzzle with lips either
+// side of it, the inside of the mouth showing red at its corners: a human mouth on a cat's face
+bool omega(vec3 P, vec3 N) {
+  if (uMouthRest.x <= 0.0 || N.z < 0.15 || P.z < uMouthRest.z - 0.008 || P.y > uNoseRest.y) return false;
+  float ax = abs(P.x);
+  float px = max(fwidth(P.x), fwidth(P.y));
+  // (seen from across the room, a face a couple of dozen art pixels across, a pixel artist leaves
+  // the mouth out: a line there is a moustache, or a grin full of teeth)
+  if (px > 0.0021) return false;
+  float hw = max(0.55 * px, 0.0004);
+  float top = uMouthRest.y + 0.0035;          // the middle of the lip line
+  float wide = mix(0.5, 0.36, smoothstep(0.0011, 0.0021, px)) * uMouthRest.x;
+  // (the line down from the nose leather to the lips)
+  if (ax < hw && P.y > top && P.y < uNoseRest.y - 0.005) return true;
+  if (ax > wide + hw) return false;
+  float u = min(ax / wide, 1.0);
+  float y = top - 0.0024 * sin(3.14159 * u) + 0.0012 * u * u;
+  float slope = (0.0024 * 3.14159 * cos(3.14159 * u) - 0.0024 * u) / wide;
+  return abs(P.y - y) < hw * sqrt(1.0 + slope * slope);
+}
 void main() {
   if (uSolid > 0.5) {
     // pixel art: which material, and how much light, for the pixel pass to paint from its ramps
     vec3 Np = normalize(vN) * (gl_FrontFacing ? 1.0 : -1.0);
-    int cls = vReg > 1.5 ? ${PIX.teeth} : vReg > 0.5 ? (vAux.y > 0.5 ? ${PIX.tongue} : ${PIX.mouth})
-      : !gl_FrontFacing ? ${PIX.mouth} : pads(tabby(pixClass(texture2D(uPixMap, vUv).rgb), vRest), vRest, vRestN);
+    // (shut, or as good as, what shows of the inside at the corners is coat, and the mouth is drawn)
+    bool shut = uJawOpen < 0.06;
+    int cls = vReg > 1.5 ? ${PIX.teeth} : vReg > 0.5 && !shut ? (vAux.y > 0.5 ? ${PIX.tongue} : ${PIX.mouth})
+      : !gl_FrontFacing && !shut ? ${PIX.mouth} : pads(tabby(pixClass(texture2D(uPixMap, vUv).rgb), vRest), vRest, vRestN);
+    if (vReg > 0.5 && vReg < 1.5 && shut) cls = ${PIX.white};
+    bool drawn = shut && gl_FrontFacing && vReg < 0.5 && omega(vRest, vRestN);
+    if (drawn) cls = ${PIX.dark};
     float shp = keyShadow(vWorld, Np);
     vec3 Vp = normalize(cameraPosition - vWorld);
     float rim = pow(1.0 - max(dot(Np, Vp), 0.0), 2.5) * max(dot(Np, uRimDir), 0.0) * shp;
@@ -225,8 +254,10 @@ void main() {
       lt = vec3(light * mix(0.55, 1.0, vAO), 0.0, 0.0);
     }
     // the mouth darkens toward the throat
-    if (vReg > 0.5 && vReg < 1.5) lt.x *= mix(1.0, 0.15, smoothstep(0.3, 0.95, vAux.x));
-    if (!gl_FrontFacing && vReg < 0.5) lt.x *= 0.5;
+    if (vReg > 0.5 && vReg < 1.5 && !shut) lt.x *= mix(1.0, 0.15, smoothstep(0.3, 0.95, vAux.x));
+    if (!gl_FrontFacing && vReg < 0.5 && !shut) lt.x *= 0.5;
+    // (the drawn mouth a warm dark brown, not black)
+    if (drawn) lt.x = max(lt.x, 0.45);
     // where the body turns away from you (the edge of a leg against the chest, of the head against
     // the shoulders) a shade darker in its own colour, as a pixel artist outlines a form from within;
     // not where the light from behind catches the edge
@@ -286,6 +317,7 @@ export function makeSkinMaterial(map: THREE.Texture, shared: Record<string, { va
       uBonePuff: { value: bones.map((b) => bristle(b.name)) },
       uBoneRib: { value: bones.map((b) => ({ spine1: 0.75, spine2: 1, chest: 0.85, hips: 0.25 } as Record<string, number>)[b.name] ?? 0) },
       uJawOpen: { value: 0 }, uSnarl: { value: 0 },
+      uNoseRest: { value: new THREE.Vector3(0, 1, 0) }, uMouthRest: { value: new THREE.Vector3(0, 1, 0) },
     },
     vertexShader: VERT,
     fragmentShader: FRAG,

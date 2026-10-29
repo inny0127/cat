@@ -208,23 +208,24 @@ void main() {
     vec3 iris = mix(uIrisA * 1.45, uIrisB * 1.2, smoothstep(0.25, 0.9, rr));
     iris *= mix(0.62, 1.0, smoothstep(0.3, -0.15, ip.y));
     iris = mix(iris, uIrisC * 0.9, smoothstep(0.82, 0.98, rr));
-    // (by day a slit exactly one art pixel wide however small the eye, so that the iris's colour
-    // shows either side of it; opening into a round pupil in the dark, and with excitement or fear)
+    // (an upright oval, narrow in bright light and never narrower than an art pixel, so that the
+    // iris's colour shows either side of it; filling out toward round in the dark, and with
+    // excitement or fear. Never a bar with square ends: a cat at its ease indoors shows an oval,
+    // and a black bar down a pale eye is a goat's, or a snake's)
     float pxI = max(length(vec2(dFdx(ip.x), dFdy(ip.x))), 1e-4);
-    float open = smoothstep(0.35, 0.85, uPupil);
-    vec2 q = ip / vec2(mix(0.5 * pxI, max(0.5 * pxI, 0.42), open), 0.46 + 0.1 * uPupil);
-    float pupil = open < 0.5 ? step(abs(q.x), 1.0) * step(abs(q.y), 1.0) : step(length(q), 1.0);
+    float open = smoothstep(0.1, 0.85, uPupil);
+    float pupW = max(0.5 * pxI, mix(0.1, 0.44, open));
+    vec2 q = ip / vec2(pupW, 0.48 + 0.1 * uPupil);
+    float pupil = step(length(q), 1.0);
     // (never smaller than about an art pixel, so even a small eye keeps its spark; and low enough
     // in the eye that the upper lid's dark rim does not cover it when the eye is only half open,
     // as it mostly is. On the pupil, up toward the light, the same side in both eyes: beside the
     // pupil, out on the iris, a spark of white in an eye a few art pixels across reads as the white
     // of an eye, and the cat looks as if it were looking off sideways, or cross-eyed; and only one
-    // of them, but in an eye seen close)
-    // (by day, on the slit itself, at the top of it and no wider: a spark of white beside a slit an
-    // art pixel wide, out on the iris of an eye six across, is the white of an eye, and the cat
-    // gives you a sidelong look)
-    vec2 gc = vec2(-0.13 * open, mix(0.2, 0.16, open));
-    vec2 gq = abs(ip - gc) / vec2(mix(min(uGlint, 0.5 * pxI), uGlint, open), uGlint);
+    // of them, but in an eye seen close. No wider than the pupil, and toward its upper edge on
+    // the side the light comes from)
+    vec2 gc = vec2(-0.45 * max(pupW - uGlint, 0.0), mix(0.2, 0.16, open));
+    vec2 gq = abs(ip - gc) / vec2(min(uGlint, pupW), uGlint);
     vec2 gq2 = abs(ip - vec2(0.2, -0.2));
     float glint = max(step(max(gq.x, gq.y), 1.0) * step(0.3, uShine), step(max(gq2.x, gq2.y), 0.05) * step(0.75, uShine) * step(uGlint, 0.13));
     vec3 c = mix(iris, vec3(0.004), pupil);

@@ -30,6 +30,10 @@ export interface Landmarks {
   nose: [number, number, number];
   padL: [number, number, number];
   padR: [number, number, number];
+  /** the tongue's root, back on the floor of the mouth (absent: placed from the nose) */
+  tongue?: [number, number, number];
+  /** a corner of the mouth (absent: no mouth drawn on it, skin.ts) */
+  mouth?: [number, number, number];
 }
 
 export interface Correctives {

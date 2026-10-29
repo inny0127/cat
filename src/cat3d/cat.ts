@@ -150,6 +150,11 @@ export class Cat3D {
       skin = makeSkinMaterial(painted, shared as unknown as Record<string, { value: unknown }>, asset.bones, asset.pixTexture);
       this.pixTexture = asset.pixTexture;
       this.skin = skin;
+      const lm = asset.landmarks;
+      if (lm.mouth) {
+        (skin.uniforms.uNoseRest.value as THREE.Vector3).set(lm.nose[0], lm.nose[1], lm.nose[2]);
+        (skin.uniforms.uMouthRest.value as THREE.Vector3).set(lm.mouth[0], lm.mouth[1], lm.mouth[2]);
+      }
       for (const geo of Object.values(asset.meshes)) {
         const m = new THREE.SkinnedMesh(geo, skin);
         m.bind(skeleton, new THREE.Matrix4());
@@ -226,7 +231,8 @@ export class Cat3D {
     const jawDef = asset.bones.find((b) => b.name === 'jaw');
     if (jaw && jawDef) {
       const nose = v3(LM.nose);
-      this.tongue = makeTongue(new THREE.Vector3(0, nose.y - 0.0182, nose.z - 0.031), v3(jawDef.pos), shared as unknown as Record<string, { value: unknown }>);
+      const root = LM.tongue ? v3(LM.tongue) : new THREE.Vector3(0, nose.y - 0.0182, nose.z - 0.031);
+      this.tongue = makeTongue(root, v3(jawDef.pos), shared as unknown as Record<string, { value: unknown }>);
       jaw.add(this.tongue.mesh);
     }
   }
@@ -310,17 +316,17 @@ export class Cat3D {
   headScale = 1;
 
   /** pixel art: flat coat colour, flat eyes, no whiskers (finer than an art pixel); the lids show
-   *  the coat's materials as the coat does. And the head a little larger, as a pixel artist draws
-   *  a cat: at a few dozen pixels across, the face is what has to read, its eyes a pixel or two
-   *  more each way */
+   *  the coat's materials as the coat does. And the head larger, as a pixel artist draws a cat
+   *  (and as a cat you would call sweet has it, a kitten's head on a cat's body): at a few dozen
+   *  pixels across, the face is what has to read, its eyes a pixel or two more each way */
   setPixelArt(on: boolean) {
     this.shared.uSolid.value = on ? 1 : 0;
-    this.headScale = on ? 1.15 : 1;
+    this.headScale = on ? 1.3 : 1;
     for (const e of this.eyes) {
       e.eyeMat.uniforms.uFlat.value = on ? 1 : 0;
-      // (drawn a few art pixels across, the eyes are made a little bigger, as a pixel artist would
-      // draw them: room for the iris, the pupil and the light in them, not a squint)
-      e.group.scale.setScalar(on ? 1.3 : 1);
+      // (drawn a few art pixels across, the eyes are made bigger, as a pixel artist would draw
+      // them: room for the iris, the pupil and the light in them, not a squint)
+      e.group.scale.setScalar(on ? 1.42 : 1);
       if (this.pixTexture && e.eyeMat.uniforms.uLidTex.value > 0.5) e.eyeMat.uniforms.uLidMap.value = on ? this.pixTexture : this.painted;
     }
     this.whiskers.setPixelArt(on);

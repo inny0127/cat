@@ -4,8 +4,10 @@ Source model: "3d modelling my cat: Fripouille" by guillaume bolis
   https://sketchfab.com/3d-models/3d-modelling-my-cat-fripouille-0ab14bf98e754f8d90fe1bf1c84ca66c
   licensed CC BY 4.0, https://creativecommons.org/licenses/by/4.0/
 Changes made here: rigged to our skeleton (bones and weights), the tail straightened onto the
-skeleton's rest line, rescaled and turned to our axes, its coat simplified into a few flat colours
-for the pixel art (the back's tabby stripes joined into bands). Its own eyeballs, whiskers and
+skeleton's rest line, rescaled and turned to our axes, the face below the eyes shortened and the
+cheeks filled out, the lower legs and paws made thicker (a kitten's face and legs, see younger and
+sturdier), its coat simplified into a few flat colours for the pixel art (the back's tabby stripes
+joined into bands). Its own eyeballs, whiskers and
 material maps are not used: the procedural eyes sit in its sockets and the procedural whiskers on
 its muzzle.
 
@@ -26,8 +28,8 @@ import model as M  # noqa: E402  (our skeleton)
 
 URL = 'https://huggingface.co/datasets/allenai/objaverse/resolve/main/glbs/000-125/0ab14bf98e754f8d90fe1bf1c84ca66c.glb'
 CREDIT = ('"3d modelling my cat: Fripouille" by guillaume bolis (https://sketchfab.com/guillaume.bolis.neko), '
-          'CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/). Rigged, re-posed, its coat simplified into flat '
-          'colours for pixel art and given procedural eyes for this app.')
+          'CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/). Rigged, re-posed, its face shortened and its legs '
+          'thickened, its coat simplified into flat colours for pixel art and given procedural eyes for this app.')
 
 # the source rig's bones, by what they are
 SPINE = ['Bone_01', 'Bone.001_02', 'Bone.002_03', 'Bone.003_04', 'Bone.004_05']   # pelvis .. head
@@ -210,6 +212,68 @@ def straighten_tail(V, W, J, k):
     tail = [np.array([0, base[1], base[0]]) + np.array([0, dv[1], dv[0]]) * L * i / M.TAIL_N for i in range(M.TAIL_N + 1)]
     print('tail: %.3f m long, unrolled from a %.0f degree hang' % (L, np.degrees(np.arctan2(-(tip[1] - ctrl[0][1]), -(tip[2] - ctrl[0][2])))))
     return out, tail
+
+
+# ------------------------------------------------------------------ a kitten's face
+# The sculpt is a grown tom's face, true to life: a long muzzle, nose to mouth near as far as eye to
+# nose, a deep chin. Drawn a few dozen art pixels across and seen close in from above as it looks
+# up, that lower face is what shows most, and a long white lower face under small eyes read as
+# grotesque, not cute. A pixel artist draws the face a kitten has: everything below the eyes
+# shorter, the muzzle shorter, the cheeks fuller, so that the eyes are the face. The eyes and
+# everything above them are left as they are.
+FACE_BELOW = 0.250      # the line under the eye openings: nothing above it moves
+FACE_SHORT = 0.7        # nose to chin, this much of what the sculpt has
+MUZZLE_SHORT = 1.0      # the muzzle's reach in front of the eyes' fronts, this much
+CHEEKS = 0.07           # the cheeks this much fuller
+
+
+def younger(P):
+    """points of the rest pose (the mesh, and landmarks given for the sculpt as it was) on the face
+    made younger: below the eyes drawn up toward them, the muzzle drawn back, the cheeks filled out.
+    A function of where the point is alone, so vertices split along UV seams stay together"""
+    P = np.array(P, float)
+    one = P.ndim == 1
+    P = np.atleast_2d(P).copy()
+    x, y, z = P[:, 0], P[:, 1], P[:, 2]
+    # the front of the head, fading out into the throat under the chin (the throat stays where it
+    # is: drawn up, its white would rise into the ginger of the sides of the head, skin.ts)
+    front = smoothstep(0.16, 0.19, z) * smoothstep(0.194, 0.21, y)
+    below = np.maximum(FACE_BELOW - y, 0)
+    ny = y + below * (1 - FACE_SHORT) * front
+    # (the whole of the nose with it, up to where the bridge rises into the brow: the tip of the
+    # nose stays the furthest forward)
+    reach = np.maximum(z - 0.19, 0) * smoothstep(FACE_BELOW + 0.016, FACE_BELOW + 0.004, y)
+    nz = z - reach * (1 - MUZZLE_SHORT) * front
+    # (the cheeks: either side of the muzzle, about level with the mouth)
+    cheek = np.exp(-((y - 0.232) / 0.014) ** 2) * smoothstep(0.012, 0.03, np.abs(x)) * smoothstep(0.14, 0.17, z)
+    nx = x * (1 + CHEEKS * cheek)
+    P[:, 0], P[:, 1], P[:, 2] = nx, ny, nz
+    return P[0] if one else P
+
+
+LEGS_THICKER = {'F': 0.5, 'H': 0.3}     # the lower legs (fore, hind) this much thicker
+
+
+def sturdier(V, G, lines, first, inv):
+    """the legs a kitten's, not a lanky tom's: the lower legs and the paws thicker round the leg's
+    own line (across only, not up and down: the soles stay where they are on the floor), fading
+    out up toward the body. Drawn a few art pixels wide, a slender cat's legs are stilts"""
+    U = V[first]
+    out = U.copy()
+    for g, line in lines.items():
+        best = np.full(len(U), np.inf)
+        near = np.zeros_like(U)
+        for a, b in zip(line[:-1], line[1:]):
+            ab = b - a
+            t = np.clip(((U - a) @ ab) / (ab @ ab), 0, 1)
+            p = a + t[:, None] * ab
+            d = np.linalg.norm(U - p, axis=1)
+            m = d < best
+            best[m], near[m] = d[m], p[m]
+        top = 0.13 if g[1] == 'F' else 0.11
+        sc = LEGS_THICKER[g[1]] * G[g][first] * smoothstep(top, top - 0.05, U[:, 1])
+        out[:, [0, 2]] += (U - near)[:, [0, 2]] * sc[:, None]
+    return out[inv]
 
 
 # ------------------------------------------------------------------ eyes, from the painted sockets
@@ -632,6 +696,19 @@ def main():
     midline = (headw > 0.5) & (np.abs(V[:, 0]) < 0.004)
     nose = V[midline][np.argmax(V[midline][:, 2])]
     sockets = eye_sockets(V, faces, F['uv'], tex, headw, nose)
+    # the face made younger, once the eyes are found in it (they stay as the sculpt has them). The
+    # whisker pads and the tongue's root were placed from the tip of the nose as the sculpt has it,
+    # and go where the face takes them
+    nose0 = nose
+    V = younger(V)
+    for o in sockets.values(): o['c'] = younger(o['c'])
+    nose = V[midline][np.argmax(V[midline][:, 2])]
+    legs = {}
+    for c in FRONT + HIND:
+        g = side_of(c) + ('F' if c in FRONT else 'H')
+        q = V[sum(W[:, k[n]] for n in c) > 0.5]
+        legs[g] = np.array([jp(n) for n in c] + [q[q[:, 1] < np.percentile(q[:, 1], 15)].mean(0)])
+    V = sturdier(V, G, legs, first, inv)
 
     # --- our skeleton, fitted into this body
     B = {n: M.pos(n).copy() for n in M.BONES}
@@ -680,7 +757,7 @@ def main():
     eyeMid = (eyes['L']['c'] + eyes['R']['c']) / 2
     # the corners of the mouth (the sculpt's lip line ends there) and the jaw's hinge: under the
     # eye, a little behind and above the corner, as a cat's is
-    corner = np.array([0.0183, 0.2259, 0.1923])
+    corner = younger([0.0183, 0.2259, 0.1923])
     B['jaw'] = np.array([0, corner[1] + 0.006, corner[2] - 0.017])
     print('bones moved from our own skeleton (cm):', {n: round(float(np.linalg.norm(B[n] - M.pos(n))) * 100, 1) for n in B if np.linalg.norm(B[n] - M.pos(n)) > 0.005})
 
@@ -753,7 +830,11 @@ def main():
               lidScale=E([np.mean([eyes[s]['half'][0] / eyes[s]['r'] for s in 'LR']) / 0.62, np.mean([eyes[s]['half'][1] / eyes[s]['r'] for s in 'LR']) / 0.465]),
               lidCol=E(np.mean([eyes[s]['skin'] for s in 'LR'], 0)),
               tailBase=E(tail[0]), tailVec=E(tail[-1] - tail[0]), legTop=0.132, backY=0.25, bellyY=0.15, bib=[0, 0.168, 0.096], ribs=[0, 0.19, -0.01],
-              nose=E(nose), padL=E(nose + pad), padR=E(nose + pad * [-1, 1, 1]))
+              nose=E(nose), padL=E(younger(nose0 + pad)), padR=E(younger(nose0 + pad * [-1, 1, 1])),
+              # the tongue's root, back on the floor of the mouth a little behind the lips
+              tongue=E(younger(nose0 + [0, -0.0182, -0.031])),
+              # a corner of the mouth (the drawn mouth goes by it, skin.ts)
+              mouth=E(corner))
     for s, key in (('L', 'eyeEulerL'), ('R', 'eyeEulerR')):
         coef, err, n = lid_uv(V, F['uv'], isl, sockets[s], eyes[s]['c'], M.euler_xyz(*lm[key]), R_eye)
         lm['lidUV' + s] = E(coef.T.ravel())          # u = a.x + b.y + c, v = d.x + e.y + f
