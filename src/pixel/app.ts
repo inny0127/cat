@@ -1572,12 +1572,28 @@ export class PixelApp {
     this.audio.play('pencil', { gain: 0.03, rate: 3.3 });
   }
 
+  /** the sweet things it does, any of which makes a picture for the day */
+  private static readonly SWEET = ['blink', 'bonk', 'purr', 'knead', 'rub', 'sleeppurr', 'back', 'flop', 'greet', 'silent', 'blep', 'loaf', 'wrestle', 'crab',
+    'pretty', 'treat', 'nip', 'bubble', 'tilt', 'ambush', 'chat', 'airlick'];
+  private photoWait = 120;
+  /** a cat long known: no photograph yet today, and it does one of the sweet things (you there
+   *  to see it, the app open a couple of minutes): a photograph of that, the day's */
+  private dayPhoto(dt: number, seen: Set<string>) {
+    if ((this.photoWait -= dt) > 0 || !seen.size || !this.visible || this.avatar.hidden || !this.state.alive) return;
+    const last = this.photos.at(-1), today = new Date(this.clock().getTime()).toDateString();
+    if (last && new Date(last.at).toDateString() === today) return;
+    const k = PixelApp.SWEET.find((k) => seen.has(k));
+    if (!k) return;
+    this.snapPhoto(k);
+    this.photoWait = 60;
+  }
+
   /** a tap on a photograph on the fairy lights: the album, open at that one */
   private openPhoto(sx: number, sy: number) {
     if (!this.album) return false;
     for (const p of [...this.room.prints].reverse()) {
       if (!this.hitThing(p.group, sx, sy, 14)) continue;
-      this.album.show(this.photos, p.i);
+      this.album.show(this.photos, p.i, this.state.born);
       this.state.hints.album = 1;
       this.haptic.tap?.();
       return true;
@@ -2394,6 +2410,7 @@ export class PixelApp {
     if (this.loafFor > 20) now.add('loaf');
     const said = this.firstWords.update(dt, now, this.state.alive && !a.hidden && this.visible);
     if (said) this.snapPhoto(said);
+    else this.dayPhoto(dt, now);
     now.clear();
   }
 }

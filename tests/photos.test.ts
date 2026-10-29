@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { loadPhotos, savePhotos, dayOf, KEEP_PHOTOS, type Photo } from '../src/ui/photos';
+import { loadPhotos, savePhotos, dayOf, daysTogether, KEEP_PHOTOS, type Photo } from '../src/ui/photos';
 
 /** a browser's storage, as much of it as is used, with room for so many characters */
 function storage(room = Infinity) {
@@ -59,5 +59,14 @@ describe('the day on a print', () => {
     const now = new Date(2026, 9, 29).getTime();
     expect(dayOf(new Date(2026, 2, 5, 14).getTime(), now)).toBe('3월 5일');
     expect(dayOf(new Date(2025, 11, 31, 23).getTime(), now)).toBe('2025년 12월 31일');
+  });
+});
+
+describe('which day together', () => {
+  it('the day it came is the first; by the calendar, not by hours', () => {
+    const born = new Date(2026, 9, 27, 23, 30).getTime();
+    expect(daysTogether(born, new Date(2026, 9, 27, 23, 50).getTime())).toBe(1);
+    expect(daysTogether(born, new Date(2026, 9, 28, 0, 10).getTime())).toBe(2);
+    expect(daysTogether(born, new Date(2026, 10, 27, 12).getTime())).toBe(32);
   });
 });

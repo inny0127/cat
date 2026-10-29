@@ -67,6 +67,13 @@ export function dayOf(at: number, now = Date.now()) {
   return `${d.getFullYear() !== n.getFullYear() ? `${d.getFullYear()}년 ` : ''}${d.getMonth() + 1}월 ${d.getDate()}일`;
 }
 
+/** which day together it was (the day the cat came, the first) */
+export function daysTogether(born: number, at: number) {
+  const a = new Date(born), b = new Date(at);
+  const d0 = Date.UTC(a.getFullYear(), a.getMonth(), a.getDate()), d1 = Date.UTC(b.getFullYear(), b.getMonth(), b.getDate());
+  return Math.max(1, Math.round((d1 - d0) / 86_400_000) + 1);
+}
+
 /**
  * The album: one photograph at a time, big, as a print with its word written under it and the
  * day; a tap on the print for the next (a swipe either way, the next or the one before), a tap
@@ -82,6 +89,7 @@ export class Album {
   private day: HTMLDivElement;
   private count: HTMLDivElement;
   private card: HTMLDivElement;
+  private born: number | undefined;
   /** put away (for whoever wants to know) */
   onClose: (() => void) | null = null;
 
@@ -109,9 +117,11 @@ export class Album {
     return this.el.classList.contains('on');
   }
 
-  show(list: Photo[], i: number) {
+  /** opened at the i-th; born: when the cat came (each print says which day together it was) */
+  show(list: Photo[], i: number, born?: number) {
     if (!list.length) return;
     this.list = list;
+    this.born = born;
     this.i = Math.max(0, Math.min(list.length - 1, i));
     this.put();
     this.el.classList.add('on');
@@ -132,7 +142,7 @@ export class Album {
     const p = this.list[this.i];
     this.img.src = p.url;
     this.text.textContent = p.text;
-    this.day.textContent = dayOf(p.at);
+    this.day.textContent = this.born ? `${dayOf(p.at)} · 함께한 지 ${daysTogether(this.born, p.at)}일째` : dayOf(p.at);
     this.count.textContent = this.list.length > 1 ? `${this.i + 1} / ${this.list.length}` : '';
   }
 }
