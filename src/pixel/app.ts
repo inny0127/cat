@@ -15,7 +15,7 @@ import { SlowWatch } from './pace';
 import { Brain } from '../sim/brain';
 import { loadState, newCat, ofTheDay, saveState, type CatState } from '../sim/state';
 import { HABITS, expectation, note, type Habit } from '../sim/habits';
-import { learn, lessons, worth } from '../sim/learn';
+import { learn, learnt, lessons, worth } from '../sim/learn';
 import { crepuscular, stepLife, THRESH } from '../sim/life';
 import { roomWarmth } from './season';
 import { clamp, smoothstep } from '../util/math';
@@ -305,9 +305,12 @@ export class PixelApp {
           this.haptic.tap?.();
           return;
         }
-        // the bottle of bubble mixture: a breath of bubbles blown into the room
-        if (this.hitThing(this.room.bubbleJar, x, y, 22)) {
-          this.blowBubbles();
+        // the bottle of bubble mixture (a breath of bubbles blown into the room) and the jar of
+        // treats beside it (one tossed to the cat): whichever the finger came down nearer
+        const bub = this.hitThing(this.room.bubbleJar, x, y, 22), tr = this.hitThing(this.room.treatJar, x, y, 22);
+        if (bub || tr) {
+          if (tr && (!bub || this.onScreenFrom(this.room.treatJar, x, y) < this.onScreenFrom(this.room.bubbleJar, x, y))) this.rattleTreats();
+          else this.blowBubbles();
           return;
         }
         // the pot of catnip: a pinch of it crumbled onto the floor for the cat
@@ -1198,6 +1201,12 @@ export class PixelApp {
     return Math.hypot((p.x * 0.5 + 0.5) * innerWidth - sx, (-p.y * 0.5 + 0.5) * innerHeight - sy) < near;
   }
 
+  /** how far a screen point is from a thing as the screen shows it (css px) */
+  private onScreenFrom(o: THREE.Object3D, sx: number, sy: number) {
+    const p = o.getWorldPosition(new THREE.Vector3()).project(this.stage.camera);
+    return Math.hypot((p.x * 0.5 + 0.5) * innerWidth - sx, (-p.y * 0.5 + 0.5) * innerHeight - sy);
+  }
+
   /** is a screen point within so many css px of a long thin thing as the screen shows it (from a
    *  to b along its own x): a fingertip is wider than it is, and comes down beside it as often as
    *  on it */
@@ -1775,6 +1784,7 @@ export class PixelApp {
     this.cat.update(dt);
     this.snoreStep(dt);
     this.nipStep(dt);
+    this.treatStep(dt);
     // (its forehead put to your face: felt, a soft bump, and heard, just)
     if (this.bumpT >= 0 && (this.bumpT += dt) > 0.3) this.bumpT = -1;
     if (this.cat.motor.bonked) {
@@ -1897,6 +1907,7 @@ export class PixelApp {
   private lampHintIn = 40;
   private nipHintIn = 300;
   private bubbleHintIn = 420;
+  private treatHintIn = 480;
 
   private hints(dt: number, touching: boolean) {
     const s = this.state;
@@ -1973,6 +1984,12 @@ export class PixelApp {
     if (s.hints.nip && !s.hints.bubbles && up && !this.avatar.hidden && !this.avatar.doing && !touching && !this.input.touching && (this.bubbleHintIn -= dt) < 0) {
       s.hints.bubbles = 1;
       this.hintUi.show('창턱 오른쪽 끝의 작은 병을 톡 누르면 비눗방울을 불어 줘요', 6000);
+      return;
+    }
+    // and after that: the treats
+    if (s.hints.bubbles && !s.hints.treats && up && !this.avatar.hidden && !this.avatar.doing && !touching && !this.input.touching && (this.treatHintIn -= dt) < 0) {
+      s.hints.treats = 1;
+      this.hintUi.show('라디오 앞의 빨간 뚜껑 통을 톡 누르면 간식을 하나 던져 줘요', 6000);
       return;
     }
     if (touching || this.input.touching) {
@@ -2151,6 +2168,105 @@ export class PixelApp {
       N.had = true;
       if (how === 'high') s.nipAt = Date.now();
     }
+  }
+
+  /** a treat on its way to the cat, or lying on the floor for it: where it is to land, how long
+   *  since the jar was rattled, whether it has been tossed yet, and whether the cat, full, has had
+   *  a sniff at it and left it */
+  private treatOut: { at: THREE.Vector3; t: number; tossed: boolean; left: boolean } | null = null;
+  private treatsWired = false;
+
+  /** the treats it has had in the last half hour (ms) */
+  private treatsLately(now: number) {
+    const s = this.state;
+    s.treats = (s.treats ?? []).filter((t) => now - t < 30 * 60e3);
+    return s.treats.length;
+  }
+
+  /** the jar of treats on the sill rattled (a cat that has learnt what that means up on its
+   *  haunches before you, asking), and a moment after, one tossed from your hand into the room, a
+   *  little way in front of it (one at a time: while one lies on the floor uneaten, a rattle only) */
+  private rattleTreats() {
+    const R = this.room, m = this.cat.motor, s = this.state, now = this.clock().getTime();
+    const jar = R.treatJar.getWorldPosition(new THREE.Vector3());
+    this.audio.play('kibbleShake', { gain: 0.06, rate: 1.45 + Math.random() * 0.1, pan: clamp(jar.x * 0.9, -0.8, 0.8) });
+    this.haptic.tap?.();
+    s.hints.treats = 1;
+    // (full up, it has learnt nothing it cares to show for it; one that has learnt it, dozing,
+    // wakes to it, as to its dinner)
+    const keen = this.treatsLately(now) >= 8 ? 0 : learnt(s, 'treat', now);
+    if (keen > 0.3) this.brain.rouse();
+    this.avatar.treatRattle(jar, keen);
+    if (this.treatOut) return;
+    const cam = this.stage.camera.position;
+    const from = this.avatar.hidden || this.cat.perch !== null ? R.spots.bed.clone() : m.pos.clone();
+    // (off to one side of it as you see it, so that it eats side on to you, not with its back to
+    // you nor in your face; out in the open, clear of the ball, and short of the front of the room,
+    // with room to stand at it)
+    const toYou = Math.atan2(cam.x - from.x, cam.z - from.z), B = R.yarnBounds, ball = R.yarnAt();
+    const seen = (p: THREE.Vector3) => {
+      const q = p.clone().setY(0.02).project(this.stage.camera);
+      return Math.abs(q.x) < 0.8 && Math.abs(q.y) < 0.85;
+    };
+    const open = (p: THREE.Vector3) => R.surfaceAt(p.x, p.z) !== 'bed' && p.z < B.maxZ - 0.22 && Math.hypot(p.x - ball.x, p.z - ball.z) > 0.12
+      && R.keepClear(p.clone(), 0.1).distanceTo(p) < 0.01 && seen(p);
+    let at = R.keepClear(new THREE.Vector3(R.spots.bed.x + 0.3, 0, R.spots.bed.z + 0.2), 0.1);
+    const sd = Math.random() < 0.5 ? 1 : -1;
+    found: for (const r of [0.38, 0.3, 0.46, 0.24]) {
+      for (const da of [1.4, -1.4, 1.0, -1.0, 1.9, -1.9, 0.5, -0.5]) {
+        const a = toYou + sd * da + (Math.random() - 0.5) * 0.2, p = new THREE.Vector3(from.x + Math.sin(a) * r, 0, from.z + Math.cos(a) * r);
+        if (open(p)) { at = p; break found; }
+      }
+    }
+    this.treatOut = { at, t: 0, tossed: false, left: false };
+  }
+
+  /** the treat: tossed after a moment (a moment more, if it is sat up asking: let it be seen), on
+   *  the floor a beat later, and the cat to it, awake and its own master; and eaten, a thing
+   *  learnt. Full (eight in half an hour), it has a sniff at it and leaves it for later */
+  private treatStep(dt: number) {
+    const T = this.treatOut, R = this.room, s = this.state;
+    if (!this.treatsWired) {
+      this.treatsWired = true;
+      R.onTreatLand = (at) => {
+        this.audio.play('pencil', { gain: 0.035, rate: 2.8, pan: clamp(at.x * 0.9, -0.8, 0.8) });
+        this.avatar.hear(at);
+      };
+      this.avatar.eatTreatCb = () => {
+        const now = this.clock().getTime();
+        R.eatTreat();
+        this.treatOut = null;
+        learn(s, 'treat', 1, 1, now);
+        this.treatsLately(now);
+        s.treats!.push(now);
+        s.hunger = clamp(s.hunger - 0.03);
+        s.trust = clamp(s.trust + 0.006 * (1 - s.trust), -1, 1);
+      };
+    }
+    if (!T) return;
+    T.t += dt;
+    if (!T.tossed) {
+      if (T.t < (this.avatar.doing === 'sit pretty' ? 1.5 : 0.9)) return;
+      T.tossed = true;
+      this.avatar.treatComing();
+      const B = this.room.yarnBounds, cam = this.stage.camera.position;
+      R.tossTreat(new THREE.Vector3(clamp(cam.x + (Math.random() - 0.5) * 0.2, B.minX + 0.2, B.maxX - 0.2), 0.5, B.maxZ - 0.02), T.at);
+      T.t = 0;
+      return;
+    }
+    const lying = R.treatAt;
+    if (!lying) {
+      // (lost: gone from the floor without being eaten)
+      if (T.t > 3) this.treatOut = null;
+      return;
+    }
+    if (T.t < 1.2) return;
+    const full = this.treatsLately(this.clock().getTime()) >= 8;
+    if (full) {
+      if (!T.left && this.avatar.nipNow(lying.clone(), 'done')) T.left = true;
+      return;
+    }
+    this.avatar.treatNow(lying.clone());
   }
 
   /** its nature as it is today, and the day it is for */

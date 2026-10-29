@@ -85,6 +85,8 @@ export interface CatState {
   learned: Learned;
   /** when it last had catnip (ms): for an hour or two after, catnip is nothing to it */
   nipAt?: number;
+  /** the treats it has had lately (ms): eight in half an hour, and it is full */
+  treats?: number[];
 }
 
 const KEY = 'cat-window.v1';

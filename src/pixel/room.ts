@@ -1196,6 +1196,39 @@ export class Room {
       add(g, winR - 0.03, winB, wallZ + 0.16);
       this.bubbleJar = g;
     }
+    // and just short of it, in front of the radio, a little jar of fish-shaped treats with a red lid
+    // (tapped, it rattles, and you toss one into the room for the cat)
+    {
+      const g = new THREE.Group();
+      g.add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.05, 14), this.mat('paint', { tone: 0.05 }))).translateY(0.025));
+      g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.03, 12), this.mat('brown', { tone: 0.1 })).translateY(0.017));
+      g.add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.024, 0.012, 14), this.mat('redBowl', { tone: 0.15 }))).translateY(0.056));
+      // (a golden fish on its label, so that you know what is in it)
+      const label = new THREE.Mesh(new THREE.SphereGeometry(0.008, 8, 5), this.mat('bookMustard', { tone: 0.2 }));
+      label.scale.set(1.3, 0.7, 0.35);
+      label.position.set(0.002, 0.026, 0.021);
+      g.add(label);
+      const fin = new THREE.Mesh(new THREE.ConeGeometry(0.006, 0.008, 3), this.mat('bookMustard', { tone: 0.2 }));
+      fin.rotation.z = Math.PI / 2;
+      fin.scale.z = 0.4;
+      fin.position.set(-0.012, 0.026, 0.02);
+      g.add(fin);
+      add(g, bx + 0.25, winB, wallZ + 0.15);
+      this.treatJar = g;
+      // (the treat itself, tossed: a little golden fish of a biscuit, big enough and bright
+      // enough to be seen on the rug's dots and the boards)
+      const t = new THREE.Group(), gold = this.mat('bookMustard', { tone: 0.2 });
+      const fish = new THREE.Mesh(new THREE.SphereGeometry(0.012, 8, 5), gold);
+      fish.scale.set(1.3, 0.55, 0.85);
+      t.add(fish);
+      const tail = new THREE.Mesh(new THREE.ConeGeometry(0.009, 0.012, 4), gold);
+      tail.rotation.z = Math.PI / 2;
+      tail.position.x = -0.018;
+      t.add(tail);
+      t.visible = false;
+      this.group.add(t);
+      this.treat.obj = t;
+    }
     const jar = this.mat('bookMustard', { tone: 0.1 });
     add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.06, 14), jar)), winR - 0.12, winB + 0.03, wallZ + 0.02);
     this.candle(jar, new THREE.Vector3(winR - 0.12, winB + 0.068, wallZ + 0.02));
@@ -2948,6 +2981,59 @@ export class Room {
   nipPot!: THREE.Object3D;
   /** the bottle of bubble mixture on the sill */
   bubbleJar!: THREE.Object3D;
+  /** the jar of treats on the sill */
+  treatJar!: THREE.Object3D;
+  /** a treat tossed into the room: in the air (from, to, how far through), lying on the floor, or
+   *  none (eaten, or not tossed) */
+  private readonly treat = { obj: null as THREE.Object3D | null, state: 'none' as 'none' | 'air' | 'floor', from: new THREE.Vector3(), to: new THREE.Vector3(), t: 0, dur: 0.7, spin: 0 };
+  /** a treat landed on the floor (for whoever wants to hear it) */
+  onTreatLand: ((at: THREE.Vector3) => void) | null = null;
+
+  /** a treat tossed from your hand (a point on your side of the room) to a point on the floor, in an
+   *  arc */
+  tossTreat(from: THREE.Vector3, to: THREE.Vector3) {
+    const T = this.treat;
+    if (!T.obj) return;
+    T.state = 'air';
+    T.from.copy(from);
+    T.to.copy(to).setY(this.groundAt(to.x, to.z) + 0.006);
+    T.t = 0;
+    T.dur = 0.55 + 0.25 * Math.min(1, from.distanceTo(to) / 1.2);
+    T.spin = (Math.random() < 0.5 ? -1 : 1) * (8 + 6 * Math.random());
+    T.obj.visible = true;
+    T.obj.scale.setScalar(1);
+    T.obj.position.copy(from);
+  }
+
+  /** the treat lying on the floor, if there is one */
+  get treatAt(): THREE.Vector3 | null {
+    return this.treat.state === 'floor' && this.treat.obj ? this.treat.obj.position : null;
+  }
+
+  /** eaten: gone */
+  eatTreat() {
+    const T = this.treat;
+    T.state = 'none';
+    if (T.obj) T.obj.visible = false;
+  }
+
+  /** the treat in the air: up and over in an arc, down, a little hop where it lands, and still */
+  private moveTreat(dt: number) {
+    const T = this.treat, o = T.obj;
+    if (!o || T.state !== 'air') return;
+    T.t += dt;
+    const u = Math.min(1, T.t / T.dur), h = 0.18 * Math.min(1, T.from.distanceTo(T.to) / 0.8);
+    o.position.lerpVectors(T.from, T.to, u);
+    o.position.y += h * 4 * u * (1 - u) * (1 - 0.6 * u);
+    o.rotation.y += T.spin * dt;
+    o.rotation.z += T.spin * 0.6 * dt;
+    if (u >= 1) {
+      o.position.copy(T.to);
+      o.rotation.z = 0;
+      T.state = 'floor';
+      this.onTreatLand?.(T.to.clone());
+    }
+  }
   /** catnip on the floor: where the pinch of it fell, how much of it is left to it (1 fresh .. 0
    *  gone: rolled in, scattered, its smell spent), how long since, and the bits of it */
   private readonly nip = { at: new THREE.Vector3(), left: 0, t: 0, bits: [] as { m: THREE.Mesh; from: THREE.Vector3; to: THREE.Vector3; dur: number; spin: number; yaw: number }[] };
@@ -3767,6 +3853,7 @@ export class Room {
     this.movePencil(dt);
     this.moveMug(dt);
     this.moveNip(dt);
+    this.moveTreat(dt);
     this.moveWand(dt);
     this.timeU.value = this.time;
     const flash = this.lightning(dt, this.stormOverride ?? stormAt(date, rain));

@@ -20,6 +20,7 @@ const DOING: Record<string, string> = {
   'look with you': '같이 보러 가기', boop: '코 인사', knead: '꾹꾹이', wake: '잠 깨기',
   sniff: '당신 냄새 맡기', shy: '눈 피하기', ambush: '매복', 'look up': '멈칫하고 보기',
   cool: '시원한 바닥에서 쉬기', huff: '시무룩', scent: '공기 냄새 맡기',
+  nip: '캣닢', 'nip meh': '캣닢 냄새만', bubbles: '비눗방울 잡기', 'look about': '두리번두리번', treat: '간식 먹기', 'sit pretty': '간식 조르기',
 };
 
 /** what is on its mind besides what it sees: the will to hunt, what it has a mind to do next,

@@ -49,6 +49,8 @@ export const FIRSTS: Record<string, string> = {
   nipmeh: '캣닢에 시큰둥해요. 셋 중 하나는 원래 그래요',
   bury: '밥그릇 옆을 앞발로 긁어요. 남은 밥을 묻어 두려는 본능이에요',
   chat: '노크에 또 대답해요. 당신과 수다 떠는 게 좋은가 봐요',
+  treat: '간식을 오도독 먹고 입맛을 다셔요. 또 있나 기다려요',
+  pretty: '통 소리에 뒷발로 앉아 졸라요. 간식을 배웠어요',
 };
 
 /** the line at the foot of the screen, as far as the first words need it */

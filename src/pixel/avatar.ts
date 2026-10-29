@@ -4,7 +4,7 @@ import { POSES, SIDE_TURN, type Leg, type PoseLayer, type PoseName } from '../ca
 import { NEUTRAL, type Mood } from '../cat3d/mood';
 import type { Avatar } from '../sim/avatar';
 import type { EarMood, TailMood } from '../rig/animator';
-import { boop, buryFood, lived, byYou, inTurn, shakeOff, canGlance, crab, coolOff, feel, huff, idleOptions, mealLayer, mealPlan, type MealPlan, groomChest, groomFlank, knead, lookWith, restingPose, sneeze, toBed, toWindow, wander, warmUp, washFace, yawn, type Act, type Ctx, sunbathe, Play, Sill, Hunt, Box, Zoomies, Walk, Stare, Rub, scratchEar, wakeUp, stretchSideOn, Greet, Gift, Snub, Beg, PawGlass, TailChase, Claw, Top, Fish, Bat, Trap, Sulk, Wrestle, Nip, nipMeh, investigate, isPerching, type Perching, type ScratchPost, type GlassFinger, type SillSpot, type SulkSpot } from './behave';
+import { boop, buryFood, lived, byYou, inTurn, shakeOff, canGlance, crab, coolOff, feel, huff, idleOptions, mealLayer, mealPlan, type MealPlan, groomChest, groomFlank, knead, lookWith, restingPose, sneeze, toBed, toWindow, wander, warmUp, washFace, yawn, type Act, type Ctx, sunbathe, Play, Sill, Hunt, Box, Zoomies, Walk, Stare, Rub, scratchEar, wakeUp, stretchSideOn, Greet, Gift, Snub, Beg, PawGlass, TailChase, Claw, Top, Fish, Bat, Trap, Sulk, Wrestle, Nip, nipMeh, investigate, SitPretty, eatTreat, isPerching, type Perching, type ScratchPost, type GlassFinger, type SillSpot, type SulkSpot } from './behave';
 import { Chase, Startle, type LaserDot } from './chase';
 import { BubbleHunt, Tease, type Lure } from './tease';
 import { GOAL, Whim } from './whim';
@@ -157,6 +157,8 @@ export class PixelAvatar implements Avatar {
    *  paw popping it. A moment's watching, and it is after them */
   bubble: Lure | null = null;
   popBubble: (() => void) | null = null;
+  /** the treat it went to, eaten (set by the app) */
+  eatTreatCb: (() => void) | null = null;
   private bubbleT = 0;
   private bubbleNeed = 0.8;
   /** the feathers of the wand (set by the app): dangled by a hand, a moment's watching and it has
@@ -1479,6 +1481,7 @@ export class PixelAvatar implements Avatar {
       mouse: () => this.ground?.mouse() ?? null,
       hookMouse: (toward) => this.ground?.hookMouse(toward),
       scatterNip: (from, k) => this.ground?.scatterNip?.(from, k),
+      eatTreat: () => this.eatTreatCb?.(),
       bubble: () => this.bubble,
       popBubble: () => this.popBubble?.(),
       pompom: () => this.ground?.pompom() ?? null,
@@ -1756,6 +1759,42 @@ export class PixelAvatar implements Avatar {
     }
     this.stopAct();
     this.act = how === 'high' ? new Nip(this.ctx, at) : how === 'meh' ? nipMeh(this.ctx, at) : investigate(this.ctx, at);
+    return true;
+  }
+
+  /**
+   * The treat jar rattled. A cat that has learnt what that means (keen: 0 .. 1, how well) and is up
+   * and about sits up on its haunches before you and asks; one that has not, looks up at it, the
+   * ears round to it
+   */
+  treatRattle(at: THREE.Vector3, keen: number) {
+    if (!this.alive || this.isHidden || this.sleep > 0.3) return;
+    const m = this.cat.motor;
+    m.flickEar('both', 0.8);
+    if (keen > 0.25 && Math.random() < 0.4 + keen && !this.errand && !this.trip && !this.perched && !this.hands.length
+      && (this.mode === 'rest' || this.mode === 'alert') && (!this.act || /^(to bed|wander|yawn|groom|wash|look about|treat|wait|investigate)/.test(this.act.name))) {
+      this.stopAct();
+      this.act = new SitPretty();
+      return;
+    }
+    this.perk(at, 0.6);
+  }
+  /** the treat is on its way: down off its haunches */
+  treatComing() {
+    if (this.act instanceof SitPretty) this.act.done();
+  }
+  /** a treat lying on the floor: awake and its own master, it goes and eats it (full: it leaves it) */
+  treatNow(at: THREE.Vector3) {
+    if (!this.alive || this.isHidden || this.sleep > 0.3 || this.errand || this.trip || this.hands.length || this.perched) return false;
+    if (this.mode !== 'rest' && this.mode !== 'alert') return false;
+    if (this.act?.name === 'treat' || this.act instanceof Chase || this.act instanceof Tease || this.act instanceof BubbleHunt || this.act instanceof Startle || this.act instanceof Nip || this.act instanceof Trap) return false;
+    // (up on its haunches still: down off them first, and then to it)
+    if (this.act instanceof SitPretty) {
+      this.act.done();
+      return false;
+    }
+    this.stopAct();
+    this.act = eatTreat(this.ctx, at);
     return true;
   }
 

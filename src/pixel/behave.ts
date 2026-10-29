@@ -161,6 +161,8 @@ export interface Ctx {
    *  paw that meets it, popping it */
   bubble?: () => Lure | null;
   popBubble?: () => void;
+  /** the treat it has gone to on the floor, eaten (gone from there) */
+  eatTreat?: () => void;
 }
 
 export interface ScratchPost {
@@ -805,6 +807,96 @@ export const sneeze = (c: Ctx) => {
       earFwd: -0.3 * nod, jaw: 0.22 * nod, whisker: 0.5 * nod,
     };
   });
+};
+
+/**
+ * Sitting pretty: a cat that has learnt what the rattle of the treat jar means, sat up on its
+ * haunches facing you, the forepaws lifted off the floor and held curled up in front of its chest,
+ * swaying a little to keep its balance, the head up to you, ears forward; a little meow; and down
+ * again after a moment (or as soon as the treat comes)
+ */
+export class SitPretty implements Act {
+  readonly name = 'sit pretty';
+  private t = 0;
+  private said = Math.random() < 0.25;
+  private turned = false;
+  private down = -1;
+  constructor(private readonly dur = rand(1.8, 3)) {}
+  get ownGaze() {
+    return true;
+  }
+  /** the treat on its way: down off its haunches now */
+  done() {
+    if (this.down < 0) this.down = this.t;
+  }
+  update(dt: number, c: Ctx) {
+    const m = c.m;
+    this.t += dt;
+    m.setPosture('sit');
+    const you = c.viewer();
+    if (!this.turned) {
+      this.turned = true;
+      const face = Math.atan2(you.x - m.pos.x, you.z - m.pos.z);
+      if (Math.abs(wrapA(face - m.yaw)) > 0.4) m.walkTo(m.pos.clone(), 0.2, face);
+    }
+    m.lookAt(you, 1);
+    const end = this.down >= 0 ? Math.min(this.dur, this.down) : this.dur;
+    const up = ease((this.t - 0.3) / 0.35) * (1 - ease((this.t - end) / 0.3));
+    const sway = Math.sin(lived(this.t, 3) * 2.6) * up;
+    const paw = (k: number) => ({ planted: 0, frame: 0, x: 0.03, y: 0.12 + 0.07 * up + 0.006 * Math.sin(this.t * 5 + k), z: 0.06 + 0.02 * up, flex: 0.95 });
+    if (!this.said && this.t > 0.9) { this.said = true; c.say(Math.random() < 0.5 ? 'meowSoft' : 'meowPlead'); }
+    m.layer = {
+      pose: {
+        chestPitch: -1.18 * up - 0.1, hipY: 0.064 + 0.03 * up, neckPitch: 0.35 * up, headPitch: 0.12 * up, chestRoll: 0.05 * sway, headRoll: -0.06 * sway,
+        LF: paw(0), RF: paw(1.3), earFwd: 0.8, eyeOpen: 1, pupil: 0.75, whisker: 0.5, tailSide: 0.4 * twitch(this.t, 4),
+      },
+      w: Math.min(1, this.t / 0.3) * (1 - ease((this.t - end - 0.2) / 0.3)),
+    };
+    if (up > 0.5) m.moment = 'pretty';
+    return this.t < end + 0.5;
+  }
+  stop(c: Ctx) {
+    c.m.layer = null;
+    c.m.lookAt(null);
+  }
+}
+
+/**
+ * A treat on the floor: over to it at a trot, a quick sniff, down on it and crunched up in a
+ * couple of bites, the head turned to get the side teeth to it; then a lick of the lips, and a sit
+ * looking at you (in case there is another), a trill now and then
+ */
+export const eatTreat = (c: Ctx, at: THREE.Vector3) => {
+  const p = standTo(c, at, c.m.pos, 0.15);
+  const to = p?.to ?? c.keepClear(at.clone(), 0.12), face = p?.face ?? Math.atan2(at.x - to.x, at.z - to.z);
+  const sniff = rand(0.35, 0.7), chew = rand(1.4, 2.2), sd = Math.random() < 0.5 ? 1 : -1;
+  let ate = false, crunches = 0;
+  const you = c.viewer();
+  // (well round from it: round to it where it stands first, its eyes on it, and then straight over
+  // to it, not an arc that brings it in from the far side)
+  const m0 = c.m, look = Math.atan2(at.x - m0.pos.x, at.z - m0.pos.z);
+  const round = Math.abs(wrapA(look - m0.yaw)) > 0.7 && m0.pos.distanceTo(to) > 0.05;
+  return new Walk('treat', [
+    ...(round ? [{ to: m0.pos.clone(), face: look, stay: 0.15, posture: 'stand' as const, layer: () => ({ earFwd: 0.8, pupil: 0.7, neckPitch: -0.3 }) }] : []),
+    {
+      to, face, stay: sniff + chew, posture: 'crouch',
+      layer: (t, m) => {
+        if (t < sniff) return { neckPitch: -0.8, headPitch: -0.35 + 0.05 * Math.sin(t * 14), whisker: 0.7, earFwd: 0.5 };
+        if (!ate) { ate = true; c.eatTreat?.(); m.moment = 'treat'; }
+        const u = t - sniff, bite = Math.max(0, Math.sin(u * 9));
+        const n = Math.floor(u * 9 / Math.PI / 2 + 0.25);
+        if (n >= crunches && crunches < 3) { crunches = n + 1; c.sound('crunch', 0.16); }
+        return { neckPitch: -0.7 + 0.25 * ease(u / 0.6), headPitch: -0.2, headRoll: sd * 0.35, headYaw: sd * 0.2, jaw: 0.04 + 0.16 * bite, eyeOpen: 0.8, squint: 0.3, earFwd: 0.2 };
+      },
+    },
+    {
+      to, face: Math.atan2(you.x - to.x, you.z - to.z) + rand(-0.3, 0.3), stay: rand(2.2, 4), posture: 'sit',
+      layer: (t, m) => {
+        if (t < 0.05) { m.noseLick(Math.random() < 0.5 ? 2 : 1); if (Math.random() < 0.3) c.say('trill'); }
+        return { earFwd: 0.6, eyeOpen: 1, pupil: 0.6, tailCurl: 0.3 * twitch(t, 2) };
+      },
+    },
+  ], 0.45);
 };
 
 /** the thing it was after gone, it does not know where (a bubble popped): a look about for it, this
