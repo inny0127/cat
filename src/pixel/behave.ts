@@ -157,6 +157,10 @@ export interface Ctx {
   finger: () => GlassFinger | null;
   /** catnip on the floor, rolled in: the bits near a point pushed out from under it (k: how hard) */
   scatterNip?: (from: THREE.Vector3, k: number) => void;
+  /** soap bubbles in the air: the one nearest it, as a thing to go after (null: none left); and a
+   *  paw that meets it, popping it */
+  bubble?: () => Lure | null;
+  popBubble?: () => void;
 }
 
 export interface ScratchPost {
@@ -801,6 +805,19 @@ export const sneeze = (c: Ctx) => {
       earFwd: -0.3 * nod, jaw: 0.22 * nod, whisker: 0.5 * nod,
     };
   });
+};
+
+/** the thing it was after gone, it does not know where (a bubble popped): a look about for it, this
+ *  way and that, ears up; then a look at you, the head on one side */
+export const lookAbout = () => {
+  const d = rand(2.2, 3.4), first = Math.random() < 0.5 ? 1 : -1;
+  return new Layered('look about', d, 0.35, (t) => {
+    const about = 1 - ease((t - d + 1.1) / 0.5);
+    return {
+      headYaw: 0.65 * first * Math.sin(t * 2.3) * about, neckYaw: 0.25 * first * Math.sin(t * 2.3 - 0.4) * about, headPitch: 0.12 * about,
+      headRoll: 0.28 * ease((t - d + 1.0) / 0.4), earFwd: 0.6, eyeOpen: 1, pupil: 0.8, whisker: 0.4,
+    };
+  }, 'sit');
 };
 
 /**

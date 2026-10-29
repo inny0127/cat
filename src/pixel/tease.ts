@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { twitch } from '../util/math';
 import { POSES, type PoseLayer } from '../cat3d/pose';
-import { washFace, type Act, type Ctx } from './behave';
+import { lookAbout, washFace, type Act, type Ctx } from './behave';
 
 const ease = (x: number) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x));
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
@@ -401,5 +401,52 @@ export class Tease implements Act {
     c.m.zoom = 0;
     c.m.lookAt(null);
     c.hold(null);
+  }
+}
+
+/**
+ * Soap bubbles drifting through the room: after them as after the feathers, the nearest its quarry,
+ * the eyes and the head going with it; sat up swatting at the low ones, up on its hind legs clapping
+ * at the higher, leaping for the highest, pouncing on those that come down to the floor. A paw that
+ * meets one pops it, and it is not there any more, which it does not understand; on to the next.
+ * All gone: a look about for them, and a look at you.
+ */
+export class BubbleHunt implements Act {
+  readonly name = 'bubbles';
+  private readonly tease = new Tease();
+  private after: Act | null = null;
+  private none = 0;
+  get phase() {
+    return this.after ? 'gone' : this.tease.phase;
+  }
+  get ownGaze() {
+    return true;
+  }
+  update(dt: number, c: Ctx) {
+    if (this.after) return this.after.update(dt, c);
+    const L = c.bubble?.() ?? null;
+    if (!L) {
+      // (a moment: another may be coming down)
+      if ((this.none += dt) < 0.6) return true;
+      this.tease.stop(c);
+      this.after = lookAbout();
+      return true;
+    }
+    this.none = 0;
+    // (the wand game, played with the bubble for the feathers: where its eyes have it, where it
+    // goes, what a paw does to it)
+    const w = Object.create(c) as Ctx;
+    w.lure = () => L;
+    w.batLure = () => c.popBubble?.();
+    w.pinLure = () => c.popBubble?.();
+    w.gaze = (id) => c.gaze(id === 'wand' ? 'bubble' : id);
+    w.seen = (id) => c.seen?.(id === 'wand' ? 'bubble' : id) ?? null;
+    if (this.tease.update(dt, w)) return true;
+    this.tease.stop(c);
+    return false;
+  }
+  stop(c: Ctx) {
+    this.after?.stop(c);
+    this.tease.stop(c);
   }
 }

@@ -211,6 +211,8 @@ export class CatAudio {
       ['shatter', () => S.shatter(sr), 2],
       ['bell', () => S.bell(sr), 4],
       ['rustle', () => S.rustle(sr), 3],
+      ['pop', () => S.bubblePop(sr), 4],
+      ['blow', () => S.blow(sr), 2],
       ['step', () => S.step(sr), 4],
       ['rain', () => S.rain(sr), 1],
       ['birdChip', () => S.birdChip(sr), 4],

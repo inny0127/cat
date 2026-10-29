@@ -105,6 +105,8 @@ uniform vec4 uBug;       // a moth or a fly: where (art pixels), how far off (vi
                          // (0 none, 1 a moth, 2 a fly; its fraction, the wings' beat)
 uniform vec3 uBugCol;    // ... and the colour of the light on it
 uniform vec3 uLaser;     // the red dot of a laser pointer: where (art pixels), how bright (0: off)
+uniform vec4 uBub[8];    // soap bubbles: where (art pixels), how big across (art pixels; 0: none), how far (view depth)
+uniform float uBubT[8];  // ... popped, how far through the drops flying off (0 whole .. 1 gone)
 uniform vec3 uStrA;      // a string (the feather wand's): from here (art pixels, view depth) ...
 uniform vec3 uStrB;      // ... to here
 uniform vec2 uStrSag;    // how far it sags at its middle (art pixels; and whether there is one)
@@ -497,6 +499,39 @@ void main() {
     if (k > 0.0) col = mix(col, 1.0 - (1.0 - col) * (1.0 - red), k * uLaser.z);
     glow = max(glow, g * uLaser.z);
   }
+  // soap bubbles, as a pixel artist draws them: a ring of single pixels in the film's colours,
+  // going round it as they turn (cyan, rose, gold, pale), the room seen through it a touch lighter,
+  // and the window caught on it up to the left; popped, a ring of drops flying out and gone.
+  // Behind whatever is nearer
+  for (int i = 0; i < 8; i++) {
+    vec4 B = uBub[i];
+    if (B.z <= 0.0) continue;
+    if (depth < 0.99999 && lin(depth) < B.w - 0.02) continue;
+    vec2 d = vec2(p) + 0.5 - B.xy;
+    float r = length(d), R = max(B.z, 1.0);
+    if (r > R * 2.8 + 1.5) continue;
+    float T = uBubT[i];
+    if (T <= 0.0) {
+      if (r > R + 0.5) continue;
+      if (r > R - 0.5) {
+        float a = atan(d.y, d.x) / 6.2832 + uTime * 0.12 + float(i) * 0.37;
+        vec3 film = 0.55 + 0.45 * cos(6.2832 * (a + vec3(0.0, 0.33, 0.67)));
+        col = mix(col, mix(vec3(0.97, 0.97, 1.0), film, 0.6), 0.62);
+        glow = max(glow, 0.2);
+      } else {
+        col = mix(col, vec3(1.0), 0.07);
+        vec2 h = d - vec2(-0.45, 0.45) * R;
+        if (dot(h, h) < max(0.3, R * R * 0.04)) { col = mix(col, vec3(1.0), 0.88); glow = max(glow, 0.5); }
+      }
+    } else {
+      float rr = R * (1.0 + 1.6 * T);
+      for (int k = 0; k < 6; k++) {
+        float a = float(k) * 1.0472 + float(i) * 0.7;
+        vec2 q = floor(B.xy + rr * vec2(cos(a), sin(a)));
+        if (q == vec2(p)) { col = mix(col, vec3(0.95, 0.97, 1.0), 0.75 * (1.0 - T)); glow = max(glow, 0.3 * (1.0 - T)); }
+      }
+    }
+  }
   gl_FragColor = vec4(col, glow);
 }`;
 
@@ -640,6 +675,7 @@ export class Stage {
         uNotes: { value: Array.from({ length: 4 }, () => new THREE.Vector3()) },
         uBug: { value: new THREE.Vector4() }, uBugCol: { value: new THREE.Vector3(1, 1, 1) },
         uLaser: { value: new THREE.Vector3() },
+        uBub: { value: Array.from({ length: 8 }, () => new THREE.Vector4()) }, uBubT: { value: new Array(8).fill(0) },
         uStrA: { value: new THREE.Vector3() }, uStrB: { value: new THREE.Vector3() }, uStrSag: { value: new THREE.Vector2() },
         uTime: { value: 0 },
         uCatDull: { value: 0 },
@@ -971,6 +1007,24 @@ export class Stage {
     const depth = -at.clone().applyMatrix4(this.camera.matrixWorldInverse).z;
     u.set(a.x, a.y, depth, (kind === 'moth' ? 1 : 2) + (up ? 0.75 : 0.25));
     if (light) (this.pixel.mat.uniforms.uBugCol.value as THREE.Vector3).copy(light);
+  }
+
+  /** soap bubbles in the room (the 8 nearest you, if more): where, how big (m), and popped,
+   *  how far through the drops flying off (0 whole .. 1 gone) */
+  setBubbles(bubbles: { p: THREE.Vector3; r: number; pop: number }[]) {
+    if (!this.pixel) return;
+    const u = this.pixel.mat.uniforms.uBub.value as THREE.Vector4[], ut = this.pixel.mat.uniforms.uBubT.value as number[];
+    const a = new THREE.Vector2(), b = new THREE.Vector2(), up = new THREE.Vector3();
+    const near = bubbles.slice().sort((x, y) => y.p.distanceToSquared(this.camera.position) - x.p.distanceToSquared(this.camera.position)).slice(-u.length);
+    for (let i = 0; i < u.length; i++) {
+      const B = near[i];
+      if (!B) { u[i].set(0, 0, 0, 0); ut[i] = 0; continue; }
+      this.toArt(B.p, a);
+      up.copy(B.p).y += B.r;
+      this.toArt(up, b);
+      u[i].set(a.x, a.y, Math.max(1, Math.abs(b.y - a.y)), -B.p.clone().applyMatrix4(this.camera.matrixWorldInverse).z);
+      ut[i] = B.pop < 0 ? 0 : Math.min(1, Math.max(0.01, B.pop / 0.22));
+    }
   }
 
   /** the red dot of a laser pointer, at a world point (null: off) */

@@ -1179,6 +1179,23 @@ export class Room {
       add(pot, winL + 0.11, winB + 0.025, wallZ + 0.02);
       this.nipPot = pot;
     }
+    // a little bottle of bubble mixture at the right-hand end, its wand stood in it (tapped, you blow
+    // a breath of bubbles into the room)
+    {
+      const g = new THREE.Group();
+      g.add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.017, 0.052, 12), this.mat('bookBlue', { tone: 0.4 }))).translateY(0.026));
+      g.add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.011, 0.012, 10), this.mat('redBowl', { tone: 0.4 }))).translateY(0.058));
+      const stick = shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.0022, 0.0022, 0.04, 5), this.mat('paint', { tone: 0.1 })));
+      stick.position.set(0.004, 0.082, 0);
+      stick.rotation.z = -0.25;
+      g.add(stick);
+      const loop = shadowy(new THREE.Mesh(new THREE.TorusGeometry(0.009, 0.0022, 5, 12), this.mat('redBowl', { tone: 0.4 })));
+      loop.position.set(0.0095, 0.108, 0);
+      loop.rotation.set(0, 0.5, -0.25);
+      g.add(loop);
+      add(g, winR - 0.03, winB, wallZ + 0.16);
+      this.bubbleJar = g;
+    }
     const jar = this.mat('bookMustard', { tone: 0.1 });
     add(shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.06, 14), jar)), winR - 0.12, winB + 0.03, wallZ + 0.02);
     this.candle(jar, new THREE.Vector3(winR - 0.12, winB + 0.068, wallZ + 0.02));
@@ -2929,6 +2946,8 @@ export class Room {
 
   /** the pot of catnip on the sill */
   nipPot!: THREE.Object3D;
+  /** the bottle of bubble mixture on the sill */
+  bubbleJar!: THREE.Object3D;
   /** catnip on the floor: where the pinch of it fell, how much of it is left to it (1 fresh .. 0
    *  gone: rolled in, scattered, its smell spent), how long since, and the bits of it */
   private readonly nip = { at: new THREE.Vector3(), left: 0, t: 0, bits: [] as { m: THREE.Mesh; from: THREE.Vector3; to: THREE.Vector3; dur: number; spin: number; yaw: number }[] };

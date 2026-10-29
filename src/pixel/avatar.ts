@@ -6,7 +6,7 @@ import type { Avatar } from '../sim/avatar';
 import type { EarMood, TailMood } from '../rig/animator';
 import { boop, buryFood, lived, byYou, inTurn, shakeOff, canGlance, crab, coolOff, feel, huff, idleOptions, mealLayer, mealPlan, type MealPlan, groomChest, groomFlank, knead, lookWith, restingPose, sneeze, toBed, toWindow, wander, warmUp, washFace, yawn, type Act, type Ctx, sunbathe, Play, Sill, Hunt, Box, Zoomies, Walk, Stare, Rub, scratchEar, wakeUp, stretchSideOn, Greet, Gift, Snub, Beg, PawGlass, TailChase, Claw, Top, Fish, Bat, Trap, Sulk, Wrestle, Nip, nipMeh, investigate, isPerching, type Perching, type ScratchPost, type GlassFinger, type SillSpot, type SulkSpot } from './behave';
 import { Chase, Startle, type LaserDot } from './chase';
-import { Tease, type Lure } from './tease';
+import { BubbleHunt, Tease, type Lure } from './tease';
 import { GOAL, Whim } from './whim';
 import { noise1 } from '../util/math';
 import { Ears } from './ears';
@@ -153,6 +153,12 @@ export class PixelAvatar implements Avatar {
     kickMouse?: (dir: THREE.Vector3, speed: number, up: number) => void;
     scatterNip?: (from: THREE.Vector3, k: number) => void;
   } | null = null;
+  /** soap bubbles in the air (set by the app): the one nearest it, as a thing to go after, and a
+   *  paw popping it. A moment's watching, and it is after them */
+  bubble: Lure | null = null;
+  popBubble: (() => void) | null = null;
+  private bubbleT = 0;
+  private bubbleNeed = 0.8;
   /** the feathers of the wand (set by the app): dangled by a hand, a moment's watching and it has
    *  to have them; after a long game, a while before it will play again */
   wand: Lure | null = null;
@@ -748,6 +754,7 @@ export class PixelAvatar implements Avatar {
     if (L) T.push({ id: 'dot', kind: 'dot', p: L.p, felt: !!L.self });
     if (this.toys) T.push({ id: 'yarn', kind: 'toy', p: this.toys.yarn() });
     if (this.wand) T.push({ id: 'wand', kind: 'toy', p: this.wand.p });
+    if (this.bubble) T.push({ id: 'bubble', kind: 'bug', p: this.bubble.p });
     if (this.glint) T.push({ id: 'glint', kind: 'glint', p: this.glint });
     if (this.visitor) T.push({ id: 'bird', kind: 'bird', p: this.visitor });
     const bug = this.outside?.bug?.();
@@ -1472,6 +1479,8 @@ export class PixelAvatar implements Avatar {
       mouse: () => this.ground?.mouse() ?? null,
       hookMouse: (toward) => this.ground?.hookMouse(toward),
       scatterNip: (from, k) => this.ground?.scatterNip?.(from, k),
+      bubble: () => this.bubble,
+      popBubble: () => this.popBubble?.(),
       pompom: () => this.ground?.pompom() ?? null,
       batPompom: (v) => this.ground?.batPompom(v),
       carry: (at, yaw) => this.ground?.carry(at, yaw),
@@ -1748,6 +1757,40 @@ export class PixelAvatar implements Avatar {
     this.stopAct();
     this.act = how === 'high' ? new Nip(this.ctx, at) : how === 'meh' ? nipMeh(this.ctx, at) : investigate(this.ctx, at);
     return true;
+  }
+
+  /** bubbles in the air: awake and its own master, not too sleepy, it is after them (up on
+   *  something, it comes down first) */
+  bubbleNow() {
+    if (!this.alive || this.sleep > 0.3 || this.errand || this.trip || this.hidden || !this.bubble || this.hands.length) return false;
+    if (this.mode !== 'rest' && this.mode !== 'alert') return false;
+    if (this.mood.sleepy > 0.7 || this.act instanceof Chase || this.act instanceof Tease || this.act instanceof BubbleHunt
+      || this.act instanceof Startle || this.act instanceof Nip || this.act instanceof Trap || this.act instanceof Gift) return false;
+    if (this.perched) {
+      if (!this.afterPerch) {
+        this.afterPerch = () => { this.bubbleNow(); };
+        (this.act as Perching).leave(() => this.bubble?.p ?? null);
+      }
+      return false;
+    }
+    this.stopAct();
+    this.act = new BubbleHunt();
+    return true;
+  }
+
+  /** a bubble popped on its nose: a start, a blink, the ears flicked and the head shaken; now and
+   *  then a sneeze */
+  bubbleNose() {
+    const m = this.cat.motor;
+    m.blinkNow();
+    m.flickEar('both', 1.3);
+    if (this.alive && !this.hands.length && Math.random() < 0.3 && this.sleep < 0.3 && !(this.act instanceof BubbleHunt && this.act.phase === 'rear')) {
+      const was = this.act;
+      if (!was || was instanceof BubbleHunt) {
+        was?.stop(this.ctx);
+        this.act = sneeze(this.ctx);
+      }
+    }
   }
 
   /** feathers dangled before it: awake and its own master, it drops what it was doing for them */
@@ -2183,6 +2226,14 @@ export class PixelAvatar implements Avatar {
     } else {
       this.wandT = 0;
       this.wandNeed = (0.3 + Math.random() * 0.6) * (1 - 0.6 * this.expects.wand);
+    }
+    // bubbles in the air: watched a moment, then it is after them
+    if (this.bubble && !(this.act instanceof BubbleHunt)) {
+      this.bubbleT += dt * (0.4 + this.nerves.on('bubble'));
+      if (this.bubbleT > this.bubbleNeed && this.bubbleNow()) this.bubbleT = 0;
+    } else {
+      this.bubbleT = 0;
+      this.bubbleNeed = 0.5 + Math.random() * 0.8;
     }
     // a ball someone is moving about: watched a moment, then it has to have it
     if (this.lure && this.act?.name !== 'play') {

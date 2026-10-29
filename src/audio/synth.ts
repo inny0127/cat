@@ -267,6 +267,30 @@ function ping(out: Float32Array, sr: number, at: number, f: number, amp: number,
   }
 }
 
+/** a soap bubble popping: hardly a sound at all, a tiny wet tick with a little high ring to it */
+export function bubblePop(sr: number) {
+  const out = new Float32Array(Math.floor(0.06 * sr));
+  clicks(out, sr, 0, 2, 0.003, 3500, 8000, 0.7, 0.0008);
+  // (the film's ring, sliding up as it goes)
+  const f0 = rnd(2200, 3400), i1 = Math.floor(0.04 * sr);
+  for (let k = 0; k < i1; k++) out[k] += Math.sin(2 * Math.PI * f0 * (k / sr) * (1 + 1.5 * k / i1)) * 0.25 * Math.exp(-k / (0.006 * sr));
+  filter(out, sr, 'hp', 900, 0.7);
+  return fade(normalize(out, 0.5), sr, 0.0003, 0.01);
+}
+
+/** a breath blown through a bubble wand: a soft rush of air */
+export function blow(sr: number) {
+  const dur = rnd(0.5, 0.7);
+  const out = new Float32Array(Math.floor(dur * sr));
+  for (let i = 0; i < out.length; i++) {
+    const u = i / out.length;
+    out[i] = noise() * Math.sin(Math.PI * Math.min(1, u * 1.6)) * (1 - 0.6 * u);
+  }
+  filter(out, sr, 'bp', 1100, 0.5);
+  filter(out, sr, 'lp', 2600, 0.7);
+  return fade(normalize(out, 0.4), sr, 0.02, 0.08);
+}
+
 /** kibble poured into a ceramic bowl */
 export function kibblePour(sr: number, dur = 1.4) {
   const out = new Float32Array(Math.floor((dur + 0.4) * sr));

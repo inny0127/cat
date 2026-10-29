@@ -23,6 +23,7 @@ import { PixelAvatar } from './avatar';
 import { Mind } from './mind';
 import { Senses3D } from './senses';
 import { Room } from './room';
+import { Bubbles } from './bubbles';
 import { Soundscape, type Heard } from './soundscape';
 import { rainAt } from '../cat3d/roomlight';
 import { Capacitor } from '@capacitor/core';
@@ -302,6 +303,11 @@ export class PixelApp {
             if (Room.dark(ck.getHours() + ck.getMinutes() / 60) > 0.6) this.avatar.lightsOn();
           }
           this.haptic.tap?.();
+          return;
+        }
+        // the bottle of bubble mixture: a breath of bubbles blown into the room
+        if (this.hitThing(this.room.bubbleJar, x, y, 22)) {
+          this.blowBubbles();
           return;
         }
         // the pot of catnip: a pinch of it crumbled onto the floor for the cat
@@ -1852,6 +1858,7 @@ export class PixelApp {
     // the tea on the books steams; by day dust turns in the sun
     this.stage.setSteam(this.room.mugUp ? this.room.mugTop : null, 1);
     this.stage.setMotes(this.room.dust(dt, (1 - dark) * (1 - rain)));
+    this.bubbleStep(dt);
     // a moth round the lamp, a fly at the window: their wings a blur of up and down
     const bug = this.room.bugAt();
     this.stage.setBug(bug?.p ?? null, bug?.kind, bug ? !bug.resting && Math.sin(now * (bug.kind === 'moth' ? 38 : 70)) > 0 : false,
@@ -1889,6 +1896,7 @@ export class PixelApp {
   private mindHintIn = 420;
   private lampHintIn = 40;
   private nipHintIn = 300;
+  private bubbleHintIn = 420;
 
   private hints(dt: number, touching: boolean) {
     const s = this.state;
@@ -1961,6 +1969,12 @@ export class PixelApp {
       this.hintUi.show('창턱의 작은 화분은 캣닢이에요. 톡 누르면 고양이에게 조금 뿌려 줘요', 6000);
       return;
     }
+    // and a while after that: the bubbles
+    if (s.hints.nip && !s.hints.bubbles && up && !this.avatar.hidden && !this.avatar.doing && !touching && !this.input.touching && (this.bubbleHintIn -= dt) < 0) {
+      s.hints.bubbles = 1;
+      this.hintUi.show('창턱 오른쪽 끝의 작은 병을 톡 누르면 비눗방울을 불어 줘요', 6000);
+      return;
+    }
     if (touching || this.input.touching) {
       this.idleHintAt = 1e9;
       return;
@@ -2018,6 +2032,71 @@ export class PixelApp {
     this.cat.breathed = false;
   }
   private loafFor = 0;
+
+  /** soap bubbles blown into the room, and the one nearest the cat as a thing for it to go after */
+  private readonly bubbles = new Bubbles();
+  private readonly bubbleLure = { p: new THREE.Vector3(), v: new THREE.Vector3(), held: true, pinned: false };
+  private bubbleAimed: import('./bubbles').Bubble | null = null;
+  private bubblesWired = false;
+
+  /** a breath of bubbles from the wand, from your side of the room into it, toward the cat (or the
+   *  middle of the room, if it is not about) */
+  private blowBubbles() {
+    const B = this.room.yarnBounds, cam = this.stage.camera.position, m = this.cat.motor;
+    const from = new THREE.Vector3(Math.max(B.minX + 0.2, Math.min(B.maxX - 0.2, cam.x + (Math.random() - 0.5) * 0.2)), 0.42 + Math.random() * 0.08, B.maxZ - 0.02);
+    const to = this.avatar.hidden ? new THREE.Vector3(cam.x, 0.32, (B.minZ + B.maxZ) / 2) : new THREE.Vector3(m.pos.x, 0.3, m.pos.z);
+    this.bubbles.blow(from, to, 6 + Math.floor(Math.random() * 4));
+    this.audio.play('blow', { gain: 0.1, pan: 0 });
+    this.state.hints.bubbles = 1;
+    this.haptic.tap?.();
+  }
+
+  /** the bubbles in the air this frame: drifting, popping (on its nose, a start), drawn; the one
+   *  nearest the cat its quarry */
+  private bubbleStep(dt: number) {
+    const Bb = this.bubbles;
+    if (!this.bubblesWired) {
+      this.bubblesWired = true;
+      Bb.onPop = (b, why) => {
+        const pan = Math.max(-0.8, Math.min(0.8, b.p.x * 0.9));
+        this.audio.play('pop', { gain: why === 'floor' ? 0.035 : why === 'nose' || why === 'paw' ? 0.1 : 0.06, pan, rate: 0.9 + Math.random() * 0.3 });
+        if (why === 'nose') this.avatar.bubbleNose();
+      };
+      this.avatar.popBubble = () => { if (this.bubbleAimed) Bb.pop(this.bubbleAimed, 'paw'); };
+    }
+    if (!Bb.list.length) {
+      if (this.avatar.bubble) this.avatar.bubble = null;
+      this.stage.setBubbles([]);
+      return;
+    }
+    Bb.step(dt, this.room.yarnBounds);
+    // (one drifting into its face pops on its nose)
+    const head = this.cat.byName.get('head');
+    if (head && !this.avatar.hidden) {
+      const hp = head.getWorldPosition(this.tmpHead);
+      const m = this.cat.motor;
+      hp.x += Math.sin(m.yaw) * 0.05;
+      hp.z += Math.cos(m.yaw) * 0.05;
+      for (const b of Bb.list) if (b.pop < 0 && b.age >= 0 && b.p.distanceTo(hp) < b.r + 0.035) Bb.pop(b, 'nose');
+      // (and one a forepaw goes through, on the paw: a swat or a clap that meets it, or not)
+      for (const name of ['handL', 'handR']) {
+        const paw = this.cat.byName.get(name);
+        if (!paw) continue;
+        const pp = paw.getWorldPosition(this.tmpPaw);
+        for (const b of Bb.list) if (b.pop < 0 && b.age >= 0 && b.p.distanceTo(pp) < b.r + 0.03) Bb.pop(b, 'paw');
+      }
+    }
+    const near = this.avatar.hidden ? null : Bb.nearest(this.cat.motor.pos);
+    this.bubbleAimed = near;
+    if (near) {
+      this.bubbleLure.p.copy(near.p);
+      this.bubbleLure.v.copy(near.v);
+      this.avatar.bubble = this.bubbleLure;
+    } else this.avatar.bubble = null;
+    this.stage.setBubbles(Bb.list);
+  }
+  private readonly tmpHead = new THREE.Vector3();
+  private readonly tmpPaw = new THREE.Vector3();
 
   /** catnip put down on the floor: where, how long ago, and whether the cat has been to it yet */
   private nipLaid: { at: THREE.Vector3; t: number; had: boolean } | null = null;
@@ -2122,6 +2201,7 @@ export class PixelApp {
     if (m.whipFor > 0 && !asleep) now.add('shake');
     if (m.noseLicking && !asleep) now.add('nose');
     if (a.burying) now.add('bury');
+    if (doing === 'bubbles' && (phase === 'rear' || phase === 'leap' || phase === 'swat')) now.add('bubble');
     // (a loaf: lying with its paws tucked under, awake and easy, a good while)
     this.loafFor = m.posture === 'loaf' && !asleep && !doing && m.speed < 0.02 ? this.loafFor + dt : 0;
     if (this.loafFor > 20) now.add('loaf');
