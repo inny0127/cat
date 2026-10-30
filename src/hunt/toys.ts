@@ -13,12 +13,13 @@ export const TOYS = [
 ] as const;
 export type ToyId = (typeof TOYS)[number]['id'];
 
-/** where one may be, out of the way: under the tables and the chairs, up on the fridge, the
- *  wardrobe, the bookcase and the cat tree, by the shoes, behind the plant, on the TV stand */
+/** where one may be, out of the way: under the tables and the chairs, up on the fridge, the top
+ *  shelf of the bookcase and the cat tree, by the shoes, by the plant, on the TV stand, and on
+ *  the bed by their pillow (to be fetched without a sound) */
 export const HIDES = [
   new THREE.Vector3(1.3, 0, 2.15), new THREE.Vector3(-2.7, 0, -2.2), new THREE.Vector3(-3.55, 0, -2.0),
-  new THREE.Vector3(-4.15, 1.85, -0.25), new THREE.Vector3(1.9, 2.0, -0.6), new THREE.Vector3(4.3, 2.0, 1.3),
-  new THREE.Vector3(3.9, 1.5, 2.9), new THREE.Vector3(-0.55, 0.42, -3.3), new THREE.Vector3(-0.45, 0, 3.32),
+  new THREE.Vector3(-4.15, 1.85, -0.25), new THREE.Vector3(2.95, 0.55, -3.15), new THREE.Vector3(4.3, 1.87, 1.3),
+  new THREE.Vector3(3.9, 1.5, 2.9), new THREE.Vector3(-0.55, 0.42, -3.3), new THREE.Vector3(-0.3, 0, 3.3),
   new THREE.Vector3(4.05, 0.5, 0.35), new THREE.Vector3(4.2, 0.95, 1.8), new THREE.Vector3(2.3, 0, -2.0),
 ];
 
