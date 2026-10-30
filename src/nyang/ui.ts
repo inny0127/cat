@@ -25,7 +25,7 @@ const CSS = `
 #ny .pop i { display: block; font-style: normal; font-size: calc(11 * var(--fpx)); color: #ffe08a; }
 #ny .pop.big { font-size: calc(20 * var(--fpx)); color: #ffd6dc; }
 @keyframes nypop { 0% { opacity: 0; transform: translate(-50%, -20%) scale(0.5); } 15% { opacity: 1; transform: translate(-50%, -70%) scale(1.15); } 100% { opacity: 0; transform: translate(-50%, -260%) scale(1); } }
-#ny .big { position: absolute; left: 50%; top: 40%; transform: translate(-50%, -50%); font-size: calc(44 * var(--fpx)); color: #fff; text-shadow: 0 3px 0 #2b1e30, 0 0 8px rgba(43, 30, 48, 0.6);
+#ny .bignum { position: absolute; left: 50%; top: 40%; transform: translate(-50%, -50%); font-size: calc(44 * var(--fpx)); color: #fff; text-shadow: 0 3px 0 #2b1e30, 0 0 8px rgba(43, 30, 48, 0.6);
   animation: nycount 0.95s ease-out forwards; white-space: nowrap; }
 @keyframes nycount { from { transform: translate(-50%, -50%) scale(1.7); opacity: 0; } 25% { opacity: 1; transform: translate(-50%, -50%) scale(1); } to { opacity: 0; } }
 #ny .tip { position: absolute; left: 16px; right: 16px; bottom: calc(26px + env(safe-area-inset-bottom)); text-align: center; color: #fff5e8;
@@ -167,6 +167,10 @@ export class NyangUi {
   onPlay: ((i: number) => void) | null = null;
   /** back to the rooms */
   onMenu: (() => void) | null = null;
+  /** the round paused (the menu button), and what was chosen then */
+  onPause: (() => void) | null = null;
+  onPauseChoice: ((c: 'resume' | 'retry' | 'menu' | 'sound' | 'music') => void) | null = null;
+  private pauseEl: HTMLElement;
   /** the wardrobe opened (or shut), and a thing in it chosen */
   onCloset: ((open: boolean) => void) | null = null;
   onPick: ((id: string) => void) | null = null;
@@ -196,7 +200,8 @@ export class NyangUi {
       <div class="screen title"></div>
       <div class="screen end"></div>
       <div class="screen credits"></div>
-      <div class="screen closet"></div>`;
+      <div class="screen closet"></div>
+      <div class="screen pause"></div>`;
     document.body.appendChild(el);
     this.timeEl = el.querySelector('.time') as HTMLElement;
     this.scoreEl = el.querySelector('.score') as HTMLElement;
@@ -228,7 +233,13 @@ export class NyangUi {
     credits.addEventListener('click', (e) => { if ((e.target as HTMLElement).tagName !== 'A') credits.classList.remove('on'); });
     const menu = el.querySelector('.menu') as HTMLElement;
     menu.addEventListener('pointerdown', (e) => e.stopPropagation());
-    menu.addEventListener('click', (e) => { e.stopPropagation(); this.onMenu?.(); });
+    menu.addEventListener('click', (e) => { e.stopPropagation(); this.onPause?.(); });
+    this.pauseEl = el.querySelector('.pause') as HTMLElement;
+    this.pauseEl.addEventListener('pointerdown', (e) => e.stopPropagation());
+    this.pauseEl.addEventListener('click', (e) => {
+      const b = (e.target as HTMLElement).closest<HTMLElement>('[data-p]');
+      if (b) this.onPauseChoice?.(b.dataset.p as 'resume' | 'retry' | 'menu' | 'sound' | 'music');
+    });
     this.title.addEventListener('click', (e) => {
       if ((e.target as HTMLElement).closest('[data-credits]')) { this.credits(credits); return; }
       if ((e.target as HTMLElement).closest('[data-closet]')) { this.onCloset?.(true); return; }
@@ -246,6 +257,7 @@ export class NyangUi {
   /** the title, and the rooms */
   showTitle(save: Save) {
     this.el.classList.remove('playing');
+    this.pauseEl.classList.remove('on');
     this.end.classList.remove('on');
     this.closetEl.classList.remove('on');
     const card = (L: Level, i: number, open: boolean, cls = '') => {
@@ -323,6 +335,25 @@ export class NyangUi {
     b.classList.add('no');
   }
 
+  /** paused: on with it, again from the start, back to the rooms; the sound and the music */
+  showPause(sound: boolean, music: boolean) {
+    // (open already: only its words changed, the buttons left as they are under the finger)
+    const so = this.pauseEl.querySelector('[data-p="sound"]'), mu = this.pauseEl.querySelector('[data-p="music"]');
+    if (this.pauseEl.classList.contains('on') && so && mu) {
+      so.textContent = `소리 ${sound ? '켬' : '끔'}`;
+      mu.textContent = `음악 ${music ? '켬' : '끔'}`;
+      return;
+    }
+    this.pauseEl.innerHTML = `<div class="card"><h2>잠깐 멈춤</h2>
+      <div class="row"><button class="btn big" data-p="resume">계속하기</button></div>
+      <div class="row"><button class="btn alt" data-p="retry">처음부터</button><button class="btn alt" data-p="menu">방 고르기</button></div>
+      <div class="row"><button class="btn alt" data-p="sound">소리 ${sound ? '켬' : '끔'}</button><button class="btn alt" data-p="music">음악 ${music ? '켬' : '끔'}</button></div></div>`;
+    this.pauseEl.classList.add('on');
+  }
+  hidePause() {
+    this.pauseEl.classList.remove('on');
+  }
+
   /** a round begun: the bar shown, the title put away */
   startRound() {
     this.title.classList.remove('on');
@@ -334,7 +365,7 @@ export class NyangUi {
   /** a number big in the middle, a moment (the count before the start) */
   big(s: string) {
     const d = document.createElement('div');
-    d.className = 'big';
+    d.className = 'bignum';
     d.textContent = s;
     this.el.appendChild(d);
     setTimeout(() => d.remove(), 1000);
@@ -456,6 +487,7 @@ export class NyangUi {
   }
 
   hideAll() {
+    this.pauseEl.classList.remove('on');
     this.title.classList.remove('on');
     this.end.classList.remove('on');
     this.closetEl.classList.remove('on');

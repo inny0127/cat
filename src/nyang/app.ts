@@ -19,7 +19,7 @@ import { buyUp, upLevel, type Upgrade } from './upgrades';
 const MODEL: string = import.meta.env.VITE_CAT_MODEL ?? './cat3d/fri.bin';
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 
-type Mode = 'title' | 'closet' | 'count' | 'play' | 'home' | 'end';
+type Mode = 'title' | 'closet' | 'count' | 'play' | 'home' | 'end' | 'pause';
 
 /**
  * 냥아치: the cat has the living room to itself until its people come home, and you are the cat.
@@ -105,17 +105,22 @@ export class NyangApp {
 
     this.ui.onPlay = (i) => this.start(i);
     this.ui.onMenu = () => this.menu();
+    this.ui.onPause = () => this.pause();
+    this.ui.onPauseChoice = (c) => this.pauseChoice(c);
+    this.audio.muted = !!this.save.mute;
     this.ui.onCloset = (open) => this.closet(open);
     this.ui.onPick = (id) => this.pick(id);
     this.ui.onUp = (id) => this.upgrade(id);
     this.wear();
     this.input();
     this.audio.unlockOn(window);
-    this.audio.music(true);
     this.frame();
     this.menu();
     window.addEventListener('resize', () => { this.stage.resize(); this.stage.setArtWidth(NyangApp.artWidth()); this.frame(); });
-    document.addEventListener('visibilitychange', () => { if (document.hidden) this.audio.suspend(); else this.audio.resume(); });
+    document.addEventListener('visibilitychange', () => {
+      // (gone to another app mid-round: paused, to come back to)
+      if (document.hidden) { this.audio.suspend(); this.pause(); } else this.audio.resume();
+    });
     // (Safari's own pinch would zoom the page)
     for (const ev of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(ev, (e) => e.preventDefault(), { passive: false });
     canvas.addEventListener('webglcontextlost', (e) => e.preventDefault());
@@ -646,8 +651,32 @@ export class NyangApp {
     this.stage.render();
   }
 
+  /** a round paused: what it was doing kept, to go back to */
+  private before: Mode = 'play';
+  private pause() {
+    if (this.mode !== 'play' && this.mode !== 'count') return;
+    this.before = this.mode;
+    this.mode = 'pause';
+    this.ui.showPause(!this.audio.muted, this.audio.musicOn);
+  }
+  private pauseChoice(c: 'resume' | 'retry' | 'menu' | 'sound' | 'music') {
+    if (c === 'resume') { this.mode = this.before; this.ui.hidePause(); }
+    else if (c === 'retry') { this.ui.hidePause(); this.start(this.level); }
+    else if (c === 'menu') { this.ui.hidePause(); this.menu(); }
+    else {
+      if (c === 'sound') {
+        this.audio.muted = this.save.mute = !this.audio.muted;
+        saveSave(this.save);
+        this.audio.music(this.audio.musicOn);
+        this.audio.setPurr(0);
+      } else this.audio.music(!this.audio.musicOn);
+      this.ui.showPause(!this.audio.muted, this.audio.musicOn);
+    }
+  }
+
   /** one step of everything (also driven by tests in fixed steps) */
   tick(dt: number) {
+    if (this.mode === 'pause') return;
     this.time += dt;
     this.modeT += dt;
     const r = this.round;

@@ -207,6 +207,8 @@ export interface Save extends Wardrobe {
   best: Record<string, number>; stars: Record<string, number>; coins: number; up: Record<string, number>;
   /** the book: of each kind of thing, how many have been knocked down, and how many broken */
   book: Record<string, [number, number]>;
+  /** the sound off (the music is the audio's own to keep) */
+  mute?: boolean;
 }
 const KEY = 'nyang.save';
 export function loadSave(): Save {
@@ -215,7 +217,7 @@ export function loadSave(): Save {
     if (s && typeof s === 'object') {
       return {
         best: s.best ?? {}, stars: s.stars ?? {}, coins: s.coins ?? 0,
-        owned: Array.isArray(s.owned) ? s.owned : [], coat: s.coat ?? 'coat-ginger', neck: s.neck ?? null, head: s.head ?? null, up: s.up ?? {}, book: s.book ?? {},
+        owned: Array.isArray(s.owned) ? s.owned : [], coat: s.coat ?? 'coat-ginger', neck: s.neck ?? null, head: s.head ?? null, up: s.up ?? {}, book: s.book ?? {}, mute: !!s.mute,
       };
     }
   } catch { /* none */ }
