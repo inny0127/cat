@@ -25,6 +25,8 @@ export interface Night {
   stars: [number, number, number];
   mods?: Mods;
   goals: Goal[];
+  /** no dawn: on till they have been woken three times, more out as it goes, their sleep lighter */
+  endless?: boolean;
 }
 
 const caught = (k: PreyKind, n: number, text: string): Goal => ({ text, done: (h) => h.caught[k] >= n });
@@ -46,7 +48,12 @@ export const NIGHTS: Night[] = [
     mods: { sleepy: 2, gift: 2 }, goals: [gifts(2), asleep, caught('mouse', 3, '생쥐 3마리 잡기')] },
   { id: 'chaos', name: '난장판의 밤', blurb: '오늘 밤은 다 떨어뜨려도 돼요. 물건 점수 두 배!', time: 180, roster: { moth: 3, cricket: 4, mouse: 2, spider: 2 }, stars: [1500, 3500, 6000],
     mods: { knock: 2 }, goals: [knocked(7), { text: '집사 머리맡 물컵 떨어뜨리기', done: (h) => h.things.some((t) => t.kind === 'glass' && t.state === 'down') }, chain(3)] },
+  { id: 'endless', name: '끝없는 밤', blurb: '새벽이 오지 않아요. 집사를 세 번 깨우면 끝! 갈수록 사냥감이 늘고 집사는 예민해져요.', time: Infinity, roster: { moth: 2, cricket: 3, mouse: 1, spider: 1 }, stars: [2000, 5000, 9000],
+    endless: true, goals: [{ text: '3분 버티기', done: (h) => h.t >= 180 }, chain(6), { text: '생쥐 3번 선물하기', done: (h) => h.gifts >= 3 }] },
 ];
+
+/** an endless night's lives: woken this many times, it is over */
+export const LIVES = 3;
 
 /** the night of the day: the same for everyone on a date (what is out, the weather, the
  *  challenges), a new one tomorrow; open once the first night has a star */
@@ -102,6 +109,8 @@ export interface GameEvents {
   /** a pounce come down on nothing (near: something got away by a whisker) */
   missed: (near: boolean) => void;
   stirred: (woke: boolean) => void;
+  /** one more out (an endless night) */
+  spawned: (p: Prey) => void;
   /** a challenge done (its index, and the points for it) */
   goal: (i: number, pts: number) => void;
   /** lightning (a rainy night): everything seen a moment */
@@ -144,6 +153,8 @@ export class Hunt {
   bolt = 0;
   /** when they last woke */
   private wokeAt = -99;
+  /** an endless night: when the next one comes out */
+  private nextOut = 30;
 
   constructor(readonly world: World, readonly night: Night, readonly on: GameEvents) {
     for (const [kind, n] of Object.entries(night.roster) as [PreyKind, number][]) {
@@ -164,8 +175,13 @@ export class Hunt {
   }
   /** the clock: from two in the morning to five, as the night goes */
   get clock() {
+    if (this.night.endless) return `${'♥'.repeat(Math.max(0, LIVES - this.wakes))}${'♡'.repeat(Math.min(LIVES, this.wakes))} ${this.lasted}`;
     const m = 120 + (this.t / this.night.time) * 180;
-    return `${Math.floor(m / 60)}:${String(Math.floor(m % 60)).padStart(2, '0')}`;
+    return `AM ${Math.floor(m / 60)}:${String(Math.floor(m % 60)).padStart(2, '0')}`;
+  }
+  /** how long an endless night has gone on (m:ss) */
+  get lasted() {
+    return `${Math.floor(this.t / 60)}:${String(Math.floor(this.t % 60)).padStart(2, '0')}`;
   }
   get chainLive() {
     return this.t - this.lastCatch <= CHAIN ? this.chain : 0;
@@ -217,7 +233,21 @@ export class Hunt {
     const loud = near * Math.max(0, cat.noise - 0.15) * 1.6;
     this.rouse(loud * dt - 0.05 * dt);
     this.challenges(false);
-    if (this.t >= this.night.time) {
+    if (this.night.endless) {
+      // (another out every half minute, a mouse or a spider among them now and then)
+      if (this.t >= this.nextOut && this.prey.length < 22) {
+        this.nextOut = this.t + 30;
+        const kinds: PreyKind[] = ['moth', 'cricket', 'cricket', 'mouse', 'spider'];
+        const p = new Prey(kinds[Math.floor(Math.random() * kinds.length)]);
+        p.spawn(W);
+        this.prey.push(p);
+        this.on.spawned(p);
+      }
+      if (this.wakes >= LIVES) {
+        this.challenges(true);
+        this.over = true;
+      }
+    } else if (this.t >= this.night.time) {
       this.challenges(true);
       this.over = true;
     }
@@ -269,7 +299,8 @@ export class Hunt {
     // (just woken, sitting up and dropping off again: not woken again straight away)
     if (by > 0 && this.t < this.wokeAt + 8) return;
     const before = this.sleep;
-    this.sleep = Math.min(1, this.sleep - (by > 0 ? by * (this.night.mods?.sleepy ?? 1) : by));
+    const lighter = (this.night.mods?.sleepy ?? 1) * (this.night.endless ? 1 + this.t / 240 : 1);
+    this.sleep = Math.min(1, this.sleep - (by > 0 ? by * lighter : by));
     if (before >= 0.5 && this.sleep < 0.5 && this.sleep > 0) this.on.stirred(false);
     if (this.sleep <= 0) {
       this.sleep = 1;

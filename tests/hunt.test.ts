@@ -330,4 +330,25 @@ describe('밤사냥: the night', () => {
     expect(save.badges).toHaveLength(4);
     expect(new Set(BADGES.map((b) => b.id)).size).toBe(BADGES.length);
   });
+  it('the endless night: no dawn, more out every half minute, over at the third waking', () => {
+    const W = { boxes: [], lamps: [{ at: new THREE.Vector3(0, 1.5, 0), color: 0, power: 1, reach: 3 }], holes: [{ at: new THREE.Vector3(3, 0, 0), out: new THREE.Vector3(-1, 0, 0) }], treats: [new THREE.Vector3()], cricketSpots: [new THREE.Vector3()], cellAt: () => -1, path: () => [], bed: { at: new THREE.Vector3(3.6, 0.55, -2.4), r: 1.25 }, sleeper: { position: new THREE.Vector3(3.6, 0.6, -3) }, grid: { cell: 0.1, cols: 1, rows: 1, free: new Uint8Array(1) } } as never;
+    const N = NIGHTS.find((n) => n.endless)!;
+    let out = 0;
+    const h = new Hunt(W, { ...N, roster: {} }, { spawned: () => { out++; }, crashed: () => {}, goal: () => {}, lightning: () => {}, caught: () => {}, gift: () => {}, missed: () => {}, stirred: () => {}, sound: () => {} });
+    const I = still();
+    for (let i = 0; i < 65 * 30; i++) h.step(1 / 30, I);
+    expect(h.over).toBe(false);
+    expect(out).toBe(2);
+    expect(h.prey).toHaveLength(2);
+    expect(h.clock).toContain('♥♥♥ 1:0');
+    // (a racket by the bed, on and on: three wakings, and it is over)
+    I.move.y = 1;
+    for (let i = 0; i < 60 * 30 && !h.over; i++) {
+      h.cat.body.x = 2.5;
+      h.cat.body.z = -1.5;
+      h.step(1 / 30, I);
+    }
+    expect(h.over).toBe(true);
+    expect(h.wakes).toBe(3);
+  });
 });

@@ -5,7 +5,7 @@ import { Paws } from './paws';
 import { Controls } from './input';
 import { Hud } from './hud';
 import { Sound } from './sound';
-import { Hunt, NIGHTS, loadSave, nightAt, nightOpen, saveSave, type Save } from './game';
+import { Hunt, LIVES, NIGHTS, loadSave, nightAt, nightOpen, saveSave, type Save } from './game';
 import { PREY, type Prey } from './prey';
 import { THINGS } from './things';
 import { COATS, allStars, coatOf, coatOpen } from './coats';
@@ -179,10 +179,15 @@ export class HuntApp {
       },
       stirred: (woke) => {
         this.sound.play('grumble', this.world.sleeper.position, 0.9);
-        if (woke) { this.hud.toast('-300', '집사가 깼어요! 쉿…'); this.red = 1; this.feel.tap('heavy'); this.wokeAt = this.time; this.mumbled = false; }
+        const left = this.hunt?.night.endless ? ` (남은 목숨 ${Math.max(0, LIVES - (this.hunt?.wakes ?? 0))})` : '';
+        if (woke) { this.hud.toast('-300', `집사가 깼어요! 쉿…${left}`); this.red = 1; this.feel.tap('heavy'); this.wokeAt = this.time; this.mumbled = false; }
         else this.hud.tip('으음… 집사가 뒤척여요. 침실에선 살금살금!', 2500);
       },
       sound: (name, at, gain) => this.heard(name, at, gain ?? 1),
+      spawned: (p) => {
+        this.scene.add(p.mesh);
+        this.glows.push(this.glow(p.kind));
+      },
       goal: (k, pts) => {
         this.hud.toast(`+${pts}`, `도전 성공! ${N.goals[k].text}`);
         this.sound.play('gift', null, 0.4, 1.2);
@@ -212,14 +217,9 @@ export class HuntApp {
     this.world.rain.visible = !!M.rain;
     this.sound.rain(!!M.rain);
     this.showGoals();
-    this.hud.card(N.name, N.goals.map((g) => g.text));
+    this.hud.card(N.name, N.goals.map((g) => g.text), N.endless ? '새벽이 오지 않는 밤 · ♥♥♥' : undefined);
     if (M.rain && !this.save.goals?.[N.id]) this.hud.tip('빗소리 덕분에 발소리가 잘 안 들려요. 번개가 칠 땐 조심!', 5000);
-    this.glows = this.hunt.prey.map((p) => {
-      const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: HuntApp.dot(), color: GLOW[p.kind], depthTest: false, depthWrite: false, transparent: true }));
-      s.scale.setScalar(0.14);
-      this.over.add(s);
-      return s;
-    });
+    this.glows = this.hunt.prey.map((p) => this.glow(p.kind));
     this.mode = 'play';
     this.tipStep = 0;
     this.hud.playing(this.controls.touchy || matchMedia('(pointer: coarse)').matches);
@@ -230,6 +230,14 @@ export class HuntApp {
   private showGoals() {
     const h = this.hunt;
     if (h) this.hud.goals(h.night.goals.map((g, k) => ({ text: g.text, done: h.goals[k] })));
+  }
+
+  /** a thing's glow, seen through the walls while listening */
+  private glow(kind: string) {
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: HuntApp.dot(), color: GLOW[kind], depthTest: false, depthWrite: false, transparent: true }));
+    s.scale.setScalar(0.14);
+    this.over.add(s);
+    return s;
   }
 
   /** the last night's hunted and its things, out of the room */
@@ -307,8 +315,8 @@ export class HuntApp {
     shot.width = this.canvas.width;
     shot.height = this.canvas.height;
     shot.getContext('2d')?.drawImage(this.canvas, 0, 0);
-    this.night = { shot, name: N.name, score: h.score, stars: h.stars, record, caught: { ...h.caught } };
-    this.hud.end({ name: N.name, score: h.score, stars: h.stars, record, caught: h.caught, gifts: h.gifts, best: h.best, wakes: h.wakes, i: this.nightI, next: nightOpen(this.save, this.nightI + 1), goals: N.goals.map((g, k) => ({ text: g.text, done: h.goals[k] })), knocked: h.knocked, coats, badges });
+    this.night = { shot, name: N.name, when: N.endless ? `${h.lasted} 버팀` : '새벽 5시', score: h.score, stars: h.stars, record, caught: { ...h.caught } };
+    this.hud.end({ name: N.name, when: N.endless ? `${h.lasted} 버팀` : '새벽 5시', score: h.score, stars: h.stars, record, caught: h.caught, gifts: h.gifts, best: h.best, wakes: h.wakes, i: this.nightI, next: nightOpen(this.save, this.nightI + 1), goals: N.goals.map((g, k) => ({ text: g.text, done: h.goals[k] })), knocked: h.knocked, coats, badges });
     this.hud.stick(null);
     this.hud.charge(null);
     this.ring.visible = false;
@@ -316,7 +324,7 @@ export class HuntApp {
   }
 
   /** the night just done, for its picture */
-  private night: { shot: HTMLCanvasElement; name: string; score: number; stars: number; record: boolean; caught: Record<string, number> } | null = null;
+  private night: { shot: HTMLCanvasElement; name: string; when: string; score: number; stars: number; record: boolean; caught: Record<string, number> } | null = null;
 
   /** a picture of the night to show off with: its last view in big pixels, its name, stars, points
    *  and catches; handed to the phone's share sheet where there is one, else shown to be saved */
@@ -344,7 +352,7 @@ export class HuntApp {
       g.fillText(s, x, y);
     };
     text('밤사냥', 48, 96, 64, '#ffd27a');
-    text(`${L.name} · 새벽 5시`, S / 2, S - 380, 44, '#c8d4ff', 'center');
+    text(`${L.name} · ${L.when}`, S / 2, S - 380, 44, '#c8d4ff', 'center');
     g.font = `84px ${font}`;
     const stars = [0, 1, 2].map((k) => k < L.stars);
     stars.forEach((on, k) => text('★', S / 2 + (k - 1) * 96, S - 270, 84, on ? '#ffd27a' : '#3e3a66', 'center'));
@@ -488,7 +496,7 @@ export class HuntApp {
     this.kick = Math.max(0, this.kick - dt * 1.8);
     // the moon (and a flash of lightning); the rain down the window; thunder after the flash; the
     // last twenty seconds, the first of the dawn
-    const dawn = h && this.mode !== 'title' ? THREE.MathUtils.smoothstep(h.t, h.night.time - 20, h.night.time) : 0;
+    const dawn = h && this.mode !== 'title' && !h.night.endless ? THREE.MathUtils.smoothstep(h.t, h.night.time - 20, h.night.time) : 0;
     this.moon.intensity = this.moonBase * (1 - 0.5 * dawn) + 14 * (h?.bolt ?? 0) ** 2;
     this.sky.intensity = 1 + 0.9 * dawn;
     this.sky.color.setHex(0x6c7ab8).lerp(DAWN, dawn);
