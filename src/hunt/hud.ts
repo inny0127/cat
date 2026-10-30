@@ -231,10 +231,12 @@ export class Hud {
     this.el.classList.toggle('touch', touch);
   }
 
-  pause(mute: boolean) {
+  pause(save: Save) {
+    const look = ['느리게', '보통', '빠르게'][save.look ?? 1];
     this.show(`<div class="card"><h2>잠깐 멈춤</h2>
       <div class="row"><button class="btn" data-c="resume">계속하기</button></div>
-      <div class="row"><button class="btn alt" data-c="retry">처음부터</button><button class="btn alt" data-c="menu">밤 고르기</button><button class="btn alt" data-c="sound">${mute ? '소리 끔' : '소리 켬'}</button></div></div>`);
+      <div class="row"><button class="btn alt" data-c="retry">처음부터</button><button class="btn alt" data-c="menu">밤 고르기</button></div>
+      <div class="row"><button class="btn alt" data-c="sound">${save.mute ? '소리 끔' : '소리 켬'}</button><button class="btn alt" data-c="look">둘러보기: ${look}</button><button class="btn alt" data-c="buzz">진동 ${save.still ? '끔' : '켬'}</button></div></div>`);
   }
 
   /** a night begun: its name over the clock's first hour, and what it asks */

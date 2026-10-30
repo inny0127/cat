@@ -120,6 +120,7 @@ export class HuntApp {
     this.hud.onChoice = (c) => this.choice(c);
     this.sound.muted = !!this.save.mute;
     this.paws.setCoat(coatOf(this.save));
+    this.settings();
     this.sound.unlockOn(window);
     addEventListener('resize', () => this.resize());
     document.addEventListener('visibilitychange', () => { if (document.hidden) { this.pause(); this.sound.suspend(); } else this.sound.resume(); });
@@ -241,7 +242,7 @@ export class HuntApp {
   private pause() {
     if (this.mode !== 'play') return;
     this.mode = 'pause';
-    this.hud.pause(!!this.save.mute);
+    this.hud.pause(this.save);
     this.hud.stick(null);
     this.hud.charge(null);
     if (document.pointerLockElement) document.exitPointerLock();
@@ -267,9 +268,21 @@ export class HuntApp {
       this.save.mute = !this.save.mute;
       saveSave(this.save);
       this.sound.setMuted(this.save.mute);
-      if (this.mode === 'pause') this.hud.pause(this.save.mute);
+      if (this.mode === 'pause') this.hud.pause(this.save);
       else this.hud.title(this.save);
+    } else if (c === 'look' || c === 'buzz') {
+      if (c === 'look') this.save.look = ((this.save.look ?? 1) + 1) % 3;
+      else this.save.still = !this.save.still;
+      saveSave(this.save);
+      this.settings();
+      this.hud.pause(this.save);
     }
+  }
+
+  /** what is kept of the settings, put to use: the look's speed, buzzes on or off */
+  private settings() {
+    this.controls.sensitivity = 0.0065 * [0.65, 1, 1.5][this.save.look ?? 1];
+    this.feel.off = !!this.save.still;
   }
 
   private finish() {

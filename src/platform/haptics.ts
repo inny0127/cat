@@ -91,7 +91,11 @@ export class Haptic {
     try { label.click(); } finally { this.scripted = false; }
   }
 
+  /** buzzes turned off (a setting) */
+  off = false;
+
   tap(kind: 'light' | 'medium' | 'heavy' = 'light') {
+    if (this.off) return;
     if (this.native) {
       void Haptics.impact({ style: kind === 'heavy' ? ImpactStyle.Heavy : kind === 'medium' ? ImpactStyle.Medium : ImpactStyle.Light });
     } else if (this.webVibrate) {
