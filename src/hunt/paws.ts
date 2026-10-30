@@ -27,6 +27,10 @@ export class Paws {
   /** each leg's own materials (a calico's differ side to side), the beans' */
   private readonly mats: { fur: THREE.MeshLambertMaterial; stripe: THREE.MeshLambertMaterial; sock: THREE.MeshLambertMaterial; rings: THREE.Object3D[] }[] = [];
   private readonly bean = new THREE.MeshLambertMaterial({ color: 0xf2a0aa, flatShading: true });
+  /** whiskers, at the corners of the eye: swept back at ease, forward when it means business */
+  private readonly whiskers = new THREE.Group();
+  private readonly whiskerMat = new THREE.LineBasicMaterial({ color: 0xf4f0e8, transparent: true, opacity: 0.6 });
+  private whiskerFwd = 0;
 
   constructor() {
     this.scene.add(this.light, this.key);
@@ -101,6 +105,17 @@ export class Paws {
     this.mouth.position.set(0, -0.042, -0.1);
     this.mouth.visible = false;
     this.scene.add(this.mouth, this.pinned);
+    for (const side of [-1, 1]) {
+      const g = new THREE.Group();
+      g.position.set(side * 0.012, -0.034, -0.03);
+      for (let k = 0; k < 3; k++) {
+        const geo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, -k * 0.003, 0), new THREE.Vector3(side * 0.075, 0.014 - k * 0.013, -0.025 + k * 0.004)]);
+        g.add(new THREE.Line(geo, this.whiskerMat));
+      }
+      g.userData.side = side;
+      this.whiskers.add(g);
+    }
+    this.scene.add(this.whiskers);
   }
 
   /** the coat the paws are in */
@@ -141,11 +156,12 @@ export class Paws {
     this.cam.updateProjectionMatrix();
     this.light.intensity = 0.6 + 1.6 * light;
     this.key.intensity = 0.4 + 1.4 * light;
+    this.whiskerMat.color.setScalar(0.3 + 0.6 * light);
     this.pose(cat, now - this.pinAt);
     const halfH = Math.tan(this.cam.fov * Math.PI / 360) * 0.11, halfW = halfH * aspect;
     const ax = Math.min(1, halfW / 0.1), drop = halfH - 0.066;
     const f = THREE.MathUtils.clamp(halfW / 0.12 * 1.2, 0.5, 1);
-    for (const g of [this.L, this.R, this.mouth, this.pinned]) {
+    for (const g of [this.L, this.R, this.mouth, this.pinned, this.whiskers]) {
       g.position.x *= ax;
       g.position.y -= drop * 0.6;
       g.scale.multiplyScalar(f);
@@ -164,6 +180,17 @@ export class Paws {
     for (const g of [this.L, this.R]) g.scale.setScalar(0.85);
     this.mouth.position.set(0, -0.042, -0.1);
     this.mouth.scale.setScalar(1);
+    // (the whiskers: forward on the hunt, half so listening, back at ease; and a twitch now and then)
+    const intent = cat.doing === 'wiggle' || cat.doing === 'pounce' ? 1 : cat.doing === 'listen' ? 0.5 : 0;
+    this.whiskerFwd += (intent - this.whiskerFwd) * 0.15;
+    this.whiskers.position.set(0, 0, 0);
+    this.whiskers.scale.setScalar(1);
+    for (const w of this.whiskers.children) {
+      const side = w.userData.side as number;
+      const twitch = Math.max(0, Math.sin(t * 1.7 + side) * Math.sin(t * 5.3)) * 0.12;
+      w.rotation.y = side * (-0.25 + 0.75 * this.whiskerFwd + twitch);
+      w.rotation.z = -side * 0.08 * Math.sin(t * 2.2);
+    }
     // a catch: both paws come down on it together, claws in it; it kicks a little, and is gone
     this.pinned.visible = pinned < PIN;
     if (pinned < PIN) {

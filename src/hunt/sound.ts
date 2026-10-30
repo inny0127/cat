@@ -141,6 +141,18 @@ const MAKERS: Record<string, Make> = {
     }
     return out;
   },
+  // the chatter at a thing out of reach: quick little clicks of the teeth
+  chatter: (sr) => {
+    const out = new Float32Array(Math.floor(0.7 * sr));
+    for (let k = 0; k < 11; k++) {
+      const i0 = Math.floor((k * 0.055 + rnd(-0.006, 0.006)) * sr), f = rnd(1800, 2400), a = 0.5 * (1 - k / 14);
+      for (let i = 0; i < 0.03 * sr && i0 + i < out.length; i++) {
+        const t = i / sr;
+        out[i0 + i] += (Math.sin(2 * Math.PI * f * t) * 0.5 + (Math.random() * 2 - 1) * 0.5) * Math.exp(-t / 0.006) * a;
+      }
+    }
+    return out;
+  },
   // caught: a bright pop and a chime up
   catch: (sr) => {
     const out = new Float32Array(Math.floor(0.5 * sr));

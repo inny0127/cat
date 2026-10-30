@@ -9,7 +9,7 @@ import { Hunt, NIGHTS, loadSave, nightAt, nightOpen, saveSave, type Save } from 
 import { PREY, type Prey } from './prey';
 import { THINGS } from './things';
 import { COATS, allStars, coatOf, coatOpen } from './coats';
-import { moveBody, type Body } from './physics';
+import { lineClear, moveBody, type Body } from './physics';
 import { Cat } from './cat';
 import { Haptic } from '../platform/haptics';
 
@@ -60,6 +60,9 @@ export class HuntApp {
   private readonly moon: THREE.DirectionalLight;
   private moonBase = 2.4;
   private thunderAt = Infinity;
+  /** how long a thing out of reach has been watched, still; the last chatter at one */
+  private watchT = 0;
+  private chatAt = -99;
   /** the last near miss said (not said again straight away) */
   private nearAt = -99;
   private dip = 0;
@@ -285,6 +288,30 @@ export class HuntApp {
     if (p.kind === 'mouse' && this.nightI <= 1 && !this.save.best[NIGHTS[1].id]) this.hud.tip('생쥐를 물었어요! 침실의 집사 침대 위로 가져가면 선물 보너스', 5000);
   }
 
+  /** a thing out of reach (up high: a moth round its light) watched a while, still: the cat
+   *  chatters at it, as cats do */
+  private chattering(dt: number, h: Hunt) {
+    const cat = h.cat;
+    let seen = false;
+    if (cat.speed < 0.2 && cat.doing !== 'pounce') {
+      for (const p of h.prey) {
+        if (p.state === 'hidden' || p.state === 'held' || !p.mesh.visible || p.pos.y - cat.body.y < 0.5) continue;
+        const to = p.pos.clone().sub(cat.eye), d = to.length();
+        if (d < 0.6 || d > 4 || to.normalize().dot(cat.fwd) < 0.96) continue;
+        if (!lineClear(cat.eye.x, cat.eye.y, cat.eye.z, p.pos.x, p.pos.y, p.pos.z, this.world.boxes)) continue;
+        seen = true;
+        break;
+      }
+    }
+    this.watchT = seen ? this.watchT + dt : 0;
+    if (this.watchT > 1.2 && this.time - this.chatAt > 8) {
+      this.chatAt = this.time;
+      this.watchT = 0;
+      this.sound.play('chatter', null, 0.5);
+      this.hud.say('깍깍깍', innerWidth / 2, innerHeight * 0.62, false);
+    }
+  }
+
   /** a sound made: played where it was made; and, a thing's, written there on the screen */
   private heard(name: string, at: THREE.Vector3 | null, gain: number) {
     this.sound.play(name, at, gain);
@@ -330,6 +357,7 @@ export class HuntApp {
       this.stop -= dt;
       if (h.over) this.finish();
       this.tips();
+      this.chattering(dt, h);
     } else if (!h || this.mode === 'title') {
       // (the title: the room looked round slowly, from the rug)
       const c = this.idle;
