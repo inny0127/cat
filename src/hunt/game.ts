@@ -142,6 +142,8 @@ export class Hunt {
   /** lightning: the next (s into the night), and how lit it still is (0..1) */
   private nextBolt = 15 + Math.random() * 15;
   bolt = 0;
+  /** when they last woke */
+  private wokeAt = -99;
 
   constructor(readonly world: World, readonly night: Night, readonly on: GameEvents) {
     for (const [kind, n] of Object.entries(night.roster) as [PreyKind, number][]) {
@@ -264,11 +266,14 @@ export class Hunt {
 
   /** their sleep made lighter (or, less than nothing, deeper): stirring past the half, and woken */
   private rouse(by: number) {
+    // (just woken, sitting up and dropping off again: not woken again straight away)
+    if (by > 0 && this.t < this.wokeAt + 8) return;
     const before = this.sleep;
     this.sleep = Math.min(1, this.sleep - (by > 0 ? by * (this.night.mods?.sleepy ?? 1) : by));
     if (before >= 0.5 && this.sleep < 0.5 && this.sleep > 0) this.on.stirred(false);
     if (this.sleep <= 0) {
-      this.sleep = 0.8;
+      this.sleep = 1;
+      this.wokeAt = this.t;
       this.wakes++;
       this.score = Math.max(0, this.score - 300);
       this.chain = 0;

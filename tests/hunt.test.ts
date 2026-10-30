@@ -192,6 +192,13 @@ describe('밤사냥: the night', () => {
     }
     expect(woke).toBe(1);
     expect(h.score).toBe(200);
+    // (sitting up, dropping off again: the same racket a few seconds on does not wake them again)
+    for (let i = 0; i < 6 * 60; i++) {
+      h.cat.body.x = 2.5;
+      h.cat.body.z = -1.5;
+      h.step(1 / 60, I);
+    }
+    expect(woke).toBe(1);
   });
   it('a mug swatted off the table: a crash, points, and the cricket by it gone', () => {
     const table: Box = [-0.5, 0.7, -0.5, 0.5, 0.75, 0.5];
