@@ -7,6 +7,7 @@ import { Hud } from './hud';
 import { Sound } from './sound';
 import { Hunt, NIGHTS, loadSave, nightOpen, saveSave, type Save } from './game';
 import { PREY, type Prey } from './prey';
+import { THINGS } from './things';
 import { moveBody, type Body } from './physics';
 import { Cat } from './cat';
 import { Haptic } from '../platform/haptics';
@@ -14,7 +15,7 @@ import { Haptic } from '../platform/haptics';
 type Mode = 'title' | 'play' | 'pause' | 'end';
 
 /** the words for the sounds things make, written where they come from */
-const WORDS: Record<string, string> = { chirp: '귀뚤귀뚤', squeak: '찍찍', flutter: '파닥', hop: '톡' };
+const WORDS: Record<string, string> = { chirp: '귀뚤귀뚤', squeak: '찍찍', flutter: '파닥', hop: '톡', shatter: '와장창!', clatter: '달그락' };
 /** what each kind glows, heard through the walls */
 const GLOW: Record<string, number> = { moth: 0xffe27a, cricket: 0x9cff8a, mouse: 0xffa8c0 };
 
@@ -125,6 +126,7 @@ export class HuntApp {
 
   private menu() {
     this.mode = 'title';
+    this.clearHunt();
     this.hunt = null;
     this.hud.title(this.save);
     this.ring.visible = false;
@@ -134,8 +136,7 @@ export class HuntApp {
   start(i: number) {
     if (!nightOpen(this.save, i)) return;
     this.nightI = i;
-    for (const p of this.hunt?.prey ?? []) this.scene.remove(p.mesh);
-    this.clearGlows();
+    this.clearHunt();
     this.hunt = new Hunt(this.world, NIGHTS[i], {
       caught: (p, pts, chain) => this.caught(p, pts, chain),
       gift: (pts) => {
@@ -151,8 +152,18 @@ export class HuntApp {
         else this.hud.tip('으음… 집사가 뒤척여요. 침실에선 살금살금!', 2500);
       },
       sound: (name, at, gain) => this.heard(name, at, gain ?? 1),
+      crashed: (t, pts) => {
+        this.hud.toast(`+${pts}`, `${THINGS[t.kind].name} ${THINGS[t.kind].sound === 'shatter' ? '와장창!' : '툭 떨어뜨렸다!'}`);
+        this.feel.tap('medium');
+        if (!this.save.knocked) {
+          this.save.knocked = true;
+          saveSave(this.save);
+          this.hud.tip('물건을 떨어뜨리면 점수! 하지만 큰 소리에 사냥감이 도망가고 집사가 깰 수 있어요', 5000);
+        }
+      },
     });
     for (const p of this.hunt.prey) this.scene.add(p.mesh);
+    for (const t of this.hunt.things) this.scene.add(t.mesh);
     this.glows = this.hunt.prey.map((p) => {
       const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: HuntApp.dot(), color: GLOW[p.kind], depthTest: false, depthWrite: false, transparent: true }));
       s.scale.setScalar(0.14);
@@ -163,6 +174,13 @@ export class HuntApp {
     this.tipStep = 0;
     this.hud.playing(this.controls.touchy || matchMedia('(pointer: coarse)').matches);
     this.sound.start();
+  }
+
+  /** the last night's hunted and its things, out of the room */
+  private clearHunt() {
+    for (const p of this.hunt?.prey ?? []) this.scene.remove(p.mesh);
+    for (const t of this.hunt?.things ?? []) this.scene.remove(t.mesh);
+    this.clearGlows();
   }
 
   private pause() {

@@ -96,6 +96,38 @@ const MAKERS: Record<string, Make> = {
     }
     return out;
   },
+  // a glass or a mug on the floor: a crack, shards ringing, bits skittering
+  shatter: (sr) => {
+    const out = new Float32Array(Math.floor(0.9 * sr));
+    const e = env(0.001, 0.05, sr);
+    let hp = 0, prev = 0;
+    for (let i = 0; i < out.length; i++) {
+      const n = Math.random() * 2 - 1;
+      hp = 0.85 * (hp + n - prev);
+      prev = n;
+      out[i] = hp * e(i) * 0.9;
+    }
+    for (let k = 0; k < 14; k++) {
+      const i0 = Math.floor(rnd(0, 0.5) * sr), f = rnd(2500, 6500), d = rnd(0.03, 0.12);
+      for (let i = 0; i < out.length - i0; i++) {
+        const t = i / sr;
+        out[i0 + i] += Math.sin(2 * Math.PI * f * t) * Math.exp(-t / d) * 0.12;
+      }
+    }
+    return out;
+  },
+  // something hard and light off a shelf: a clack, a bounce, a roll
+  clatter: (sr) => {
+    const out = new Float32Array(Math.floor(0.6 * sr));
+    for (const [at, g] of [[0, 0.8], [0.16, 0.45], [0.27, 0.25], [0.33, 0.12]] as const) {
+      const i0 = Math.floor(at * sr), f = rnd(700, 1100);
+      for (let i = 0; i < out.length - i0; i++) {
+        const t = i / sr;
+        out[i0 + i] += (Math.sin(2 * Math.PI * f * t) * 0.6 + (Math.random() * 2 - 1) * 0.5) * Math.exp(-t / 0.025) * g;
+      }
+    }
+    return out;
+  },
   // caught: a bright pop and a chime up
   catch: (sr) => {
     const out = new Float32Array(Math.floor(0.5 * sr));

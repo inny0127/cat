@@ -220,6 +220,13 @@ export class Prey {
     this.mesh.rotation.y = this.heading;
   }
 
+  /** a crash heard (loud: 1 for a glass on the floor): near enough, it is off; further, wary */
+  hear(at: THREE.Vector3, loud: number) {
+    if (this.state === 'hidden' || this.state === 'held' || this.state === 'flee') return;
+    const d = this.pos.distanceTo(at), R = 3.5 * loud;
+    if (d < R) this.alert += 1.6 * (1 - d / R);
+  }
+
   /** off: too much of the cat */
   private startle(S: Senses) {
     this.state = 'flee';

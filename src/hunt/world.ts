@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { Box } from './physics';
+import type { Spot } from './things';
 
 /** the flat's size: x and z either side of its middle (m), and how high its ceiling */
 export const HALF_X = 4.5, HALF_Z = 3.5, CEIL = 2.5;
@@ -36,6 +37,19 @@ export class World {
   readonly treats = [new THREE.Vector3(-2.6, 0, -2.0), new THREE.Vector3(-1.55, 0, -0.35), new THREE.Vector3(1.4, 0, 1.0)];
   /** where crickets like to be, and moths (round the lights) */
   readonly cricketSpots = [new THREE.Vector3(-2.2, 0, -1.0), new THREE.Vector3(1.6, 0, 2.0), new THREE.Vector3(-0.2, 0, -2.6), new THREE.Vector3(3.6, 0, -0.9), new THREE.Vector3(-3.0, 0, 1.6)];
+
+  /** the things standing about to be pushed off: a mug and the remote on the coffee table, a
+   *  lucky cat on the bookcase, pens on the TV stand, a vase on the kitchen table, more pens on
+   *  the counter, and a glass of water by their bed */
+  readonly spots: Spot[] = [
+    { kind: 'mug', at: new THREE.Vector3(1.85, 0.4, 2.1) },
+    { kind: 'remote', at: new THREE.Vector3(1.55, 0.4, 2.2) },
+    { kind: 'figure', at: new THREE.Vector3(4.2, 0.95, 1.15) },
+    { kind: 'pens', at: new THREE.Vector3(2.98, 0.5, 0.38) },
+    { kind: 'vase', at: new THREE.Vector3(-2.05, 0.75, -1.55) },
+    { kind: 'pens', at: new THREE.Vector3(-3.92, 0.92, -1.1) },
+    { kind: 'glass', at: new THREE.Vector3(2.48, 0.55, -3.1) },
+  ];
 
   private readonly parts = new Map<string, THREE.BufferGeometry[]>();
   private readonly mats = new Map<string, THREE.Material>();
@@ -89,7 +103,6 @@ export class World {
     this.deco('rug', 0.3, 2.7, 0, 0.008, 1.2, 2.75);
     this.table('wood', 0.9, 2.1, 1.7, 2.3, 0.4, 0.04, 0.05);
     this.deco('book', 1.1, 1.4, 0.4, 0.43, 1.85, 2.05);
-    this.deco('mug', 1.75, 1.83, 0.4, 0.48, 2.0, 2.08);
     // the floor lamp in the corner
     this.cyl('dark', 3.2, 3.1, 0.16, 0, 0.03);
     this.solid('dark', 3.18, 3.22, 0, 1.5, 3.08, 3.12);

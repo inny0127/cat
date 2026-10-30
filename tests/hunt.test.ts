@@ -4,6 +4,7 @@ import { moveBody, lineClear, groundUnder, type Body, type Box } from '../src/hu
 import { Cat, type Intent } from '../src/hunt/cat';
 import { Prey } from '../src/hunt/prey';
 import { CHAIN, GIFT, Hunt, NIGHTS, chainMul, nightOpen } from '../src/hunt/game';
+import { THINGS } from '../src/hunt/things';
 
 const body = (x: number, y: number, z: number): Body => ({ x, y, z, vx: 0, vy: 0, vz: 0, r: 0.12, h: 0.26, grounded: false, landed: 0 });
 const run = (b: Body, boxes: Box[], s: number) => { for (let i = 0; i < s * 60; i++) moveBody(b, boxes, 1 / 60); };
@@ -169,5 +170,42 @@ describe('밤사냥: the night', () => {
     }
     expect(woke).toBe(1);
     expect(h.score).toBe(200);
+  });
+  it('a mug swatted off the table: a crash, points, and the cricket by it gone', () => {
+    const table: Box = [-0.5, 0.7, -0.5, 0.5, 0.75, 0.5];
+    const W = { boxes: [table], lamps: [{ at: new THREE.Vector3(0, 1.5, 0), color: 0, power: 1, reach: 3 }], holes: [{ at: new THREE.Vector3(3, 0, 0), out: new THREE.Vector3(-1, 0, 0) }], treats: [new THREE.Vector3()], cricketSpots: [new THREE.Vector3(0.3, 0, 1.2)], cellAt: () => -1, path: () => [], bed: { at: new THREE.Vector3(9, 0.55, 9), r: 1 }, sleeper: { position: new THREE.Vector3(9, 0.6, 9) }, grid: { cell: 0.1, cols: 1, rows: 1, free: new Uint8Array(1) }, spots: [{ kind: 'mug', at: new THREE.Vector3(0, 0.75, 0.35) }] } as never;
+    const crashed: string[] = [], heard: string[] = [];
+    const h = new Hunt(W, { ...NIGHTS[0], roster: { cricket: 1 } }, { caught: () => {}, gift: () => {}, missed: () => {}, stirred: () => {}, sound: (n) => heard.push(n), crashed: (t) => crashed.push(t.kind) });
+    const cricket = h.prey[0];
+    cricket.pos.set(0.3, 0, 1.2);
+    cricket.state = 'pause';
+    h.cat.place(0, 0.75, 0.1, 0);
+    const I = still();
+    I.crouch = true;
+    h.step(1 / 60, I);
+    I.crouch = false;
+    I.release = true;
+    h.step(1 / 60, I);
+    I.release = false;
+    for (let i = 0; i < 90; i++) h.step(1 / 60, I);
+    expect(crashed).toEqual(['mug']);
+    expect(heard).toContain(THINGS.mug.sound);
+    expect(h.score).toBeGreaterThanOrEqual(THINGS.mug.pts);
+    expect(h.things[0].state).toBe('down');
+    expect(cricket.state).toBe('flee');
+  });
+  it('a mug left be stays put; walked into on its table, it is shoved but not off', () => {
+    const table: Box = [-1, 0.7, -1, 1, 0.75, 1];
+    const W = { boxes: [table], lamps: [{ at: new THREE.Vector3(0, 1.5, 0), color: 0, power: 1, reach: 3 }], holes: [], treats: [], cricketSpots: [], cellAt: () => -1, path: () => [], bed: { at: new THREE.Vector3(9, 0.55, 9), r: 1 }, grid: { cell: 0.1, cols: 1, rows: 1, free: new Uint8Array(1) }, spots: [{ kind: 'mug', at: new THREE.Vector3(0, 0.75, 0.2) }] } as never;
+    const h = new Hunt(W, { ...NIGHTS[0], roster: {} }, { caught: () => {}, gift: () => {}, missed: () => {}, stirred: () => {}, sound: () => {}, crashed: () => {} });
+    h.cat.place(0, 0.75, -0.5, 0);
+    const I = still();
+    for (let i = 0; i < 60; i++) h.step(1 / 60, I);
+    expect(h.things[0].pos.z).toBeCloseTo(0.2, 5);
+    I.move.y = 0.5;
+    for (let i = 0; i < 100; i++) h.step(1 / 60, I);
+    expect(h.things[0].pos.z).toBeGreaterThan(0.25);
+    expect(h.things[0].state === 'down').toBe(false);
+    expect(h.knocked).toBe(0);
   });
 });

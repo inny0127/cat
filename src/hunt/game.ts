@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { Cat, type Intent } from './cat';
 import { PREY, Prey, type PreyKind } from './prey';
 import type { World } from './world';
+import { THINGS, Thing } from './things';
 
 /** a night: how long it lasts (s of play), what is out, the points for its stars */
 export interface Night {
@@ -30,6 +31,8 @@ export interface GameEvents {
   gift: (pts: number) => void;
   missed: () => void;
   stirred: (woke: boolean) => void;
+  /** a thing pushed off, landed: what, and its points */
+  crashed: (t: Thing, pts: number) => void;
   sound: (name: string, at: THREE.Vector3 | null, gain?: number) => void;
 }
 
@@ -56,6 +59,9 @@ export class Hunt {
   wakes = 0;
   over = false;
   private back: { p: Prey; at: number }[] = [];
+  /** the things about to be pushed off, and how many have been */
+  readonly things: Thing[] = [];
+  knocked = 0;
 
   constructor(readonly world: World, readonly night: Night, readonly on: GameEvents) {
     for (const [kind, n] of Object.entries(night.roster) as [PreyKind, number][]) {
@@ -65,6 +71,7 @@ export class Hunt {
         this.prey.push(p);
       }
     }
+    for (const s of world.spots ?? []) this.things.push(new Thing(s.kind, s.at));
     // the cat starts on the rug, looking toward the kitchen
     this.cat.place(1.5, 0, 1.0, -Math.PI * 0.75);
   }
@@ -95,6 +102,7 @@ export class Hunt {
       p.update(dt, { eye: cat.eye, noise: cat.noise, speed: cat.speed, world: W, sound: (q, name) => this.on.sound(name, q.pos, name === 'chirp' ? 0.5 : 0.7) });
     }
     this.catching();
+    this.pushing(dt);
     // (a moth or cricket caught: back again, somewhere, in a while)
     for (let i = this.back.length - 1; i >= 0; i--) {
       if (this.t < this.back[i].at) continue;
@@ -116,9 +124,15 @@ export class Hunt {
     // their sleep: a racket in the bedroom wakes them by degrees; quiet, it deepens again
     const near = cat.body.x > 1.5 && cat.body.z < 0 ? 1 : 0;
     const loud = near * Math.max(0, cat.noise - 0.15) * 1.6;
+    this.rouse(loud * dt - 0.05 * dt);
+    if (this.t >= this.night.time) this.over = true;
+  }
+
+  /** their sleep made lighter (or, less than nothing, deeper): stirring past the half, and woken */
+  private rouse(by: number) {
     const before = this.sleep;
-    this.sleep = Math.min(1, this.sleep - loud * dt + 0.05 * dt);
-    if (before >= 0.5 && this.sleep < 0.5) this.on.stirred(false);
+    this.sleep = Math.min(1, this.sleep - by);
+    if (before >= 0.5 && this.sleep < 0.5 && this.sleep > 0) this.on.stirred(false);
     if (this.sleep <= 0) {
       this.sleep = 0.8;
       this.wakes++;
@@ -126,7 +140,36 @@ export class Hunt {
       this.chain = 0;
       this.on.stirred(true);
     }
-    if (this.t >= this.night.time) this.over = true;
+  }
+
+  /** the things on the tops: swatted or shoved off, falling, landing with a crash that everything
+   *  near hears (the things hunted, off; they, if it is near enough, stirring) */
+  private pushing(dt: number) {
+    const cat = this.cat, b = cat.body, W = this.world;
+    const sw = cat.swatAt;
+    for (const t of this.things) {
+      if (sw && cat.t < 0.15 && t.near(sw.x, sw.y, sw.z, 0.2)) {
+        // (a swat: sent off the way the paw went, and a little across)
+        const f = new THREE.Vector3(cat.fwd.x, 0, cat.fwd.z).normalize();
+        t.knock(f.x * 1.7 - f.z * 0.4, f.z * 1.7 + f.x * 0.4);
+        this.on.sound('pat', t.pos, 0.6);
+      } else if (cat.speed > 0.3 && t.state === 'up' && t.near(b.x, b.y + 0.02, b.z, b.r + 0.04)) {
+        // (walked into: shoved along ahead)
+        const k = 0.6 + 0.5 * cat.speed;
+        t.knock((b.vx / cat.speed) * k, (b.vz / cat.speed) * k, 0.2);
+      }
+      const fell = t.update(dt, W.boxes);
+      if (!fell) continue;
+      const K = THINGS[t.kind];
+      const pts = Math.round((K.pts * (0.5 + Math.min(1, fell))) / 10) * 10;
+      this.score += pts;
+      this.knocked++;
+      this.on.sound(K.sound, t.pos, K.loud);
+      this.on.crashed(t, pts);
+      for (const p of this.prey) p.hear(t.pos, K.loud);
+      const bed = W.sleeper?.position;
+      if (bed) this.rouse(0.75 * K.loud * Math.max(0, 1 - t.pos.distanceTo(bed) / 4.5));
+    }
   }
 
   /** a pounce or a swat that finds something */
@@ -174,12 +217,12 @@ export class Hunt {
 }
 
 /** what is kept between nights: the best of each, its stars */
-export interface Save { best: Record<string, number>; stars: Record<string, number>; mute?: boolean }
+export interface Save { best: Record<string, number>; stars: Record<string, number>; mute?: boolean; knocked?: boolean }
 const KEY = 'bamsanyang.save';
 export function loadSave(): Save {
   try {
     const s = JSON.parse(localStorage.getItem(KEY) ?? 'null');
-    if (s && typeof s === 'object') return { best: s.best ?? {}, stars: s.stars ?? {}, mute: !!s.mute };
+    if (s && typeof s === 'object') return { best: s.best ?? {}, stars: s.stars ?? {}, mute: !!s.mute, knocked: !!s.knocked };
   } catch { /* none kept */ }
   return { best: {}, stars: {} };
 }
