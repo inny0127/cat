@@ -92,19 +92,34 @@ export class Paws {
 
   /** the paws for this frame, by what the cat is doing; light: how lit the room is where it is */
   update(cat: Cat, aspect: number, light: number) {
+    // (on a narrow screen the view opens up and down, and the paws go smaller, lower and nearer in,
+    // so both still show whole; the poses below are for a wide one)
+    this.cam.fov = THREE.MathUtils.clamp(2 * Math.atan(Math.tan(35 * Math.PI / 180) / aspect) * 180 / Math.PI, 62, 95);
     this.cam.aspect = aspect;
     this.cam.updateProjectionMatrix();
     this.light.intensity = 0.6 + 1.6 * light;
     this.key.intensity = 0.4 + 1.4 * light;
+    this.pose(cat);
+    const halfH = Math.tan(this.cam.fov * Math.PI / 360) * 0.11, halfW = halfH * aspect;
+    const ax = Math.min(1, halfW / 0.1), drop = halfH - 0.066;
+    const f = THREE.MathUtils.clamp(halfW / 0.12 * 1.2, 0.5, 1);
+    for (const g of [this.L, this.R, this.mouth]) {
+      g.position.x *= ax;
+      g.position.y -= drop * 0.6;
+      g.scale.setScalar((g === this.mouth ? 1 : 0.85) * f);
+    }
+  }
+
+  private pose(cat: Cat) {
     const t = cat.t, ph = cat.stride * Math.PI, run = Math.min(1, cat.speed / 2.5);
     const pose = (g: THREE.Group, x: number, y: number, z: number, rx: number, ry = 0, rz = 0) => {
       g.position.set(x, y, z);
       g.rotation.set(rx, ry, rz);
     };
-    // (where they rest: low at either side, reaching a little ahead; nearer the middle on a narrow
-    // screen, where the sides are close in)
-    const sx = 0.05 * Math.min(1, 0.65 + 0.35 * aspect);
+    // (where they rest: low at either side, reaching a little ahead)
+    const sx = 0.05;
     for (const c of this.claws) c.visible = false;
+    this.mouth.position.set(0, -0.042, -0.1);
     this.mouth.rotation.z = Math.sin(cat.stride * Math.PI) * 0.25 * Math.min(1, cat.speed);
     this.mouth.rotation.x = Math.sin(t * 2) * 0.1;
     if (cat.doing === 'pounce') {
