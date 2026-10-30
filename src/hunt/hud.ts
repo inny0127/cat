@@ -31,6 +31,11 @@ const CSS = `
 #hud .toast { position: absolute; left: 50%; top: 32%; transform: translate(-50%, -50%); text-align: center; white-space: nowrap; font-size: calc(16 * var(--fpx)); animation: htoast 1.5s ease-out forwards; }
 #hud .toast b { display: block; font-weight: 400; font-size: calc(22 * var(--fpx)); color: #ffd27a; }
 @keyframes htoast { 0% { opacity: 0; transform: translate(-50%, -50%) scale(0.6); } 12% { opacity: 1; transform: translate(-50%, -50%) scale(1.08); } 20% { transform: translate(-50%, -50%) scale(1); } 80% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -80%); } }
+#hud .ncard { position: absolute; left: 50%; top: 40%; transform: translate(-50%, -50%); text-align: center; white-space: nowrap; animation: hcard 3.2s ease-in-out forwards; }
+#hud .ncard small { display: block; color: #8f9ac8; font-size: calc(12 * var(--fpx)); letter-spacing: 2px; }
+#hud .ncard b { display: block; font-weight: 400; color: #ffd27a; font-size: calc(26 * var(--fpx)); margin: 2px 0 6px; text-shadow: 0 3px 0 #3a2050; }
+#hud .ncard .gl { font-size: calc(11 * var(--fpx)); }
+@keyframes hcard { 0% { opacity: 0; transform: translate(-50%, -40%); } 12% { opacity: 1; transform: translate(-50%, -50%); } 78% { opacity: 1; } 100% { opacity: 0; } }
 #hud .tip { position: absolute; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom)); transform: translateX(-50%); width: min(80vw, 520px); text-align: center; color: #e6f0ff; opacity: 0; transition: opacity 0.5s ease; }
 #hud .tip.on { opacity: 1; }
 #hud .stick { position: absolute; width: 110px; height: 110px; margin: -55px 0 0 -55px; border-radius: 50%; box-shadow: inset 0 0 0 2px rgba(200, 210, 255, 0.35); display: none; }
@@ -207,6 +212,16 @@ export class Hud {
     this.show(`<div class="card"><h2>잠깐 멈춤</h2>
       <div class="row"><button class="btn" data-c="resume">계속하기</button></div>
       <div class="row"><button class="btn alt" data-c="retry">처음부터</button><button class="btn alt" data-c="menu">밤 고르기</button><button class="btn alt" data-c="sound">${mute ? '소리 끔' : '소리 켬'}</button></div></div>`);
+  }
+
+  /** a night begun: its name over the clock's first hour, and what it asks */
+  card(name: string, goals: string[]) {
+    this.el.querySelector('.ncard')?.remove();
+    const d = document.createElement('div');
+    d.className = 'ncard';
+    d.innerHTML = `<small>AM 2:00</small><b>${name}</b><div class="gl">${Hud.goalList(goals.map((text) => ({ text, done: false })))}</div>`;
+    this.el.appendChild(d);
+    setTimeout(() => d.remove(), 3300);
   }
 
   /** the night's challenges, by the clock (done ones lit) */

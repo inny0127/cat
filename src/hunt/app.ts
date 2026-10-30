@@ -17,6 +17,8 @@ type Mode = 'title' | 'play' | 'pause' | 'end';
 
 /** the words for the sounds things make, written where they come from */
 const WORDS: Record<string, string> = { chirp: '귀뚤귀뚤', squeak: '찍찍', flutter: '파닥', hop: '톡', zip: '스르륵', shatter: '와장창!', clatter: '달그락' };
+/** the sky's colour as dawn comes */
+const DAWN = new THREE.Color(0xb8a8d8);
 /** where the bedside lamp is (put on when they wake) */
 const BEDSIDE = new THREE.Vector3(2.32, 0.8, -3.25);
 /** what each kind glows, heard through the walls */
@@ -61,6 +63,8 @@ export class HuntApp {
    *  that goes with the lightning comes */
   private readonly moon: THREE.DirectionalLight;
   private moonBase = 2.4;
+  /** the sky's glow all round (toward dawn, paler and brighter) */
+  private readonly sky = new THREE.HemisphereLight(0x6c7ab8, 0x2a2232, 1.0);
   private thunderAt = Infinity;
   /** when they last woke (sat up, the bedside lamp on, a word, and down again) */
   private wokeAt = -99;
@@ -82,7 +86,7 @@ export class HuntApp {
     S.add(this.world.group);
     S.fog = new THREE.Fog(0x10142a, 4, 15);
     // the night's light: the sky's glow all round, the moon through the window, the lamps left on
-    S.add(new THREE.HemisphereLight(0x6c7ab8, 0x2a2232, 1.0));
+    S.add(this.sky);
     const moon = this.moon = new THREE.DirectionalLight(0xa8bcff, 2.4);
     moon.position.copy(new THREE.Vector3(1.5, 0, 0).addScaledVector(this.world.moonDir, -9));
     moon.target.position.set(1.5, 0, 0);
@@ -205,6 +209,7 @@ export class HuntApp {
     this.world.rain.visible = !!M.rain;
     this.sound.rain(!!M.rain);
     this.showGoals();
+    this.hud.card(N.name, N.goals.map((g) => g.text));
     if (M.rain && !this.save.goals?.[N.id]) this.hud.tip('빗소리 덕분에 발소리가 잘 안 들려요. 번개가 칠 땐 조심!', 5000);
     this.glows = this.hunt.prey.map((p) => {
       const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: HuntApp.dot(), color: GLOW[p.kind], depthTest: false, depthWrite: false, transparent: true }));
@@ -402,8 +407,12 @@ export class HuntApp {
     this.flash = Math.max(0, this.flash - dt * 2.5);
     this.red = Math.max(0, this.red - dt * 1.2);
     this.kick = Math.max(0, this.kick - dt * 1.8);
-    // the moon (and a flash of lightning); the rain down the window; thunder after the flash
-    this.moon.intensity = this.moonBase + 14 * (h?.bolt ?? 0) ** 2;
+    // the moon (and a flash of lightning); the rain down the window; thunder after the flash; the
+    // last twenty seconds, the first of the dawn
+    const dawn = h && this.mode !== 'title' ? THREE.MathUtils.smoothstep(h.t, h.night.time - 20, h.night.time) : 0;
+    this.moon.intensity = this.moonBase * (1 - 0.5 * dawn) + 14 * (h?.bolt ?? 0) ** 2;
+    this.sky.intensity = 1 + 0.9 * dawn;
+    this.sky.color.setHex(0x6c7ab8).lerp(DAWN, dawn);
     if (this.world.rain.visible) {
       this.world.rain.material.map!.offset.y += dt * 1.6;
       this.world.rain.material.color.setScalar(1 + 4 * (h?.bolt ?? 0));
