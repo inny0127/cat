@@ -1,5 +1,5 @@
 import { ICONS, pix } from '../ui/hud';
-import { LEVELS, unlocked, type Round, type Save } from './round';
+import { LEVELS, dailyLevel, unlocked, type Level, type Round, type Save } from './round';
 import { COATS, WEAR } from './closet';
 
 const CSS = `
@@ -35,7 +35,9 @@ const CSS = `
 #ny .logo { text-align: center; }
 #ny .logo h1 { margin: 0; font-weight: 400; font-size: calc(48 * var(--fpx)); line-height: 1.1; color: #ffd6a8; text-shadow: 0 4px 0 #6b2a3a, 0 8px 0 rgba(30, 20, 34, 0.5); letter-spacing: 2px; }
 #ny .logo p { margin: 8px 0 0; color: #fff5e8; text-shadow: 0 2px 0 #2b1e30; font-size: calc(14 * var(--fpx)); }
-#ny .levels { display: flex; flex-direction: column; gap: 10px; width: min(330px, 100%); }
+#ny .levels { display: flex; flex-direction: column; gap: 10px; width: min(330px, 100%); max-height: 46vh; overflow-y: auto; padding: 3px; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+#ny .lv.today { box-shadow: 0 0 0 2px #ffe08a, 3px 4px 0 rgba(20, 14, 22, 0.35); }
+#ny .lv.today b { color: #ffe08a; }
 #ny .lv { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; padding: 10px 12px; background: rgba(43, 36, 51, 0.92); box-shadow: 0 0 0 2px #c99486, 3px 4px 0 rgba(20, 14, 22, 0.35); cursor: pointer; text-align: left; border: 0; color: inherit; font: inherit; }
 #ny .lv:active { transform: translateY(2px); }
 #ny .lv b { font-weight: 400; color: #ffd6a8; font-size: calc(14 * var(--fpx)); }
@@ -213,11 +215,12 @@ export class NyangUi {
     this.el.classList.remove('playing');
     this.end.classList.remove('on');
     this.closetEl.classList.remove('on');
-    const cards = LEVELS.map((L, i) => {
-      const open = unlocked(save, i), st = save.stars[L.id] ?? 0;
-      return `<button class="lv ${open ? '' : 'lock'}" data-lv="${i}"><b>${i + 1}. ${L.name}</b><span>${open ? L.blurb : '앞 방에서 별을 하나 따면 열려요'}</span>
+    const card = (L: Level, i: number, open: boolean, cls = '') => {
+      const st = save.stars[L.id] ?? 0;
+      return `<button class="lv ${open ? '' : 'lock'} ${cls}" data-lv="${i}"><b>${i < LEVELS.length ? `${i + 1}. ` : ''}${L.name}</b><span>${open ? L.blurb : '앞 방에서 별을 하나 따면 열려요'}</span>
         <div class="st">${open ? `${'★'.repeat(st)}<span style="color:#5a4458">${'★'.repeat(3 - st)}</span><br><small style="color:#bdb2c0">${save.best[L.id] ? `최고 ${save.best[L.id].toLocaleString('ko-KR')}` : ''}</small>` : ICONS.lock(18)}</div></button>`;
-    }).join('');
+    };
+    const cards = card(dailyLevel(new Date()), LEVELS.length, true, 'today') + LEVELS.map((L, i) => card(L, i, unlocked(save, i))).join('');
     this.title.innerHTML = `<div class="logo">${PAW(40)}<h1>냥아치</h1><p>집사 오기 전에 다 엎어라!</p></div>
       <div class="levels">${cards}</div>
       <div class="titlebar"><div class="coins">${ICONS.coin(18)}${save.coins.toLocaleString('ko-KR')}냥</div><button class="btn alt" data-closet>옷장</button></div>

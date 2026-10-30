@@ -12,7 +12,7 @@ const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 export type Goal = { to: THREE.Vector3; top: Top | null } | { prop: Prop };
 
 type Step =
-  | { k: 'walk'; to: THREE.Vector3 }
+  | { k: 'walk'; to: THREE.Vector3; via?: { from: THREE.Vector3; speed: number } }
   | { k: 'jump'; from: THREE.Vector3; to: THREE.Vector3; top: Top | null }
   | { k: 'swat'; prop: Prop };
 
@@ -38,6 +38,7 @@ export class Kitty {
   private side = 1;
   private hit = false;
   private swats = 0;
+  private replans = 0;
   private look = -1;
   private lookAt = new THREE.Vector3();
   private idle = 0;
@@ -88,16 +89,30 @@ export class Kitty {
     if (!route) return;
     let cur = this.on;
     const here = this.cat.motor.pos.clone();
+    // (across the floor: by the way round the furniture)
+    const walk = (to: THREE.Vector3) => {
+      if (!cur) {
+        // (each corner taken as fast as its turn lets it be)
+        const pts = [here.clone(), ...this.floorPath(here, to), to];
+        for (let k = 1; k < pts.length - 1; k++) {
+          const a = pts[k].clone().sub(pts[k - 1]).setY(0).normalize(), b = pts[k + 1].clone().sub(pts[k]).setY(0).normalize();
+          const turn = Math.acos(clamp(a.dot(b), -1, 1));
+          this.steps.push({ k: 'walk', to: pts[k], via: { from: pts[k - 1], speed: turn < 0.5 ? 1.5 : turn < 1.1 ? 1.0 : 0.6 } });
+        }
+      }
+      this.steps.push({ k: 'walk', to });
+    };
     for (const next of route) {
       const h = this.hop(cur, next, at, here);
       if (!h) { this.steps = []; return; }
-      this.steps.push({ k: 'walk', to: h.launch });
+      walk(h.launch);
       this.steps.push({ k: 'jump', from: h.launch, to: h.land, top: next });
       here.copy(h.land);
       cur = next;
     }
     if ('prop' in G) this.steps.push({ k: 'swat', prop: G.prop });
-    else this.steps.push({ k: 'walk', to: this.inside(cur, G.to) });
+    else walk(this.inside(cur, G.to));
+    this.replans = 0;
     this.t = 0;
     this.phase = '';
   }
@@ -144,6 +159,83 @@ export class Kitty {
     if (x < B.x0 || x > B.x1 || z < B.z0 || z > B.z1 || this.set.topAt(x, z)) return false;
     for (const [c, r] of this.set.solids) if (Math.hypot(x - c.x, z - c.z) < r + 0.05) return false;
     return true;
+  }
+
+  /** the floor in cells, free (1) or not: where the middle of the cat can be */
+  private static readonly CELL = 0.05;
+  private free: Uint8Array | null = null;
+  private cols = 0;
+  private rows = 0;
+  private cellOf(x: number, z: number) {
+    const B = this.set.bounds, C = Kitty.CELL;
+    return [clamp(Math.round((x - B.x0) / C), 0, this.cols - 1), clamp(Math.round((z - B.z0) / C), 0, this.rows - 1)];
+  }
+  private grid() {
+    if (this.free) return this.free;
+    const B = this.set.bounds, C = Kitty.CELL;
+    this.cols = Math.floor((B.x1 - B.x0) / C) + 1;
+    this.rows = Math.floor((B.z1 - B.z0) / C) + 1;
+    const f = this.free = new Uint8Array(this.cols * this.rows);
+    for (let j = 0; j < this.rows; j++) for (let i = 0; i < this.cols; i++) f[j * this.cols + i] = this.clearAt(B.x0 + i * C, B.z0 + j * C) ? 1 : 0;
+    return f;
+  }
+  /** a straight line across the floor clear all along */
+  private lineClear(a: THREE.Vector3, b: THREE.Vector3) {
+    const n = Math.ceil(Math.hypot(b.x - a.x, b.z - a.z) / 0.03);
+    for (let k = 1; k < n; k++) if (!this.clearAt(a.x + ((b.x - a.x) * k) / n, a.z + ((b.z - a.z) * k) / n)) return false;
+    return true;
+  }
+  /** the points to go by across the floor from one spot to another, round the furniture (none:
+   *  straight there, or no way round) */
+  floorPath(from: THREE.Vector3, to: THREE.Vector3): THREE.Vector3[] {
+    if (this.lineClear(from, to)) return [];
+    const f = this.grid(), W = this.cols, B = this.set.bounds, C = Kitty.CELL;
+    const near = (x: number, z: number) => {
+      const [ci, cj] = this.cellOf(x, z);
+      let best = -1, bd = Infinity;
+      for (let j = Math.max(0, cj - 6); j <= Math.min(this.rows - 1, cj + 6); j++) for (let i = Math.max(0, ci - 6); i <= Math.min(W - 1, ci + 6); i++) {
+        const d = (i - ci) ** 2 + (j - cj) ** 2;
+        if (f[j * W + i] && d < bd) { bd = d; best = j * W + i; }
+      }
+      return best;
+    };
+    const s0 = near(from.x, from.z), g = near(to.x, to.z);
+    if (s0 < 0 || g < 0) return [];
+    const cost = new Float32Array(f.length).fill(Infinity), prev = new Int32Array(f.length).fill(-1), done = new Uint8Array(f.length);
+    const gx = g % W, gz = Math.floor(g / W);
+    const open: number[] = [s0];
+    cost[s0] = 0;
+    while (open.length) {
+      let bi = 0, bf = Infinity;
+      for (let k = 0; k < open.length; k++) {
+        const c = open[k], h = Math.hypot((c % W) - gx, Math.floor(c / W) - gz);
+        if (cost[c] + h < bf) { bf = cost[c] + h; bi = k; }
+      }
+      const c = open.splice(bi, 1)[0];
+      if (c === g) break;
+      if (done[c]) continue;
+      done[c] = 1;
+      const ci = c % W, cj = Math.floor(c / W);
+      for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
+        const i = ci + di, j = cj + dj;
+        if ((!di && !dj) || i < 0 || j < 0 || i >= W || j >= this.rows) continue;
+        const n = j * W + i;
+        if (!f[n] || done[n]) continue;
+        const nc = cost[c] + (di && dj ? Math.SQRT2 : 1);
+        if (nc < cost[n]) { cost[n] = nc; prev[n] = c; open.push(n); }
+      }
+    }
+    if (prev[g] < 0 && g !== s0) return [];
+    const cells: THREE.Vector3[] = [];
+    for (let c = g; c >= 0 && c !== s0; c = prev[c]) cells.unshift(new THREE.Vector3(B.x0 + (c % W) * C, 0, B.z0 + Math.floor(c / W) * C));
+    // (the corners only: each point the last one from which the next can be seen)
+    const out: THREE.Vector3[] = [];
+    let at = from.clone();
+    for (let k = 0; k < cells.length; k++) {
+      const nxt = cells[k + 1] ?? to;
+      if (!this.lineClear(at, nxt)) { out.push(cells[k]); at = cells[k]; }
+    }
+    return out;
   }
 
   /** spots on the floor just off a top's open sides (its front and its ends), each with the spot on
@@ -215,7 +307,19 @@ export class Kitty {
         this.phase = 'walk';
         m.layer = null;
         m.setPosture('stand');
-        this.go(s.to, () => this.done());
+        if (s.via) m.walkTo(s.to.clone().setY(0), s.via.speed * this.pace, null, null, true);
+        else this.go(s.to, () => { if (this.steps[0] === s) this.done(); });
+        if (this.steps[0] !== s) return;
+      }
+      // (by the way: on past it, near; near enough where it springs from: it springs from here;
+      // and never round and round a spot it cannot quite come to)
+      const near = s.via ? 0.18 : this.steps[1]?.k === 'jump' ? 0.12 : 0.04;
+      const d = Math.hypot(m.pos.x - s.to.x, m.pos.z - s.to.z);
+      // (gone past it, by it)
+      const past = !!s.via && d < 0.4 && (m.pos.x - s.to.x) * (s.to.x - s.via.from.x) + (m.pos.z - s.to.z) * (s.to.z - s.via.from.z) > 0;
+      if (d < near || past || this.t > 5) {
+        if (!s.via) m.stop();
+        this.done();
       }
       return;
     }
@@ -231,7 +335,7 @@ export class Kitty {
     if (far < 0.03 && face === null) { m.stop(); then(); return; }
     const p = to.clone().setY(0);
     if (this.on) m.walkTo(p, clamp(far * 1.8, 0.35, 0.7) * this.pace, face, then, false);
-    else m.walkTo(p, (far > 0.6 ? 1.5 : 0.9) * this.pace, face, then, far > 0.35 && face === null);
+    else m.walkTo(p, (far > 0.6 ? 1.5 : 0.9) * this.pace, face, then, far > 0.6 && face === null);
   }
 
   private done() {
@@ -247,6 +351,14 @@ export class Kitty {
     const h0 = this.on?.h ?? 0, h1 = s.top?.h ?? 0, dh = h1 - h0;
     const face = Math.atan2(s.to.x - s.from.x, s.to.z - s.from.z);
     if (this.phase === '') {
+      // (not where it meant to spring from, a long way off: the way there afresh, a few times)
+      if (Math.hypot(m.pos.x - s.from.x, m.pos.z - s.from.z) > 0.25) {
+        if (++this.replans > 2) { this.steps = []; m.stop(); return; }
+        const n = this.replans;
+        this.plan();
+        this.replans = n;
+        return;
+      }
       this.phase = 'gather';
       m.stop();
       this.from.copy(m.pos);

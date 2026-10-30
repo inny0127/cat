@@ -9,7 +9,7 @@ import { roomMaterial } from '../pixel/room';
 import { LivingRoom, type Top } from './set';
 import { KINDS, Props, type Prop } from './props';
 import { Kitty } from './kitty';
-import { LEVELS, Round, loadSave, saveSave, unlocked } from './round';
+import { LEVELS, Round, dailyLevel, loadSave, saveSave, unlocked, type Level } from './round';
 import { NyangUi } from './ui';
 import { COATS, WEAR, choose } from './closet';
 import { makeWear } from '../cat3d/wear';
@@ -54,6 +54,9 @@ export class NyangApp {
   private dist = 3;
   private shake = 0;
   private hour = 14;
+  private rain = 0;
+  /** the room being played (or shown) */
+  private L: Level = LEVELS[0];
   private last = 0;
   private time = 0;
   private steps = 0;
@@ -385,9 +388,10 @@ export class NyangApp {
 
   /** the things put out on the furniture for a room, and its hour */
   private lay(i: number) {
-    const L = LEVELS[i];
+    const L = this.L = i < LEVELS.length ? LEVELS[i] : dailyLevel(new Date());
     this.level = i;
     this.hour = L.hour;
+    this.rain = L.rain ?? 0;
     this.props.clear();
     for (const [kind, top, x, z] of L.props) this.props.place(kind, this.set.tops.find((T) => T.id === top) ?? null, x, z);
   }
@@ -397,20 +401,20 @@ export class NyangApp {
     this.focusT = 0;
     this.lay(i);
     this.kitty.place(0.42, 0.42, Math.PI);
-    this.round = new Round(LEVELS[i]);
+    this.round = new Round(this.L);
     this.mode = 'count';
     this.modeT = 0;
     this.count = 0;
     this.follow = true;
     this.steps = 0;
     this.dropNip();
-    this.nipAt = [15, 45].filter((t) => t < LEVELS[i].time - 12);
+    this.nipAt = [15, 45, 75].filter((t) => t < this.L.time - 12);
     this.frenzy = 0;
     this.kitty.pace = 1;
     this.tapped = false;
     this.ui.frenzy(0);
     this.ui.startRound();
-    this.ui.show(this.round, 0, LEVELS[i].props.length);
+    this.ui.show(this.round, 0, this.L.props.length);
     this.audio.start();
   }
 
@@ -524,7 +528,7 @@ export class NyangApp {
 
   /** the round over: what it came to, kept, and the card */
   private finish() {
-    const r = this.round!, L = LEVELS[this.level];
+    const r = this.round!, L = this.L;
     const record = r.score > (this.save.best[L.id] ?? 0);
     if (record) this.save.best[L.id] = r.score;
     this.save.stars[L.id] = Math.max(this.save.stars[L.id] ?? 0, r.stars);
@@ -610,13 +614,14 @@ export class NyangApp {
         setTimeout(() => this.ui.say(st >= 3 ? '내 꽃병…! 내 찻주전자…!!' : st === 2 ? '야!!! 이게 다 뭐야!!' : st === 1 ? '…뭐야 이거. 너지?' : '어? 오늘은 얌전했네?'), 1100);
         this.kitty.tell({ to: this.cat.motor.pos.clone(), top: this.kitty.on });
       }
-      this.ui.show(r, r.downs, LEVELS[this.level].props.length);
+      this.ui.show(r, r.downs, this.L.props.length);
       this.ui.edges(...this.offscreen());
       this.catnip(dt);
     } else if (this.mode === 'home' && this.modeT > 3.4) this.finish();
 
     // the room, its light, and the cat in it
-    const d = this.set.update(dt, this.hour, 0, new Date());
+    const d = this.set.update(dt, this.hour, this.rain, new Date());
+    this.audio.setRain(this.mode === 'title' || this.mode === 'closet' ? 0 : this.rain * 0.8);
     this.stage.setDayLight(d);
     const dark = 1 - skyDay(this.hour);
     this.cat.setWhiskerLight(0.62 - 0.2 * dark, d.lamp > 0.5 ? 0.8 * dark : 0);

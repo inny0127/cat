@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
-import { COMBO_GAP, LEVELS, Round, comboMul, unlocked } from '../src/nyang/round';
+import { COMBO_GAP, LEVELS, Round, comboMul, dailyLevel, unlocked } from '../src/nyang/round';
+import { TOPS } from '../src/nyang/tops';
 import { KINDS, Props } from '../src/nyang/props';
 import { choose } from '../src/nyang/closet';
 import type { Top } from '../src/nyang/set';
@@ -57,6 +58,30 @@ describe('냥아치: a round', () => {
       for (const [kind, top] of L.props) {
         expect(KINDS[kind]).toBeTruthy();
         expect(tops).toContain(top);
+      }
+    }
+  });
+});
+
+describe('냥아치: the room of the day', () => {
+  it('is the same all day, another the next, its things on tops and apart, its marks rising', () => {
+    const a = dailyLevel(new Date(2026, 9, 30, 8)), b = dailyLevel(new Date(2026, 9, 30, 22)), c = dailyLevel(new Date(2026, 9, 31, 8));
+    expect(a).toEqual(b);
+    expect(a.props).not.toEqual(c.props);
+    for (const L of [a, c]) {
+      expect(L.props.length).toBeGreaterThanOrEqual(15);
+      expect(L.stars[0]).toBeLessThan(L.stars[1]);
+      expect(L.stars[1]).toBeLessThan(L.stars[2]);
+      for (const [kind, top, x, z] of L.props) {
+        const T = TOPS.find((t) => t.id === top)!;
+        expect(x).toBeGreaterThanOrEqual(T.x0);
+        expect(x).toBeLessThanOrEqual(T.x1);
+        expect(z).toBeGreaterThanOrEqual(T.z0);
+        expect(z).toBeLessThanOrEqual(T.z1);
+        for (const [k2, t2, x2, z2] of L.props) {
+          if (t2 !== top || (x2 === x && z2 === z)) continue;
+          expect(Math.hypot(x - x2, z - z2)).toBeGreaterThan(KINDS[kind].r + KINDS[k2].r);
+        }
       }
     }
   });
