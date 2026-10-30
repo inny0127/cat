@@ -21,8 +21,19 @@ export interface Body {
 /** how high a ledge it walks up without jumping */
 const STEP = 0.045;
 
-/** one step of a body's moving: along its velocity, out of the boxes, onto what it lands on */
+/** one step of a body's moving: along its velocity, out of the boxes, onto what it lands on (in
+ *  steps short enough that nothing fast goes through a wall between one and the next) */
 export function moveBody(b: Body, boxes: readonly Box[], dt: number, gravity = 13) {
+  const n = Math.min(12, Math.max(1, Math.ceil((Math.max(Math.abs(b.vx), Math.abs(b.vy), Math.abs(b.vz)) * dt) / 0.04)));
+  let landed = 0;
+  for (let i = 0; i < n; i++) {
+    stepBody(b, boxes, dt / n, gravity);
+    landed = Math.max(landed, b.landed);
+  }
+  b.landed = landed;
+}
+
+function stepBody(b: Body, boxes: readonly Box[], dt: number, gravity: number) {
   const wasGrounded = b.grounded;
   b.vy -= gravity * dt;
   b.x += b.vx * dt;

@@ -64,6 +64,8 @@ export class World {
     this.slab('tile', -HALF_X, -1.2, -0.02, 0, -HALF_Z, -1.2);
     this.slab('carpet', 1.5, HALF_X, -0.019, 0.001, -HALF_Z, 0);
     this.slab('ceiling', -HALF_X, HALF_X, H, H + 0.05, -HALF_Z, HALF_Z, false);
+    // (the ceiling: a head bumped on it, from the top of the fridge)
+    this.boxes.push([-HALF_X, H, -HALF_Z, HALF_X, H + 0.5, HALF_Z]);
     // outer walls (the north one with a window in it)
     this.solid('wall', -HALF_X - 0.1, -HALF_X, 0, H, -HALF_Z, HALF_Z);
     this.solid('wall', HALF_X, HALF_X + 0.1, 0, H, -HALF_Z, HALF_Z);
@@ -79,6 +81,8 @@ export class World {
     this.deco('frame', 2.28, 2.34, 1.0, 2.1, HALF_Z - 0.04, HALF_Z + 0.02);
     this.deco('frame', 1.48, 1.52, 1.0, 2.1, HALF_Z - 0.03, HALF_Z + 0.02);
     this.night(0.7, 2.3, 1.0, 2.1, HALF_Z + 0.04);
+    // (the glass: nobody goes out through it)
+    this.boxes.push([0.7, 1.0, HALF_Z + 0.02, 2.3, 2.1, HALF_Z + 0.1]);
     this.rain = this.rainOn(0.7, 2.3, 1.0, 2.1, HALF_Z + 0.03);
     // baseboards
     for (const [x0, x1, z0, z1] of [[-HALF_X, HALF_X, HALF_Z - 0.02, HALF_Z], [-HALF_X, HALF_X, -HALF_Z, -HALF_Z + 0.02], [-HALF_X, -HALF_X + 0.02, -HALF_Z, HALF_Z], [HALF_X - 0.02, HALF_X, -HALF_Z, HALF_Z]] as const) this.deco('trim', x0, x1, 0, 0.07, z0, z1);

@@ -42,6 +42,13 @@ describe('밤사냥: a cat among boxes', () => {
     expect(c.y).toBe(0);
     expect(c.x).toBeLessThan(0.5);
   });
+  it('a full-tilt pounce at a thin wall, in long frames, never comes out the other side', () => {
+    for (const v of [4, 7, 10]) {
+      const b = body(0, 0.3, 0);
+      for (let i = 0; i < 30; i++) { b.vx = v; moveBody(b, [wall], 1 / 30); }
+      expect(b.x).toBeLessThanOrEqual(1 - 0.12 + 1e-6);
+    }
+  });
   it('sees past nothing solid', () => {
     expect(lineClear(-2, 0.1, 0, 0.8, 0.1, 0, [wall])).toBe(true);
     expect(lineClear(0, 0.1, 0, 2, 0.1, 0, [wall])).toBe(false);

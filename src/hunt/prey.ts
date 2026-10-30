@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { lineClear } from './physics';
-import type { World } from './world';
+import { CEIL, HALF_X, HALF_Z, type World } from './world';
 
 export type PreyKind = 'moth' | 'cricket' | 'mouse';
 
@@ -219,6 +219,10 @@ export class Prey {
     if (this.kind === 'moth') this.moth(dt, S);
     else if (this.kind === 'cricket') this.cricket(dt, S);
     else this.mouse(dt, S);
+    // (never out through the walls, the floor or the ceiling, however its orbit or its hop goes)
+    this.pos.x = THREE.MathUtils.clamp(this.pos.x, -HALF_X + 0.06, HALF_X - 0.06);
+    this.pos.z = THREE.MathUtils.clamp(this.pos.z, -HALF_Z + 0.06, HALF_Z - 0.06);
+    this.pos.y = THREE.MathUtils.clamp(this.pos.y, 0, CEIL - 0.1);
     this.mesh.position.copy(this.pos);
     this.mesh.rotation.y = this.heading;
   }
