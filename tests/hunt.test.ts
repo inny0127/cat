@@ -6,6 +6,7 @@ import { Prey } from '../src/hunt/prey';
 import { CHAIN, GIFT, GOAL, Hunt, NIGHTS, chainMul, nightOpen, today } from '../src/hunt/game';
 import { THINGS } from '../src/hunt/things';
 import { COATS, allStars, coatOf } from '../src/hunt/coats';
+import { BADGES, reckon } from '../src/hunt/journal';
 
 const body = (x: number, y: number, z: number): Body => ({ x, y, z, vx: 0, vy: 0, vz: 0, r: 0.12, h: 0.26, grounded: false, landed: 0 });
 const run = (b: Body, boxes: Box[], s: number) => { for (let i = 0; i < s * 60; i++) moveBody(b, boxes, 1 / 60); };
@@ -317,5 +318,16 @@ describe('밤사냥: the night', () => {
     expect(nightOpen({ best: {}, stars: {} }, -1)).toBe(false);
     expect(nightOpen({ best: {}, stars: { first: 1 } }, -1)).toBe(true);
     expect(allStars({ best: {}, stars: { first: 2, [a.id]: 3 } })).toBe(2);
+  });
+  it('the journal adds each night in, and gives each badge once, when earned', () => {
+    const save = { best: {}, stars: { first: 3 } } as Parameters<typeof reckon>[0];
+    let fresh = reckon(save, { moth: 4, cricket: 2, mouse: 0, spider: 0, gifts: 0, knocked: 1 }, { stars: 3, wakes: 0, best: 5 });
+    expect(fresh).toEqual(['첫 사냥', '연속 사냥', '쉿, 완벽한 밤']);
+    expect(save.totals).toMatchObject({ moth: 4, cricket: 2, nights: 1, bestChain: 5 });
+    fresh = reckon(save, { moth: 6, cricket: 0, mouse: 0, spider: 0, gifts: 0, knocked: 0 }, { stars: 1, wakes: 2, best: 2 });
+    expect(fresh).toEqual(['불나방 사냥꾼']);
+    expect(save.totals).toMatchObject({ moth: 10, nights: 2, bestChain: 5 });
+    expect(save.badges).toHaveLength(4);
+    expect(new Set(BADGES.map((b) => b.id)).size).toBe(BADGES.length);
   });
 });

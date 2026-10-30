@@ -363,12 +363,15 @@ export interface Save { best: Record<string, number>; stars: Record<string, numb
   /** each night's challenges ever done (a bit each) */
   goals?: Record<string, number>;
   /** the coat worn */
-  coat?: string }
+  coat?: string;
+  /** counted across every night, and the badges won */
+  totals?: Record<string, number>;
+  badges?: string[] }
 const KEY = 'bamsanyang.save';
 export function loadSave(): Save {
   try {
     const s = JSON.parse(localStorage.getItem(KEY) ?? 'null');
-    if (s && typeof s === 'object') return { best: s.best ?? {}, stars: s.stars ?? {}, mute: !!s.mute, knocked: !!s.knocked, goals: s.goals ?? {}, coat: typeof s.coat === 'string' ? s.coat : undefined };
+    if (s && typeof s === 'object') return { best: s.best ?? {}, stars: s.stars ?? {}, mute: !!s.mute, knocked: !!s.knocked, goals: s.goals ?? {}, coat: typeof s.coat === 'string' ? s.coat : undefined, totals: s.totals ?? {}, badges: Array.isArray(s.badges) ? s.badges : [] };
   } catch { /* none kept */ }
   return { best: {}, stars: {} };
 }

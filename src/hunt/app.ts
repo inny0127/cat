@@ -9,6 +9,7 @@ import { Hunt, NIGHTS, loadSave, nightAt, nightOpen, saveSave, type Save } from 
 import { PREY, type Prey } from './prey';
 import { THINGS } from './things';
 import { COATS, allStars, coatOf, coatOpen } from './coats';
+import { reckon } from './journal';
 import { lineClear, moveBody, type Body } from './physics';
 import { Cat } from './cat';
 import { Haptic } from '../platform/haptics';
@@ -250,6 +251,7 @@ export class HuntApp {
     if (c === 'resume') { this.mode = 'play'; this.hud.playing(this.controls.touchy || matchMedia('(pointer: coarse)').matches); }
     else if (c === 'retry') this.start(this.nightI);
     else if (c === 'menu') this.menu();
+    else if (c === 'journal') this.hud.journal(this.save);
     else if (c.startsWith('coat:')) {
       const k = COATS.find((x) => `coat:${x.id}` === c);
       if (!k) return;
@@ -279,10 +281,12 @@ export class HuntApp {
     saveSave(this.save);
     const after = allStars(this.save);
     const coats = COATS.filter((c) => before < c.stars && after >= c.stars).map((c) => c.name);
+    const badges = reckon(this.save, { ...h.caught, gifts: h.gifts, knocked: h.knocked }, { stars: h.stars, wakes: h.wakes, best: h.best });
+    saveSave(this.save);
     this.mode = 'end';
     this.sound.music(false);
     this.sound.play('alarm', null, 0.4);
-    this.hud.end({ name: N.name, score: h.score, stars: h.stars, record, caught: h.caught, gifts: h.gifts, best: h.best, wakes: h.wakes, i: this.nightI, next: nightOpen(this.save, this.nightI + 1), goals: N.goals.map((g, k) => ({ text: g.text, done: h.goals[k] })), knocked: h.knocked, coats });
+    this.hud.end({ name: N.name, score: h.score, stars: h.stars, record, caught: h.caught, gifts: h.gifts, best: h.best, wakes: h.wakes, i: this.nightI, next: nightOpen(this.save, this.nightI + 1), goals: N.goals.map((g, k) => ({ text: g.text, done: h.goals[k] })), knocked: h.knocked, coats, badges });
     this.hud.stick(null);
     this.hud.charge(null);
     this.ring.visible = false;
