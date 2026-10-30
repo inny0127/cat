@@ -1,4 +1,5 @@
 import { NIGHTS, type Save } from './game';
+import { TOYS } from './toys';
 
 /** what is counted across every night: the things caught (by kind), gifts, things pushed off,
  *  the nights played and the best run of catches */
@@ -23,6 +24,7 @@ export const BADGES: Badge[] = [
   { id: 'quiet', name: '쉿, 완벽한 밤', how: '집사를 안 깨우고 별 3개', won: (_t, _s, n) => !!n && n.stars === 3 && n.wakes === 0 },
   { id: 'crash', name: '와장창 대마왕', how: '물건 20개 떨어뜨리기', won: (t) => total(t, 'knocked') >= 20 },
   { id: 'nights', name: '밤의 주인', how: '모든 밤에서 별 하나 이상', won: (_t, s) => NIGHTS.every((N) => (s.stars[N.id] ?? 0) >= 1) },
+  { id: 'toys', name: '보물 수집가', how: '숨은 보물 8개 모두', won: (_t, s) => (s.toys?.length ?? 0) >= TOYS.length },
   { id: 'daily', name: '개근 고양이', how: '오늘의 밤 7번 (다른 날)', won: (_t, s) => Object.keys(s.best).filter((k) => k.startsWith('day-')).length >= 7 },
 ];
 

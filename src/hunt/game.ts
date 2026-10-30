@@ -3,6 +3,7 @@ import { Cat, type Intent } from './cat';
 import { PREY, Prey, type PreyKind } from './prey';
 import type { World } from './world';
 import { THINGS, Thing } from './things';
+import { HIDES, TOYS, Toy, type ToyId } from './toys';
 
 /** what is different about a night: the cat heard less (rain on the windows) or seen further (a
  *  bright moon), their sleep lighter, a gift or a crash worth more; rain (and lightning), the moon
@@ -102,6 +103,8 @@ export const CHAIN = 12;
 export const chainMul = (n: number) => Math.min(3, 1 + 0.5 * Math.max(0, n - 1));
 /** a mouse laid on their bed */
 export const GIFT = 500;
+/** the night's treasure found */
+export const TREASURE = 300;
 
 export interface GameEvents {
   caught: (p: Prey, pts: number, chain: number) => void;
@@ -113,6 +116,8 @@ export interface GameEvents {
   spawned: (p: Prey) => void;
   /** a challenge done (its index, and the points for it) */
   goal: (i: number, pts: number) => void;
+  /** the night's treasure found */
+  found: (t: Toy) => void;
   /** lightning (a rainy night): everything seen a moment */
   lightning: () => void;
   /** a thing pushed off, landed: what, and its points */
@@ -146,6 +151,8 @@ export class Hunt {
   /** the things about to be pushed off, and how many have been */
   readonly things: Thing[] = [];
   knocked = 0;
+  /** the night's treasure, hidden somewhere (one not yet kept, if any is left), and its worth */
+  toy: Toy | null = null;
   /** the night's challenges, done or not */
   readonly goals: boolean[];
   /** lightning: the next (s into the night), and how lit it still is (0..1) */
@@ -156,7 +163,7 @@ export class Hunt {
   /** an endless night: when the next one comes out */
   private nextOut = 30;
 
-  constructor(readonly world: World, readonly night: Night, readonly on: GameEvents) {
+  constructor(readonly world: World, readonly night: Night, readonly on: GameEvents, kept?: string[]) {
     for (const [kind, n] of Object.entries(night.roster) as [PreyKind, number][]) {
       for (let i = 0; i < n; i++) {
         const p = new Prey(kind);
@@ -166,6 +173,11 @@ export class Hunt {
     }
     for (const s of world.spots ?? []) this.things.push(new Thing(s.kind, s.at));
     this.goals = night.goals.map(() => false);
+    if (world.spots) {
+      const have = new Set(kept ?? []), left = TOYS.filter((t) => !have.has(t.id));
+      const pick = (left.length ? left : TOYS)[Math.floor(Math.random() * (left.length || TOYS.length))];
+      this.toy = new Toy(pick.id as ToyId, HIDES[Math.floor(Math.random() * HIDES.length)].clone());
+    }
     // the cat starts on the rug, looking toward the kitchen
     this.cat.place(1.5, 0, 1.0, -Math.PI * 0.75);
   }
@@ -210,6 +222,14 @@ export class Hunt {
     }
     this.catching();
     this.pushing(dt);
+    // the treasure: found by going right up to it
+    const T = this.toy;
+    if (T && !T.found && Math.hypot(T.at.x - cat.body.x, T.at.z - cat.body.z) < 0.22 && Math.abs(T.at.y - cat.body.y) < 0.3) {
+      T.found = true;
+      T.mesh.visible = false;
+      this.score += TREASURE;
+      this.on.found(T);
+    }
     // (a moth or cricket caught: back again, somewhere, in a while)
     for (let i = this.back.length - 1; i >= 0; i--) {
       if (this.t < this.back[i].at) continue;
@@ -395,6 +415,8 @@ export interface Save { best: Record<string, number>; stars: Record<string, numb
   goals?: Record<string, number>;
   /** the coat worn */
   coat?: string;
+  /** the treasures found and kept */
+  toys?: string[];
   /** how fast a drag turns the head (0: slow, 1: as made, 2: fast); buzzes off */
   look?: number;
   still?: boolean;
@@ -405,7 +427,7 @@ const KEY = 'bamsanyang.save';
 export function loadSave(): Save {
   try {
     const s = JSON.parse(localStorage.getItem(KEY) ?? 'null');
-    if (s && typeof s === 'object') return { best: s.best ?? {}, stars: s.stars ?? {}, mute: !!s.mute, knocked: !!s.knocked, goals: s.goals ?? {}, coat: typeof s.coat === 'string' ? s.coat : undefined, totals: s.totals ?? {}, badges: Array.isArray(s.badges) ? s.badges : [], look: typeof s.look === 'number' ? s.look : 1, still: !!s.still };
+    if (s && typeof s === 'object') return { best: s.best ?? {}, stars: s.stars ?? {}, mute: !!s.mute, knocked: !!s.knocked, goals: s.goals ?? {}, coat: typeof s.coat === 'string' ? s.coat : undefined, totals: s.totals ?? {}, badges: Array.isArray(s.badges) ? s.badges : [], look: typeof s.look === 'number' ? s.look : 1, still: !!s.still, toys: Array.isArray(s.toys) ? s.toys : [] };
   } catch { /* none kept */ }
   return { best: {}, stars: {} };
 }

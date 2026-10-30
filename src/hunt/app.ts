@@ -5,7 +5,8 @@ import { Paws } from './paws';
 import { Controls } from './input';
 import { Hud } from './hud';
 import { Sound } from './sound';
-import { Hunt, LIVES, NIGHTS, loadSave, nightAt, nightOpen, saveSave, type Save } from './game';
+import { Hunt, LIVES, NIGHTS, TREASURE, loadSave, nightAt, nightOpen, saveSave, type Save } from './game';
+import { TOYS } from './toys';
 import { PREY, type Prey } from './prey';
 import { THINGS } from './things';
 import { COATS, allStars, coatOf, coatOpen } from './coats';
@@ -204,6 +205,14 @@ export class HuntApp {
         this.thunderAt = this.time + 0.7 + Math.random() * 1.2;
         this.feel.tap('light');
       },
+      found: (t) => {
+        const name = TOYS.find((k) => k.id === t.id)!.name;
+        const fresh = !(this.save.toys ?? []).includes(t.id);
+        this.hud.toast(`+${TREASURE}`, `보물 발견! ${name}${fresh ? ' (수첩에 모았어요)' : ''}`);
+        this.sound.play('gift', null, 0.5, 1.3);
+        this.feel.tap('medium');
+        if (fresh) { (this.save.toys ??= []).push(t.id); saveSave(this.save); }
+      },
       crashed: (t, pts) => {
         this.hud.toast(`+${pts}`, `${THINGS[t.kind].name} ${THINGS[t.kind].sound === 'shatter' ? '와장창!' : '툭 떨어뜨렸다!'}`);
         this.feel.tap('medium');
@@ -213,9 +222,10 @@ export class HuntApp {
           this.hud.tip('물건을 떨어뜨리면 점수! 하지만 큰 소리에 사냥감이 도망가고 집사가 깰 수 있어요', 5000);
         }
       },
-    });
+    }, this.save.toys);
     for (const p of this.hunt.prey) this.scene.add(p.mesh);
     for (const t of this.hunt.things) this.scene.add(t.mesh);
+    if (this.hunt.toy) this.scene.add(this.hunt.toy.mesh);
     // the night's own weather and moon
     const M = N.mods ?? {};
     this.moonBase = 2.4 * (M.moon ?? 1);
@@ -251,6 +261,7 @@ export class HuntApp {
   private clearHunt() {
     for (const p of this.hunt?.prey ?? []) this.scene.remove(p.mesh);
     for (const t of this.hunt?.things ?? []) this.scene.remove(t.mesh);
+    if (this.hunt?.toy) this.scene.remove(this.hunt.toy.mesh);
     this.clearGlows();
   }
 
@@ -471,6 +482,7 @@ export class HuntApp {
     this.world.sleeper.scale.y = 1 + 0.03 * Math.sin(this.time * 1.3);
     this.waking();
     this.dust.drift(this.time);
+    h?.toy?.update(this.time);
     if (Math.random() < dt * 0.15 && h && this.mode === 'play') this.sound.play('snore', this.world.sleeper.position, 0.35);
     this.flash = Math.max(0, this.flash - dt * 2.5);
     this.red = Math.max(0, this.red - dt * 1.2);

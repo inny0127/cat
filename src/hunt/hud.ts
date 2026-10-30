@@ -1,6 +1,7 @@
 import { NIGHTS, nightOpen, today, type Save } from './game';
 import { COATS, allStars, coatOf, coatOpen } from './coats';
 import { BADGES } from './journal';
+import { TOYS } from './toys';
 
 const hex = (n: number) => `#${n.toString(16).padStart(6, '0')}`;
 
@@ -89,6 +90,10 @@ const CSS = `
 #hud .tot div { background: rgba(255, 255, 255, 0.04); padding: 5px 4px; }
 #hud .tot span { display: block; color: #8f9ac8; font-size: calc(10 * var(--fpx)); }
 #hud .tot b { font-weight: 400; color: #f2ecff; font-size: calc(15 * var(--fpx)); }
+#hud .toys { display: flex; flex-wrap: wrap; gap: 4px 10px; justify-content: center; font-size: calc(11 * var(--fpx)); color: #6a6f98; }
+#hud .toys span { display: flex; align-items: center; gap: 4px; }
+#hud .toys span.on { color: #e6f0ff; }
+#hud .toys i { width: 8px; height: 8px; box-shadow: 0 0 0 1px #3e3a66; }
 #hud .bds { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; text-align: left; }
 #hud .bd { padding: 5px 7px; box-shadow: 0 0 0 1px #3e3a66; opacity: 0.55; }
 #hud .bd.on { opacity: 1; box-shadow: 0 0 0 2px #ffd27a; }
@@ -282,6 +287,8 @@ export class Hud {
     const badges = BADGES.map((b) => `<div class="bd ${won.has(b.id) ? 'on' : ''}"><b>${won.has(b.id) ? '★' : '☆'} ${b.name}</b><span>${b.how}</span></div>`).join('');
     this.show(`<div class="card jr"><h2>사냥 수첩</h2>
       <div class="tot">${rows.map(([k, v]) => `<div><span>${k}</span><b>${v}</b></div>`).join('')}</div>
+      <p style="margin-top:8px">숨은 보물 ${TOYS.filter((k) => save.toys?.includes(k.id)).length}/${TOYS.length}</p>
+      <div class="toys">${TOYS.map((k) => (save.toys?.includes(k.id) ? `<span class="on"><i style="background:${hex(k.color)}"></i>${k.name}</span>` : '<span><i></i>???</span>')).join('')}</div>
       <p style="margin-top:8px">배지 ${won.size}/${BADGES.length}</p>
       <div class="bds">${badges}</div>
       <div class="row"><button class="btn" data-c="menu">돌아가기</button></div></div>`);

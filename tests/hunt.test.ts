@@ -351,4 +351,18 @@ describe('밤사냥: the night', () => {
     expect(h.over).toBe(true);
     expect(h.wakes).toBe(3);
   });
+  it('a treasure hidden for the night, one not kept yet; found by going right up to it, once', () => {
+    const W = { boxes: [], lamps: [{ at: new THREE.Vector3(0, 1.5, 0), color: 0, power: 1, reach: 3 }], holes: [], treats: [], cricketSpots: [], cellAt: () => -1, path: () => [], bed: { at: new THREE.Vector3(9, 0.55, 9), r: 1 }, grid: { cell: 0.1, cols: 1, rows: 1, free: new Uint8Array(1) }, spots: [] } as never;
+    const found: string[] = [];
+    const kept = ['cap', 'tie', 'fluff', 'bell', 'feather', 'band', 'pencap'];
+    const h = new Hunt(W, { ...NIGHTS[0], roster: {} }, { found: (t) => found.push(t.id), spawned: () => {}, crashed: () => {}, goal: () => {}, lightning: () => {}, caught: () => {}, gift: () => {}, missed: () => {}, stirred: () => {}, sound: () => {} }, kept);
+    expect(h.toy?.id).toBe('sock');
+    const at = h.toy!.at;
+    h.cat.place(at.x + 1, at.y, at.z, 0);
+    h.step(1 / 60, still());
+    expect(found).toEqual([]);
+    for (let i = 0; i < 3; i++) { h.cat.place(at.x, at.y, at.z, 0); h.step(1 / 60, still()); }
+    expect(found).toEqual(['sock']);
+    expect(h.score).toBeGreaterThanOrEqual(300);
+  });
 });
