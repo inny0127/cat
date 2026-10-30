@@ -3,17 +3,17 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-  <meta name="theme-color" content="#c99486" />
+  <meta name="theme-color" content="#2b2433" />
   <meta name="color-scheme" content="light" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="고양이" />
-  <meta name="description" content="화면 너머에 사는 고양이. 쓰다듬고, 밥을 주고, 믿음을 쌓아가세요." />
+  <meta name="apple-mobile-web-app-title" content="냥아치" />
+  <meta name="description" content="집사가 오기 전에 거실을 엉망으로! 고양이가 되어 컵, 꽃병, 화분을 냥냥펀치로 떨어뜨리는 픽셀 아트 액션 게임." />
   <link rel="manifest" href="./manifest.webmanifest" />
   <link rel="icon" type="image/png" href="./icons/icon-192.png" />
   <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
-  <title>창가의 고양이</title>
+  <title>냥아치</title>
   <style>
     /* the app's words in pixels, as the room is drawn: Galmuri11 (Lee Minseo, SIL OFL 1.1) cut
        down to the letters the app writes (tools/font_subset.py), renamed as its licence asks */
@@ -23,7 +23,7 @@
       font-display: block;
     }
     :root {
-      --paper: #f4eee4;
+      --paper: #2b2433;
       --ink: rgba(92, 70, 58, 0.62);
       /* the font's pixel, a whole number of the screen's (main.ts sets it) */
       --fpx: 1px;
@@ -59,8 +59,8 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      background: #c99486;
-      color: #fff5e8;
+      background: #2b2433;
+      color: #ffd6a8;
       font: 400 calc(12 * var(--fpx)) / 1.5 var(--pixel-font);
       letter-spacing: 0;
       text-shadow: 0 var(--fpx) 0 rgba(59, 49, 80, 0.45);
@@ -80,92 +80,6 @@
     @keyframes arrive { from { opacity: 0; transform: translateY(calc(4 * var(--fpx))); } to { opacity: 1; transform: none; } }
     #loading.off { opacity: 0; }
     @keyframes breathe { 0%, 100% { opacity: 0.35; } 50% { opacity: 0.95; } }
-    #hint {
-      position: fixed;
-      left: 16px;
-      right: 16px;
-      bottom: calc(28px + env(safe-area-inset-bottom));
-      text-align: center;
-      font: 400 calc(12 * var(--fpx)) / 1.6 var(--pixel-font);
-      letter-spacing: 0;
-      word-break: keep-all;
-      overflow-wrap: anywhere;
-      color: #fff5e8;
-      /* (a pixel's shadow under each stroke, and a soft dusk round the line, to read over the room) */
-      text-shadow: 0 var(--fpx) 0 rgba(43, 30, 48, 0.85), 0 0 calc(6 * var(--fpx)) rgba(43, 30, 48, 0.5);
-      opacity: 0;
-      transition: opacity 1.6s ease;
-      pointer-events: none;
-    }
-    #hint.on { opacity: 1; }
-    /* the credits card, shown by tapping the little print on the shelf */
-    #credits {
-      position: fixed;
-      left: 50%;
-      top: 50%;
-      transform: translate(-50%, -50%);
-      width: min(300px, calc(100vw - 48px));
-      padding: 18px 18px 16px;
-      background: rgba(43, 36, 51, 0.94);
-      border: 2px solid #c99486;
-      box-shadow: 0 0 0 2px rgba(43, 36, 51, 0.94), 4px 6px 0 rgba(20, 14, 22, 0.35);
-      color: #f7f0e8;
-      font: 400 calc(12 * var(--fpx)) / 1.65 var(--pixel-font);
-      letter-spacing: 0;
-      /* (Korean broken between words, not inside them) */
-      word-break: keep-all;
-      overflow-wrap: anywhere;
-      opacity: 0;
-      transition: opacity 0.5s ease;
-      pointer-events: none;
-      z-index: 5;
-    }
-    #credits.on { opacity: 1; pointer-events: auto; }
-    #credits h2 { margin: 0 0 8px; font-size: inherit; font-weight: 400; color: #f6cf9b; }
-    #credits b { font-weight: 400; color: #ffebc2; }
-    #credits p { margin: 0 0 8px; }
-    #credits a { color: #a3b4d4; text-decoration: none; border-bottom: 1px solid rgba(163, 180, 212, 0.4); }
-    #credits .small { color: #bdb2c0; margin: 10px 0 0; }
-    /* the photographs, opened from the prints on the fairy lights: one at a time, as a print */
-    #album {
-      position: fixed;
-      inset: 0;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 12px;
-      background: rgba(30, 22, 34, 0.72);
-      opacity: 0;
-      transition: opacity 0.45s ease;
-      pointer-events: none;
-      z-index: 6;
-      touch-action: none;
-    }
-    #album.on { opacity: 1; pointer-events: auto; }
-    #album .card {
-      width: min(264px, calc(100vw - 64px));
-      padding: 12px 12px 10px;
-      background: #f6f1e7;
-      box-shadow: 0 0 0 2px #d9cfc0, 4px 6px 0 rgba(20, 14, 22, 0.35);
-      transform: rotate(-1.2deg);
-      color: #4a3a40;
-      font: 400 calc(12 * var(--fpx)) / 1.55 var(--pixel-font);
-      letter-spacing: 0;
-      word-break: keep-all;
-      overflow-wrap: anywhere;
-    }
-    #album img {
-      display: block;
-      width: 100%;
-      aspect-ratio: 1;
-      image-rendering: crisp-edges;
-      image-rendering: pixelated;
-      background: #2c2430;
-    }
-    #album .words { margin: 10px 2px 2px; min-height: 3.1em; }
-    #album .day { text-align: right; color: #9a8790; margin: 0 2px; }
-    #album .count { color: #e8dccf; font: 400 calc(12 * var(--fpx)) / 1 var(--pixel-font); min-height: 1em; }
     noscript, #fallback {
       position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
       font: 14px/1.6 -apple-system, "Apple SD Gothic Neo", sans-serif; color: var(--ink); text-align: center; padding: 24px;
@@ -173,12 +87,9 @@
   </style>
 </head>
 <body>
-  <div id="loading"><img src="./icons/art-64.png" alt="" width="64" height="64" /><span>창문을 여는 중…</span></div>
-  <canvas id="stage" aria-label="방 안의 고양이. 손가락으로 쓰다듬을 수 있어요." role="img"></canvas>
-  <div id="hint" aria-live="polite"></div>
-  <div id="credits" role="dialog" aria-label="만든 것들"></div>
-  <div id="album" role="dialog" aria-label="사진"></div>
-  <noscript>고양이를 보려면 자바스크립트를 켜 주세요.</noscript>
-  <script type="module" src="/src/pixel/main.ts"></script>
+  <div id="loading"><img src="./icons/art-64.png" alt="" width="64" height="64" /><span>집사가 나가는 중…</span></div>
+  <canvas id="stage" aria-label="거실의 고양이. 물건을 누르면 고양이가 떨어뜨려요." role="img"></canvas>
+  <noscript>게임을 하려면 자바스크립트를 켜 주세요.</noscript>
+  <script type="module" src="/src/nyang/main.ts"></script>
 </body>
 </html>

@@ -17,7 +17,7 @@ if (IOS) await ctx.addInitScript(() => { delete Navigator.prototype.vibrate; });
 const page = await ctx.newPage();
 const errs = [];
 page.on('pageerror', (e) => errs.push(e.message));
-await page.goto((process.env.REEL_BASE ?? 'http://localhost:5173/') + 'index.html');
+await page.goto((process.env.REEL_BASE ?? 'http://localhost:5173/') + 'window.html');
 await page.waitForFunction(() => window.__pcat, null, { timeout: 180000 });
 await page.waitForTimeout(1500);
 const cdp = await ctx.newCDPSession(page);

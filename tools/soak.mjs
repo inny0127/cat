@@ -11,7 +11,7 @@ if (process.env.SOAK_SEED) await page.addInitScript((s) => { let r = s; Math.ran
 const errs = [];
 page.on('pageerror', (e) => errs.push(e.message));
 page.on('console', (m) => { if (m.type() === 'error') errs.push(m.text().slice(0, 300)); });
-await page.goto((process.env.REEL_BASE ?? 'http://localhost:5173/') + 'index.html?still' + (process.env.SOAK_QUERY ? '&' + process.env.SOAK_QUERY : ''));
+await page.goto((process.env.REEL_BASE ?? 'http://localhost:5173/') + 'window.html?still' + (process.env.SOAK_QUERY ? '&' + process.env.SOAK_QUERY : ''));
 await page.waitForFunction(() => window.__pcat, null, { timeout: 180000 });
 const report = await page.evaluate(async (minutes) => {
   const app = window.__pcat;

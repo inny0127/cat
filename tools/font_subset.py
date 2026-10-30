@@ -24,7 +24,7 @@ PS_NAME = 'WindowPixel-Regular'
 def letters():
     """every letter the app may write: printable ASCII, and anything else in its sources"""
     files = glob.glob(os.path.join(ROOT, 'src', '**', '*.ts'), recursive=True)
-    files += [os.path.join(ROOT, 'index.html'), os.path.join(ROOT, 'public', 'manifest.webmanifest')]
+    files += [os.path.join(ROOT, 'index.html'), os.path.join(ROOT, 'window.html'), os.path.join(ROOT, 'public', 'manifest.webmanifest')]
     out = {chr(c) for c in range(0x20, 0x7f)}
     for f in files:
         with open(f, encoding='utf-8') as fh:

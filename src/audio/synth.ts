@@ -570,6 +570,31 @@ export function fanfare(sr: number) {
   return fade(normalize(out, 0.55), sr, 0.001, 0.2);
 }
 
+/** the count before a round: a short square-ish blip (high: go) */
+export function beep(sr: number, high = false) {
+  const out = new Float32Array(Math.floor(0.16 * sr));
+  const f = high ? 1320 : 880;
+  for (let k = 0; k < out.length; k++) {
+    const t = k / sr, ph = (f * t) % 1;
+    out[k] = (ph < 0.5 ? 0.6 : -0.6) * Math.exp(-t / (high ? 0.09 : 0.05));
+  }
+  filter(out, sr, 'lp', 3200, 0.7);
+  return fade(normalize(out, 0.45), sr, 0.002, 0.03);
+}
+
+/** someone home: a key in the lock (two scrapes and a turn), the latch, and the door going to */
+export function door(sr: number) {
+  const out = new Float32Array(Math.floor(1.1 * sr));
+  clicks(out, sr, 0, 4, 0.08, 2200, 6000, 0.35, 0.002);
+  clicks(out, sr, 0.22, 3, 0.05, 1800, 5000, 0.4, 0.002);
+  ping(out, sr, 0.42, rnd(900, 1100), 0.6, 0.012);
+  clicks(out, sr, 0.42, 2, 0.01, 1500, 4000, 0.7, 0.003);
+  ping(out, sr, 0.85, rnd(70, 90), 0.9, 0.06);
+  clicks(out, sr, 0.85, 3, 0.02, 600, 2000, 0.5, 0.004);
+  filter(out, sr, 'hp', 60, 0.7);
+  return fade(normalize(out, 0.75), sr, 0.001, 0.08);
+}
+
 /** a padded step on the floor */
 export function step(sr: number) {
   const out = new Float32Array(Math.floor(0.09 * sr));

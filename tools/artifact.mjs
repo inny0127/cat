@@ -1,4 +1,5 @@
-// node tools/artifact.mjs outdir: the pixel cat (index.html) built to be shown as a claude.ai
+// node tools/artifact.mjs outdir [page.html]: a page of the app (index.html, the game; window.html,
+// the cat by its window) built to be shown as a claude.ai
 // Artifact. The page there is one HTML fragment (the Artifact wraps it in its own document): the
 // app's styles with the pixel font in them as a data URI, the loading picture as one too, and the
 // whole bundle inlined as one module script (a frame that loads scripts from nowhere else), and
@@ -10,6 +11,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const out = process.argv[2] || 'artifact-dist';
+const entry = process.argv[3] || 'index.html';
 const tmp = path.join(out, '.build');
 fs.rmSync(out, { recursive: true, force: true });
 await build({
@@ -28,17 +30,18 @@ await build({
     modulePreload: false,
     // (the font into the page's styles as a data URI)
     assetsInlineLimit: 200000,
-    rollupOptions: { input: 'index.html', output: { inlineDynamicImports: true, entryFileNames: 'app.js' } },
+    rollupOptions: { input: entry, output: { inlineDynamicImports: true, entryFileNames: 'app.js' } },
   },
 });
 const js = fs.readFileSync(path.join(tmp, 'app.js'), 'utf8');
-const html = fs.readFileSync(path.join(tmp, 'index.html'), 'utf8');
+const html = fs.readFileSync(path.join(tmp, entry), 'utf8');
+const title = html.match(/<title>([\s\S]*?)<\/title>/)[1];
 const style = html.match(/<style>([\s\S]*?)<\/style>/)[1];
 if (/url\(\.\/assets\//.test(style)) throw new Error('an asset in the styles was not inlined');
 let body = html.match(/<body>([\s\S]*?)<\/body>/)[1].replace(/<script[\s\S]*?<\/script>/g, '');
 const art = 'data:image/png;base64,' + fs.readFileSync('public/icons/art-64.png').toString('base64');
 body = body.replace('./icons/art-64.png', art);
-const page = `<title>창가의 고양이</title>
+const page = `<title>${title}</title>
 <style>${style}</style>
 ${body.trim()}
 <script type="module">${js.replace(/<\/script/g, '<\\/script')}</script>

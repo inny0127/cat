@@ -24,7 +24,7 @@ export default defineConfig({
   plugins: [leaveOutTheLabCat()],
   build: {
     target: 'es2022',
-    rollupOptions: { input: { main: 'index.html', painted: 'painted.html' } },
+    rollupOptions: { input: { main: 'index.html', window: 'window.html', painted: 'painted.html' } },
     assetsInlineLimit: 0,
     chunkSizeWarningLimit: 800,
   },

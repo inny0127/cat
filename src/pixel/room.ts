@@ -242,6 +242,29 @@ void main() {
   gl_FragColor = pixRoomLit(m, lt, glowAmt);
 }`;
 
+/** how a material of the room is to be drawn: its pattern (1 floorboards, 2 a round rug, 3 the wall
+ *  and its panelling, 4 fleece, 6 plush, 9 a thing in the round...), a step lighter or darker */
+export interface MatOpts { pattern?: number; tone?: number; rug?: THREE.Vector3; wallZ?: number; side?: number }
+
+/** a material of the room's: lit by the room's own light (lights: the shared uniforms), written for
+ *  the pixel pass as which material and how much light */
+export function roomMaterial(lights: Record<string, { value: unknown }>, name: Material, o: MatOpts = {}) {
+  const shared: Record<string, { value: unknown }> = {};
+  for (const k of ['uKeyDir', 'uLampPos', 'uLampInt', 'uShadowMap', 'uShadowMatrix', 'uShadowOn', 'uShadowSoft', 'uCaps',
+    'uSun', 'uWin', 'uWinBar', 'uWinZ', 'uSkyI', 'uPatch', 'uAmb', 'uFloorB', 'uFill', 'uFairy', 'uFairyInt', 'uOcc']) shared[k] = lights[k];
+  return new THREE.ShaderMaterial({
+    uniforms: {
+      ...shared,
+      uMat: { value: PIX[name] }, uPattern: { value: o.pattern ?? 0 }, uGlow: { value: 0 }, uTone: { value: o.tone ?? 0 },
+      uSpec: { value: 0 },
+      uRug: { value: o.rug ?? new THREE.Vector3() }, uWallZ: { value: o.wallZ ?? -10 }, uSide: { value: o.side ?? 1 },
+    },
+    vertexShader: VERT,
+    fragmentShader: FRAG,
+    side: THREE.DoubleSide,
+  });
+}
+
 /** the sky through the window: written as finished colours (alpha 0.15), in art pixels */
 const SKY_FRAG = /* glsl */ `
 uniform float uTime;
@@ -3318,22 +3341,8 @@ export class Room {
   print: THREE.Object3D = new THREE.Group();
   private readonly nightU = { value: 0 };
 
-  private mat(name: Material, o: { pattern?: number; tone?: number; rug?: THREE.Vector3; wallZ?: number; side?: number } = {}) {
-    const L = this.lights;
-    const shared: Record<string, { value: unknown }> = {};
-    for (const k of ['uKeyDir', 'uLampPos', 'uLampInt', 'uShadowMap', 'uShadowMatrix', 'uShadowOn', 'uShadowSoft', 'uCaps',
-      'uSun', 'uWin', 'uWinBar', 'uWinZ', 'uSkyI', 'uPatch', 'uAmb', 'uFloorB', 'uFill', 'uFairy', 'uFairyInt', 'uOcc']) shared[k] = L[k];
-    const m = new THREE.ShaderMaterial({
-      uniforms: {
-        ...shared,
-        uMat: { value: PIX[name] }, uPattern: { value: o.pattern ?? 0 }, uGlow: { value: 0 }, uTone: { value: o.tone ?? 0 },
-        uSpec: { value: 0 },
-        uRug: { value: o.rug ?? new THREE.Vector3() }, uWallZ: { value: o.wallZ ?? -10 }, uSide: { value: o.side ?? 1 },
-      },
-      vertexShader: VERT,
-      fragmentShader: FRAG,
-      side: THREE.DoubleSide,
-    });
+  private mat(name: Material, o: MatOpts = {}) {
+    const m = roomMaterial(this.lights, name, o);
     this.mats.push(m);
     return m;
   }

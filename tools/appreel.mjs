@@ -1,5 +1,5 @@
-// node tools/appreel.mjs out.gif "<index.html query>" "<actions json>" [fps] [seconds] [width,height]
-// Runs the pixel cat app (index.html?still) in fixed steps of game time, so a slow software
+// node tools/appreel.mjs out.gif "<window.html query>" "<actions json>" [fps] [seconds] [width,height]
+// Runs the pixel cat app (window.html?still) in fixed steps of game time, so a slow software
 // rasteriser still shows real-time behaviour, and writes an animated GIF plus a contact sheet.
 // Actions: [[seconds, "js using app (window.__pcat)"], ...]; an action may set window.__tick =
 // (t, app) => {...} to run every frame. The cat's saved state can be seeded with ?seed={json}.
@@ -29,7 +29,7 @@ if (seed) {
     } catch { /* first run: nothing saved yet */ }
   }, seed);
 }
-await page.goto((process.env.REEL_BASE ?? 'http://localhost:5173/') + 'index.html?still&' + query);
+await page.goto((process.env.REEL_BASE ?? 'http://localhost:5173/') + 'window.html?still&' + query);
 await page.waitForFunction(() => window.__pcat, null, { timeout: 180000 });
 
 const frames = Math.round(fps * seconds);

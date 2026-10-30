@@ -7,7 +7,7 @@ import { chromium } from 'playwright-core';
 const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 const page = await b.newPage({ viewport: { width: 390, height: 844 } });
 await page.addInitScript(() => { let r = 11; Math.random = () => ((r = (r * 16807) % 2147483647) / 2147483647); });
-await page.goto((process.env.REEL_BASE ?? 'http://localhost:5173/') + 'index.html?still&hour=14&rain=0');
+await page.goto((process.env.REEL_BASE ?? 'http://localhost:5173/') + 'window.html?still&hour=14&rain=0');
 await page.waitForFunction(() => window.__pcat, null, { timeout: 180000 });
 const out = await page.evaluate(() => {
   const a = window.__pcat, c = a.cat, m = c.motor, kin = c.kin, body = c.body, V = m.pos.constructor;

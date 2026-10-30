@@ -227,6 +227,9 @@ export class CatAudio {
       ['coin', () => S.coin(sr), 3],
       ['heart', () => S.heart(sr), 3],
       ['fanfare', () => S.fanfare(sr), 1],
+      ['beep', () => S.beep(sr), 1],
+      ['beepGo', () => S.beep(sr, true), 1],
+      ['door', () => S.door(sr), 1],
     ];
     for (const [name, fn, count] of jobs) {
       this.bank[name] = [];
