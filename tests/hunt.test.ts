@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { moveBody, lineClear, groundUnder, type Body, type Box } from '../src/hunt/physics';
 import { Cat, type Intent } from '../src/hunt/cat';
 import { Prey } from '../src/hunt/prey';
-import { CHAIN, GIFT, GOAL, Hunt, NIGHTS, chainMul, nightOpen } from '../src/hunt/game';
+import { CHAIN, GIFT, GOAL, Hunt, NIGHTS, chainMul, nightOpen, today } from '../src/hunt/game';
 import { THINGS } from '../src/hunt/things';
 import { COATS, allStars, coatOf } from '../src/hunt/coats';
 
@@ -277,5 +277,24 @@ describe('밤사냥: the night', () => {
     expect(allStars(save)).toBe(5);
     expect(coatOf(save).id).toBe('ginger');
     expect(coatOf({ ...save, coat: 'black' }).id).toBe('black');
+  });
+  it('the night of the day: the same all day, another the next, and open after the first night', () => {
+    const a = today(new Date(2026, 9, 30, 1)), b = today(new Date(2026, 9, 30, 23)), c = today(new Date(2026, 9, 31, 12));
+    expect(a.id).toBe(b.id);
+    expect(a.blurb).toBe(b.blurb);
+    expect(a.goals.map((g) => g.text)).toEqual(b.goals.map((g) => g.text));
+    expect(c.id).not.toBe(a.id);
+    const days = Array.from({ length: 40 }, (_, k) => today(new Date(2026, 0, 1 + k)));
+    for (const N of days) {
+      expect(N.goals.length).toBe(3);
+      expect(new Set(N.goals.map((g) => g.text)).size).toBe(3);
+      expect(N.stars[0]).toBeLessThan(N.stars[1]);
+      expect(N.stars[1]).toBeLessThan(N.stars[2]);
+    }
+    // (not every day alike)
+    expect(new Set(days.map((N) => N.blurb.split(' · ').slice(1).join())).size).toBeGreaterThan(20);
+    expect(nightOpen({ best: {}, stars: {} }, -1)).toBe(false);
+    expect(nightOpen({ best: {}, stars: { first: 1 } }, -1)).toBe(true);
+    expect(allStars({ best: {}, stars: { first: 2, [a.id]: 3 } })).toBe(2);
   });
 });

@@ -48,6 +48,48 @@ export const NIGHTS: Night[] = [
     mods: { knock: 2 }, goals: [knocked(7), { text: '집사 머리맡 물컵 떨어뜨리기', done: (h) => h.things.some((t) => t.kind === 'glass' && t.state === 'down') }, chain(3)] },
 ];
 
+/** the night of the day: the same for everyone on a date (what is out, the weather, the
+ *  challenges), a new one tomorrow; open once the first night has a star */
+export function today(d = new Date()): Night {
+  const M = d.getMonth() + 1, D = d.getDate();
+  const key = `${d.getFullYear()}${String(M).padStart(2, '0')}${String(D).padStart(2, '0')}`;
+  let seed = (+key % 2147483646) + 1;
+  const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const pick = <T>(a: T[]) => a[Math.floor(rnd() * a.length)];
+  const twist = pick<{ name: string; mods: Mods }>([
+    { name: '고요한 밤', mods: {} },
+    { name: '비 오는 밤', mods: { hear: 0.45, rain: true, moon: 0.35 } },
+    { name: '달 밝은 밤', mods: { see: 1.5, moon: 1.8 } },
+    { name: '집사가 예민한 밤', mods: { sleepy: 2, gift: 2 } },
+    { name: '난장판의 밤', mods: { knock: 2 } },
+  ]);
+  const roster = { moth: 1 + Math.floor(rnd() * 4), cricket: 1 + Math.floor(rnd() * 5), mouse: 1 + Math.floor(rnd() * 3) };
+  // (three challenges, each of a different sort)
+  const sorts: Goal[][] = [
+    [caught('moth', 2, '나방 2마리 잡기'), caught('cricket', 3, '귀뚜라미 3마리 잡기'), caught('mouse', 2, '생쥐 2마리 잡기')],
+    [chain(3), chain(4)],
+    [gifts(1), asleep],
+    [knocked(2), knocked(4)],
+  ];
+  const goals: Goal[] = [];
+  while (goals.length < 3) {
+    const i = Math.floor(rnd() * sorts.length);
+    if (!sorts[i].length) continue;
+    goals.push(pick(sorts[i]));
+    sorts[i] = [];
+  }
+  // (stars by what is out: about what a fair night of it would come to)
+  const worth = roster.moth * 100 + roster.cricket * 150 + roster.mouse * 500;
+  const r = (x: number) => Math.max(100, Math.round(x / 100) * 100);
+  return {
+    id: `day-${key}`, name: '오늘의 밤', blurb: `${M}월 ${D}일 · ${twist.name} · 나방 ${roster.moth} · 귀뚜라미 ${roster.cricket} · 생쥐 ${roster.mouse}`,
+    time: 180, roster, stars: [r(worth * 0.6), r(worth * 1.3), r(worth * 2.1)], mods: twist.mods, goals,
+  };
+}
+
+/** the night by its place in the list (the night of the day: -1) */
+export const nightAt = (i: number) => (i < 0 ? today() : NIGHTS[i]);
+
 /** a run of catches, each within this long of the one before, counts up; and what it is worth */
 export const CHAIN = 12;
 export const chainMul = (n: number) => Math.min(3, 1 + 0.5 * Math.max(0, n - 1));
@@ -328,4 +370,4 @@ export function loadSave(): Save {
 export function saveSave(s: Save) {
   try { localStorage.setItem(KEY, JSON.stringify(s)); } catch { /* this visit only */ }
 }
-export const nightOpen = (s: Save, i: number) => i === 0 || (s.stars[NIGHTS[i - 1].id] ?? 0) >= 1;
+export const nightOpen = (s: Save, i: number) => i === 0 || (s.stars[NIGHTS[i < 0 ? 0 : i - 1].id] ?? 0) >= 1;

@@ -5,7 +5,7 @@ import { Paws } from './paws';
 import { Controls } from './input';
 import { Hud } from './hud';
 import { Sound } from './sound';
-import { Hunt, NIGHTS, loadSave, nightOpen, saveSave, type Save } from './game';
+import { Hunt, NIGHTS, loadSave, nightAt, nightOpen, saveSave, type Save } from './game';
 import { PREY, type Prey } from './prey';
 import { THINGS } from './things';
 import { COATS, allStars, coatOf, coatOpen } from './coats';
@@ -149,7 +149,8 @@ export class HuntApp {
     if (!nightOpen(this.save, i)) return;
     this.nightI = i;
     this.clearHunt();
-    this.hunt = new Hunt(this.world, NIGHTS[i], {
+    const N = nightAt(i);
+    this.hunt = new Hunt(this.world, N, {
       caught: (p, pts, chain) => this.caught(p, pts, chain),
       gift: (pts) => {
         this.hud.toast(`+${pts}`, '집사에게 선물!');
@@ -168,7 +169,7 @@ export class HuntApp {
       },
       sound: (name, at, gain) => this.heard(name, at, gain ?? 1),
       goal: (k, pts) => {
-        this.hud.toast(`+${pts}`, `도전 성공! ${NIGHTS[i].goals[k].text}`);
+        this.hud.toast(`+${pts}`, `도전 성공! ${N.goals[k].text}`);
         this.sound.play('gift', null, 0.4, 1.2);
         this.feel.tap('medium');
         this.showGoals();
@@ -191,12 +192,12 @@ export class HuntApp {
     for (const p of this.hunt.prey) this.scene.add(p.mesh);
     for (const t of this.hunt.things) this.scene.add(t.mesh);
     // the night's own weather and moon
-    const M = NIGHTS[i].mods ?? {};
+    const M = N.mods ?? {};
     this.moonBase = 2.4 * (M.moon ?? 1);
     this.world.rain.visible = !!M.rain;
     this.sound.rain(!!M.rain);
     this.showGoals();
-    if (M.rain && !this.save.goals?.[NIGHTS[i].id]) this.hud.tip('빗소리 덕분에 발소리가 잘 안 들려요. 번개가 칠 땐 조심!', 5000);
+    if (M.rain && !this.save.goals?.[N.id]) this.hud.tip('빗소리 덕분에 발소리가 잘 안 들려요. 번개가 칠 땐 조심!', 5000);
     this.glows = this.hunt.prey.map((p) => {
       const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: HuntApp.dot(), color: GLOW[p.kind], depthTest: false, depthWrite: false, transparent: true }));
       s.scale.setScalar(0.14);

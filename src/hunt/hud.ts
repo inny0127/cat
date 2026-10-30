@@ -1,4 +1,4 @@
-import { NIGHTS, nightOpen, type Save } from './game';
+import { NIGHTS, nightOpen, today, type Save } from './game';
 import { COATS, allStars, coatOf, coatOpen } from './coats';
 
 const hex = (n: number) => `#${n.toString(16).padStart(6, '0')}`;
@@ -61,6 +61,7 @@ const CSS = `
 #hud .nt em { grid-row: 1 / span 2; grid-column: 2; align-self: center; font-style: normal; color: #ffd27a; text-align: right; }
 #hud .nt.lock { opacity: 0.5; }
 #hud .nt small { color: #8f9ac8; }
+#hud .nt.day { box-shadow: 0 0 0 2px #ffd27a; background: rgba(48, 36, 60, 0.92); }
 #hud .how { width: min(340px, 92vw); color: #a9b0d8; text-align: left; line-height: 1.6; }
 #hud .how b { color: #e6f0ff; font-weight: 400; }
 #hud .card { width: min(320px, 90vw); padding: 16px; text-align: center; background: rgba(28, 24, 52, 0.94); box-shadow: 0 0 0 2px #7f86c8, 4px 5px 0 rgba(0, 0, 0, 0.35); }
@@ -93,7 +94,10 @@ const CSS = `
   #hud .coats { width: min(760px, 96vw); }
   #hud .coats > span { width: auto; margin-right: 6px; }
   #hud .coat { width: 28px; height: 28px; }
-  #hud .screen.old .how { display: none; }
+  #hud .screen.old .how, #hud .screen.old .sub { display: none; }
+  #hud .nt.day { grid-column: 1 / -1; grid-template-columns: auto 1fr auto; align-items: center; gap: 2px 12px; }
+  #hud .nt.day span { grid-column: 2; }
+  #hud .nt.day em { grid-column: 3; grid-row: 1; text-align: right; }
   #hud .card { padding: 10px 16px; }
 }
 `;
@@ -161,7 +165,10 @@ export class Hud {
   /** the nights to choose from */
   title(save: Save) {
     this.el.classList.remove('playing');
-    const cards = NIGHTS.map((N, i) => {
+    const T = today(), tOpen = nightOpen(save, -1), tStars = save.stars[T.id] ?? 0;
+    const day = `<button class="nt day ${tOpen ? '' : 'lock'}" data-n="-1"><b>${T.name}</b><span>${tOpen ? T.blurb : '첫 번째 밤에서 별을 하나 따면 열려요'}</span>
+      <em>${'★'.repeat(tStars)}<span style="color:#3e3a66">${'★'.repeat(3 - tStars)}</span><br><small>${save.best[T.id] ? `오늘 최고 ${save.best[T.id].toLocaleString('ko-KR')}` : '매일 새로운 밤'}</small></em></button>`;
+    const cards = day + NIGHTS.map((N, i) => {
       const open = nightOpen(save, i), st = save.stars[N.id] ?? 0;
       const done = N.goals.filter((_, k) => ((save.goals?.[N.id] ?? 0) >> k) & 1).length;
       const best = save.best[N.id] ? `최고 ${save.best[N.id].toLocaleString('ko-KR')}` : '';
@@ -221,7 +228,7 @@ export class Hud {
       <p>선물 ${o.gifts} · 최고 연속 ${o.best}${o.knocked ? ` · 떨어뜨림 ${o.knocked}` : ''}${o.wakes ? ` · 집사 깨움 ${o.wakes}` : ''}</p>
       <div class="gl">${Hud.goalList(o.goals)}</div>
       ${o.coats.map((n) => `<p style="color:#ffd27a">새 털색: ${n}! (밤 고르기에서 바꿔 입어요)</p>`).join('')}
-      <div class="row"><button class="btn alt" data-c="menu">밤 고르기</button><button class="btn" data-n="${o.i}">다시 하기</button>${o.i + 1 < NIGHTS.length ? `<button class="btn ${o.next ? '' : 'lock'}" data-n="${o.i + 1}" ${o.next ? '' : 'style="opacity:.5"'}>다음 밤</button>` : ''}</div></div>`);
+      <div class="row"><button class="btn alt" data-c="menu">밤 고르기</button><button class="btn" data-n="${o.i}">다시 하기</button>${o.i >= 0 && o.i + 1 < NIGHTS.length ? `<button class="btn ${o.next ? '' : 'lock'}" data-n="${o.i + 1}" ${o.next ? '' : 'style="opacity:.5"'}>다음 밤</button>` : ''}</div></div>`);
   }
 
   private show(html: string) {

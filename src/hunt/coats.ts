@@ -20,8 +20,8 @@ export const COATS: Coat[] = [
   { id: 'white', name: '하양이', stars: 18, left: { fur: 0xf6f2ea, stripe: null, sock: 0xf6f2ea }, bean: 0xf4a8b4 },
 ];
 
-/** every star won, all the nights' together */
-export const allStars = (s: Save) => Object.values(s.stars).reduce((a, b) => a + b, 0);
+/** every star won, all the nights' together (not the night of the day's: they come round anew) */
+export const allStars = (s: Save) => Object.entries(s.stars).reduce((a, [k, n]) => (k.startsWith('day-') ? a : a + n), 0);
 export const coatOpen = (s: Save, c: Coat) => allStars(s) >= c.stars;
 /** the coat worn (the first, if what is kept is gone or not yet earned) */
 export const coatOf = (s: Save) => {
