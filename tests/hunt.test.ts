@@ -248,4 +248,24 @@ describe('밤사냥: the night', () => {
     };
     expect(alert(0.45)).toBeLessThan(alert(1) * 0.6);
   });
+  it('a pounce a little off its mark is bent onto it; one well off is not', () => {
+    const W = { boxes: [], lamps: [{ at: new THREE.Vector3(0, 1.5, 0), color: 0, power: 1, reach: 3 }], holes: [{ at: new THREE.Vector3(3, 0, 3), out: new THREE.Vector3(-1, 0, 0) }], treats: [new THREE.Vector3()], cricketSpots: [new THREE.Vector3()], cellAt: () => -1, path: () => [], bed: { at: new THREE.Vector3(9, 0.55, 9), r: 1 }, grid: { cell: 0.1, cols: 1, rows: 1, free: new Uint8Array(1) } } as never;
+    const pounceAt = (x: number, z: number) => {
+      let got = 0;
+      const h = new Hunt(W, { ...NIGHTS[0], roster: { cricket: 1 } }, { crashed: () => {}, goal: () => {}, lightning: () => {}, caught: () => { got++; }, gift: () => {}, missed: () => {}, stirred: () => {}, sound: () => {} });
+      const c = h.prey[0];
+      h.cat.place(0, 0, 0, 0);
+      const I = still();
+      I.crouch = true;
+      for (let i = 0; i < 30; i++) { c.pos.set(x, 0, z); c.state = 'pause'; c.alert = 0; h.step(1 / 60, I); }
+      I.crouch = false;
+      I.release = true;
+      h.step(1 / 60, I);
+      I.release = false;
+      for (let i = 0; i < 60; i++) { if (c.state !== 'held' && c.mesh.visible) { c.pos.set(x, 0, z); c.state = 'pause'; c.alert = 0; } h.step(1 / 60, I); }
+      return got;
+    };
+    expect(pounceAt(0.45, 1.5)).toBe(1);
+    expect(pounceAt(1.4, 1.0)).toBe(0);
+  });
 });

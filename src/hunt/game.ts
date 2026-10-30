@@ -57,7 +57,8 @@ export const GIFT = 500;
 export interface GameEvents {
   caught: (p: Prey, pts: number, chain: number) => void;
   gift: (pts: number) => void;
-  missed: () => void;
+  /** a pounce come down on nothing (near: something got away by a whisker) */
+  missed: (near: boolean) => void;
   stirred: (woke: boolean) => void;
   /** a challenge done (its index, and the points for it) */
   goal: (i: number, pts: number) => void;
@@ -134,6 +135,7 @@ export class Hunt {
     this.t += dt;
     const cat = this.cat, W = this.world, M = this.night.mods ?? {};
     cat.update(dt, I, W.boxes);
+    this.homing(dt);
     // (a rainy night: now and then a flash, everything plain to see a moment)
     this.bolt = Math.max(0, this.bolt - dt * 2.5);
     if (M.rain && this.t >= this.nextBolt) {
@@ -185,6 +187,37 @@ export class Hunt {
       this.score += GOAL;
       this.on.goal(i, GOAL);
     });
+  }
+
+  /** a cat's eye on its mark: a pounce's flight bent a little toward the nearest thing ahead of it
+   *  (within some thirty degrees, in reach), and its pace made to come down on it */
+  private homing(dt: number) {
+    const cat = this.cat, b = cat.body;
+    if (cat.doing !== 'pounce' || cat.t > 0.5) return;
+    const sp = Math.hypot(b.vx, b.vz);
+    if (sp < 0.5) return;
+    const hx = b.vx / sp, hz = b.vz / sp;
+    let best: Prey | null = null, score = Infinity;
+    for (const p of this.prey) {
+      if (p.state === 'hidden' || p.state === 'held' || !p.mesh.visible) continue;
+      const dx = p.pos.x - b.x, dz = p.pos.z - b.z, d = Math.hypot(dx, dz), dy = p.pos.y - b.y;
+      if (d < 0.05 || d > 2.6 || dy < -0.4 || dy > 1.3) continue;
+      const cos = (dx * hx + dz * hz) / d;
+      if (cos < 0.85) continue;
+      if (d * (2 - cos) < score) { score = d * (2 - cos); best = p; }
+    }
+    if (!best) return;
+    const dx = best.pos.x - b.x, dz = best.pos.z - b.z, d = Math.hypot(dx, dz);
+    const have = Math.atan2(b.vx, b.vz);
+    let da = Math.atan2(dx, dz) - have;
+    while (da > Math.PI) da -= Math.PI * 2;
+    while (da < -Math.PI) da += Math.PI * 2;
+    const a = have + THREE.MathUtils.clamp(da, -2.5 * dt, 2.5 * dt);
+    // (as long in the air as it takes to come down to its height: that fast along, to be there)
+    const g = 13, T = Math.max(0.15, (b.vy + Math.sqrt(Math.max(0, b.vy * b.vy + 2 * g * (b.y - best.pos.y + 0.05)))) / g);
+    const s2 = sp + THREE.MathUtils.clamp(d / T - sp, -sp * 0.5, sp * 0.25) * Math.min(1, 4 * dt);
+    b.vx = Math.sin(a) * s2;
+    b.vz = Math.cos(a) * s2;
   }
 
   /** their sleep made lighter (or, less than nothing, deeper): stirring past the half, and woken */
@@ -243,7 +276,10 @@ export class Hunt {
         const r = p.kind === 'mouse' ? 0.2 : 0.22;
         if (p.pos.distanceTo(reach) < r + PREY[p.kind].size) { hit = p; break; }
       }
-      if (!hit && cat.pounced) this.on.missed();
+      if (!hit && cat.pounced) {
+        const near = this.prey.some((p) => p.state !== 'hidden' && p.state !== 'held' && p.mesh.visible && p.pos.distanceTo(reach) < 0.55);
+        this.on.missed(near);
+      }
     } else if (cat.swatAt) {
       for (const p of this.prey) {
         if (p.state === 'hidden' || p.state === 'held' || !p.mesh.visible) continue;

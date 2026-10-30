@@ -59,6 +59,8 @@ export class HuntApp {
   private readonly moon: THREE.DirectionalLight;
   private moonBase = 2.4;
   private thunderAt = Infinity;
+  /** the last near miss said (not said again straight away) */
+  private nearAt = -99;
   private dip = 0;
   private baseFov = 75;
   private tipStep = 0;
@@ -153,7 +155,10 @@ export class HuntApp {
         this.flash = 0.6;
         this.feel.tap('heavy');
       },
-      missed: () => this.sound.play('miss', null, 0.3),
+      missed: (near) => {
+        this.sound.play('miss', null, 0.3);
+        if (near && this.time - this.nearAt > 4) { this.nearAt = this.time; this.hud.toast('아깝다!', ''); }
+      },
       stirred: (woke) => {
         this.sound.play('grumble', this.world.sleeper.position, 0.9);
         if (woke) { this.hud.toast('-300', '집사가 깼어요! 쉿…'); this.red = 1; this.feel.tap('heavy'); }
