@@ -200,18 +200,22 @@ export class Brain {
       if (glad > 0.1 || n.food || n.water) this.later(1, () => this.anim.greet?.(Math.max(glad, 0.3)));
       return;
     }
-    // (a cat fond of you, after long enough, as often as not gets up out of its nap for you)
-    if (chance((0.72 + nightly * 0.2) * (1 - 0.35 * glad))) {
+    // (you come in: most often it is up and about, and comes to see who it is (by night more often
+    // asleep); the fonder of you, and the longer you were gone, the likelier it is up for you)
+    if (chance((0.22 + nightly * 0.45) * (1 - 0.5 * glad))) {
       this.toSleep(rand(0.6, 1));
       // (asleep, it heard you come all the same: an eye opens on you in a moment, and if it trusts
       // you a slow blink, before it goes back to sleep)
       if (glad > 0.05) this.greetPeek = rand(1.5, 4);
     } else {
       this.toAwake('rest');
-      if (glad > 0.2 && chance(0.35 + 0.65 * glad)) {
-        this.later(0.9, () => this.say('trill'));
-        this.chatter(away);
-        this.later(1, () => this.anim.greet?.(glad));
+      if (chance(0.55 + 0.45 * glad)) {
+        if (glad > 0.2) {
+          this.later(0.9, () => this.say('trill'));
+          this.chatter(away);
+        }
+        // (up to the glass to see you: glad, or only curious who it is)
+        this.later(1, () => this.anim.greet?.(Math.max(glad, 0.25)));
       }
     }
   }
@@ -1042,7 +1046,8 @@ export class Brain {
       case 'alert':
       case 'enjoy':
         if (idle > 4 && !needs(s).food && !needs(s).water) {
-          this.wantSleepIn -= dt * tired;
+          // (you there and busy with it, the last minute: its nap put off, mostly)
+          this.wantSleepIn -= dt * tired * (idle < 60 ? 0.3 : 1);
           if (this.wantSleepIn <= 0) this.toSleep(0.45);
         }
         {

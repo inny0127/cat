@@ -26,7 +26,7 @@ export interface Game {
 }
 
 /** the things done with the cat that count */
-export type Kind = 'pet' | 'purr' | 'treat' | 'play' | 'feed' | 'water' | 'litter' | 'blink' | 'bubble' | 'nip';
+export type Kind = 'pet' | 'purr' | 'treat' | 'play' | 'feed' | 'water' | 'litter' | 'blink' | 'bubble' | 'nip' | 'wish';
 
 export interface Mission {
   kind: Kind;
@@ -49,6 +49,7 @@ export const MISSIONS: Record<Kind, { say: (n: number) => string; need: [number,
   blink: { say: () => '눈 키스 받기 (천천히 깜빡임)', need: [1, 1], step: 1, reward: [50, 50] },
   bubble: { say: (n) => `비눗방울 ${n}개 잡게 하기`, need: [3, 6], step: 1, reward: [30, 45] },
   nip: { say: () => '캣닢 주기', need: [1, 1], step: 1, reward: [25, 25] },
+  wish: { say: (n) => `고양이 소원 ${n}번 들어주기`, need: [1, 3], step: 1, reward: [35, 70] },
 };
 
 /** how much affection the next level asks, from this one */

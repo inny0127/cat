@@ -59,6 +59,57 @@ export const ICONS = {
     'KGKKKGK',
     'KKKKKKK',
   ], { K: '#2c2430', G: '#a7a8bb', B: '#8fb0c3' }, s),
+  bowl: (s: number) => pix([
+    '..BBB..',
+    '.BBBBB.',
+    'KRRRRRK',
+    'KRWRRRK',
+    '.KRRRK.',
+    '..KKK..',
+  ], { K: '#5a2232', R: '#c25b62', W: '#e48d85', B: '#9c653d' }, s),
+  drop: (s: number) => pix([
+    '...K...',
+    '..KBK..',
+    '.KBBBK.',
+    'KBWBBBK',
+    'KBWBBBK',
+    '.KBBBK.',
+    '..KKK..',
+  ], { K: '#2b4767', B: '#62a0bd', W: '#d6f0f5' }, s),
+  scoop: (s: number) => pix([
+    'K......',
+    '.K.....',
+    '..K....',
+    '...KKKK',
+    '...KSSK',
+    '...KSSK',
+    '....KK.',
+  ], { K: '#4a3a40', S: '#d3c3ad' }, s),
+  yarn: (s: number) => pix([
+    '..KKK..',
+    '.KRWRK.',
+    'KRRWRRK',
+    'KWRRRWK',
+    'KRRWRRK',
+    '.KRRRK.',
+    '..KKK.K',
+  ], { K: '#5a2232', R: '#c25b62', W: '#e9a0a0' }, s),
+  hand: (s: number) => pix([
+    '.K.K.K.',
+    'KWKWKWK',
+    'KWWWWWK',
+    'KWWWWWK',
+    '.KWWWK.',
+    '..KKK..',
+  ], { K: '#7b5160', W: '#f3c6b0' }, s),
+  fish: (s: number) => pix([
+    '.......',
+    '..YYY.Y',
+    '.YKYYYY',
+    'YYYYYY.',
+    '.YYYYYY',
+    '..YYY.Y',
+  ], { Y: '#e8b54a', K: '#3d2a2e' }, s),
   check: (s: number) => pix([
     '......K',
     '.....KK',
@@ -117,6 +168,12 @@ const CSS = `
 #hud .card .go { margin-top: 10px; }
 #hud .card .beat { animation: hudbeat 0.9s ease infinite; display: inline-block; }
 @keyframes hudbeat { 0%, 100% { transform: scale(1); } 15% { transform: scale(1.18); } 30% { transform: scale(1); } 45% { transform: scale(1.1); } }
+#hud .wish { position: absolute; transform: translate(-50%, -100%); padding: 5px 6px 4px; background: #f6f1e7; box-shadow: 0 0 0 2px #2b2433, 2px 3px 0 rgba(20, 14, 22, 0.3);
+  pointer-events: auto; cursor: pointer; opacity: 0; transition: opacity 0.3s ease; line-height: 0; }
+#hud .wish.on { opacity: 1; }
+#hud .wish::after { content: ''; position: absolute; left: 50%; bottom: -7px; width: 7px; height: 7px; margin-left: -3px; background: #f6f1e7; box-shadow: 2px 2px 0 0 #2b2433; transform: rotate(45deg); }
+#hud .wish i { display: block; animation: hudwish 1.2s ease-in-out infinite; }
+@keyframes hudwish { 50% { transform: translateY(-2px); } }
 #hud .confetti { position: absolute; top: -12px; animation: hudfall linear forwards; }
 @keyframes hudfall { to { transform: translate(var(--dx), 110vh) rotate(var(--r)); } }
 .hudbtn { font: 400 calc(12 * var(--fpx)) / 1 var(--pixel-font); letter-spacing: 0; color: #2b2433; background: #f6cf9b; border: 0; padding: 8px 12px; cursor: pointer;
@@ -151,6 +208,23 @@ export class Hud {
   private pops = 0;
   private shownCoins = -1;
   private cardTimer = 0;
+  private wishEl!: HTMLDivElement;
+  private wishIcon = '';
+  /** the wish bubble tapped */
+  onWish: (() => void) | null = null;
+
+  /** the cat's wish in a bubble over its head (null: none), at a point on the screen */
+  wish(icon: keyof typeof ICONS | null, x = 0, y = 0) {
+    const W = this.wishEl;
+    if (!icon) { W.classList.remove('on'); return; }
+    if (icon !== this.wishIcon) {
+      this.wishIcon = icon;
+      (W.firstElementChild as HTMLElement).innerHTML = ICONS[icon](26);
+    }
+    W.style.left = `${Math.round(x)}px`;
+    W.style.top = `${Math.round(y)}px`;
+    W.classList.add('on');
+  }
   private coinTarget = 0;
   private coinRaf = 0;
   /** a button pressed: 'missions', 'shop', 'album', 'love', 'coins' */
@@ -176,6 +250,7 @@ export class Hud {
         <button class="btn" data-k="shop" aria-label="상점">${ICONS.bag(24)}<span class="badge"></span></button>
         <button class="btn hide" data-k="album" aria-label="사진첩">${ICONS.camera(24)}<span class="badge"></span></button>
       </div>
+      <div class="wish"><i></i></div>
       <div class="toast"></div>
       <div class="card"></div>`;
     parent.appendChild(el);
@@ -194,6 +269,9 @@ export class Hud {
       b.addEventListener('click', (e) => { e.stopPropagation(); this.onPress?.(k); });
     }
     this.cardEl.addEventListener('pointerdown', (e) => e.stopPropagation());
+    this.wishEl = el.querySelector('.wish') as HTMLDivElement;
+    this.wishEl.addEventListener('pointerdown', (e) => e.stopPropagation());
+    this.wishEl.addEventListener('click', (e) => { e.stopPropagation(); this.onWish?.(); });
     this.cardEl.addEventListener('click', (e) => {
       e.stopPropagation();
       if ((e.target as HTMLElement).closest('.go')) this.onCard?.();

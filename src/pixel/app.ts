@@ -44,6 +44,18 @@ const ARTIFACT = import.meta.env.VITE_ARTIFACT === '1';
  * painted cat (app.ts); the body is the 3D cat drawn as pixel art, which the brain moves through
  * PixelAvatar, and whose feelings show in its eyes, ears, tail, fur and breath.
  */
+/** what the cat may want of you, the picture in its bubble, and how to grant it */
+type WishKind = 'food' | 'water' | 'litter' | 'pet' | 'play' | 'treat';
+const WISH_ICON: Record<WishKind, 'bowl' | 'drop' | 'scoop' | 'hand' | 'yarn' | 'fish'> = { food: 'bowl', water: 'drop', litter: 'scoop', pet: 'hand', play: 'yarn', treat: 'fish' };
+const WISH_HELP: Record<WishKind, string> = {
+  food: '배고프대요! 빈 곳을 좌우로 빠르게 문지르거나 휴대폰을 흔들면 사료를 부어요',
+  water: '목마르대요! 빈 곳을 길게 누르고 있으면 물을 따라요',
+  litter: '화장실이 더럽대요! 빈 곳을 아래로 쓸어내리면 모래를 치워요',
+  pet: '쓰다듬어 달래요! 머리나 볼을 살며시 쓰다듬어 주세요',
+  play: '놀아 달래요! 창턱의 깃털이나 레이저, 바닥의 털실로 놀아 주세요',
+  treat: '간식이 먹고 싶대요! 라디오 앞의 빨간 뚜껑 통을 눌러 주세요',
+};
+
 export class PixelApp {
   readonly stage: Stage;
   readonly audio = new CatAudio();
@@ -149,6 +161,7 @@ export class PixelApp {
       hasPhotos: () => this.photos.length > 0,
       now: () => this.clock().getTime(),
     });
+    this.director.hud.onWish = () => this.wishHelp();
     this.avatar.ground = {
       keepClear: (p, r) => this.room.keepClear(p, r),
       detour: (from, to, r) => this.room.detour(from, to, r),
@@ -1579,6 +1592,76 @@ export class PixelApp {
     this.wasBlink = blink;
   }
 
+  /** what the cat wants of you just now, in a bubble over its head: what, since when, how far
+   *  granted (strokes, a game: seconds of it), and the time till the next */
+  private wishNow: { k: WishKind; t: number; got: number } | null = null;
+  private wishIn = 25;
+  private treatEaten = false;
+  private lastPlayAt = -1e9;
+
+  /** the cat's wishes: one at a time, now and then, as it is (hungry, thirsty, its box dirty, a
+   *  while without a stroke or a game, a treat it has learnt to want), shown in a bubble over its
+   *  head while it is up and to be seen, a meow with it; granted, a trill, hearts and coins; not,
+   *  after a minute it lets it go. A tap on the bubble says how to grant it */
+  private wishStep(dt: number, touched: boolean) {
+    const s = this.state, b = this.brain, a = this.avatar, D = this.director;
+    const awake = b.mode === 'rest' || b.mode === 'alert' || b.mode === 'enjoy';
+    const now = this.clock().getTime();
+    if (a.doing === 'chase' || a.doing === 'tease' || a.doing === 'play' || a.doing === 'bubbles') this.lastPlayAt = this.tickNow;
+    const W = this.wishNow;
+    if (W) {
+      W.t += dt;
+      if (W.k === 'pet' && touched && b.mode === 'enjoy') W.got += dt;
+      if (W.k === 'play' && this.tickNow - this.lastPlayAt < 0.2 && this.tickNow - this.inputAt < 8) W.got += dt;
+      const granted = W.k === 'food' ? s.food > 0.6 : W.k === 'water' ? s.water > 0.6 : W.k === 'litter' ? s.litter < 0.2
+        : W.k === 'pet' ? W.got > 3 : W.k === 'play' ? W.got > 5 : this.treatEaten;
+      if (granted) {
+        this.wishNow = null;
+        this.wishIn = 50 + Math.random() * 50;
+        b.say('trill', { delay: 0.3 });
+        D.love(5, '<span>소원을 들어줬어요!</span>');
+        D.did('wish');
+      } else if (W.t > 70) {
+        this.wishNow = null;
+        this.wishIn = 80 + Math.random() * 40;
+      }
+    } else if (s.alive && awake && !a.hidden && (this.wishIn -= dt) <= 0) {
+      const sincePet = (Date.now() - s.lastPetAt) / 1000, sinceTreat = (now - (s.treats?.at(-1) ?? 0)) / 1000;
+      const k: WishKind | null = s.hunger > 0.5 && s.food < 0.25 ? 'food'
+        : s.thirst > 0.45 && s.water < 0.25 ? 'water'
+        : s.litter > 0.55 ? 'litter'
+        : learnt(s, 'treat', now) > 0.2 && sinceTreat > 15 * 60 && this.treatsLately(now) < 6 && Math.random() < 0.4 ? 'treat'
+        : this.tickNow - this.lastPlayAt > 5 * 60 && this.avatar.mood.sleepy < 0.6 && Math.random() < 0.6 ? 'play'
+        : sincePet > 3 * 60 && s.trust > 0.1 ? 'pet'
+        : null;
+      if (k) {
+        this.wishNow = { k, t: 0, got: 0 };
+        this.treatEaten = false;
+        b.say(k === 'food' || k === 'water' ? 'meowPlead' : 'meowSoft');
+      } else this.wishIn = 30;
+    }
+    // (the bubble: over its head while it is up and to be seen; blinking out now and then, not to
+    // be always in the way)
+    const show = this.wishNow && awake && this.visible && !this.director.busy && (this.wishNow.t % 9) < 6.5;
+    const h = show ? this.directorHead() : null;
+    this.director.hud.wish(h ? WISH_ICON[this.wishNow!.k] : null, h?.x, (h?.y ?? 0) - 40);
+  }
+
+  /** the cat's head on the screen, if it is to be seen there */
+  private directorHead() {
+    if (this.avatar.hidden) return null;
+    const h = this.senses.headScreen();
+    return h.x > 20 && h.x < innerWidth - 20 && h.y > 90 && h.y < innerHeight ? h : null;
+  }
+
+  /** a tap on the wish bubble: how to grant it */
+  private wishHelp() {
+    const W = this.wishNow;
+    if (!W) return;
+    this.haptic.tap?.();
+    this.director.hud.toast(WISH_HELP[W.k], 4200);
+  }
+
   /** kibble shaken into the bowl: filled up from low, a mission done and a little affection */
   private feed(k: number) {
     const before = this.state.food;
@@ -1881,6 +1964,7 @@ export class PixelApp {
     const contacts: Contact[] = this.avatar.hidden ? [] : this.input.onCat();
     this.brain.update(dt, now, contacts);
     this.gameStep(dt, contacts.length > 0);
+    this.wishStep(dt, contacts.length > 0);
     // what it feels shows in its eyes, ears, tail, fur and breath
     const s = this.state;
     const sick = s.alive ? clamp((THRESH.sick - s.health) / THRESH.sick * 1.6) : 1;
@@ -2438,6 +2522,7 @@ export class PixelApp {
         s.trust = clamp(s.trust + 0.006 * (1 - s.trust), -1, 1);
         this.director.love(3);
         this.director.did('treat');
+        this.treatEaten = true;
       };
     }
     if (!T) return;
