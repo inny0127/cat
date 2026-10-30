@@ -44,6 +44,8 @@ const CSS = `
 #hud .stick i { position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; margin: -22px 0 0 -22px; border-radius: 50%; background: rgba(200, 210, 255, 0.28); }
 #hud .btns { position: absolute; right: calc(14px + env(safe-area-inset-right)); bottom: calc(16px + env(safe-area-inset-bottom)); display: none; width: 180px; height: 170px; }
 #hud.playing.touch .btns { display: block; }
+#hud.lefty .btns { right: auto; left: calc(14px + env(safe-area-inset-left)); transform: scaleX(-1); }
+#hud.lefty .btns .b { transform: scaleX(-1); }
 #hud .b { position: absolute; pointer-events: auto; border-radius: 50%; border: 0; background: rgba(30, 26, 56, 0.55); box-shadow: 0 0 0 2px rgba(190, 200, 255, 0.45); color: #f2ecff; font: inherit; touch-action: none; display: flex; align-items: center; justify-content: center; text-align: center; line-height: 1.1; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
 /* (each button a label round a switch no one sees: on an iPhone a tap on it ticks, felt) */
 #hud .b input { visibility: hidden; position: absolute; left: 0; top: 0; margin: 0; pointer-events: none; }
@@ -243,7 +245,7 @@ export class Hud {
     this.show(`<div class="card"><h2>잠깐 멈춤</h2>
       <div class="row"><button class="btn" data-c="resume">계속하기</button></div>
       <div class="row"><button class="btn alt" data-c="retry">처음부터</button><button class="btn alt" data-c="menu">밤 고르기</button></div>
-      <div class="row"><button class="btn alt" data-c="sound">${save.mute ? '소리 끔' : '소리 켬'}</button><button class="btn alt" data-c="look">둘러보기: ${look}</button><button class="btn alt" data-c="buzz">진동 ${save.still ? '끔' : '켬'}</button></div></div>`);
+      <div class="row"><button class="btn alt" data-c="sound">${save.mute ? '소리 끔' : '소리 켬'}</button><button class="btn alt" data-c="look">둘러보기: ${look}</button><button class="btn alt" data-c="buzz">진동 ${save.still ? '끔' : '켬'}</button><button class="btn alt" data-c="hand">${save.lefty ? '왼손' : '오른손'}</button></div></div>`);
   }
 
   /** a night begun: its name over the clock's first hour, and what it asks */

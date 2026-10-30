@@ -296,9 +296,10 @@ export class HuntApp {
       this.sound.setMuted(this.save.mute);
       if (this.mode === 'pause') this.hud.pause(this.save);
       else this.hud.title(this.save);
-    } else if (c === 'look' || c === 'buzz') {
+    } else if (c === 'look' || c === 'buzz' || c === 'hand') {
       if (c === 'look') this.save.look = ((this.save.look ?? 1) + 1) % 3;
-      else this.save.still = !this.save.still;
+      else if (c === 'buzz') this.save.still = !this.save.still;
+      else this.save.lefty = !this.save.lefty;
       saveSave(this.save);
       this.settings();
       this.hud.pause(this.save);
@@ -309,6 +310,8 @@ export class HuntApp {
   private settings() {
     this.controls.sensitivity = 0.0065 * [0.65, 1, 1.5][this.save.look ?? 1];
     this.feel.off = !!this.save.still;
+    this.controls.lefty = !!this.save.lefty;
+    this.hud.el.classList.toggle('lefty', !!this.save.lefty);
   }
 
   private finish() {

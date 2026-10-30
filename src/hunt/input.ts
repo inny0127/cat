@@ -24,6 +24,8 @@ export class Controls {
   enabled = true;
   /** any touch seen (the buttons are drawn then) */
   touchy = false;
+  /** the stick on the right, the buttons on the left */
+  lefty = false;
 
   constructor(private readonly surface: HTMLElement, buttons: { pounce: HTMLElement; jump: HTMLElement; listen: HTMLElement }) {
     const S = surface;
@@ -63,7 +65,8 @@ export class Controls {
       return;
     }
     this.touchy = true;
-    if (e.clientX < innerWidth * 0.45 && !this.stick) this.stick = { id: e.pointerId, ox: e.clientX, oy: e.clientY, x: e.clientX, y: e.clientY };
+    const stickSide = this.lefty ? e.clientX > innerWidth * 0.55 : e.clientX < innerWidth * 0.45;
+    if (stickSide && !this.stick) this.stick = { id: e.pointerId, ox: e.clientX, oy: e.clientY, x: e.clientX, y: e.clientY };
     else if (!this.lookFinger) this.lookFinger = { id: e.pointerId, x: e.clientX, y: e.clientY };
   }
   private move(e: PointerEvent) {

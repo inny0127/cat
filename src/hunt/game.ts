@@ -420,6 +420,8 @@ export interface Save { best: Record<string, number>; stars: Record<string, numb
   /** how fast a drag turns the head (0: slow, 1: as made, 2: fast); buzzes off */
   look?: number;
   still?: boolean;
+  /** the buttons on the left, the stick on the right */
+  lefty?: boolean;
   /** counted across every night, and the badges won */
   totals?: Record<string, number>;
   badges?: string[] }
@@ -427,7 +429,7 @@ const KEY = 'bamsanyang.save';
 export function loadSave(): Save {
   try {
     const s = JSON.parse(localStorage.getItem(KEY) ?? 'null');
-    if (s && typeof s === 'object') return { best: s.best ?? {}, stars: s.stars ?? {}, mute: !!s.mute, knocked: !!s.knocked, goals: s.goals ?? {}, coat: typeof s.coat === 'string' ? s.coat : undefined, totals: s.totals ?? {}, badges: Array.isArray(s.badges) ? s.badges : [], look: typeof s.look === 'number' ? s.look : 1, still: !!s.still, toys: Array.isArray(s.toys) ? s.toys : [] };
+    if (s && typeof s === 'object') return { best: s.best ?? {}, stars: s.stars ?? {}, mute: !!s.mute, knocked: !!s.knocked, goals: s.goals ?? {}, coat: typeof s.coat === 'string' ? s.coat : undefined, totals: s.totals ?? {}, badges: Array.isArray(s.badges) ? s.badges : [], look: typeof s.look === 'number' ? s.look : 1, still: !!s.still, lefty: !!s.lefty, toys: Array.isArray(s.toys) ? s.toys : [] };
   } catch { /* none kept */ }
   return { best: {}, stars: {} };
 }
