@@ -17,6 +17,8 @@ type Mode = 'title' | 'play' | 'pause' | 'end';
 
 /** the words for the sounds things make, written where they come from */
 const WORDS: Record<string, string> = { chirp: '귀뚤귀뚤', squeak: '찍찍', flutter: '파닥', hop: '톡', shatter: '와장창!', clatter: '달그락' };
+/** where the bedside lamp is (put on when they wake) */
+const BEDSIDE = new THREE.Vector3(2.32, 0.8, -3.25);
 /** what each kind glows, heard through the walls */
 const GLOW: Record<string, number> = { moth: 0xffe27a, cricket: 0x9cff8a, mouse: 0xffa8c0 };
 
@@ -60,6 +62,9 @@ export class HuntApp {
   private readonly moon: THREE.DirectionalLight;
   private moonBase = 2.4;
   private thunderAt = Infinity;
+  /** when they last woke (sat up, the bedside lamp on, a word, and down again) */
+  private wokeAt = -99;
+  private mumbled = true;
   /** how long a thing out of reach has been watched, still; the last chatter at one */
   private watchT = 0;
   private chatAt = -99;
@@ -167,7 +172,7 @@ export class HuntApp {
       },
       stirred: (woke) => {
         this.sound.play('grumble', this.world.sleeper.position, 0.9);
-        if (woke) { this.hud.toast('-300', '집사가 깼어요! 쉿…'); this.red = 1; this.feel.tap('heavy'); }
+        if (woke) { this.hud.toast('-300', '집사가 깼어요! 쉿…'); this.red = 1; this.feel.tap('heavy'); this.wokeAt = this.time; this.mumbled = false; }
         else this.hud.tip('으음… 집사가 뒤척여요. 침실에선 살금살금!', 2500);
       },
       sound: (name, at, gain) => this.heard(name, at, gain ?? 1),
@@ -288,6 +293,26 @@ export class HuntApp {
     if (p.kind === 'mouse' && this.nightI <= 1 && !this.save.best[NIGHTS[1].id]) this.hud.tip('생쥐를 물었어요! 침실의 집사 침대 위로 가져가면 선물 보너스', 5000);
   }
 
+  /** woken: the bedside lamp on, them up on an elbow looking round, a mumble; then the lamp off
+   *  and down again, six seconds on */
+  private waking() {
+    const w = this.time - this.wokeAt, on = w >= 0 && w < 6;
+    const up = on ? Math.min(1, w / 0.5) * Math.min(1, (6 - w) / 0.8) : 0;
+    const [, head, hair] = this.world.sleeper.children;
+    head.position.set(0, 0.08 + 0.2 * up, -0.1 + 0.18 * up);
+    hair.position.copy(head.position);
+    head.rotation.y = hair.rotation.y = up * 0.6 * Math.sin(w * 1.4);
+    const lamp = this.lamps.find((L) => L.light.position.distanceTo(BEDSIDE) < 0.1);
+    if (lamp) lamp.light.intensity = lamp.base * (1 + 2.5 * up);
+    if (on && w > 1.6 && !this.mumbled && this.hunt) {
+      this.mumbled = true;
+      const v = head.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0, 0.25, 0)).project(this.cam);
+      const R = this.canvas.getBoundingClientRect();
+      if (v.z < 1 && Math.abs(v.x) < 0.9 && Math.abs(v.y) < 0.9) this.hud.say('누구야…?', R.left + (v.x * 0.5 + 0.5) * R.width, R.top + (-v.y * 0.5 + 0.5) * R.height, false);
+      else this.hud.tip('집사: 으음… 누구야…?', 2500);
+    }
+  }
+
   /** a thing out of reach (up high: a moth round its light) watched a while, still: the cat
    *  chatters at it, as cats do */
   private chattering(dt: number, h: Hunt) {
@@ -372,6 +397,7 @@ export class HuntApp {
     }
     // their breathing, under the blanket
     this.world.sleeper.scale.y = 1 + 0.03 * Math.sin(this.time * 1.3);
+    this.waking();
     if (Math.random() < dt * 0.15 && h && this.mode === 'play') this.sound.play('snore', this.world.sleeper.position, 0.35);
     this.flash = Math.max(0, this.flash - dt * 2.5);
     this.red = Math.max(0, this.red - dt * 1.2);
