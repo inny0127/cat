@@ -130,7 +130,6 @@ export class Thing {
     const add = (geo: THREE.BufferGeometry, m: THREE.Material, x = 0, y = 0, z = 0) => {
       const mesh = new THREE.Mesh(geo, m);
       mesh.position.set(x, y, z);
-      mesh.castShadow = true;
       this.mesh.add(mesh);
       return mesh;
     };

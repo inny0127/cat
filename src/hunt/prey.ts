@@ -148,7 +148,6 @@ export class Prey {
       g.add(tail);
       this.tail = tail;
     }
-    g.traverse((o) => { if (o instanceof THREE.Mesh) o.castShadow = true; });
     // (a little bigger than life, to be seen at all from across a room in so few pixels)
     g.scale.setScalar(this.kind === 'mouse' ? 1.45 : 2.2);
   }

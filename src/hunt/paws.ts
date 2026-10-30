@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { Cat } from './cat';
 import type { Coat } from './coats';
 
@@ -37,45 +38,31 @@ export class Paws {
     this.key.position.set(0.3, 1, 0.4);
     const bean = this.bean;
     const claw = new THREE.MeshLambertMaterial({ color: 0xffffff });
+    // (each piece placed, then the pieces of a colour merged: a few draws a leg, not a dozen)
+    const at = (g: THREE.BufferGeometry, x: number, y: number, z: number, rx = 0, rz = 0, sx = 1, sy = 1, sz = 1) =>
+      g.applyMatrix4(new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, 0, rz)), new THREE.Vector3(sx, sy, sz)));
     const leg = (side: number) => {
       const g = new THREE.Group();
       const fur = new THREE.MeshLambertMaterial({ color: 0xe0913f, flatShading: true });
       const stripe = new THREE.MeshLambertMaterial({ color: 0xb8662a, flatShading: true });
       const sock = new THREE.MeshLambertMaterial({ color: 0xfaf3ea, flatShading: true });
-      const rings: THREE.Object3D[] = [];
-      this.mats.push({ fur, stripe, sock, rings });
-      const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.019, 0.12, 8), fur);
-      arm.rotation.x = Math.PI / 2;
-      arm.position.z = 0.065;
-      g.add(arm);
-      for (let i = 0; i < 3; i++) {
-        const s = new THREE.Mesh(new THREE.TorusGeometry(0.0205, 0.004, 4, 8, Math.PI), stripe);
-        s.position.z = 0.03 + i * 0.03;
-        s.rotation.z = Math.PI;
-        g.add(s);
-        rings.push(s);
-      }
-      const paw = new THREE.Mesh(new THREE.SphereGeometry(1, 9, 7), sock);
-      paw.scale.set(0.026, 0.017, 0.03);
-      paw.position.set(0, -0.004, 0.0);
-      g.add(paw);
-      // (the beans underneath: one big, four small)
-      const big = new THREE.Mesh(new THREE.SphereGeometry(0.009, 6, 5), bean);
-      big.scale.set(1.2, 0.5, 1);
-      big.position.set(0, -0.017, 0.004);
-      g.add(big);
+      g.add(new THREE.Mesh(at(new THREE.CylinderGeometry(0.016, 0.019, 0.12, 8), 0, 0, 0.065, Math.PI / 2), fur));
+      const rings = new THREE.Mesh(mergeGeometries([0, 1, 2].map((i) => at(new THREE.TorusGeometry(0.0205, 0.004, 4, 8, Math.PI), 0, 0, 0.03 + i * 0.03, 0, Math.PI))), stripe);
+      g.add(rings);
+      this.mats.push({ fur, stripe, sock, rings: [rings] });
+      g.add(new THREE.Mesh(at(new THREE.SphereGeometry(1, 9, 7), 0, -0.004, 0, 0, 0, 0.026, 0.017, 0.03), sock));
+      // (the beans underneath: one big, four small; and the claws, out only now and then)
+      const beans = [at(new THREE.SphereGeometry(0.009, 6, 5), 0, -0.017, 0.004, 0, 0, 1.2, 0.5, 1)];
+      const claws: THREE.BufferGeometry[] = [];
       for (let i = 0; i < 4; i++) {
-        const b = new THREE.Mesh(new THREE.SphereGeometry(0.0045, 5, 4), bean);
-        b.scale.set(1, 0.6, 1);
-        b.position.set(-0.014 + i * 0.0093, -0.013, -0.018 + Math.abs(i - 1.5) * 0.003);
-        g.add(b);
-        const c = new THREE.Mesh(new THREE.ConeGeometry(0.0025, 0.012, 4), claw);
-        c.rotation.x = -Math.PI / 2;
-        c.position.set(-0.014 + i * 0.0093, -0.006, -0.032);
-        c.visible = false;
-        g.add(c);
-        this.claws.push(c);
+        beans.push(at(new THREE.SphereGeometry(0.0045, 5, 4), -0.014 + i * 0.0093, -0.013, -0.018 + Math.abs(i - 1.5) * 0.003, 0, 0, 1, 0.6, 1));
+        claws.push(at(new THREE.ConeGeometry(0.0025, 0.012, 4), -0.014 + i * 0.0093, -0.006, -0.032, -Math.PI / 2));
       }
+      g.add(new THREE.Mesh(mergeGeometries(beans), bean));
+      const c = new THREE.Mesh(mergeGeometries(claws), claw);
+      c.visible = false;
+      g.add(c);
+      this.claws.push(c);
       g.scale.setScalar(0.85);
       g.userData.side = side;
       this.scene.add(g);
@@ -108,10 +95,9 @@ export class Paws {
     for (const side of [-1, 1]) {
       const g = new THREE.Group();
       g.position.set(side * 0.012, -0.034, -0.03);
-      for (let k = 0; k < 3; k++) {
-        const geo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, -k * 0.003, 0), new THREE.Vector3(side * 0.075, 0.014 - k * 0.013, -0.025 + k * 0.004)]);
-        g.add(new THREE.Line(geo, this.whiskerMat));
-      }
+      const pts: THREE.Vector3[] = [];
+      for (let k = 0; k < 3; k++) pts.push(new THREE.Vector3(0, -k * 0.003, 0), new THREE.Vector3(side * 0.075, 0.014 - k * 0.013, -0.025 + k * 0.004));
+      g.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), this.whiskerMat));
       g.userData.side = side;
       this.whiskers.add(g);
     }
@@ -224,7 +210,7 @@ export class Paws {
       const u = Math.min(1, t / 0.3), a = Math.sin(Math.PI * u);
       pose(this.L, -sx, -0.056, -0.11, 0.1);
       pose(this.R, sx - 0.06 * u, -0.054 + 0.04 * a, -0.115 - 0.04 * a, 0.2 + 0.7 * a, 0, 0.6 * a);
-      for (const c of this.claws.slice(4)) c.visible = a > 0.3;
+      this.claws[1].visible = a > 0.3;
       return;
     }
     if (cat.doing === 'wiggle') {
