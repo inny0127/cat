@@ -187,6 +187,80 @@ export class LivingRoom {
     Lt.uWinZ.value = WALL_Z - 0.03;
     (Lt.uFairy.value as THREE.Vector4).set(0, 0, -10, 0);
     for (const v of Lt.uOcc.value as THREE.Vector4[]) v.set(0, 0, 0, 0);
+    this.batch();
+  }
+
+  /** the still things merged, those that look alike, into one mesh each (fewer draws on a phone):
+   *  each vertex keeps where it was in its own thing, for the patterns (the room's BATCHED) */
+  private batch() {
+    const L = this.lights;
+    const look = (m: THREE.Mesh) => {
+      const mat = m.material as THREE.ShaderMaterial;
+      return [Object.entries(mat.uniforms).map(([k, v]) => (v === L[k] ? k : k + '=' + JSON.stringify(v.value))).join(), mat.side, m.castShadow, m.receiveShadow].join('|');
+    };
+    this.group.updateMatrixWorld(true);
+    const looks = new Map<string, THREE.Mesh[]>();
+    for (const o of this.group.children) {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh || Array.isArray(m.material)) continue;
+      const mat = m.material as THREE.ShaderMaterial;
+      if (!mat.uniforms?.uMat || this.glows.includes(mat) || !m.geometry.attributes.normal) continue;
+      const k = look(m);
+      looks.set(k, [...(looks.get(k) ?? []), m]);
+    }
+    const M = new THREE.Matrix4(), N = new THREE.Matrix3(), p = new THREE.Vector3(), n = new THREE.Vector3();
+    for (const meshes of looks.values()) {
+      if (meshes.length < 2) continue;
+      let nv = 0, ni = 0;
+      for (const m of meshes) {
+        nv += m.geometry.attributes.position.count;
+        ni += m.geometry.index ? m.geometry.index.count : m.geometry.attributes.position.count;
+      }
+      const pos = new Float32Array(nv * 3), nrm = new Float32Array(nv * 3), uv = new Float32Array(nv * 2), local = new Float32Array(nv * 3);
+      const idx = nv > 65535 ? new Uint32Array(ni) : new Uint16Array(ni);
+      let v0 = 0, i0 = 0;
+      for (const m of meshes) {
+        const g = m.geometry, P = g.attributes.position, Nm = g.attributes.normal, U = g.attributes.uv, I = g.index;
+        M.copy(m.matrix);
+        N.setFromMatrix4(M);
+        for (let i = 0; i < P.count; i++) {
+          p.fromBufferAttribute(P, i);
+          local.set([p.x, p.y, p.z], (v0 + i) * 3);
+          p.applyMatrix4(M);
+          pos.set([p.x, p.y, p.z], (v0 + i) * 3);
+          n.fromBufferAttribute(Nm, i).applyMatrix3(N).normalize();
+          nrm.set([n.x, n.y, n.z], (v0 + i) * 3);
+          if (U) uv.set([U.getX(i), U.getY(i)], (v0 + i) * 2);
+        }
+        const flip = M.determinant() < 0, count = I ? I.count : P.count;
+        for (let i = 0; i < count; i += 3) {
+          const a = I ? I.getX(i) : i, b = I ? I.getX(i + 1) : i + 1, c = I ? I.getX(i + 2) : i + 2;
+          idx[i0 + i] = v0 + a;
+          idx[i0 + i + 1] = v0 + (flip ? c : b);
+          idx[i0 + i + 2] = v0 + (flip ? b : c);
+        }
+        v0 += P.count;
+        i0 += count;
+      }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      g.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
+      g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+      g.setAttribute('local', new THREE.BufferAttribute(local, 3));
+      g.setIndex(new THREE.BufferAttribute(idx, 1));
+      g.computeBoundingSphere();
+      const src = meshes[0].material as THREE.ShaderMaterial;
+      const one = new THREE.Mesh(g, new THREE.ShaderMaterial({
+        uniforms: src.uniforms, vertexShader: src.vertexShader, fragmentShader: src.fragmentShader, side: src.side, defines: { ...src.defines, BATCHED: 1 },
+      }));
+      one.castShadow = meshes[0].castShadow;
+      one.receiveShadow = meshes[0].receiveShadow;
+      this.group.add(one);
+      for (const m of meshes) {
+        this.group.remove(m);
+        m.geometry.dispose();
+      }
+    }
   }
 
   /** a piece of furniture's footprint on the floor, in circles, for the cat to go round */
@@ -217,7 +291,8 @@ export class LivingRoom {
     L.uSkyI.value = d.sky;
     L.uAmb.value = d.amb;
     L.uFloorB.value = d.floorB;
-    (L.uFill.value as THREE.Vector4).w = d.fill;
+    // (after dark a light left on in the hall behind you: enough to see what is on the far side)
+    (L.uFill.value as THREE.Vector4).w = d.fill + 0.14 * (1 - skyDay(hour));
     L.uFairyInt.value = 0;
     const day = skyDay(hour);
     if (L.uSubject) (L.uSubject.value as THREE.Vector4).w = 0.42 * day + (1 - day) * (0.2 + 0.1 * Math.min(1, d.lamp / 2));
@@ -268,6 +343,12 @@ void main() {
     if (k > 0.0) c = mix(c, mix(vec3(0.42, 0.42, 0.58), vec3(0.98, 0.97, 0.95), uDay) * mix(vec3(1.0), vec3(1.0, 0.85, 0.75), uGold), 0.85);
   }
   c = mix(c, vec3(0.55, 0.57, 0.64) * mix(0.4, 1.0, uDay), uRain * 0.6);
+  // (rain: short streaks slanting down, each column its own pace)
+  if (uRain > 0.0) {
+    float colr = floor(vUv.x * 70.0 + vUv.y * 9.0);
+    float y = fract(vUv.y * 1.6 + uTime * (1.4 + 0.6 * h1(colr)) + h1(colr + 3.0));
+    if (h1(colr + 9.0) < 0.55 && y < 0.07) c = mix(c, vec3(0.85, 0.9, 1.0) * mix(0.55, 1.0, uDay), 0.45 * uRain);
+  }
   // (the houses across the way: roofs at their heights, windows lit after dark)
   float col = floor(q.x * 9.0);
   float hgt = 0.18 + 0.2 * h1(col + 11.0);

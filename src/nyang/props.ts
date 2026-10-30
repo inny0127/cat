@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { Material } from '../cat3d/pixclass';
 import type { Top } from './set';
 
@@ -47,7 +48,7 @@ export interface Prop {
 interface Shard { m: THREE.Mesh; v: THREE.Vector3; w: THREE.Vector3; t: number; still: boolean }
 
 /** a thing made, standing at its own origin (its foot) */
-function make(kind: Kind, paint: Paint): { g: THREE.Group; main: THREE.Material } {
+function makeParts(kind: Kind, paint: Paint): { g: THREE.Group; main: THREE.Material } {
   const g = new THREE.Group();
   const add = (geo: THREE.BufferGeometry, m: THREE.Material, x = 0, y = 0, z = 0) => {
     const o = new THREE.Mesh(geo, m);
@@ -182,6 +183,33 @@ function make(kind: Kind, paint: Paint): { g: THREE.Group; main: THREE.Material 
 
 const G = 9.8;
 const UP = new THREE.Vector3(0, 1, 0);
+
+/** a thing made, its parts of one material merged into one mesh (fewer draws on a phone) */
+function make(kind: Kind, paint: Paint): { g: THREE.Group; main: THREE.Material } {
+  const { g, main } = makeParts(kind, paint);
+  const by = new Map<THREE.Material, THREE.Mesh[]>();
+  for (const o of g.children) {
+    const m = o as THREE.Mesh;
+    if (m.isMesh && !Array.isArray(m.material)) by.set(m.material, [...(by.get(m.material) ?? []), m]);
+  }
+  for (const [mat, meshes] of by) {
+    if (meshes.length < 2) continue;
+    const geos = meshes.map((m) => {
+      m.updateMatrix();
+      const geo = (m.geometry.index ? m.geometry.toNonIndexed() : m.geometry.clone()).applyMatrix4(m.matrix);
+      for (const k of Object.keys(geo.attributes)) if (k !== 'position' && k !== 'normal' && k !== 'uv') geo.deleteAttribute(k);
+      return geo;
+    });
+    const merged = mergeGeometries(geos);
+    for (const x of geos) x.dispose();
+    if (!merged) continue;
+    const one = new THREE.Mesh(merged, mat);
+    one.castShadow = true;
+    for (const m of meshes) { g.remove(m); m.geometry.dispose(); }
+    g.add(one);
+  }
+  return { g, main };
+}
 
 /**
  * The things on the furniture, and what happens to them: pushed along a top they slide and slow;
@@ -353,7 +381,15 @@ export class Props {
     const K = KINDS[p.kind], g = p.group;
     p.state = 'broken';
     g.visible = false;
-    const n = 7 + Math.floor(K.r * 120);
+    const n = 5 + Math.floor(K.r * 60);
+    // (only so many pieces lying about: the oldest at rest swept away)
+    while (this.shards.length + n > 70) {
+      const i = this.shards.findIndex((s) => s.still);
+      if (i < 0) break;
+      const [old] = this.shards.splice(i, 1);
+      this.group.remove(old.m);
+      old.m.geometry.dispose();
+    }
     for (let i = 0; i < n; i++) {
       const s = 0.008 + Math.random() * 0.016;
       const m = new THREE.Mesh(new THREE.BoxGeometry(s, s * 0.5, s * (0.6 + Math.random())), p.mat);
