@@ -151,6 +151,8 @@ export class Round {
   over = false;
   /** what every knock is worth over its own, for a while (the catnip's frenzy: 2) */
   boost = 1;
+  /** how long a run of knocks keeps going between them (s) */
+  gap = COMBO_GAP;
   constructor(readonly level: Level) {}
 
   get left() {
@@ -167,7 +169,7 @@ export class Round {
   /** a thing down (base points, whether it broke): the points it brings now */
   down(pts: number, broke: boolean) {
     if (this.over) return 0;
-    this.combo = this.t - this.last <= COMBO_GAP ? this.combo + 1 : 1;
+    this.combo = this.t - this.last <= this.gap ? this.combo + 1 : 1;
     this.best = Math.max(this.best, this.combo);
     this.last = this.t;
     this.downs++;
@@ -184,13 +186,13 @@ export class Round {
 
   /** the combo still going (it lapses after the gap) */
   get comboLive() {
-    return this.t - this.last <= COMBO_GAP ? this.combo : 0;
+    return this.t - this.last <= this.gap ? this.combo : 0;
   }
 }
 
 /** what is kept between rounds: the best score and stars for each room, the coins (냥), and the
  *  cat's wardrobe */
-export interface Save extends Wardrobe { best: Record<string, number>; stars: Record<string, number>; coins: number }
+export interface Save extends Wardrobe { best: Record<string, number>; stars: Record<string, number>; coins: number; up: Record<string, number> }
 const KEY = 'nyang.save';
 export function loadSave(): Save {
   try {
@@ -198,11 +200,11 @@ export function loadSave(): Save {
     if (s && typeof s === 'object') {
       return {
         best: s.best ?? {}, stars: s.stars ?? {}, coins: s.coins ?? 0,
-        owned: Array.isArray(s.owned) ? s.owned : [], coat: s.coat ?? 'coat-ginger', neck: s.neck ?? null, head: s.head ?? null,
+        owned: Array.isArray(s.owned) ? s.owned : [], coat: s.coat ?? 'coat-ginger', neck: s.neck ?? null, head: s.head ?? null, up: s.up ?? {},
       };
     }
   } catch { /* none */ }
-  return { best: {}, stars: {}, coins: 0, owned: [], coat: 'coat-ginger', neck: null, head: null };
+  return { best: {}, stars: {}, coins: 0, owned: [], coat: 'coat-ginger', neck: null, head: null, up: {} };
 }
 export function saveSave(s: Save) {
   try { localStorage.setItem(KEY, JSON.stringify(s)); } catch { /* kept this visit only */ }

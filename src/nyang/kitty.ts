@@ -48,6 +48,9 @@ export class Kitty {
   you = new THREE.Vector3(0, 1, 3);
   /** how much quicker than itself it is going about it all (high on catnip: 1.5) */
   pace = 1;
+  /** how much harder than itself it swats, and how much quicker it runs (its upgrades) */
+  power = 1;
+  legs = 1;
 
   constructor(private readonly cat: Cat3D, private readonly set: LivingRoom, private readonly props: Props) {
     const m = cat.motor;
@@ -307,7 +310,7 @@ export class Kitty {
         this.phase = 'walk';
         m.layer = null;
         m.setPosture('stand');
-        if (s.via) m.walkTo(s.to.clone().setY(0), s.via.speed * this.pace, null, null, true);
+        if (s.via) m.walkTo(s.to.clone().setY(0), s.via.speed * this.pace * this.legs, null, null, true);
         else this.go(s.to, () => { if (this.steps[0] === s) this.done(); });
         if (this.steps[0] !== s) return;
       }
@@ -334,8 +337,8 @@ export class Kitty {
     const far = Math.hypot(to.x - m.pos.x, to.z - m.pos.z);
     if (far < 0.03 && face === null) { m.stop(); then(); return; }
     const p = to.clone().setY(0);
-    if (this.on) m.walkTo(p, clamp(far * 1.8, 0.35, 0.7) * this.pace, face, then, false);
-    else m.walkTo(p, (far > 0.6 ? 1.5 : 0.9) * this.pace, face, then, far > 0.6 && face === null);
+    if (this.on) m.walkTo(p, clamp(far * 1.8, 0.35, 0.7) * this.pace * this.legs, face, then, false);
+    else m.walkTo(p, (far > 0.6 ? 1.5 : 0.9) * this.pace * this.legs, face, then, far > 0.6 && face === null);
   }
 
   private done() {
@@ -466,7 +469,7 @@ export class Kitty {
     if (!this.hit && u > 0.5) {
       this.hit = true;
       this.swats++;
-      this.props.swat(P, dir, 1.0 + 0.25 * Math.min(3, this.swats));
+      this.props.swat(P, dir, (1.0 + 0.25 * Math.min(3, this.swats)) * this.power);
       this.sound?.('pencil', 0.08);
     }
     if (u >= 1) {

@@ -1,6 +1,7 @@
 import { ICONS, pix } from '../ui/hud';
 import { LEVELS, dailyLevel, unlocked, type Level, type Round, type Save } from './round';
 import { COATS, WEAR } from './closet';
+import { UPGRADES, upLevel } from './upgrades';
 
 const CSS = `
 #ny { position: fixed; inset: 0; pointer-events: none; z-index: 4; font: 400 calc(12 * var(--fpx)) / 1.4 var(--pixel-font); letter-spacing: 0; color: #f7f0e8; word-break: keep-all; }
@@ -91,6 +92,15 @@ const CSS = `
 #ny .item.on em { color: #9fe0a8; }
 #ny .item.no { animation: nyno 0.35s ease; }
 @keyframes nyno { 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+#ny .tabs { display: flex; gap: 6px; }
+#ny .tabs button { font: inherit; color: #bdb2c0; background: none; border: 0; padding: 4px 8px; cursor: pointer; font-size: calc(15 * var(--fpx)); }
+#ny .tabs button.on { color: #ffd6a8; box-shadow: inset 0 -2px 0 #ffd6a8; }
+#ny .ups { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+#ny .up { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; padding: 9px 10px; background: #3a3045; box-shadow: 0 0 0 1px rgba(201, 148, 134, 0.45); }
+#ny .up b { font-weight: 400; color: #ffd6a8; }
+#ny .up span { color: #bdb2c0; grid-column: 1; }
+#ny .up .pips { color: #ffe08a; letter-spacing: 2px; }
+#ny .up button { grid-row: 1 / span 3; grid-column: 2; align-self: center; }
 #ny .titlebar { display: flex; gap: 10px; align-items: center; }
 #ny .nip { position: absolute; left: 50%; top: calc(112px + env(safe-area-inset-top)); transform: translateX(-50%); padding: 4px 10px; display: none; white-space: nowrap;
   background: rgba(36, 70, 44, 0.9); color: #c9ffb0; box-shadow: 0 0 0 2px #7ed36a, 0 0 12px rgba(126, 211, 106, 0.7); animation: nybump 0.6s ease infinite; }
@@ -148,6 +158,9 @@ export class NyangUi {
   /** the wardrobe opened (or shut), and a thing in it chosen */
   onCloset: ((open: boolean) => void) | null = null;
   onPick: ((id: string) => void) | null = null;
+  onUp: ((id: string) => void) | null = null;
+  private tab: 'wear' | 'up' = 'wear';
+  private shown: Save | null = null;
   private closetEl: HTMLElement;
 
   constructor() {
@@ -189,6 +202,10 @@ export class NyangUi {
     this.closetEl.addEventListener('click', (e) => {
       const t = e.target as HTMLElement;
       if (t.closest('[data-close]')) { this.onCloset?.(false); return; }
+      const tab = t.closest<HTMLElement>('[data-tab]');
+      if (tab && this.shown) { this.tab = tab.dataset.tab as 'wear' | 'up'; this.showCloset(this.shown); return; }
+      const up = t.closest<HTMLElement>('[data-up]');
+      if (up) { this.onUp?.(up.dataset.up!); return; }
       const b = t.closest<HTMLElement>('[data-pick]');
       if (b) this.onPick?.(b.dataset.pick!);
     });
@@ -223,7 +240,7 @@ export class NyangUi {
     const cards = card(dailyLevel(new Date()), LEVELS.length, true, 'today') + LEVELS.map((L, i) => card(L, i, unlocked(save, i))).join('');
     this.title.innerHTML = `<div class="logo">${PAW(40)}<h1>냥아치</h1><p>집사 오기 전에 다 엎어라!</p></div>
       <div class="levels">${cards}</div>
-      <div class="titlebar"><div class="coins">${ICONS.coin(18)}${save.coins.toLocaleString('ko-KR')}냥</div><button class="btn alt" data-closet>옷장</button></div>
+      <div class="titlebar"><div class="coins">${ICONS.coin(18)}${save.coins.toLocaleString('ko-KR')}냥</div><button class="btn alt" data-closet>옷장 · 강화</button></div>
       <button class="link" data-credits>만든 것들</button>`;
     this.title.classList.add('on');
   }
@@ -254,10 +271,20 @@ export class NyangUi {
     const coats = COATS.map((c) => row(c.id, c.name, c.price, save.coat === c.id)).join('');
     const of = (slot: 'neck' | 'head') => WEAR.filter((w) => w.slot === slot).map((w) => row(w.id, w.name, w.price, save[slot] === w.id)).join('');
     const top = this.closetEl.querySelector('.sheet')?.scrollTop ?? 0;
-    this.closetEl.innerHTML = `<div class="sheet"><div class="top"><b>옷장</b><span class="coins">${ICONS.coin(16)}${save.coins.toLocaleString('ko-KR')}냥</span></div>
-      <h3>털색</h3><div class="grid">${coats}</div>
+    this.shown = save;
+    const ups = UPGRADES.map((u) => {
+      const lv = upLevel(save.up, u.id), max = lv >= u.costs.length;
+      return `<div class="up"><b>${u.name} <span class="pips">${'■'.repeat(lv)}<span style="color:#5a4458">${'■'.repeat(u.costs.length - lv)}</span></span></b>
+        <span>${u.what(lv)}${max ? '' : ` → ${u.what(lv + 1)}`}</span>
+        <button class="btn ${max ? 'alt' : ''}" data-up="${u.id}" ${max ? 'disabled' : ''}>${max ? '최고' : `${ICONS.coin(12)}${u.costs[lv]}`}</button></div>`;
+    }).join('');
+    const body = this.tab === 'wear'
+      ? `<h3>털색</h3><div class="grid">${coats}</div>
       <h3>목에</h3><div class="grid">${of('neck')}</div>
-      <h3>머리에</h3><div class="grid">${of('head')}</div>
+      <h3>머리에</h3><div class="grid">${of('head')}</div>`
+      : `<div class="ups">${ups}</div>`;
+    this.closetEl.innerHTML = `<div class="sheet"><div class="top"><div class="tabs"><button data-tab="wear" class="${this.tab === 'wear' ? 'on' : ''}">옷장</button><button data-tab="up" class="${this.tab === 'up' ? 'on' : ''}">강화</button></div><span class="coins">${ICONS.coin(16)}${save.coins.toLocaleString('ko-KR')}냥</span></div>
+      ${body}
       <div class="row"><button class="btn" data-close>다 골랐어요</button></div></div>`;
     (this.closetEl.querySelector('.sheet') as HTMLElement).scrollTop = top;
     this.closetEl.classList.add('on');
@@ -265,7 +292,7 @@ export class NyangUi {
 
   /** a thing in the wardrobe that cannot be had (yet): a shake of it */
   deny(id: string) {
-    const b = this.closetEl.querySelector<HTMLElement>(`[data-pick="${id}"]`);
+    const b = this.closetEl.querySelector<HTMLElement>(`[data-pick="${id}"], [data-up="${id}"]`);
     if (!b) return;
     b.classList.remove('no');
     void b.offsetWidth;

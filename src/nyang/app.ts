@@ -13,6 +13,7 @@ import { LEVELS, Round, dailyLevel, loadSave, saveSave, unlocked, type Level } f
 import { NyangUi } from './ui';
 import { COATS, WEAR, choose } from './closet';
 import { makeWear } from '../cat3d/wear';
+import { buyUp, upLevel, type Upgrade } from './upgrades';
 
 // (the app built for a claude.ai Artifact carries the model in it, as a data: URL)
 const MODEL: string = import.meta.env.VITE_CAT_MODEL ?? './cat3d/fri.bin';
@@ -106,6 +107,7 @@ export class NyangApp {
     this.ui.onMenu = () => this.menu();
     this.ui.onCloset = (open) => this.closet(open);
     this.ui.onPick = (id) => this.pick(id);
+    this.ui.onUp = (id) => this.upgrade(id);
     this.wear();
     this.input();
     this.audio.unlockOn(window);
@@ -359,6 +361,21 @@ export class NyangApp {
     setTimeout(() => this.cat.motor.lookAt(this.kitty.you, 1), 600);
   }
 
+  /** a step of an upgrade bought */
+  private upgrade(id: string) {
+    const got = buyUp(this.save, id as Upgrade['id']);
+    if (got !== 'bought') {
+      this.ui.deny(id);
+      this.audio.play('thump', { gain: 0.25 });
+      this.haptic.tap('medium');
+      return;
+    }
+    this.audio.play('fanfare', { gain: 0.4, rate: 1.1 });
+    this.haptic.tap('light');
+    saveSave(this.save);
+    this.ui.showCloset(this.save);
+  }
+
   /** the cat dressed as the wardrobe says: its coat, and what it has on */
   private readonly wearing: THREE.Object3D[] = [];
   private wear() {
@@ -412,6 +429,11 @@ export class NyangApp {
     this.frenzy = 0;
     this.kitty.pace = 1;
     this.tapped = false;
+    // (as strong, as quick, as keen as the upgrades have made it)
+    const up = this.save.up;
+    this.kitty.power = 1 + 0.15 * upLevel(up, 'paw');
+    this.kitty.legs = 1 + 0.08 * upLevel(up, 'legs');
+    this.round.gap = 3.2 + 0.4 * upLevel(up, 'focus');
     this.ui.frenzy(0);
     this.ui.startRound();
     this.ui.show(this.round, 0, this.L.props.length);
@@ -457,7 +479,7 @@ export class NyangApp {
       if (this.kitty.on === n.top && Math.hypot(m.x - n.at.x, m.z - n.at.z) < 0.16) {
         // (eaten: the frenzy)
         this.dropNip();
-        this.frenzy = 8;
+        this.frenzy = 8 + 2 * upLevel(this.save.up, 'nose');
         r.boost = 2;
         this.kitty.pace = 1.5;
         this.ui.big('캣닢 타임!');
@@ -514,7 +536,7 @@ export class NyangApp {
     g.position.copy(at);
     this.stage.scene.add(g);
     this.nip = { mesh: g, at, top: null, t: 0 };
-    this.ui.tip('캣닢이 떨어졌어요! 눌러서 먹으면 8초 동안 점수 2배!', 3500);
+    this.ui.tip(`캣닢이 떨어졌어요! 눌러서 먹으면 ${8 + 2 * upLevel(this.save.up, 'nose')}초 동안 점수 2배!`, 3500);
     this.audio.play('rustle', { gain: 0.3, pan: this.pan(at.x) });
   }
 

@@ -4,6 +4,7 @@ import { COMBO_GAP, LEVELS, Round, comboMul, dailyLevel, unlocked } from '../src
 import { TOPS } from '../src/nyang/tops';
 import { KINDS, Props } from '../src/nyang/props';
 import { choose } from '../src/nyang/closet';
+import { buyUp, upLevel } from '../src/nyang/upgrades';
 import type { Top } from '../src/nyang/set';
 
 const table: Top = { id: 'table', x0: 0, x1: 0.6, z0: -0.3, z1: 0.3, h: 0.66 };
@@ -44,7 +45,7 @@ describe('냥아치: a round', () => {
     const r = new Round(LEVELS[0]);
     r.score = LEVELS[0].stars[1];
     expect(r.stars).toBe(2);
-    const save = { best: {}, stars: {} as Record<string, number>, coins: 0, owned: [], coat: 'coat-ginger', neck: null, head: null };
+    const save = { best: {}, stars: {} as Record<string, number>, coins: 0, owned: [], coat: 'coat-ginger', neck: null, head: null, up: {} };
     expect(unlocked(save, 0)).toBe(true);
     expect(unlocked(save, 1)).toBe(false);
     save.stars[LEVELS[0].id] = 1;
@@ -143,5 +144,23 @@ describe('냥아치: the wardrobe', () => {
     expect(choose(w, 'coat-cream')).toBe('poor');
     expect(choose(w, 'coat-ginger')).toBe('wear');
     expect(choose(w, 'nothing')).toBe('poor');
+  });
+});
+
+describe('냥아치: upgrades', () => {
+  it('a step at a time, each dearer, while the coins last, up to four', () => {
+    const s = { coins: 1000, up: {} as Record<string, number> };
+    expect(buyUp(s, 'paw')).toBe('bought');
+    expect(s.coins).toBe(900);
+    expect(buyUp(s, 'paw')).toBe('bought');
+    expect(s.coins).toBe(650);
+    expect(buyUp(s, 'paw')).toBe('bought');
+    expect(s.coins).toBe(150);
+    expect(buyUp(s, 'paw')).toBe('poor');
+    expect(upLevel(s.up, 'paw')).toBe(3);
+    s.coins = 5000;
+    expect(buyUp(s, 'paw')).toBe('bought');
+    expect(buyUp(s, 'paw')).toBe('max');
+    expect(upLevel(s.up, 'legs')).toBe(0);
   });
 });
