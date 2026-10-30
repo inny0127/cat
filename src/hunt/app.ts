@@ -101,6 +101,7 @@ export class HuntApp {
       p.position.copy(L.at);
       S.add(p);
       this.lamps.push({ light: p, base: L.power * 1.8, flicker: !!L.flicker });
+      if (L.power >= 0.9 && !L.flicker) this.motes(L.at, L.color, L.power);
     }
     this.ring = new THREE.Sprite(new THREE.SpriteMaterial({ map: HuntApp.pawTex(), color: 0xffb8c8, transparent: true, depthWrite: false, fog: false }));
     this.ring.scale.setScalar(0.11);
@@ -230,6 +231,37 @@ export class HuntApp {
   private showGoals() {
     const h = this.hunt;
     if (h) this.hud.goals(h.night.goals.map((g, k) => ({ text: g.text, done: h.goals[k] })));
+  }
+
+  /** dust in a lamp's light: a few dozen motes drifting slowly in the air round it, each a pixel */
+  private readonly dust: { pts: THREE.Points; home: Float32Array; seed: Float32Array }[] = [];
+  private motes(at: THREE.Vector3, color: number, power: number) {
+    const n = Math.round(18 + 10 * power), home = new Float32Array(n * 3), seed = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      // (below the lamp, in the cone of its light, thinning out as they go)
+      const r = Math.sqrt(Math.random()) * 0.7, a = Math.random() * Math.PI * 2, y = -Math.random() * Math.min(1.2, at.y - 0.1);
+      home.set([at.x + Math.cos(a) * r * (0.4 - y * 0.5), at.y + y - 0.1, at.z + Math.sin(a) * r * (0.4 - y * 0.5)], i * 3);
+      seed[i] = Math.random() * 100;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(home.slice(), 3));
+    const pts = new THREE.Points(geo, new THREE.PointsMaterial({ color: new THREE.Color(color).lerp(new THREE.Color(0xffffff), 0.5), size: 1, sizeAttenuation: false, transparent: true, opacity: 0.8, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
+    pts.frustumCulled = false;
+    this.scene.add(pts);
+    this.dust.push({ pts, home, seed });
+  }
+  private drift() {
+    const t = this.time;
+    for (const D of this.dust) {
+      const pos = D.pts.geometry.getAttribute('position') as THREE.BufferAttribute, a = pos.array as Float32Array;
+      for (let i = 0; i < D.seed.length; i++) {
+        const s = D.seed[i];
+        a[i * 3] = D.home[i * 3] + Math.sin(t * 0.21 + s) * 0.06;
+        a[i * 3 + 1] = D.home[i * 3 + 1] + Math.sin(t * 0.13 + s * 1.7) * 0.08;
+        a[i * 3 + 2] = D.home[i * 3 + 2] + Math.cos(t * 0.17 + s * 0.6) * 0.06;
+      }
+      pos.needsUpdate = true;
+    }
   }
 
   /** a thing's glow, seen through the walls while listening */
@@ -490,6 +522,7 @@ export class HuntApp {
     // their breathing, under the blanket
     this.world.sleeper.scale.y = 1 + 0.03 * Math.sin(this.time * 1.3);
     this.waking();
+    this.drift();
     if (Math.random() < dt * 0.15 && h && this.mode === 'play') this.sound.play('snore', this.world.sleeper.position, 0.35);
     this.flash = Math.max(0, this.flash - dt * 2.5);
     this.red = Math.max(0, this.red - dt * 1.2);
