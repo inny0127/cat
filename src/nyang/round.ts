@@ -28,7 +28,7 @@ export const LEVELS: Level[] = [
     ],
   },
   {
-    id: 'evening', name: '노을 지는 저녁', blurb: '저녁 약속이 생겼대요. 75초, 이번엔 더 많이!', hour: 18.3, time: 75, stars: [2200, 4400, 6600],
+    id: 'evening', name: '노을 지는 저녁', blurb: '저녁 약속이 생겼대요. 75초, 이번엔 더 많이!', hour: 18.3, time: 75, stars: [2000, 4000, 6000],
     props: [
       ['cup', 'coffee', -0.58, 0.2], ['cup', 'coffee', -0.44, 0.33], ['vase', 'coffee', -0.3, 0.24], ['glass', 'coffee', -0.2, 0.16],
       ['frame', 'sofaBack', -0.7, -0.53], ['plant', 'sofaBack', -0.4, -0.53], ['frame', 'sofaBack', -0.12, -0.53],
@@ -56,7 +56,7 @@ export const LEVELS: Level[] = [
 ];
 
 /** how much a run of quick knocks is worth: each within this long of the one before, a step up */
-export const COMBO_GAP = 2.6;
+export const COMBO_GAP = 3.2;
 export const comboMul = (n: number) => Math.min(4, 1 + 0.5 * Math.max(0, n - 1));
 
 /**
@@ -72,6 +72,8 @@ export class Round {
   breaks = 0;
   private last = -99;
   over = false;
+  /** what every knock is worth over its own, for a while (the catnip's frenzy: 2) */
+  boost = 1;
   constructor(readonly level: Level) {}
 
   get left() {
@@ -93,7 +95,7 @@ export class Round {
     this.last = this.t;
     this.downs++;
     if (broke) this.breaks++;
-    const got = Math.round((pts * (broke ? 1.5 : 1) * comboMul(this.combo)) / 10) * 10;
+    const got = Math.round((pts * (broke ? 1.5 : 1) * comboMul(this.combo) * this.boost) / 10) * 10;
     this.score += got;
     return got;
   }

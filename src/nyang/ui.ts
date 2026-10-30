@@ -90,6 +90,19 @@ const CSS = `
 #ny .item.no { animation: nyno 0.35s ease; }
 @keyframes nyno { 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
 #ny .titlebar { display: flex; gap: 10px; align-items: center; }
+#ny .nip { position: absolute; left: 50%; top: calc(112px + env(safe-area-inset-top)); transform: translateX(-50%); padding: 4px 10px; display: none; white-space: nowrap;
+  background: rgba(36, 70, 44, 0.9); color: #c9ffb0; box-shadow: 0 0 0 2px #7ed36a, 0 0 12px rgba(126, 211, 106, 0.7); animation: nybump 0.6s ease infinite; }
+#ny.playing .nip.on { display: block; }
+#ny .glow { position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity 0.4s ease; box-shadow: inset 0 0 60px 10px rgba(126, 211, 106, 0.55); animation: nyglow 0.9s ease-in-out infinite alternate; }
+#ny .glow.on { opacity: 1; }
+@keyframes nyglow { to { box-shadow: inset 0 0 90px 18px rgba(255, 182, 220, 0.5); } }
+#ny .say { position: absolute; left: 50%; top: 22%; transform: translateX(-50%); max-width: min(300px, calc(100vw - 48px)); padding: 10px 14px; background: #fff8ee; color: #3b2a33;
+  font-size: calc(16 * var(--fpx)); text-align: center; box-shadow: 0 0 0 2px #3b2a33, 3px 4px 0 rgba(20, 14, 22, 0.35); animation: nysay 2.4s ease-out forwards; }
+#ny .say::after { content: ''; position: absolute; right: 18px; bottom: -12px; border: 6px solid transparent; border-top-color: #3b2a33; border-left-color: #3b2a33; }
+@keyframes nysay { 0% { opacity: 0; transform: translateX(-50%) scale(0.6); } 10% { opacity: 1; transform: translateX(-50%) scale(1.05); } 18% { transform: translateX(-50%) scale(1); } 85% { opacity: 1; } 100% { opacity: 0; } }
+#ny .point { position: absolute; display: none; transform: translate(-50%, -100%); color: #ffe08a; font-size: calc(18 * var(--fpx)); line-height: 1.1; text-align: center; text-shadow: 0 2px 0 #2b1e30, 0 0 6px rgba(43, 30, 48, 0.8); animation: nypoint 0.8s ease-in-out infinite; }
+#ny .point.on { display: block; }
+@keyframes nypoint { 50% { margin-top: -8px; } }
 #ny .home { position: absolute; left: 0; right: 0; top: 34%; text-align: center; font-size: calc(26 * var(--fpx)); color: #fff; text-shadow: 0 3px 0 #6b2a3a, 0 0 10px rgba(43, 30, 48, 0.7); animation: nycount 2.2s ease-out forwards; }
 `;
 
@@ -122,6 +135,10 @@ export class NyangUi {
   private edgeL: HTMLElement;
   private edgeR: HTMLElement;
   private edgeN = [-1, -1];
+  private nipEl: HTMLElement;
+  private glowEl: HTMLElement;
+  private pointEl: HTMLElement;
+  private nipN = -1;
   /** a room chosen to play (its index) */
   onPlay: ((i: number) => void) | null = null;
   /** back to the rooms */
@@ -142,6 +159,9 @@ export class NyangUi {
       <div class="pill count play">0 / 0</div>
       <button class="pill menu play" aria-label="그만하기">${pix(['KKKKK', '.....', 'KKKKK', '.....', 'KKKKK'], { K: '#f7f0e8' }, 16)}</button>
       <div class="score play">0<small></small></div>
+      <div class="glow"></div>
+      <div class="nip"></div>
+      <div class="point">톡!<br>▼</div>
       <div class="edge l"></div><div class="edge r"></div>
       <div class="tip"></div>
       <div class="screen title"></div>
@@ -156,6 +176,9 @@ export class NyangUi {
     this.tipEl = el.querySelector('.tip') as HTMLElement;
     this.title = el.querySelector('.title') as HTMLElement;
     this.edgeL = el.querySelector('.edge.l') as HTMLElement;
+    this.nipEl = el.querySelector('.nip') as HTMLElement;
+    this.glowEl = el.querySelector('.glow') as HTMLElement;
+    this.pointEl = el.querySelector('.point') as HTMLElement;
     this.edgeR = el.querySelector('.edge.r') as HTMLElement;
     this.end = el.querySelector('.end') as HTMLElement;
     const credits = el.querySelector('.credits') as HTMLElement;
@@ -285,6 +308,33 @@ export class NyangUi {
     if (l !== this.edgeN[0]) { this.edgeL.innerHTML = `◀<br>${l}`; this.edgeL.classList.toggle('on', l > 0); }
     if (r !== this.edgeN[1]) { this.edgeR.innerHTML = `▶<br>${r}`; this.edgeR.classList.toggle('on', r > 0); }
     this.edgeN = [l, r];
+  }
+
+  /** the catnip's frenzy: how long it has left (0: over) */
+  frenzy(left: number) {
+    const n = Math.ceil(left);
+    if (n === this.nipN) return;
+    this.nipN = n;
+    this.nipEl.textContent = `캣닢 타임! 점수 x2 · ${n}`;
+    this.nipEl.classList.toggle('on', n > 0);
+    this.glowEl.classList.toggle('on', n > 0);
+  }
+
+  /** a word said, in a bubble (their people, come home) */
+  say(s: string) {
+    const d = document.createElement('div');
+    d.className = 'say';
+    d.textContent = s;
+    this.el.appendChild(d);
+    setTimeout(() => d.remove(), 2500);
+  }
+
+  /** a finger pointing at a point on the screen, to tap there (none: away) */
+  point(x: number | null, y = 0) {
+    this.pointEl.classList.toggle('on', x !== null);
+    if (x === null) return;
+    this.pointEl.style.left = `${x}px`;
+    this.pointEl.style.top = `${y}px`;
   }
 
   /** points popping up where a thing came down */

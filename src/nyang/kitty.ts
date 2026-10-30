@@ -45,6 +45,8 @@ export class Kitty {
   sound: ((name: string, gain: number) => void) | null = null;
   /** where you are (the camera), to look at */
   you = new THREE.Vector3(0, 1, 3);
+  /** how much quicker than itself it is going about it all (high on catnip: 1.5) */
+  pace = 1;
 
   constructor(private readonly cat: Cat3D, private readonly set: LivingRoom, private readonly props: Props) {
     const m = cat.motor;
@@ -137,7 +139,7 @@ export class Kitty {
   }
 
   /** is a spot on the floor free to stand on: in the room, under no top, clear of the furniture */
-  private clearAt(x: number, z: number) {
+  clearAt(x: number, z: number) {
     const B = this.set.bounds;
     if (x < B.x0 || x > B.x1 || z < B.z0 || z > B.z1 || this.set.topAt(x, z)) return false;
     for (const [c, r] of this.set.solids) if (Math.hypot(x - c.x, z - c.z) < r + 0.05) return false;
@@ -207,7 +209,7 @@ export class Kitty {
     const s = this.steps[0];
     if (!s) return this.rest(dt);
     this.idle = 0;
-    this.t += dt;
+    this.t += dt * this.pace;
     if (s.k === 'walk') {
       if (this.phase !== 'walk') {
         this.phase = 'walk';
@@ -228,8 +230,8 @@ export class Kitty {
     const far = Math.hypot(to.x - m.pos.x, to.z - m.pos.z);
     if (far < 0.03 && face === null) { m.stop(); then(); return; }
     const p = to.clone().setY(0);
-    if (this.on) m.walkTo(p, clamp(far * 1.6, 0.3, 0.55), face, then, false);
-    else m.walkTo(p, far > 0.6 ? 1.15 : 0.75, face, then, far > 0.35 && face === null);
+    if (this.on) m.walkTo(p, clamp(far * 1.8, 0.35, 0.7) * this.pace, face, then, false);
+    else m.walkTo(p, (far > 0.6 ? 1.5 : 0.9) * this.pace, face, then, far > 0.35 && face === null);
   }
 
   private done() {
@@ -251,7 +253,7 @@ export class Kitty {
     }
     if (this.phase === 'gather') {
       m.yaw = m.yaw + clamp(wrapA(face - m.yaw), -8 * dt, 8 * dt);
-      const len = dh > 0.05 ? 0.28 : 0.12;
+      const len = dh > 0.05 ? 0.2 : 0.1;
       m.setPosture(dh > 0.05 ? 'crouch' : 'stand');
       m.layer = { pose: { neckPitch: dh > 0 ? 0.5 : -0.4, earFwd: 0.8, pupil: 0.8, hipY: dh > 0.05 ? 0.135 : 0.2, tailLift: -0.2 }, w: Math.min(1, this.t / 0.15) };
       if (this.t > len && Math.abs(wrapA(face - m.yaw)) < 0.5) {

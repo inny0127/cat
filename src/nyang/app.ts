@@ -243,6 +243,18 @@ export class NyangApp {
   /** a tap: at a thing (the cat goes for it), or a spot on a top or the floor (it goes there) */
   tap(x: number, y: number) {
     if (this.mode !== 'play' && this.mode !== 'count') return;
+    this.tapped = true;
+    const nip = this.nip;
+    if (nip) {
+      const s = this.toScreen(nip.at);
+      if (Math.hypot(s.x - x, s.y - y) < 34) {
+        this.kitty.tell({ to: nip.at.clone(), top: nip.top });
+        this.ui.mark(s.x, s.y, true);
+        this.follow = true;
+        this.haptic.tap('light');
+        return;
+      }
+    }
     const prop = this.propAt(x, y);
     if (prop) {
       this.kitty.tell({ prop });
@@ -300,6 +312,11 @@ export class NyangApp {
   private menu() {
     this.mode = 'title';
     this.focusT = 0;
+    this.dropNip();
+    this.frenzy = 0;
+    this.kitty.pace = 1;
+    this.ui.frenzy(0);
+    this.ui.point(null);
     this.modeT = 0;
     this.round = null;
     let i = 0;
@@ -386,6 +403,12 @@ export class NyangApp {
     this.count = 0;
     this.follow = true;
     this.steps = 0;
+    this.dropNip();
+    this.nipAt = [15, 45].filter((t) => t < LEVELS[i].time - 12);
+    this.frenzy = 0;
+    this.kitty.pace = 1;
+    this.tapped = false;
+    this.ui.frenzy(0);
     this.ui.startRound();
     this.ui.show(this.round, 0, LEVELS[i].props.length);
     this.audio.start();
@@ -404,6 +427,99 @@ export class NyangApp {
     this.audio.play('coin', { gain: 0.22, delay: 0.06, rate: 1 + 0.06 * Math.min(6, r.combo - 1) });
     this.haptic.tapSoon(broke ? 'medium' : 'light');
     if (r.combo === 5 || r.combo === 8) this.ui.big(`${r.combo}연속!`);
+  }
+
+  /** catnip: a sprig of it put down somewhere now and then in a round (when, still to come), where
+   *  it lies, and how long the frenzy it brings has yet to run (s) */
+  private nip: { mesh: THREE.Group; at: THREE.Vector3; top: Top | null; t: number } | null = null;
+  private nipAt: number[] = [];
+  private frenzy = 0;
+  /** whether a tap has been made this round (till then, on the first round, a finger shows where) */
+  private tapped = true;
+
+  private catnip(dt: number) {
+    const r = this.round!;
+    // (a sprig put down: on a clear bit of floor in view, or on a top)
+    if (!this.nip && this.nipAt.length && r.t >= this.nipAt[0]) {
+      this.nipAt.shift();
+      this.putNip();
+    }
+    const n = this.nip;
+    if (n) {
+      n.t += dt;
+      n.mesh.rotation.y += dt * 1.5;
+      n.mesh.scale.setScalar(1 + 0.12 * Math.sin(n.t * 6));
+      const m = this.cat.motor.pos;
+      if (this.kitty.on === n.top && Math.hypot(m.x - n.at.x, m.z - n.at.z) < 0.16) {
+        // (eaten: the frenzy)
+        this.dropNip();
+        this.frenzy = 8;
+        r.boost = 2;
+        this.kitty.pace = 1.5;
+        this.ui.big('캣닢 타임!');
+        this.audio.play('trill', { gain: 0.6 });
+        this.audio.play('fanfare', { gain: 0.35, rate: 1.2 });
+        this.haptic.tapSoon('medium');
+      } else if (n.t > 14) this.dropNip();
+    }
+    if (this.frenzy > 0) {
+      this.frenzy -= dt;
+      if (this.frenzy <= 0) { this.frenzy = 0; r.boost = 1; this.kitty.pace = 1; }
+    }
+    this.ui.frenzy(this.frenzy);
+    // (the very first round: a finger over the nearest thing, till a tap)
+    if (!this.tapped && this.level === 0 && !this.save.best[LEVELS[0].id]) {
+      const c = this.cat.motor.pos;
+      let best: Prop | null = null, bd = Infinity;
+      for (const p of this.props.list) {
+        if (!p.on || p.state === 'broken') continue;
+        const s = this.toScreen(p.group.position);
+        if (s.x < 30 || s.x > innerWidth - 30) continue;
+        const d = p.group.position.distanceTo(c);
+        if (d < bd) { bd = d; best = p; }
+      }
+      if (best) {
+        const s = this.toScreen(best.group.position.clone().setY(best.group.position.y + KINDS[best.kind].h + 0.03));
+        this.ui.point(s.x, s.y);
+      } else this.ui.point(null);
+    } else this.ui.point(null);
+  }
+
+  /** a sprig of catnip put down where the cat can get to it, in view */
+  private putNip() {
+    const [lo, hi] = [this.camX - this.halfWidth() * 0.7, this.camX + this.halfWidth() * 0.7];
+    let at: THREE.Vector3 | null = null;
+    for (let k = 0; k < 40 && !at; k++) {
+      const x = lo + Math.random() * (hi - lo), z = -0.1 + Math.random() * 0.75;
+      if (this.kitty.clearAt(x, z) && this.cat.motor.pos.distanceTo(new THREE.Vector3(x, 0, z)) > 0.35) at = new THREE.Vector3(x, 0, z);
+    }
+    if (!at) return;
+    const g = new THREE.Group();
+    const leaf = this.paint('leaf', 0.15);
+    for (let i = 0; i < 6; i++) {
+      const a = i * 2.4, l = new THREE.Mesh(new THREE.SphereGeometry(0.022, 6, 4), leaf);
+      l.scale.set(1.3, 0.35, 0.7);
+      l.position.set(Math.cos(a) * 0.025, 0.012 + 0.006 * (i % 3), Math.sin(a) * 0.025);
+      l.rotation.y = -a;
+      l.castShadow = true;
+      g.add(l);
+    }
+    const flower = new THREE.Mesh(new THREE.SphereGeometry(0.012, 6, 4), this.paint('pink', 0.2));
+    flower.position.y = 0.03;
+    g.add(flower);
+    g.position.copy(at);
+    this.stage.scene.add(g);
+    this.nip = { mesh: g, at, top: null, t: 0 };
+    this.ui.tip('캣닢이 떨어졌어요! 눌러서 먹으면 8초 동안 점수 2배!', 3500);
+    this.audio.play('rustle', { gain: 0.3, pan: this.pan(at.x) });
+  }
+
+  private dropNip() {
+    const n = this.nip;
+    if (!n) return;
+    this.stage.scene.remove(n.mesh);
+    n.mesh.traverse((m) => { if (m instanceof THREE.Mesh) m.geometry.dispose(); });
+    this.nip = null;
   }
 
   /** the round over: what it came to, kept, and the card */
@@ -459,7 +575,7 @@ export class NyangApp {
         if (n === 3) {
           this.mode = 'play';
           this.modeT = 0;
-          if (!this.save.best[LEVELS[0].id]) this.ui.tip('물건을 톡 누르면 고양이가 가서 떨어뜨려요. 바닥이나 가구를 누르면 그리로 가요', 6000);
+          if (!this.save.best[LEVELS[0].id]) this.ui.tip('물건을 톡 누르면 고양이가 가서 떨어뜨려요. 옆으로 밀면 방을 둘러봐요', 6000);
         }
       }
     } else if (this.mode === 'play' && r) {
@@ -485,11 +601,19 @@ export class NyangApp {
         this.modeT = 0;
         this.ui.home();
         this.audio.play('door', { gain: 0.7 });
+        this.dropNip();
+        this.frenzy = 0;
+        this.kitty.pace = 1;
+        this.ui.frenzy(0);
+        this.ui.point(null);
+        const st = r.stars;
+        setTimeout(() => this.ui.say(st >= 3 ? '내 꽃병…! 내 찻주전자…!!' : st === 2 ? '야!!! 이게 다 뭐야!!' : st === 1 ? '…뭐야 이거. 너지?' : '어? 오늘은 얌전했네?'), 1100);
         this.kitty.tell({ to: this.cat.motor.pos.clone(), top: this.kitty.on });
       }
       this.ui.show(r, r.downs, LEVELS[this.level].props.length);
       this.ui.edges(...this.offscreen());
-    } else if (this.mode === 'home' && this.modeT > 2.4) this.finish();
+      this.catnip(dt);
+    } else if (this.mode === 'home' && this.modeT > 3.4) this.finish();
 
     // the room, its light, and the cat in it
     const d = this.set.update(dt, this.hour, 0, new Date());
