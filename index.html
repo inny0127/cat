@@ -3,17 +3,17 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-  <meta name="theme-color" content="#2b2433" />
+  <meta name="theme-color" content="#0a0d1c" />
   <meta name="color-scheme" content="light" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="냥아치" />
-  <meta name="description" content="집사가 오기 전에 거실을 엉망으로! 고양이가 되어 컵, 꽃병, 화분을 냥냥펀치로 떨어뜨리는 픽셀 아트 액션 게임." />
+  <meta name="apple-mobile-web-app-title" content="밤사냥" />
+  <meta name="description" content="집사가 잠든 한밤중, 고양이의 눈높이로 나방·귀뚜라미·생쥐를 사냥하는 1인칭 픽셀 게임. 살금살금 다가가 씰룩씰룩, 덮쳐!" />
   <link rel="manifest" href="./manifest.webmanifest" />
   <link rel="icon" type="image/png" href="./icons/icon-192.png" />
   <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
-  <title>냥아치</title>
+  <title>밤사냥</title>
   <style>
     /* the app's words in pixels, as the room is drawn: Galmuri11 (Lee Minseo, SIL OFL 1.1) cut
        down to the letters the app writes (tools/font_subset.py), renamed as its licence asks */
@@ -23,7 +23,7 @@
       font-display: block;
     }
     :root {
-      --paper: #2b2433;
+      --paper: #05060c;
       --ink: rgba(92, 70, 58, 0.62);
       /* the font's pixel, a whole number of the screen's (main.ts sets it) */
       --fpx: 1px;
@@ -59,8 +59,8 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      background: #2b2433;
-      color: #ffd6a8;
+      background: #0a0d1c;
+      color: #ffd27a;
       font: 400 calc(12 * var(--fpx)) / 1.5 var(--pixel-font);
       letter-spacing: 0;
       text-shadow: 0 var(--fpx) 0 rgba(59, 49, 80, 0.45);
@@ -87,9 +87,9 @@
   </style>
 </head>
 <body>
-  <div id="loading"><img src="./icons/art-64.png" alt="" width="64" height="64" /><span>집사가 나가는 중…</span></div>
-  <canvas id="stage" aria-label="거실의 고양이. 물건을 누르면 고양이가 떨어뜨려요." role="img"></canvas>
+  <div id="loading"><img src="./icons/art-64.png" alt="" width="64" height="64" /><span>집사가 잠드는 중…</span></div>
+  <canvas id="stage" aria-label="고양이의 눈으로 본 한밤중의 집" role="img"></canvas>
   <noscript>게임을 하려면 자바스크립트를 켜 주세요.</noscript>
-  <script type="module" src="/src/nyang/main.ts"></script>
+  <script type="module" src="/src/hunt/main.ts"></script>
 </body>
 </html>
