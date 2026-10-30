@@ -153,6 +153,17 @@ const MAKERS: Record<string, Make> = {
     }
     return out;
   },
+  // a spider up its thread: a thin quick zip, rising
+  zip: (sr) => {
+    const out = new Float32Array(Math.floor(0.25 * sr));
+    let ph = 0;
+    for (let i = 0; i < out.length; i++) {
+      const u = i / out.length;
+      ph += (2 * Math.PI * (2200 + 2600 * u)) / sr;
+      out[i] = (Math.sin(ph) * 0.3 + (Math.random() * 2 - 1) * 0.15) * Math.sin(Math.PI * u) * (0.6 + 0.4 * Math.sin(u * 90));
+    }
+    return out;
+  },
   // caught: a bright pop and a chime up
   catch: (sr) => {
     const out = new Float32Array(Math.floor(0.5 * sr));

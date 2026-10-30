@@ -38,6 +38,8 @@ export class World {
   /** the flat's crumbs and bowls: where a mouse goes when it is out */
   readonly treats = [new THREE.Vector3(-2.6, 0, -2.0), new THREE.Vector3(-1.55, 0, -0.35), new THREE.Vector3(1.4, 0, 1.0)];
   /** where crickets like to be, and moths (round the lights) */
+  /** where spiders let themselves down from (over what: its top's height) */
+  readonly spiderSpots = [new THREE.Vector3(1.5, 0.4, 2.0), new THREE.Vector3(0.0, 0, 0.8), new THREE.Vector3(0.6, 0, -2.4), new THREE.Vector3(2.4, 0, -1.0), new THREE.Vector3(-2.6, 0.75, -2.0), new THREE.Vector3(-3.0, 0, 0.6)];
   readonly cricketSpots = [new THREE.Vector3(-2.2, 0, -1.0), new THREE.Vector3(1.6, 0, 2.0), new THREE.Vector3(-0.2, 0, -2.6), new THREE.Vector3(3.6, 0, -0.9), new THREE.Vector3(-3.0, 0, 1.6)];
 
   /** the things standing about to be pushed off: a mug and the remote on the coffee table, a

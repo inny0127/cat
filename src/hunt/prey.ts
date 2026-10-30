@@ -2,13 +2,14 @@ import * as THREE from 'three';
 import { lineClear } from './physics';
 import { CEIL, HALF_X, HALF_Z, type World } from './world';
 
-export type PreyKind = 'moth' | 'cricket' | 'mouse';
+export type PreyKind = 'moth' | 'cricket' | 'mouse' | 'spider';
 
 /** each kind: its name, points, how far it hears and sees, how jumpy it is, how fast it gets away */
 export const PREY: Record<PreyKind, { name: string; pts: number; hear: number; see: number; nerves: number; flee: number; size: number }> = {
   moth: { name: '나방', pts: 100, hear: 1.6, see: 1.2, nerves: 0.9, flee: 2.6, size: 0.03 },
   cricket: { name: '귀뚜라미', pts: 150, hear: 2.6, see: 1.3, nerves: 1.1, flee: 1.8, size: 0.025 },
   mouse: { name: '생쥐', pts: 300, hear: 4.0, see: 2.6, nerves: 1.4, flee: 2.7, size: 0.045 },
+  spider: { name: '거미', pts: 200, hear: 2.0, see: 1.0, nerves: 1.0, flee: 1.6, size: 0.03 },
 };
 
 export type PreyState = 'roam' | 'pause' | 'wary' | 'flee' | 'hidden' | 'stunned' | 'held';
@@ -52,6 +53,11 @@ export class Prey {
   private wings: THREE.Object3D[] = [];
   private legs: THREE.Object3D[] = [];
   private tail: THREE.Object3D | null = null;
+  /** a spider's thread, up to where it hangs from (scaled to reach the ceiling); how low it lets
+   *  itself down */
+  private thread: THREE.Line | null = null;
+  private hang = 0.5;
+  private base = 0;
   private chirpIn = rnd(1, 4);
   /** seen from the cat this step (for the ? and ! over it) */
   seen = false;
@@ -96,6 +102,24 @@ export class Prey {
         ant.rotation.set(-0.5, s * 0.3, 0);
         g.add(ant);
       }
+    } else if (this.kind === 'spider') {
+      const black = M(0x2a2228);
+      const body = new THREE.Mesh(new THREE.SphereGeometry(1, 6, 5), black);
+      body.scale.set(0.009, 0.008, 0.011);
+      g.add(body);
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.005, 5, 4), black);
+      head.position.set(0, 0.002, 0.011);
+      g.add(head);
+      for (const s of [-1, 1]) for (let k = 0; k < 4; k++) {
+        const leg = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.0015, 0.0015), black);
+        leg.position.set(s * 0.012, 0.003, 0.008 - k * 0.006);
+        leg.rotation.set(0, s * (0.6 - k * 0.4), s * -0.5);
+        g.add(leg);
+        this.legs.push(leg);
+      }
+      const thread = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 1, 0)]), new THREE.LineBasicMaterial({ color: 0xd8dcf0, transparent: true, opacity: 0.55 }));
+      g.add(thread);
+      this.thread = thread;
     } else {
       const grey = M(0x8f8b95), pink = M(0xe9a2a8);
       const body = new THREE.Mesh(new THREE.SphereGeometry(1, 8, 6), grey);
@@ -149,6 +173,15 @@ export class Prey {
       this.cellPos(world, c);
       this.state = 'pause';
       this.wait = rnd(1, 3);
+    } else if (this.kind === 'spider') {
+      // (from the ceiling over somewhere, let down a way on its thread)
+      const spots = world.spiderSpots ?? [new THREE.Vector3()];
+      const s = spots[Math.floor(Math.random() * spots.length)];
+      this.home.set(s.x + rnd(-0.3, 0.3), CEIL, s.z + rnd(-0.3, 0.3));
+      this.pos.copy(this.home).setY(CEIL - 0.1);
+      this.base = s.y;
+      this.hang = rnd(0.25, 0.85) + s.y;
+      this.state = 'roam';
     } else {
       const h = world.holes[Math.floor(Math.random() * world.holes.length)];
       this.pos.copy(h.at);
@@ -218,6 +251,7 @@ export class Prey {
     }
     if (this.kind === 'moth') this.moth(dt, S);
     else if (this.kind === 'cricket') this.cricket(dt, S);
+    else if (this.kind === 'spider') this.spider(dt, S);
     else this.mouse(dt, S);
     // (never out through the walls, the floor or the ceiling, however its orbit or its hop goes)
     this.pos.x = THREE.MathUtils.clamp(this.pos.x, -HALF_X + 0.06, HALF_X - 0.06);
@@ -225,6 +259,7 @@ export class Prey {
     this.pos.y = THREE.MathUtils.clamp(this.pos.y, 0, CEIL - 0.1);
     this.mesh.position.copy(this.pos);
     this.mesh.rotation.y = this.heading;
+    if (this.thread) this.thread.scale.y = Math.max(0.01, (CEIL - this.pos.y) / this.mesh.scale.y);
   }
 
   /** a crash heard (loud: 1 for a glass on the floor): near enough, it is off; further, wary */
@@ -247,10 +282,41 @@ export class Prey {
     } else if (this.kind === 'cricket') {
       this.wait = 0;
       S.sound(this, 'hop');
+    } else if (this.kind === 'spider') {
+      S.sound(this, 'zip');
     } else {
       this.runHome(S.world);
       S.sound(this, 'squeak');
     }
+  }
+
+  /** a spider: down on its thread to where it means to hang, turning slowly, swaying; up and out of
+   *  reach when it takes fright, and a while after, down again somewhere else */
+  private spider(dt: number, S: Senses) {
+    const sway = Math.sin(this.t * 1.3) * 0.03;
+    this.heading += dt * 0.6 * Math.sin(this.t * 0.4);
+    for (const [k, l] of this.legs.entries()) l.rotation.z = (k < 4 ? 1 : -1) * (-0.5 + 0.15 * Math.sin(this.t * 3 + k));
+    if (this.state === 'hidden') {
+      this.wait -= dt;
+      if (this.wait <= 0) this.spawn(S.world);
+      return;
+    }
+    if (this.state === 'stunned') {
+      this.wait -= dt;
+      if (this.wait <= 0) this.state = 'roam';
+      return;
+    }
+    if (this.state === 'flee') {
+      // (up the thread, fast; out of sight against the ceiling)
+      this.pos.y += PREY.spider.flee * dt;
+      if (this.pos.y >= CEIL - 0.12) { this.state = 'hidden'; this.mesh.visible = false; this.wait = rnd(8, 15); }
+      return;
+    }
+    const want = this.state === 'wary' ? Math.min(this.hang + 0.4, CEIL - 0.2) : this.hang;
+    this.pos.y += THREE.MathUtils.clamp(want - this.pos.y, -0.25 * dt, 0.3 * dt);
+    this.pos.x = this.home.x + sway;
+    this.pos.z = this.home.z + sway * 0.6;
+    if (this.state === 'roam' && Math.random() < dt * 0.05) this.hang = THREE.MathUtils.clamp(this.hang + rnd(-0.3, 0.3), this.base + 0.22, CEIL - 0.4);
   }
 
   private moth(dt: number, S: Senses) {

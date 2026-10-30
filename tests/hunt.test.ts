@@ -136,6 +136,20 @@ describe('밤사냥: the hunted', () => {
     for (let i = 0; i < 60; i++) spooked.update(1 / 60, sense(new THREE.Vector3(0.8, 0.2, 0), 0.9, 2.8, W));
     expect(spooked.state).toBe('flee');
   });
+  it('a spider let down on its thread is up and away from a cat bounding at it, and back down later', () => {
+    const W = world();
+    const sp = new Prey('spider');
+    sp.spawn(W);
+    for (let i = 0; i < 300; i++) sp.update(1 / 60, sense(new THREE.Vector3(3, 0.2, 3), 0, 0, W));
+    expect(sp.state).toBe('roam');
+    expect(sp.pos.y).toBeLessThan(1.2);
+    const low = sp.pos.y;
+    for (let i = 0; i < 240; i++) sp.update(1 / 60, sense(sp.pos.clone().add(new THREE.Vector3(0.5, -low + 0.2, 0)), 1, 3, W));
+    expect(sp.state).toBe('hidden');
+    expect(sp.mesh.visible).toBe(false);
+    for (let i = 0; i < 60 * 20; i++) sp.update(1 / 60, sense(new THREE.Vector3(3, 0.2, 3), 0, 0, W));
+    expect(sp.mesh.visible).toBe(true);
+  });
   it('a mouse startled runs for its hole and is gone', () => {
     const W = world();
     const m = new Prey('mouse');

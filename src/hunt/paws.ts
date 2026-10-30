@@ -135,6 +135,10 @@ export class Paws {
     this.pinned.clear();
     const m = thing.clone();
     m.visible = true;
+    // (not a spider's thread: only the thing itself)
+    const lines: THREE.Object3D[] = [];
+    m.traverse((o) => { if (o instanceof THREE.Line) lines.push(o); });
+    for (const o of lines) o.removeFromParent();
     m.position.set(0, 0, 0);
     m.rotation.set(0, Math.PI / 2, 0);
     m.scale.setScalar(1);

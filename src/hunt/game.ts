@@ -38,13 +38,13 @@ export const NIGHTS: Night[] = [
     goals: [caught('cricket', 2, '귀뚜라미 2마리 잡기'), caught('moth', 1, '나방 잡기'), knocked(1)] },
   { id: 'mice', name: '생쥐의 밤', blurb: '부엌에 생쥐가 나왔대요. 잡아서 집사 침대에 선물해요.', time: 180, roster: { moth: 2, cricket: 2, mouse: 3 }, stars: [900, 2200, 3800],
     goals: [gifts(1), chain(3), asleep] },
-  { id: 'rain', name: '비 오는 밤', blurb: '빗소리가 발소리를 덮어줘요. 하지만 번개가 치면 다 보여요!', time: 180, roster: { moth: 1, cricket: 5, mouse: 2 }, stars: [1000, 2400, 4000],
+  { id: 'rain', name: '비 오는 밤', blurb: '빗소리가 발소리를 덮어줘요. 하지만 번개가 치면 다 보여요!', time: 180, roster: { moth: 1, cricket: 5, mouse: 2, spider: 1 }, stars: [1000, 2400, 4000],
     mods: { hear: 0.45, rain: true, moon: 0.35 }, goals: [caught('cricket', 5, '귀뚜라미 5마리 잡기'), chain(4), gifts(1)] },
-  { id: 'full', name: '보름달 밤', blurb: '달빛이 밝아 멀리서도 들켜요. 그림자를 따라 살금살금.', time: 210, roster: { moth: 4, cricket: 4, mouse: 3 }, stars: [1400, 3200, 5200],
-    mods: { see: 1.5, moon: 1.8 }, goals: [caught('moth', 3, '나방 3마리 잡기'), chain(5), knocked(3)] },
-  { id: 'light', name: '예민한 집사의 밤', blurb: '집사가 잠귀가 밝아요. 대신 선물은 두 배!', time: 180, roster: { moth: 3, cricket: 3, mouse: 3 }, stars: [1200, 3000, 5000],
+  { id: 'full', name: '보름달 밤', blurb: '달빛이 밝아 멀리서도 들켜요. 그림자를 따라 살금살금.', time: 210, roster: { moth: 4, cricket: 4, mouse: 3, spider: 2 }, stars: [1400, 3200, 5200],
+    mods: { see: 1.5, moon: 1.8 }, goals: [caught('moth', 3, '나방 3마리 잡기'), caught('spider', 1, '천장에서 내려온 거미 잡기'), chain(5)] },
+  { id: 'light', name: '예민한 집사의 밤', blurb: '집사가 잠귀가 밝아요. 대신 선물은 두 배!', time: 180, roster: { moth: 3, cricket: 3, mouse: 3, spider: 1 }, stars: [1200, 3000, 5000],
     mods: { sleepy: 2, gift: 2 }, goals: [gifts(2), asleep, caught('mouse', 3, '생쥐 3마리 잡기')] },
-  { id: 'chaos', name: '난장판의 밤', blurb: '오늘 밤은 다 떨어뜨려도 돼요. 물건 점수 두 배!', time: 180, roster: { moth: 3, cricket: 4, mouse: 2 }, stars: [1500, 3500, 6000],
+  { id: 'chaos', name: '난장판의 밤', blurb: '오늘 밤은 다 떨어뜨려도 돼요. 물건 점수 두 배!', time: 180, roster: { moth: 3, cricket: 4, mouse: 2, spider: 2 }, stars: [1500, 3500, 6000],
     mods: { knock: 2 }, goals: [knocked(7), { text: '집사 머리맡 물컵 떨어뜨리기', done: (h) => h.things.some((t) => t.kind === 'glass' && t.state === 'down') }, chain(3)] },
 ];
 
@@ -63,10 +63,10 @@ export function today(d = new Date()): Night {
     { name: '집사가 예민한 밤', mods: { sleepy: 2, gift: 2 } },
     { name: '난장판의 밤', mods: { knock: 2 } },
   ]);
-  const roster = { moth: 1 + Math.floor(rnd() * 4), cricket: 1 + Math.floor(rnd() * 5), mouse: 1 + Math.floor(rnd() * 3) };
+  const roster = { moth: 1 + Math.floor(rnd() * 4), cricket: 1 + Math.floor(rnd() * 5), mouse: 1 + Math.floor(rnd() * 3), spider: Math.floor(rnd() * 3) };
   // (three challenges, each of a different sort)
   const sorts: Goal[][] = [
-    [caught('moth', 2, '나방 2마리 잡기'), caught('cricket', 3, '귀뚜라미 3마리 잡기'), caught('mouse', 2, '생쥐 2마리 잡기')],
+    [caught('moth', 2, '나방 2마리 잡기'), caught('cricket', 3, '귀뚜라미 3마리 잡기'), caught('mouse', 2, '생쥐 2마리 잡기'), ...(roster.spider ? [caught('spider', 1, '거미 잡기')] : [])],
     [chain(3), chain(4)],
     [gifts(1), asleep],
     [knocked(2), knocked(4)],
@@ -79,10 +79,10 @@ export function today(d = new Date()): Night {
     sorts[i] = [];
   }
   // (stars by what is out: about what a fair night of it would come to)
-  const worth = roster.moth * 100 + roster.cricket * 150 + roster.mouse * 500;
+  const worth = roster.moth * 100 + roster.cricket * 150 + roster.mouse * 500 + roster.spider * 200;
   const r = (x: number) => Math.max(100, Math.round(x / 100) * 100);
   return {
-    id: `day-${key}`, name: '오늘의 밤', blurb: `${M}월 ${D}일 · ${twist.name} · 나방 ${roster.moth} · 귀뚜라미 ${roster.cricket} · 생쥐 ${roster.mouse}`,
+    id: `day-${key}`, name: '오늘의 밤', blurb: `${M}월 ${D}일 · ${twist.name} · 나방 ${roster.moth} · 귀뚜라미 ${roster.cricket} · 생쥐 ${roster.mouse}${roster.spider ? ` · 거미 ${roster.spider}` : ''}`,
     time: 180, roster, stars: [r(worth * 0.6), r(worth * 1.3), r(worth * 2.1)], mods: twist.mods, goals,
   };
 }
@@ -127,7 +127,7 @@ export class Hunt {
   private lastCatch = -99;
   /** a mouse in the mouth */
   held: Prey | null = null;
-  caught: Record<PreyKind, number> = { moth: 0, cricket: 0, mouse: 0 };
+  caught: Record<PreyKind, number> = { moth: 0, cricket: 0, mouse: 0, spider: 0 };
   gifts = 0;
   /** how deeply they sleep (1: soundly; at 0, woken) */
   sleep = 1;

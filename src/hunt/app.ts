@@ -16,11 +16,11 @@ import { Haptic } from '../platform/haptics';
 type Mode = 'title' | 'play' | 'pause' | 'end';
 
 /** the words for the sounds things make, written where they come from */
-const WORDS: Record<string, string> = { chirp: '귀뚤귀뚤', squeak: '찍찍', flutter: '파닥', hop: '톡', shatter: '와장창!', clatter: '달그락' };
+const WORDS: Record<string, string> = { chirp: '귀뚤귀뚤', squeak: '찍찍', flutter: '파닥', hop: '톡', zip: '스르륵', shatter: '와장창!', clatter: '달그락' };
 /** where the bedside lamp is (put on when they wake) */
 const BEDSIDE = new THREE.Vector3(2.32, 0.8, -3.25);
 /** what each kind glows, heard through the walls */
-const GLOW: Record<string, number> = { moth: 0xffe27a, cricket: 0x9cff8a, mouse: 0xffa8c0 };
+const GLOW: Record<string, number> = { moth: 0xffe27a, cricket: 0x9cff8a, mouse: 0xffa8c0, spider: 0xc8a8ff };
 
 /**
  * 밤사냥: you are the cat, it is the middle of the night, their person is asleep, and the flat is

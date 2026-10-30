@@ -224,7 +224,7 @@ export class Hud {
     const say = o.stars === 3 ? '전설의 사냥꾼!' : o.stars === 2 ? '훌륭한 사냥이었어요' : o.stars === 1 ? '나쁘지 않은 밤' : '내일 밤엔 더 잘할 거예요';
     this.show(`<div class="card"><p>${o.name} · 새벽 5시</p><h2>${say}</h2><div class="stars">${stars}</div>
       <p style="font-size:calc(24 * var(--fpx));color:#f2ecff">${o.score.toLocaleString('ko-KR')}</p>${o.record ? '<p style="color:#ffd27a">새 최고 기록!</p>' : ''}
-      <p>나방 ${o.caught.moth} · 귀뚜라미 ${o.caught.cricket} · 생쥐 ${o.caught.mouse}</p>
+      <p>나방 ${o.caught.moth} · 귀뚜라미 ${o.caught.cricket} · 생쥐 ${o.caught.mouse}${o.caught.spider ? ` · 거미 ${o.caught.spider}` : ''}</p>
       <p>선물 ${o.gifts} · 최고 연속 ${o.best}${o.knocked ? ` · 떨어뜨림 ${o.knocked}` : ''}${o.wakes ? ` · 집사 깨움 ${o.wakes}` : ''}</p>
       <div class="gl">${Hud.goalList(o.goals)}</div>
       ${o.coats.map((n) => `<p style="color:#ffd27a">새 털색: ${n}! (밤 고르기에서 바꿔 입어요)</p>`).join('')}
