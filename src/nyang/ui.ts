@@ -116,6 +116,14 @@ const CSS = `
 #ny .point { position: absolute; display: none; transform: translate(-50%, -100%); color: #ffe08a; font-size: calc(18 * var(--fpx)); line-height: 1.1; text-align: center; text-shadow: 0 2px 0 #2b1e30, 0 0 6px rgba(43, 30, 48, 0.8); animation: nypoint 0.8s ease-in-out infinite; }
 #ny .point.on { display: block; }
 @keyframes nypoint { 50% { margin-top: -8px; } }
+#ny .cam { position: absolute; left: 50%; top: calc(140px + env(safe-area-inset-top)); transform: translateX(-50%); padding: 5px 12px; display: none; white-space: nowrap;
+  background: rgba(43, 20, 28, 0.9); color: #ffd0d0; box-shadow: 0 0 0 2px #e8607a; font-size: calc(14 * var(--fpx)); }
+#ny .cam i { font-style: normal; color: #ff4d5e; }
+#ny .cam.warn { display: block; animation: nyblink 0.4s steps(2) infinite; }
+#ny .cam.rec { display: block; background: rgba(120, 10, 30, 0.92); color: #fff; }
+@keyframes nyblink { 50% { opacity: 0.3; } }
+#ny .recframe { position: absolute; inset: 0; pointer-events: none; display: none; box-shadow: inset 0 0 0 4px rgba(232, 60, 80, 0.85), inset 0 0 40px 10px rgba(232, 60, 80, 0.35); }
+#ny .recframe.on { display: block; }
 #ny .home { position: absolute; left: 0; right: 0; top: 34%; text-align: center; font-size: calc(26 * var(--fpx)); color: #fff; text-shadow: 0 3px 0 #6b2a3a, 0 0 10px rgba(43, 30, 48, 0.7); animation: nycount 2.2s ease-out forwards; }
 `;
 
@@ -152,6 +160,9 @@ export class NyangUi {
   private glowEl: HTMLElement;
   private pointEl: HTMLElement;
   private nipN = -1;
+  private camEl: HTMLElement;
+  private recEl: HTMLElement;
+  private camS = '';
   /** a room chosen to play (its index) */
   onPlay: ((i: number) => void) | null = null;
   /** back to the rooms */
@@ -176,6 +187,8 @@ export class NyangUi {
       <button class="pill menu play" aria-label="그만하기">${pix(['KKKKK', '.....', 'KKKKK', '.....', 'KKKKK'], { K: '#f7f0e8' }, 16)}</button>
       <div class="score play">0<small></small></div>
       <div class="glow"></div>
+      <div class="recframe"></div>
+      <div class="cam"></div>
       <div class="nip"></div>
       <div class="point">톡!<br>▼</div>
       <div class="edge l"></div><div class="edge r"></div>
@@ -195,6 +208,8 @@ export class NyangUi {
     this.nipEl = el.querySelector('.nip') as HTMLElement;
     this.glowEl = el.querySelector('.glow') as HTMLElement;
     this.pointEl = el.querySelector('.point') as HTMLElement;
+    this.camEl = el.querySelector('.cam') as HTMLElement;
+    this.recEl = el.querySelector('.recframe') as HTMLElement;
     this.edgeR = el.querySelector('.edge.r') as HTMLElement;
     this.end = el.querySelector('.end') as HTMLElement;
     const credits = el.querySelector('.credits') as HTMLElement;
@@ -359,6 +374,16 @@ export class NyangUi {
     this.glowEl.classList.toggle('on', n > 0);
   }
 
+  /** their pet cam: about to look in, looking in (and for how long yet), or off */
+  cam(state: 'off' | 'warn' | 'rec', left = 0) {
+    const s = `${state}${Math.ceil(left)}`;
+    if (s === this.camS) return;
+    this.camS = s;
+    this.camEl.className = `cam ${state === 'off' ? '' : state}`;
+    this.camEl.innerHTML = state === 'warn' ? '<i>●</i> 펫캠이 켜지려고 해요!' : state === 'rec' ? `<i>●</i> REC 얌전한 척! ${Math.ceil(left)}` : '';
+    this.recEl.classList.toggle('on', state === 'rec');
+  }
+
   /** a word said, in a bubble (their people, come home) */
   say(s: string) {
     const d = document.createElement('div');
@@ -382,7 +407,7 @@ export class NyangUi {
     d.className = `pop ${big ? 'big' : ''}`;
     d.style.left = `${x}px`;
     d.style.top = `${y}px`;
-    d.innerHTML = `+${pts.toLocaleString('ko-KR')}<i>${name}</i>`;
+    d.innerHTML = `${pts >= 0 ? '+' : ''}${pts.toLocaleString('ko-KR')}<i>${name}</i>`;
     this.el.appendChild(d);
     setTimeout(() => d.remove(), 1450);
   }
@@ -423,7 +448,7 @@ export class NyangUi {
     const say = st === 3 ? '완벽한 냥아치!' : st === 2 ? '집사가 할 말을 잃었어요' : st === 1 ? '꽤 어질렀어요' : '집사가 눈치채지도 못했어요…';
     this.end.innerHTML = `<div class="card"><h2>${say}</h2><div class="stars">${stars}</div>
       <div class="pts">${r.score.toLocaleString('ko-KR')}</div>${record ? '<p class="gold">새 최고 기록!</p>' : ''}
-      <p>엎은 것 ${r.downs} / ${all} · 깨뜨린 것 ${r.breaks} · 최고 콤보 x${r.best}</p>
+      <p>엎은 것 ${r.downs} / ${all} · 깨뜨린 것 ${r.breaks} · 최고 콤보 x${r.best}${r.catches ? ` · 들킨 횟수 ${r.catches}` : ''}</p>
       <p class="gold">+${coins}냥</p>
       <div class="row"><button class="btn alt" data-go="menu">방 고르기</button><button class="btn" data-go="${i}">다시 하기</button>
       ${i + 1 < LEVELS.length ? `<button class="btn" data-go="${i + 1}" ${nextOpen ? '' : 'disabled style="opacity:.5"'}>다음 방 ▶</button>` : ''}</div></div>`;

@@ -322,6 +322,8 @@ export class NyangApp {
     this.kitty.pace = 1;
     this.ui.frenzy(0);
     this.ui.point(null);
+    this.camState = 'off';
+    this.ui.cam('off');
     this.modeT = 0;
     this.round = null;
     let i = 0;
@@ -435,6 +437,9 @@ export class NyangApp {
     this.kitty.legs = 1 + 0.08 * upLevel(up, 'legs');
     this.round.gap = 3.2 + 0.4 * upLevel(up, 'focus');
     this.ui.frenzy(0);
+    this.camState = 'off';
+    this.camNext = this.L.cam ? 10 + Math.random() * 6 : Infinity;
+    this.ui.cam('off');
     this.ui.startRound();
     this.ui.show(this.round, 0, this.L.props.length);
     this.audio.start();
@@ -447,6 +452,18 @@ export class NyangApp {
     if (broke) this.shake = Math.max(this.shake, 0.8);
     const r = this.round;
     if (this.mode !== 'play' || !r) return;
+    if (this.camState === 'rec') {
+      // (seen doing it, on their pet cam)
+      r.down(0, broke);
+      r.caught(400);
+      this.camClean = false;
+      const s = this.toScreen(at.clone().setY(at.y + 0.1));
+      this.ui.pop(clamp(s.x, 40, innerWidth - 40), clamp(s.y, 90, innerHeight - 60), -400, '들켰다!', true);
+      this.ui.big('들켰다!');
+      this.audio.play('meowPlead', { gain: 0.5 });
+      this.haptic.tapSoon('heavy');
+      return;
+    }
     const got = r.down(KINDS[p.kind].pts, broke);
     const s = this.toScreen(at.clone().setY(at.y + 0.1));
     this.ui.pop(clamp(s.x, 40, innerWidth - 40), clamp(s.y, 90, innerHeight - 60), got, `${KINDS[p.kind].name}${broke ? ' 와장창!' : ''}`, broke || r.combo >= 3);
@@ -469,6 +486,12 @@ export class NyangApp {
   private nip: { mesh: THREE.Group; at: THREE.Vector3; top: Top | null; t: number } | null = null;
   private nipAt: number[] = [];
   private frenzy = 0;
+  /** their pet cam: off, about to look in, or looking in; how long it has been so; when next; and
+   *  whether nothing has come down while it looked */
+  private camState: 'off' | 'warn' | 'rec' = 'off';
+  private camT = 0;
+  private camNext = Infinity;
+  private camClean = true;
   /** whether a tap has been made this round (till then, on the first round, a finger shows where) */
   private tapped = true;
 
@@ -518,6 +541,34 @@ export class NyangApp {
         this.ui.point(s.x, s.y);
       } else this.ui.point(null);
     } else this.ui.point(null);
+  }
+
+  /** their pet cam now and then: a warning, then three seconds of it looking in; through them
+   *  nothing must come down (and a cat sat still the while looks the very picture of innocence) */
+  private petCam(dt: number) {
+    const r = this.round!;
+    this.camT += dt;
+    if (this.camState === 'off' && r.t >= this.camNext && r.left > 8) {
+      this.camState = 'warn';
+      this.camT = 0;
+      this.audio.play('beep', { gain: 0.3, rate: 0.7 });
+      this.ui.tip('펫캠이 켜져요! 3초 동안 아무것도 떨어뜨리지 말고 얌전히', 2600);
+    } else if (this.camState === 'warn' && this.camT > 1.6) {
+      this.camState = 'rec';
+      this.camT = 0;
+      this.camClean = true;
+      this.audio.play('pencil', { gain: 0.3, rate: 1.4 });
+    } else if (this.camState === 'rec' && this.camT > 3) {
+      this.camState = 'off';
+      this.camT = 0;
+      this.camNext = r.t + (this.L.cam ?? 20) * (0.8 + 0.4 * Math.random());
+      if (this.camClean && !this.kitty.busy) {
+        r.score += 150;
+        this.ui.pop(innerWidth / 2, innerHeight * 0.32, 150, '얌전한 척 성공!', true);
+        this.audio.play('trill', { gain: 0.4 });
+      }
+    }
+    this.ui.cam(this.camState, 3 - this.camT);
   }
 
   /** a sprig of catnip put down where the cat can get to it, in view */
@@ -641,6 +692,8 @@ export class NyangApp {
         this.kitty.pace = 1;
         this.ui.frenzy(0);
         this.ui.point(null);
+        this.camState = 'off';
+        this.ui.cam('off');
         const st = r.stars;
         setTimeout(() => this.ui.say(st >= 3 ? '내 꽃병…! 내 찻주전자…!!' : st === 2 ? '야!!! 이게 다 뭐야!!' : st === 1 ? '…뭐야 이거. 너지?' : '어? 오늘은 얌전했네?'), 1100);
         this.kitty.tell({ to: this.cat.motor.pos.clone(), top: this.kitty.on });
@@ -648,6 +701,7 @@ export class NyangApp {
       this.ui.show(r, r.downs, this.L.props.length);
       this.ui.edges(...this.offscreen());
       this.catnip(dt);
+      this.petCam(dt);
     } else if (this.mode === 'home' && this.modeT > 3.4) this.finish();
 
     // the room, its light, and the cat in it

@@ -32,6 +32,22 @@ describe('냥아치: a round', () => {
     expect(comboMul(20)).toBe(4);
   });
 
+  it('caught on the pet cam: points lost (never below none), the run broken', () => {
+    const r = new Round(LEVELS[2]);
+    r.down(300, true);
+    r.step(1);
+    r.down(300, true);
+    expect(r.comboLive).toBe(2);
+    r.caught(400);
+    expect(r.score).toBe(1130 - 400);
+    expect(r.comboLive).toBe(0);
+    r.caught(5000);
+    expect(r.score).toBe(0);
+    expect(r.catches).toBe(2);
+    expect(LEVELS[0].cam).toBeUndefined();
+    expect(LEVELS[2].cam).toBeGreaterThan(0);
+  });
+
   it('ends when the time is up, and counts nothing after', () => {
     const r = new Round(LEVELS[0]);
     expect(r.step(LEVELS[0].time - 1)).toBe(false);

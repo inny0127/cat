@@ -11,6 +11,8 @@ export interface Level {
   hour: number;
   rain?: number;
   time: number;
+  /** their pet cam looks in about this often (s; none: never) */
+  cam?: number;
   stars: [number, number, number];
   props: [Kind, string, number, number][];
 }
@@ -42,7 +44,7 @@ export const LEVELS: Level[] = [
     ],
   },
   {
-    id: 'evening', name: '노을 지는 저녁', blurb: '저녁 약속이 생겼대요. 75초, 이번엔 더 많이!', hour: 18.3, time: 75, stars: [1600, 3500, 5400],
+    id: 'evening', name: '노을 지는 저녁', blurb: '저녁 약속이 생겼대요. 75초, 이번엔 더 많이!', hour: 18.3, time: 75, cam: 22, stars: [1600, 3500, 5400],
     props: [
       ['cup', 'coffee', -0.58, 0.2], ['cup', 'coffee', -0.44, 0.33], ['vase', 'coffee', -0.3, 0.24], ['glass', 'coffee', -0.2, 0.16],
       ['frame', 'sofaBack', -0.7, -0.53], ['plant', 'sofaBack', -0.4, -0.53], ['frame', 'sofaBack', -0.12, -0.53],
@@ -55,7 +57,7 @@ export const LEVELS: Level[] = [
     ],
   },
   {
-    id: 'party', name: '파티 다음 날', blurb: '어젯밤 파티의 설거지가 그대로! 80초 만에 와장창', hour: 11.5, time: 80, stars: [1800, 4000, 6000],
+    id: 'party', name: '파티 다음 날', blurb: '어젯밤 파티의 설거지가 그대로! 80초 만에 와장창', hour: 11.5, time: 80, cam: 19, stars: [1800, 4000, 6000],
     props: [
       ['plate', 'table', 1.05, -0.45], ['plate', 'table', 1.3, -0.48], ['plate', 'table', 1.55, -0.45], ['glass', 'table', 1.12, -0.28], ['glass', 'table', 1.42, -0.3],
       ['cup', 'table', 1.25, -0.15], ['cup', 'table', 1.55, -0.2], ['bowl', 'table', 1.05, -0.08], ['vase', 'table', 1.35, -0.05],
@@ -69,7 +71,7 @@ export const LEVELS: Level[] = [
     ],
   },
   {
-    id: 'night', name: '한밤의 대소동', blurb: '집사가 늦게 온대요. 불 켜진 거실, 90초 동안 마음껏!', hour: 22.5, time: 90, stars: [3600, 7800, 12000],
+    id: 'night', name: '한밤의 대소동', blurb: '집사가 늦게 온대요. 불 켜진 거실, 90초 동안 마음껏!', hour: 22.5, time: 90, cam: 17, stars: [3600, 7800, 12000],
     props: [
       ['mug', 'coffee', -0.58, 0.18], ['teapot', 'coffee', -0.42, 0.28], ['cup', 'coffee', -0.25, 0.2], ['candle', 'coffee', -0.22, 0.34],
       ['vase', 'sofaBack', -0.72, -0.53], ['frame', 'sofaBack', -0.45, -0.53], ['plant', 'sofaBack', -0.14, -0.53],
@@ -82,7 +84,7 @@ export const LEVELS: Level[] = [
     ],
   },
   {
-    id: 'dawn', name: '새벽 햇살', blurb: '집사가 새벽 운동을 나갔어요. 해 뜨는 95초 동안 전부!', hour: 6.8, time: 95, stars: [4600, 10000, 15000],
+    id: 'dawn', name: '새벽 햇살', blurb: '집사가 새벽 운동을 나갔어요. 해 뜨는 95초 동안 전부!', hour: 6.8, time: 95, cam: 15, stars: [4600, 10000, 15000],
     props: [
       ['mug', 'coffee', -0.58, 0.18], ['plant', 'coffee', -0.42, 0.3], ['remote', 'coffee', -0.28, 0.2], ['orange', 'coffee', -0.2, 0.34],
       ['cushion', 'sofa', -0.65, -0.26], ['book', 'sofa', -0.4, -0.22], ['cushion', 'sofa', -0.18, -0.28],
@@ -127,7 +129,7 @@ export function dailyLevel(d: Date): Level {
   const hours = [9, 13, 16.5, 18.2, 21];
   return {
     id: `daily-${key}`, name: '오늘의 방', blurb: `${d.getMonth() + 1}월 ${d.getDate()}일의 배치. 날마다 바뀌어요!`,
-    hour: hours[Math.floor(rnd() * hours.length)], rain: rnd() < 0.25 ? 1 : 0, time: 75,
+    hour: hours[Math.floor(rnd() * hours.length)], rain: rnd() < 0.25 ? 1 : 0, time: 75, cam: rnd() < 0.5 ? 20 : undefined,
     stars: [mark(0.4), mark(0.75), mark(1.05)], props,
   };
 }
@@ -178,6 +180,15 @@ export class Round {
     this.score += got;
     return got;
   }
+
+  /** caught on their pet cam: so many points lost, the run of knocks broken */
+  caught(pen: number) {
+    this.score = Math.max(0, this.score - pen);
+    this.combo = 0;
+    this.last = -99;
+    this.catches++;
+  }
+  catches = 0;
 
   /** stars won (0 .. 3) */
   get stars() {
