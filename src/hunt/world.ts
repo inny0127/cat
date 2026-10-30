@@ -29,6 +29,8 @@ export class World {
   readonly sleeper: THREE.Object3D;
   /** the TV's screen (it flickers) */
   readonly screen: THREE.MeshBasicMaterial;
+  /** rain running down the window (seen on a rainy night; its streaks moved down as it falls) */
+  readonly rain: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
   /** where the moon comes in, and from which way */
   readonly moonDir = new THREE.Vector3(-0.25, -0.62, -0.75).normalize();
   /** the floor, in cells a mouse can run along (1: free) */
@@ -77,6 +79,7 @@ export class World {
     this.deco('frame', 2.28, 2.34, 1.0, 2.1, HALF_Z - 0.04, HALF_Z + 0.02);
     this.deco('frame', 1.48, 1.52, 1.0, 2.1, HALF_Z - 0.03, HALF_Z + 0.02);
     this.night(0.7, 2.3, 1.0, 2.1, HALF_Z + 0.04);
+    this.rain = this.rainOn(0.7, 2.3, 1.0, 2.1, HALF_Z + 0.03);
     // baseboards
     for (const [x0, x1, z0, z1] of [[-HALF_X, HALF_X, HALF_Z - 0.02, HALF_Z], [-HALF_X, HALF_X, -HALF_Z, -HALF_Z + 0.02], [-HALF_X, -HALF_X + 0.02, -HALF_Z, HALF_Z], [HALF_X - 0.02, HALF_X, -HALF_Z, HALF_Z]] as const) this.deco('trim', x0, x1, 0, 0.07, z0, z1);
     // the bedroom's walls: along z = 0 with a door in it, and along x = 1.5
@@ -329,6 +332,34 @@ export class World {
     m.position.set((x0 + x1) / 2, (y0 + y1) / 2, z);
     m.rotation.y = Math.PI;
     this.group.add(m);
+  }
+  /** cloud over the night outside, and rain down the glass, in streaks that repeat as they fall */
+  private rainOn(x0: number, x1: number, y0: number, y1: number, z: number) {
+    const c = document.createElement('canvas');
+    c.width = 32;
+    c.height = 64;
+    const g = c.getContext('2d')!;
+    g.fillStyle = 'rgba(34, 40, 60, 0.92)';
+    g.fillRect(0, 0, 32, 64);
+    let seed = 7;
+    const rnd = () => ((seed = (seed * 9301 + 49297) % 233280) / 233280);
+    for (let i = 0; i < 26; i++) {
+      const x = Math.floor(rnd() * 32), y = Math.floor(rnd() * 64), len = 3 + Math.floor(rnd() * 7);
+      g.fillStyle = `rgba(170, 190, 230, ${0.35 + rnd() * 0.4})`;
+      for (let k = 0; k < len; k++) g.fillRect(x, (y + k) % 64, 1, 1);
+    }
+    const tex = new THREE.CanvasTexture(c);
+    tex.magFilter = THREE.NearestFilter;
+    tex.minFilter = THREE.NearestFilter;
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(2, 1);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, y1 - y0), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false }));
+    m.position.set((x0 + x1) / 2, (y0 + y1) / 2, z);
+    m.rotation.y = Math.PI;
+    m.visible = false;
+    this.group.add(m);
+    return m;
   }
   /** a mouse hole in the foot of a wall (an arch of dark), the way out of it into the room */
   private hole(x: number, z: number, ox: number, oz: number) {

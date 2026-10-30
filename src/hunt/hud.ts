@@ -6,6 +6,12 @@ const CSS = `
 #hud .bar { position: absolute; top: calc(8px + env(safe-area-inset-top)); left: calc(10px + env(safe-area-inset-left)); right: calc(10px + env(safe-area-inset-right)); display: none; justify-content: space-between; align-items: flex-start; }
 #hud.playing .bar { display: flex; }
 #hud .clock { font-size: calc(14 * var(--fpx)); color: #c8d4ff; }
+#hud .goals, #hud .gl { font-size: calc(11 * var(--fpx)); color: #c8d4ff; line-height: 1.55; margin-top: 2px; }
+#hud .goals div, #hud .gl div { display: flex; align-items: center; gap: 7px; }
+#hud .goals i, #hud .gl i { width: 7px; height: 7px; flex: none; box-shadow: 0 0 0 2px #8f9ac8; }
+#hud .goals .done, #hud .gl .done { color: #ffd27a; }
+#hud .goals .done i, #hud .gl .done i { background: #ffd27a; box-shadow: 0 0 0 2px #ffd27a; }
+#hud .gl { display: inline-block; text-align: left; margin: 6px 0 2px; }
 #hud .clock small { display: block; font-size: calc(11 * var(--fpx)); color: #8f9ac8; }
 #hud .score { text-align: center; font-size: calc(18 * var(--fpx)); }
 #hud .score small { display: block; font-size: calc(12 * var(--fpx)); color: #ffd27a; min-height: 1.4em; }
@@ -43,7 +49,6 @@ const CSS = `
 #hud .screen.on { display: flex; }
 #hud .screen > :first-child { margin-top: auto; }
 #hud .screen > :last-child { margin-bottom: auto; }
-}
 #hud h1 { margin: 0; font-weight: 400; font-size: calc(44 * var(--fpx)); color: #ffd27a; text-shadow: 0 4px 0 #3a2050, 0 0 18px rgba(255, 210, 122, 0.35); letter-spacing: 2px; }
 #hud .sub { color: #c8d4ff; margin-top: -4px; }
 #hud .nights { display: flex; flex-direction: column; gap: 8px; width: min(340px, 92vw); }
@@ -52,6 +57,7 @@ const CSS = `
 #hud .nt span { color: #a9b0d8; grid-column: 1; }
 #hud .nt em { grid-row: 1 / span 2; grid-column: 2; align-self: center; font-style: normal; color: #ffd27a; text-align: right; }
 #hud .nt.lock { opacity: 0.5; }
+#hud .nt small { color: #8f9ac8; }
 #hud .how { width: min(340px, 92vw); color: #a9b0d8; text-align: left; line-height: 1.6; }
 #hud .how b { color: #e6f0ff; font-weight: 400; }
 #hud .card { width: min(320px, 90vw); padding: 16px; text-align: center; background: rgba(28, 24, 52, 0.94); box-shadow: 0 0 0 2px #7f86c8, 4px 5px 0 rgba(0, 0, 0, 0.35); }
@@ -68,10 +74,14 @@ const CSS = `
 @media (max-height: 520px) {
   #hud h1 { font-size: calc(30 * var(--fpx)); }
   #hud .screen { gap: 8px; }
-  #hud .nights { flex-direction: row; width: min(760px, 96vw); }
-  #hud .nt { flex: 1; grid-template-columns: 1fr; }
+  #hud .nights { display: grid; grid-template-columns: repeat(3, 1fr); width: min(760px, 96vw); }
+  #hud .nt { grid-template-columns: 1fr; padding: 7px 10px; }
+  #hud .nt span { font-size: calc(11 * var(--fpx)); line-height: 1.3; }
   #hud .nt em { grid-row: auto; grid-column: 1; text-align: left; }
   #hud .how { width: min(760px, 96vw); columns: 2; font-size: calc(11 * var(--fpx)); }
+  #hud .goals { font-size: calc(10 * var(--fpx)); line-height: 1.45; }
+  #hud .card { padding: 10px 16px; }
+}
 `;
 
 /**
@@ -85,6 +95,7 @@ export class Hud {
   readonly el: HTMLDivElement;
   readonly btn: { pounce: HTMLElement; jump: HTMLElement; listen: HTMLElement };
   private clockEl: HTMLElement;
+  private goalsEl: HTMLElement;
   private scoreEl: HTMLElement;
   private heldEl: HTMLElement;
   private tipEl: HTMLElement;
@@ -103,7 +114,7 @@ export class Hud {
     const el = this.el = document.createElement('div');
     el.id = 'hud';
     el.innerHTML = `
-      <div class="bar"><div class="clock"></div><div class="score">0<small></small></div><button class="pause" aria-label="멈춤">II</button></div>
+      <div class="bar"><div><div class="clock"></div><div class="goals"></div></div><div class="score">0<small></small></div><button class="pause" aria-label="멈춤">II</button></div>
       <div class="held">생쥐를 물고 있어요 → 집사 침대로!</div>
       <div class="charge"><i></i></div>
       <div class="stick"><i></i></div>
@@ -113,6 +124,7 @@ export class Hud {
     document.body.appendChild(el);
     const q = (s: string) => el.querySelector(s) as HTMLElement;
     this.clockEl = q('.clock');
+    this.goalsEl = q('.goals');
     this.scoreEl = q('.score');
     this.heldEl = q('.held');
     this.tipEl = q('.tip');
@@ -137,8 +149,10 @@ export class Hud {
     this.el.classList.remove('playing');
     const cards = NIGHTS.map((N, i) => {
       const open = nightOpen(save, i), st = save.stars[N.id] ?? 0;
+      const done = N.goals.filter((_, k) => ((save.goals?.[N.id] ?? 0) >> k) & 1).length;
+      const best = save.best[N.id] ? `최고 ${save.best[N.id].toLocaleString('ko-KR')}` : '';
       return `<button class="nt ${open ? '' : 'lock'}" data-n="${i}"><b>${N.name}</b><span>${open ? N.blurb : '앞의 밤에서 별을 하나 따면 열려요'}</span>
-        <em>${'★'.repeat(st)}<span style="color:#3e3a66">${'★'.repeat(3 - st)}</span><br><small style="color:#8f9ac8">${save.best[N.id] ? `최고 ${save.best[N.id].toLocaleString('ko-KR')}` : ''}</small></em></button>`;
+        <em>${'★'.repeat(st)}<span style="color:#3e3a66">${'★'.repeat(3 - st)}</span><br><small>${best}${best && done ? ' · ' : ''}${done ? `도전 ${done}/${N.goals.length}` : ''}</small></em></button>`;
     }).join('');
     const wide = innerWidth > innerHeight;
     this.show(`<h1>밤사냥</h1><div class="sub">집사가 잠든 밤, 고양이의 눈으로 사냥을</div>
@@ -160,15 +174,24 @@ export class Hud {
       <div class="row"><button class="btn alt" data-c="retry">처음부터</button><button class="btn alt" data-c="menu">밤 고르기</button><button class="btn alt" data-c="sound">${mute ? '소리 끔' : '소리 켬'}</button></div></div>`);
   }
 
+  /** the night's challenges, by the clock (done ones lit) */
+  goals(list: { text: string; done: boolean }[]) {
+    this.goalsEl.innerHTML = Hud.goalList(list);
+  }
+  private static goalList(list: { text: string; done: boolean }[]) {
+    return list.map((g) => `<div class="${g.done ? 'done' : ''}"><i></i>${g.text}</div>`).join('');
+  }
+
   /** dawn: the night's reckoning */
-  end(o: { name: string; score: number; stars: number; record: boolean; caught: Record<string, number>; gifts: number; best: number; wakes: number; i: number; next: boolean }) {
+  end(o: { name: string; score: number; stars: number; record: boolean; caught: Record<string, number>; gifts: number; best: number; wakes: number; i: number; next: boolean; goals: { text: string; done: boolean }[]; knocked: number }) {
     this.el.classList.remove('playing');
     const stars = [0, 1, 2].map((k) => `<i class="${k < o.stars ? 'on' : ''}">★</i>`).join('');
     const say = o.stars === 3 ? '전설의 사냥꾼!' : o.stars === 2 ? '훌륭한 사냥이었어요' : o.stars === 1 ? '나쁘지 않은 밤' : '내일 밤엔 더 잘할 거예요';
     this.show(`<div class="card"><p>${o.name} · 새벽 5시</p><h2>${say}</h2><div class="stars">${stars}</div>
       <p style="font-size:calc(24 * var(--fpx));color:#f2ecff">${o.score.toLocaleString('ko-KR')}</p>${o.record ? '<p style="color:#ffd27a">새 최고 기록!</p>' : ''}
       <p>나방 ${o.caught.moth} · 귀뚜라미 ${o.caught.cricket} · 생쥐 ${o.caught.mouse}</p>
-      <p>선물 ${o.gifts} · 최고 연속 ${o.best}${o.wakes ? ` · 집사 깨움 ${o.wakes}` : ''}</p>
+      <p>선물 ${o.gifts} · 최고 연속 ${o.best}${o.knocked ? ` · 떨어뜨림 ${o.knocked}` : ''}${o.wakes ? ` · 집사 깨움 ${o.wakes}` : ''}</p>
+      <div class="gl">${Hud.goalList(o.goals)}</div>
       <div class="row"><button class="btn alt" data-c="menu">밤 고르기</button><button class="btn" data-n="${o.i}">다시 하기</button>${o.i + 1 < NIGHTS.length ? `<button class="btn ${o.next ? '' : 'lock'}" data-n="${o.i + 1}" ${o.next ? '' : 'style="opacity:.5"'}>다음 밤</button>` : ''}</div></div>`);
   }
 

@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { moveBody, lineClear, groundUnder, type Body, type Box } from '../src/hunt/physics';
 import { Cat, type Intent } from '../src/hunt/cat';
 import { Prey } from '../src/hunt/prey';
-import { CHAIN, GIFT, Hunt, NIGHTS, chainMul, nightOpen } from '../src/hunt/game';
+import { CHAIN, GIFT, GOAL, Hunt, NIGHTS, chainMul, nightOpen } from '../src/hunt/game';
 import { THINGS } from '../src/hunt/things';
 
 const body = (x: number, y: number, z: number): Body => ({ x, y, z, vx: 0, vy: 0, vz: 0, r: 0.12, h: 0.26, grounded: false, landed: 0 });
@@ -175,7 +175,7 @@ describe('밤사냥: the night', () => {
     const table: Box = [-0.5, 0.7, -0.5, 0.5, 0.75, 0.5];
     const W = { boxes: [table], lamps: [{ at: new THREE.Vector3(0, 1.5, 0), color: 0, power: 1, reach: 3 }], holes: [{ at: new THREE.Vector3(3, 0, 0), out: new THREE.Vector3(-1, 0, 0) }], treats: [new THREE.Vector3()], cricketSpots: [new THREE.Vector3(0.3, 0, 1.2)], cellAt: () => -1, path: () => [], bed: { at: new THREE.Vector3(9, 0.55, 9), r: 1 }, sleeper: { position: new THREE.Vector3(9, 0.6, 9) }, grid: { cell: 0.1, cols: 1, rows: 1, free: new Uint8Array(1) }, spots: [{ kind: 'mug', at: new THREE.Vector3(0, 0.75, 0.35) }] } as never;
     const crashed: string[] = [], heard: string[] = [];
-    const h = new Hunt(W, { ...NIGHTS[0], roster: { cricket: 1 } }, { caught: () => {}, gift: () => {}, missed: () => {}, stirred: () => {}, sound: (n) => heard.push(n), crashed: (t) => crashed.push(t.kind) });
+    const h = new Hunt(W, { ...NIGHTS[0], roster: { cricket: 1 } }, { goal: () => {}, lightning: () => {}, caught: () => {}, gift: () => {}, missed: () => {}, stirred: () => {}, sound: (n) => heard.push(n), crashed: (t) => crashed.push(t.kind) });
     const cricket = h.prey[0];
     cricket.pos.set(0.3, 0, 1.2);
     cricket.state = 'pause';
@@ -197,7 +197,7 @@ describe('밤사냥: the night', () => {
   it('a mug left be stays put; walked into on its table, it is shoved but not off', () => {
     const table: Box = [-1, 0.7, -1, 1, 0.75, 1];
     const W = { boxes: [table], lamps: [{ at: new THREE.Vector3(0, 1.5, 0), color: 0, power: 1, reach: 3 }], holes: [], treats: [], cricketSpots: [], cellAt: () => -1, path: () => [], bed: { at: new THREE.Vector3(9, 0.55, 9), r: 1 }, grid: { cell: 0.1, cols: 1, rows: 1, free: new Uint8Array(1) }, spots: [{ kind: 'mug', at: new THREE.Vector3(0, 0.75, 0.2) }] } as never;
-    const h = new Hunt(W, { ...NIGHTS[0], roster: {} }, { caught: () => {}, gift: () => {}, missed: () => {}, stirred: () => {}, sound: () => {}, crashed: () => {} });
+    const h = new Hunt(W, { ...NIGHTS[0], roster: {} }, { goal: () => {}, lightning: () => {}, caught: () => {}, gift: () => {}, missed: () => {}, stirred: () => {}, sound: () => {}, crashed: () => {} });
     h.cat.place(0, 0.75, -0.5, 0);
     const I = still();
     for (let i = 0; i < 60; i++) h.step(1 / 60, I);
@@ -207,5 +207,38 @@ describe('밤사냥: the night', () => {
     expect(h.things[0].pos.z).toBeGreaterThan(0.25);
     expect(h.things[0].state === 'down').toBe(false);
     expect(h.knocked).toBe(0);
+  });
+  it('pays a challenge the moment it is done, and not waking them only at dawn', () => {
+    const W = { boxes: [], lamps: [{ at: new THREE.Vector3(0, 1.5, 0), color: 0, power: 1, reach: 3 }], holes: [], treats: [], cricketSpots: [], cellAt: () => -1, path: () => [], bed: { at: new THREE.Vector3(9, 0.55, 9), r: 1 }, grid: { cell: 0.1, cols: 1, rows: 1, free: new Uint8Array(1) } } as never;
+    const paid: number[] = [];
+    const night = { ...NIGHTS[1], time: 2, roster: {} };
+    const h = new Hunt(W, night, { caught: () => {}, gift: () => {}, missed: () => {}, stirred: () => {}, sound: () => {}, crashed: () => {}, lightning: () => {}, goal: (k) => paid.push(k) });
+    h.best = 3;
+    h.step(1 / 60, still());
+    expect(paid).toEqual([1]);
+    expect(h.score).toBe(GOAL);
+    for (let i = 0; i < 150 && !h.over; i++) h.step(1 / 60, still());
+    expect(h.over).toBe(true);
+    expect(paid).toEqual([1, 2]);
+    expect(h.goals).toEqual([false, true, true]);
+  });
+  it('every night has its challenges, each its own words', () => {
+    for (const N of NIGHTS) {
+      expect(N.goals.length).toBe(3);
+      expect(new Set(N.goals.map((g) => g.text)).size).toBe(3);
+    }
+    expect(new Set(NIGHTS.map((N) => N.id)).size).toBe(NIGHTS.length);
+  });
+  it('rain on the windows: a trotting cat goes unheard by a cricket that would hear it on a still night', () => {
+    const W = { boxes: [], lamps: [{ at: new THREE.Vector3(0, 1.5, 0), color: 0, power: 1, reach: 3 }], holes: [], treats: [], cricketSpots: [new THREE.Vector3()], cellAt: () => -1, path: () => [], grid: { cell: 0.1, cols: 1, rows: 1, free: new Uint8Array(1) } } as never;
+    const alert = (hear: number) => {
+      const c = new Prey('cricket');
+      c.pos.set(0, 0, 0);
+      c.state = 'pause';
+      // (heard, not seen: from behind a wall of nothing, standing still but loud)
+      for (let i = 0; i < 30; i++) c.update(1 / 60, { eye: new THREE.Vector3(1.2, 0.2, 0), noise: 0.35 * hear, speed: 0, world: W, sound: () => {} });
+      return c.alert;
+    };
+    expect(alert(0.45)).toBeLessThan(alert(1) * 0.6);
   });
 });

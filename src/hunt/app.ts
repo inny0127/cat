@@ -54,6 +54,11 @@ export class HuntApp {
    *  jolt of a landing (0..1) */
   private stop = 0;
   private kick = 0;
+  /** the moonlight, as bright as the night has it (and lightning, a flash of it); when the thunder
+   *  that goes with the lightning comes */
+  private readonly moon: THREE.DirectionalLight;
+  private moonBase = 2.4;
+  private thunderAt = Infinity;
   private dip = 0;
   private baseFov = 75;
   private tipStep = 0;
@@ -67,7 +72,7 @@ export class HuntApp {
     S.fog = new THREE.Fog(0x10142a, 4, 15);
     // the night's light: the sky's glow all round, the moon through the window, the lamps left on
     S.add(new THREE.HemisphereLight(0x6c7ab8, 0x2a2232, 1.0));
-    const moon = new THREE.DirectionalLight(0xa8bcff, 2.4);
+    const moon = this.moon = new THREE.DirectionalLight(0xa8bcff, 2.4);
     moon.position.copy(new THREE.Vector3(1.5, 0, 0).addScaledVector(this.world.moonDir, -9));
     moon.target.position.set(1.5, 0, 0);
     moon.castShadow = true;
@@ -128,6 +133,9 @@ export class HuntApp {
     this.mode = 'title';
     this.clearHunt();
     this.hunt = null;
+    this.world.rain.visible = false;
+    this.sound.rain(false);
+    this.moonBase = 2.4;
     this.hud.title(this.save);
     this.ring.visible = false;
     this.clearGlows();
@@ -152,6 +160,17 @@ export class HuntApp {
         else this.hud.tip('으음… 집사가 뒤척여요. 침실에선 살금살금!', 2500);
       },
       sound: (name, at, gain) => this.heard(name, at, gain ?? 1),
+      goal: (k, pts) => {
+        this.hud.toast(`+${pts}`, `도전 성공! ${NIGHTS[i].goals[k].text}`);
+        this.sound.play('gift', null, 0.4, 1.2);
+        this.feel.tap('medium');
+        this.showGoals();
+      },
+      lightning: () => {
+        this.flash = 0.45;
+        this.thunderAt = this.time + 0.7 + Math.random() * 1.2;
+        this.feel.tap('light');
+      },
       crashed: (t, pts) => {
         this.hud.toast(`+${pts}`, `${THINGS[t.kind].name} ${THINGS[t.kind].sound === 'shatter' ? '와장창!' : '툭 떨어뜨렸다!'}`);
         this.feel.tap('medium');
@@ -164,6 +183,13 @@ export class HuntApp {
     });
     for (const p of this.hunt.prey) this.scene.add(p.mesh);
     for (const t of this.hunt.things) this.scene.add(t.mesh);
+    // the night's own weather and moon
+    const M = NIGHTS[i].mods ?? {};
+    this.moonBase = 2.4 * (M.moon ?? 1);
+    this.world.rain.visible = !!M.rain;
+    this.sound.rain(!!M.rain);
+    this.showGoals();
+    if (M.rain && !this.save.goals?.[NIGHTS[i].id]) this.hud.tip('빗소리 덕분에 발소리가 잘 안 들려요. 번개가 칠 땐 조심!', 5000);
     this.glows = this.hunt.prey.map((p) => {
       const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: HuntApp.dot(), color: GLOW[p.kind], depthTest: false, depthWrite: false, transparent: true }));
       s.scale.setScalar(0.14);
@@ -174,6 +200,11 @@ export class HuntApp {
     this.tipStep = 0;
     this.hud.playing(this.controls.touchy || matchMedia('(pointer: coarse)').matches);
     this.sound.start();
+  }
+
+  private showGoals() {
+    const h = this.hunt;
+    if (h) this.hud.goals(h.night.goals.map((g, k) => ({ text: g.text, done: h.goals[k] })));
   }
 
   /** the last night's hunted and its things, out of the room */
@@ -210,10 +241,12 @@ export class HuntApp {
     const record = h.score > (this.save.best[N.id] ?? 0);
     if (record) this.save.best[N.id] = h.score;
     this.save.stars[N.id] = Math.max(this.save.stars[N.id] ?? 0, h.stars);
+    const goals = (this.save.goals ??= {});
+    h.goals.forEach((d, k) => { if (d) goals[N.id] = (goals[N.id] ?? 0) | (1 << k); });
     saveSave(this.save);
     this.mode = 'end';
     this.sound.play('alarm', null, 0.4);
-    this.hud.end({ name: N.name, score: h.score, stars: h.stars, record, caught: h.caught, gifts: h.gifts, best: h.best, wakes: h.wakes, i: this.nightI, next: nightOpen(this.save, this.nightI + 1) });
+    this.hud.end({ name: N.name, score: h.score, stars: h.stars, record, caught: h.caught, gifts: h.gifts, best: h.best, wakes: h.wakes, i: this.nightI, next: nightOpen(this.save, this.nightI + 1), goals: N.goals.map((g, k) => ({ text: g.text, done: h.goals[k] })), knocked: h.knocked });
     this.hud.stick(null);
     this.hud.charge(null);
     this.ring.visible = false;
@@ -295,6 +328,13 @@ export class HuntApp {
     this.flash = Math.max(0, this.flash - dt * 2.5);
     this.red = Math.max(0, this.red - dt * 1.2);
     this.kick = Math.max(0, this.kick - dt * 1.8);
+    // the moon (and a flash of lightning); the rain down the window; thunder after the flash
+    this.moon.intensity = this.moonBase + 14 * (h?.bolt ?? 0) ** 2;
+    if (this.world.rain.visible) {
+      this.world.rain.material.map!.offset.y += dt * 1.6;
+      this.world.rain.material.color.setScalar(1 + 4 * (h?.bolt ?? 0));
+    }
+    if (this.time >= this.thunderAt) { this.thunderAt = Infinity; this.sound.play('thunder', null, 0.9); }
     this.dip = Math.max(0, this.dip - dt * 4);
   }
   /** the cat on the title (no night under way): only its eyes, looking round */

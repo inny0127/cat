@@ -20,6 +20,8 @@ export interface Senses {
   noise: number;
   speed: number;
   world: World;
+  /** how far it sees, against the usual (a bright moon, lightning: further) */
+  see?: number;
   /** a sound it makes (a chirp, a squeak, wings), for the game to play where it is */
   sound: (p: Prey, name: string) => void;
 }
@@ -201,10 +203,11 @@ export class Prey {
       const d = this.pos.distanceTo(S.eye);
       let gain = 0;
       if (d < K.hear) gain += S.noise * 6 * (1 - d / K.hear);
-      if (d < K.see && S.speed > 0.05 && lineClear(this.pos.x, this.pos.y + 0.03, this.pos.z, S.eye.x, S.eye.y, S.eye.z, S.world.boxes)) {
+      const see = K.see * (S.see ?? 1);
+      if (d < see && S.speed > 0.05 && lineClear(this.pos.x, this.pos.y + 0.03, this.pos.z, S.eye.x, S.eye.y, S.eye.z, S.world.boxes)) {
         this.seen = true;
         // (a creeping cat hardly seen; a trotting one plain)
-        gain += (S.speed < 0.7 ? 0.25 * S.speed : 0.6 + 0.4 * S.speed) * (1 - d / K.see) * 1.4;
+        gain += (S.speed < 0.7 ? 0.25 * S.speed : 0.6 + 0.4 * S.speed) * (1 - d / see) * 1.4;
       }
       // (right up close it knows anyway, in a moment)
       if (d < 0.3) gain += 0.8 * (1 - d / 0.3);

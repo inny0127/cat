@@ -128,6 +128,19 @@ const MAKERS: Record<string, Make> = {
     }
     return out;
   },
+  // thunder far off: a crack, then a long low roll
+  thunder: (sr) => {
+    const out = new Float32Array(Math.floor(3 * sr));
+    let lp = 0, lp2 = 0;
+    for (let i = 0; i < out.length; i++) {
+      const t = i / sr;
+      lp += (Math.random() * 2 - 1 - lp) * 0.02;
+      lp2 += (lp - lp2) * 0.05;
+      const roll = Math.min(1, t / 0.08) * Math.exp(-t / 1.1) * (0.7 + 0.3 * Math.sin(t * 7 + Math.sin(t * 3) * 2));
+      out[i] = lp2 * 9 * roll + (t < 0.06 ? (Math.random() * 2 - 1) * (1 - t / 0.06) * 0.3 : 0);
+    }
+    return out;
+  },
   // caught: a bright pop and a chime up
   catch: (sr) => {
     const out = new Float32Array(Math.floor(0.5 * sr));
@@ -238,6 +251,34 @@ export class Sound {
     g.gain.value = 0.25;
     src.connect(g).connect(this.out);
     src.start();
+    // (rain on the windows, for a rainy night: a hiss and the patter of drops, turned up when it rains)
+    const rn = ctx.sampleRate * 3, rb = ctx.createBuffer(1, rn, ctx.sampleRate), rd = rb.getChannelData(0);
+    let hp = 0, prev = 0;
+    for (let i = 0; i < rn; i++) {
+      const w = Math.random() * 2 - 1;
+      hp = 0.6 * (hp + w - prev);
+      prev = w;
+      rd[i] = hp * 0.25;
+    }
+    for (let k = 0; k < 160; k++) {
+      const i0 = Math.floor(Math.random() * (rn - 400)), a = 0.2 + Math.random() * 0.5;
+      for (let i = 0; i < 300; i++) rd[i0 + i] += (Math.random() * 2 - 1) * a * Math.exp(-i / 40);
+    }
+    const rs = ctx.createBufferSource();
+    rs.buffer = rb;
+    rs.loop = true;
+    this.rainGain = ctx.createGain();
+    this.rainGain.gain.value = this.raining ? 0.5 : 0;
+    rs.connect(this.rainGain).connect(this.out);
+    rs.start();
+  }
+
+  private rainGain: GainNode | null = null;
+  private raining = false;
+  /** the rain heard on the windows, or not */
+  rain(on: boolean) {
+    this.raining = on;
+    if (this.rainGain && this.ctx) this.rainGain.gain.setTargetAtTime(on ? 0.5 : 0, this.ctx.currentTime, 0.4);
   }
 
   /** start on the first touch (and again after the app comes back) */

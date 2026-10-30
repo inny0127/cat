@@ -4,7 +4,18 @@ import { PREY, Prey, type PreyKind } from './prey';
 import type { World } from './world';
 import { THINGS, Thing } from './things';
 
-/** a night: how long it lasts (s of play), what is out, the points for its stars */
+/** what is different about a night: the cat heard less (rain on the windows) or seen further (a
+ *  bright moon), their sleep lighter, a gift or a crash worth more; rain (and lightning), the moon
+ *  brighter or dimmer */
+export interface Mods { hear?: number; see?: number; sleepy?: number; gift?: number; knock?: number; rain?: boolean; moon?: number }
+
+/** a night's challenge: done (at once, or only at dawn, as for not waking them) */
+export interface Goal { text: string; done: (h: Hunt, dawn: boolean) => boolean }
+/** what each challenge done is worth */
+export const GOAL = 200;
+
+/** a night: how long it lasts (s of play), what is out, the points for its stars, its twist and
+ *  its challenges */
 export interface Night {
   id: string;
   name: string;
@@ -12,12 +23,29 @@ export interface Night {
   time: number;
   roster: Partial<Record<PreyKind, number>>;
   stars: [number, number, number];
+  mods?: Mods;
+  goals: Goal[];
 }
 
+const caught = (k: PreyKind, n: number, text: string): Goal => ({ text, done: (h) => h.caught[k] >= n });
+const chain = (n: number): Goal => ({ text: `${n}연속 잡기`, done: (h) => h.best >= n });
+const gifts = (n: number): Goal => ({ text: n > 1 ? `집사에게 생쥐 선물 ${n}번` : '집사에게 생쥐 선물하기', done: (h) => h.gifts >= n });
+const knocked = (n: number): Goal => ({ text: n > 1 ? `물건 ${n}개 떨어뜨리기` : '물건 하나 떨어뜨리기', done: (h) => h.knocked >= n });
+const asleep: Goal = { text: '집사를 한 번도 깨우지 않기', done: (h, dawn) => dawn && h.wakes === 0 };
+
 export const NIGHTS: Night[] = [
-  { id: 'first', name: '첫 번째 밤', blurb: '나방과 귀뚜라미부터. 살금살금 다가가 꾹 눌러 덮쳐요!', time: 150, roster: { moth: 3, cricket: 3, mouse: 1 }, stars: [600, 1400, 2400] },
-  { id: 'mice', name: '생쥐의 밤', blurb: '부엌에 생쥐가 나왔대요. 잡아서 집사 침대에 선물해요.', time: 180, roster: { moth: 2, cricket: 2, mouse: 3 }, stars: [900, 2200, 3800] },
-  { id: 'full', name: '보름달 밤', blurb: '모두가 깨어 있는 밤. 연속으로 잡아 콤보를 노려요.', time: 210, roster: { moth: 4, cricket: 4, mouse: 3 }, stars: [1400, 3200, 5200] },
+  { id: 'first', name: '첫 번째 밤', blurb: '나방과 귀뚜라미부터. 살금살금 다가가 꾹 눌러 덮쳐요!', time: 150, roster: { moth: 3, cricket: 3, mouse: 1 }, stars: [600, 1400, 2400],
+    goals: [caught('cricket', 2, '귀뚜라미 2마리 잡기'), caught('moth', 1, '나방 잡기'), knocked(1)] },
+  { id: 'mice', name: '생쥐의 밤', blurb: '부엌에 생쥐가 나왔대요. 잡아서 집사 침대에 선물해요.', time: 180, roster: { moth: 2, cricket: 2, mouse: 3 }, stars: [900, 2200, 3800],
+    goals: [gifts(1), chain(3), asleep] },
+  { id: 'rain', name: '비 오는 밤', blurb: '빗소리가 발소리를 덮어줘요. 하지만 번개가 치면 다 보여요!', time: 180, roster: { moth: 1, cricket: 5, mouse: 2 }, stars: [1000, 2400, 4000],
+    mods: { hear: 0.45, rain: true, moon: 0.35 }, goals: [caught('cricket', 5, '귀뚜라미 5마리 잡기'), chain(4), gifts(1)] },
+  { id: 'full', name: '보름달 밤', blurb: '달빛이 밝아 멀리서도 들켜요. 그림자를 따라 살금살금.', time: 210, roster: { moth: 4, cricket: 4, mouse: 3 }, stars: [1400, 3200, 5200],
+    mods: { see: 1.5, moon: 1.8 }, goals: [caught('moth', 3, '나방 3마리 잡기'), chain(5), knocked(3)] },
+  { id: 'light', name: '예민한 집사의 밤', blurb: '집사가 잠귀가 밝아요. 대신 선물은 두 배!', time: 180, roster: { moth: 3, cricket: 3, mouse: 3 }, stars: [1200, 3000, 5000],
+    mods: { sleepy: 2, gift: 2 }, goals: [gifts(2), asleep, caught('mouse', 3, '생쥐 3마리 잡기')] },
+  { id: 'chaos', name: '난장판의 밤', blurb: '오늘 밤은 다 떨어뜨려도 돼요. 물건 점수 두 배!', time: 180, roster: { moth: 3, cricket: 4, mouse: 2 }, stars: [1500, 3500, 6000],
+    mods: { knock: 2 }, goals: [knocked(7), { text: '집사 머리맡 물컵 떨어뜨리기', done: (h) => h.things.some((t) => t.kind === 'glass' && t.state === 'down') }, chain(3)] },
 ];
 
 /** a run of catches, each within this long of the one before, counts up; and what it is worth */
@@ -31,6 +59,10 @@ export interface GameEvents {
   gift: (pts: number) => void;
   missed: () => void;
   stirred: (woke: boolean) => void;
+  /** a challenge done (its index, and the points for it) */
+  goal: (i: number, pts: number) => void;
+  /** lightning (a rainy night): everything seen a moment */
+  lightning: () => void;
   /** a thing pushed off, landed: what, and its points */
   crashed: (t: Thing, pts: number) => void;
   sound: (name: string, at: THREE.Vector3 | null, gain?: number) => void;
@@ -62,6 +94,11 @@ export class Hunt {
   /** the things about to be pushed off, and how many have been */
   readonly things: Thing[] = [];
   knocked = 0;
+  /** the night's challenges, done or not */
+  readonly goals: boolean[];
+  /** lightning: the next (s into the night), and how lit it still is (0..1) */
+  private nextBolt = 15 + Math.random() * 15;
+  bolt = 0;
 
   constructor(readonly world: World, readonly night: Night, readonly on: GameEvents) {
     for (const [kind, n] of Object.entries(night.roster) as [PreyKind, number][]) {
@@ -72,6 +109,7 @@ export class Hunt {
       }
     }
     for (const s of world.spots ?? []) this.things.push(new Thing(s.kind, s.at));
+    this.goals = night.goals.map(() => false);
     // the cat starts on the rug, looking toward the kitchen
     this.cat.place(1.5, 0, 1.0, -Math.PI * 0.75);
   }
@@ -94,12 +132,19 @@ export class Hunt {
   step(dt: number, I: Intent) {
     if (this.over) return;
     this.t += dt;
-    const cat = this.cat, W = this.world;
+    const cat = this.cat, W = this.world, M = this.night.mods ?? {};
     cat.update(dt, I, W.boxes);
+    // (a rainy night: now and then a flash, everything plain to see a moment)
+    this.bolt = Math.max(0, this.bolt - dt * 2.5);
+    if (M.rain && this.t >= this.nextBolt) {
+      this.nextBolt = this.t + 12 + Math.random() * 16;
+      this.bolt = 1;
+      this.on.lightning();
+    }
     if (cat.doing === 'pounce' && cat.t < dt * 1.5) this.on.sound('whoosh', null, 0.5);
     if (cat.landedHard > 2) this.on.sound('thud', null, Math.min(0.8, cat.landedHard / 8));
     for (const p of this.prey) {
-      p.update(dt, { eye: cat.eye, noise: cat.noise, speed: cat.speed, world: W, sound: (q, name) => this.on.sound(name, q.pos, name === 'chirp' ? 0.5 : 0.7) });
+      p.update(dt, { eye: cat.eye, noise: cat.noise * (M.hear ?? 1), speed: cat.speed, world: W, see: (M.see ?? 1) * (1 + 1.5 * this.bolt), sound: (q, name) => this.on.sound(name, q.pos, name === 'chirp' ? 0.5 : 0.7) });
     }
     this.catching();
     this.pushing(dt);
@@ -113,7 +158,7 @@ export class Hunt {
     if (this.held) {
       const b = W.bed.at, e = cat.body;
       if (Math.hypot(e.x - b.x, e.z - b.z) < W.bed.r && e.y > 0.4) {
-        const pts = Math.round((GIFT * chainMul(this.chainLive || 1)) / 10) * 10;
+        const pts = Math.round((GIFT * (M.gift ?? 1) * chainMul(this.chainLive || 1)) / 10) * 10;
         this.score += pts;
         this.gifts++;
         this.held.release(new THREE.Vector3(e.x, 0, e.z + 0.3), W);
@@ -125,13 +170,27 @@ export class Hunt {
     const near = cat.body.x > 1.5 && cat.body.z < 0 ? 1 : 0;
     const loud = near * Math.max(0, cat.noise - 0.15) * 1.6;
     this.rouse(loud * dt - 0.05 * dt);
-    if (this.t >= this.night.time) this.over = true;
+    this.challenges(false);
+    if (this.t >= this.night.time) {
+      this.challenges(true);
+      this.over = true;
+    }
+  }
+
+  /** the challenges done since last looked: their points, and said */
+  private challenges(dawn: boolean) {
+    this.night.goals.forEach((g, i) => {
+      if (this.goals[i] || !g.done(this, dawn)) return;
+      this.goals[i] = true;
+      this.score += GOAL;
+      this.on.goal(i, GOAL);
+    });
   }
 
   /** their sleep made lighter (or, less than nothing, deeper): stirring past the half, and woken */
   private rouse(by: number) {
     const before = this.sleep;
-    this.sleep = Math.min(1, this.sleep - by);
+    this.sleep = Math.min(1, this.sleep - (by > 0 ? by * (this.night.mods?.sleepy ?? 1) : by));
     if (before >= 0.5 && this.sleep < 0.5 && this.sleep > 0) this.on.stirred(false);
     if (this.sleep <= 0) {
       this.sleep = 0.8;
@@ -161,7 +220,7 @@ export class Hunt {
       const fell = t.update(dt, W.boxes);
       if (!fell) continue;
       const K = THINGS[t.kind];
-      const pts = Math.round((K.pts * (0.5 + Math.min(1, fell))) / 10) * 10;
+      const pts = Math.round((K.pts * (this.night.mods?.knock ?? 1) * (0.5 + Math.min(1, fell))) / 10) * 10;
       this.score += pts;
       this.knocked++;
       this.on.sound(K.sound, t.pos, K.loud);
@@ -217,12 +276,14 @@ export class Hunt {
 }
 
 /** what is kept between nights: the best of each, its stars */
-export interface Save { best: Record<string, number>; stars: Record<string, number>; mute?: boolean; knocked?: boolean }
+export interface Save { best: Record<string, number>; stars: Record<string, number>; mute?: boolean; knocked?: boolean;
+  /** each night's challenges ever done (a bit each) */
+  goals?: Record<string, number> }
 const KEY = 'bamsanyang.save';
 export function loadSave(): Save {
   try {
     const s = JSON.parse(localStorage.getItem(KEY) ?? 'null');
-    if (s && typeof s === 'object') return { best: s.best ?? {}, stars: s.stars ?? {}, mute: !!s.mute, knocked: !!s.knocked };
+    if (s && typeof s === 'object') return { best: s.best ?? {}, stars: s.stars ?? {}, mute: !!s.mute, knocked: !!s.knocked, goals: s.goals ?? {} };
   } catch { /* none kept */ }
   return { best: {}, stars: {} };
 }
