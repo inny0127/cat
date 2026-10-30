@@ -174,7 +174,8 @@ export class Kitty {
       for (const [floor, top] of this.edges(T, a ? 0.24 : 0.2)) {
         if (!this.clearAt(floor.x, floor.z)) continue;
         const launch = a ? top : floor, land = a ? floor : top;
-        const cost = flat(land, toward) + 0.6 * flat(launch, from);
+        // (up: down a paw's reach from where it is going, not on top of it)
+        const cost = (a ? flat(land, toward) : Math.abs(flat(land, toward) - 0.16)) + 0.6 * flat(launch, from);
         if (cost < bestCost) { bestCost = cost; best = { launch, land }; }
       }
       return best;
@@ -307,11 +308,19 @@ export class Kitty {
     if (this.phase === '' || this.phase === 'approach') {
       if (this.phase === '') {
         this.phase = 'approach';
-        // (stand off it the other side from the way it is to go, a paw's reach away)
-        const stand = this.inside(T, at.clone().addScaledVector(dir, -0.17), 0.06);
+        // (stand off it the other side from the way it is to go, a paw's reach away; on a top too
+        // narrow for that, beside it, on the side it comes from, a paw scooping it on its way)
+        let stand = this.inside(T, at.clone().addScaledVector(dir, -0.17), 0.06);
+        if (Math.hypot(stand.x - at.x, stand.z - at.z) < 0.12) {
+          const side = new THREE.Vector3(dir.z, 0, -dir.x);
+          if (side.dot(m.pos.clone().sub(at)) < 0) side.negate();
+          stand = this.inside(T, at.clone().addScaledVector(side, 0.15).addScaledVector(dir, -0.03), 0.05);
+        }
         m.layer = null;
         m.setPosture('stand');
-        this.go(stand, () => { this.phase = 'sit'; this.t = 0; }, Math.atan2(dir.x, dir.z));
+        // (facing it, turned a little the way it is to go)
+        const fv = new THREE.Vector3(at.x - stand.x, 0, at.z - stand.z).normalize().multiplyScalar(0.6).addScaledVector(dir, 0.4);
+        this.go(stand, () => { this.phase = 'sit'; this.t = 0; }, Math.atan2(fv.x, fv.z));
       }
       // (it walked off: after it again)
       if (this.t > 4) { this.phase = ''; this.t = 0; }

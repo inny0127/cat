@@ -11,12 +11,14 @@ import { KINDS, Props, type Prop } from './props';
 import { Kitty } from './kitty';
 import { LEVELS, Round, loadSave, saveSave, unlocked } from './round';
 import { NyangUi } from './ui';
+import { COATS, WEAR, choose } from './closet';
+import { makeWear } from '../cat3d/wear';
 
 // (the app built for a claude.ai Artifact carries the model in it, as a data: URL)
 const MODEL: string = import.meta.env.VITE_CAT_MODEL ?? './cat3d/fri.bin';
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 
-type Mode = 'title' | 'count' | 'play' | 'home' | 'end';
+type Mode = 'title' | 'closet' | 'count' | 'play' | 'home' | 'end';
 
 /**
  * 냥아치: the cat has the living room to itself until its people come home, and you are the cat.
@@ -62,6 +64,7 @@ export class NyangApp {
   private readonly tmpR = new THREE.Vector3();
   private readonly tmpU = new THREE.Vector3();
   private readonly roomCaps: THREE.Vector4[];
+  private readonly paint: (m: Material, tone?: number, pattern?: number) => THREE.Material;
   /** how far the cat's shade reaches onto the room, of how far its own body's does */
   capsK = 0.2;
 
@@ -82,13 +85,13 @@ export class NyangApp {
     this.set = new LivingRoom(roomLights);
     this.stage.scene.add(this.set.group);
     // (the things on the furniture, in the room's own materials: one of each kind, shared)
-    const paint = (m: Material, tone = 0, pattern = 0) => {
+    this.paint = (m: Material, tone = 0, pattern = 0) => {
       const key = `${m}/${tone}/${pattern}`;
       let mat = this.mats.get(key);
       if (!mat) this.mats.set(key, (mat = roomMaterial(roomLights, m, { tone, pattern })));
       return mat;
     };
-    this.props = new Props(paint, (x, z, below) => this.set.topAt(x, z, below));
+    this.props = new Props(this.paint, (x, z, below) => this.set.topAt(x, z, below));
     this.stage.scene.add(this.props.group);
     this.kitty = new Kitty(cat, this.set, this.props);
     this.kitty.sound = (name, gain) => this.audio.play(name, { gain, pan: this.pan(cat.motor.pos.x) });
@@ -98,6 +101,9 @@ export class NyangApp {
 
     this.ui.onPlay = (i) => this.start(i);
     this.ui.onMenu = () => this.menu();
+    this.ui.onCloset = (open) => this.closet(open);
+    this.ui.onPick = (id) => this.pick(id);
+    this.wear();
     this.input();
     this.audio.unlockOn(window);
     this.audio.music(true);
@@ -154,14 +160,23 @@ export class NyangApp {
     return (2 * this.halfWidth()) / innerWidth;
   }
 
+  /** how far the view has come in close on the cat (the wardrobe open: 1), and is going to */
+  private focus = 0;
+  private focusT = 0;
+
   private place() {
     const cam = this.stage.camera;
     const tv = Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2);
     const el = THREE.MathUtils.degToRad(19);
     const target = new THREE.Vector3(this.camX, 0.6, -0.12);
+    // (close on the cat, it in the top of the picture, the wardrobe under it)
+    const f = this.focus * this.focus * (3 - 2 * this.focus);
+    const m = this.cat.motor.pos;
+    target.lerp(new THREE.Vector3(m.x, (this.kitty.on?.h ?? 0) - 0.13, m.z), f);
+    const dist = this.dist + (0.58 / tv - this.dist) * f;
     // (a level camera, from a little above, its picture slid down to what it looks at: upright
     // things stay upright, as pixel art draws them)
-    cam.position.set(target.x, target.y + this.dist * Math.tan(el), target.z + this.dist);
+    cam.position.set(target.x, target.y + dist * Math.tan(el), target.z + dist);
     cam.rotation.set(0, 0, 0);
     if (this.shake > 0) {
       const k = this.shake * this.shake * 0.02;
@@ -171,7 +186,7 @@ export class NyangApp {
     cam.updateMatrixWorld();
     this.stage.setShift(Math.tan(el) / tv, 0);
     // (on the art's grid, the rest slid: the room's pixels hold still as the view goes along)
-    const px = (2 * tv * this.dist) / this.stage.pixelRows();
+    const px = (2 * tv * dist) / this.stage.pixelRows();
     const right = this.tmpR.setFromMatrixColumn(cam.matrixWorld, 0), up = this.tmpU.setFromMatrixColumn(cam.matrixWorld, 1);
     const rx = cam.position.dot(right), uy = cam.position.dot(up);
     const sx = Math.round(rx / px) * px, sy = Math.round(uy / px) * px;
@@ -284,6 +299,7 @@ export class NyangApp {
   /** the rooms to choose from; the room laid out behind them, the cat sat in it */
   private menu() {
     this.mode = 'title';
+    this.focusT = 0;
     this.modeT = 0;
     this.round = null;
     let i = 0;
@@ -291,6 +307,63 @@ export class NyangApp {
     this.lay(i);
     this.kitty.place(0.42, 0.42, Math.PI * 0.1);
     this.ui.showTitle(this.save);
+  }
+
+  /** the wardrobe opened (the view close on the cat, sat facing you) or shut */
+  private closet(open: boolean) {
+    this.mode = open ? 'closet' : 'title';
+    this.focusT = open ? 1 : 0;
+    if (open) {
+      this.kitty.place(this.cat.motor.pos.x, this.cat.motor.pos.z, 0);
+      this.ui.showCloset(this.save);
+    } else this.ui.showTitle(this.save);
+  }
+
+  /** a thing chosen in the wardrobe: bought if need be, and put on (or off) */
+  private pick(id: string) {
+    const got = choose(this.save, id);
+    if (got === 'poor') {
+      this.ui.deny(id);
+      this.audio.play('thump', { gain: 0.25 });
+      this.haptic.tap('medium');
+      return;
+    }
+    if (got === 'bought') this.audio.play('fanfare', { gain: 0.4 });
+    else this.audio.play('pencil', { gain: 0.15 });
+    this.haptic.tap('light');
+    saveSave(this.save);
+    this.wear();
+    this.ui.showCloset(this.save);
+    // (a look down at itself, and up at you)
+    this.cat.motor.lookAt(this.cat.motor.pos.clone().setY(0.02), 1);
+    setTimeout(() => this.cat.motor.lookAt(this.kitty.you, 1), 600);
+  }
+
+  /** the cat dressed as the wardrobe says: its coat, and what it has on */
+  private readonly wearing: THREE.Object3D[] = [];
+  private wear() {
+    const s = this.save;
+    this.stage.setCoat((COATS.find((c) => c.id === s.coat) ?? COATS[0]).coat);
+    for (const o of this.wearing) {
+      o.removeFromParent();
+      o.traverse((m) => { if (m instanceof THREE.Mesh) m.geometry.dispose(); });
+    }
+    this.wearing.length = 0;
+    const sk = this.cat.meshes[0]?.skeleton;
+    for (const id of [s.neck, s.head]) {
+      const it = WEAR.find((w) => w.id === id);
+      if (!it?.look || !sk) continue;
+      const w = makeWear(it.look, it.color ?? 'bookRed', (m, t) => this.paint(m, t));
+      const bone = this.cat.byName.get(w.bone), i = sk.bones.findIndex((b) => b.name === w.bone);
+      if (!bone || i < 0) continue;
+      // (made where it goes on the cat at rest: less where the bone is at rest)
+      const rest = new THREE.Vector3().setFromMatrixPosition(sk.boneInverses[i].clone().invert());
+      const holder = new THREE.Group();
+      holder.position.copy(rest).negate();
+      holder.add(w.obj);
+      bone.add(holder);
+      this.wearing.push(holder);
+    }
   }
 
   /** the things put out on the furniture for a room, and its hour */
@@ -304,6 +377,7 @@ export class NyangApp {
 
   /** a round begun: the room laid out afresh, the cat in the middle, the count down */
   start(i: number) {
+    this.focusT = 0;
     this.lay(i);
     this.kitty.place(0.42, 0.42, Math.PI);
     this.round = new Round(LEVELS[i]);
@@ -440,6 +514,7 @@ export class NyangApp {
     this.camWant = clamp(this.camWant, lo, hi);
     this.camX += (this.camWant - this.camX) * (1 - Math.exp(-dt * (this.down?.moved ? 30 : 3)));
     this.shake = Math.max(0, this.shake - dt * 2.5);
+    this.focus += (this.focusT - this.focus) * (1 - Math.exp(-dt * 4));
     this.place();
   }
 }

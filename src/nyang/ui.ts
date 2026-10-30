@@ -1,5 +1,6 @@
 import { ICONS, pix } from '../ui/hud';
 import { LEVELS, unlocked, type Round, type Save } from './round';
+import { COATS, WEAR } from './closet';
 
 const CSS = `
 #ny { position: fixed; inset: 0; pointer-events: none; z-index: 4; font: 400 calc(12 * var(--fpx)) / 1.4 var(--pixel-font); letter-spacing: 0; color: #f7f0e8; word-break: keep-all; }
@@ -73,6 +74,22 @@ const CSS = `
 #ny .credits a { color: #a3b4d4; text-decoration: none; border-bottom: 1px solid rgba(163, 180, 212, 0.4); }
 #ny .credits b { font-weight: 400; color: #ffebc2; }
 #ny .link { background: none; border: 0; color: #bdb2c0; font: inherit; cursor: pointer; padding: 6px; text-decoration: underline; text-underline-offset: 3px; }
+#ny .screen.closet { justify-content: flex-end; background: linear-gradient(rgba(30, 22, 34, 0) 35%, rgba(30, 22, 34, 0.75)); }
+#ny .sheet { width: min(380px, 100%); max-height: 52vh; overflow-y: auto; padding: 12px 12px 14px; background: rgba(43, 36, 51, 0.95);
+  box-shadow: 0 0 0 2px #c99486, 3px 4px 0 rgba(20, 14, 22, 0.35); -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+#ny .sheet .top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+#ny .sheet .top b { font-weight: 400; color: #ffd6a8; font-size: calc(16 * var(--fpx)); }
+#ny .sheet h3 { margin: 10px 0 6px; font-weight: 400; font-size: inherit; color: #bdb2c0; }
+#ny .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+#ny .item { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; padding: 8px 9px; background: #3a3045; border: 0; color: #f7f0e8; font: inherit; text-align: left; cursor: pointer;
+  box-shadow: 0 0 0 1px rgba(201, 148, 134, 0.45); }
+#ny .item em { font-style: normal; color: #ffe08a; display: flex; align-items: center; gap: 4px; }
+#ny .item.own em { color: #bdb2c0; }
+#ny .item.on { box-shadow: 0 0 0 2px #ffe08a; background: #4a3c52; }
+#ny .item.on em { color: #9fe0a8; }
+#ny .item.no { animation: nyno 0.35s ease; }
+@keyframes nyno { 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+#ny .titlebar { display: flex; gap: 10px; align-items: center; }
 #ny .home { position: absolute; left: 0; right: 0; top: 34%; text-align: center; font-size: calc(26 * var(--fpx)); color: #fff; text-shadow: 0 3px 0 #6b2a3a, 0 0 10px rgba(43, 30, 48, 0.7); animation: nycount 2.2s ease-out forwards; }
 `;
 
@@ -109,6 +126,10 @@ export class NyangUi {
   onPlay: ((i: number) => void) | null = null;
   /** back to the rooms */
   onMenu: (() => void) | null = null;
+  /** the wardrobe opened (or shut), and a thing in it chosen */
+  onCloset: ((open: boolean) => void) | null = null;
+  onPick: ((id: string) => void) | null = null;
+  private closetEl: HTMLElement;
 
   constructor() {
     const st = document.createElement('style');
@@ -125,7 +146,8 @@ export class NyangUi {
       <div class="tip"></div>
       <div class="screen title"></div>
       <div class="screen end"></div>
-      <div class="screen credits"></div>`;
+      <div class="screen credits"></div>
+      <div class="screen closet"></div>`;
     document.body.appendChild(el);
     this.timeEl = el.querySelector('.time') as HTMLElement;
     this.scoreEl = el.querySelector('.score') as HTMLElement;
@@ -137,13 +159,21 @@ export class NyangUi {
     this.edgeR = el.querySelector('.edge.r') as HTMLElement;
     this.end = el.querySelector('.end') as HTMLElement;
     const credits = el.querySelector('.credits') as HTMLElement;
-    for (const s of [this.title, this.end, credits]) s.addEventListener('pointerdown', (e) => e.stopPropagation());
+    this.closetEl = el.querySelector('.closet') as HTMLElement;
+    for (const s of [this.title, this.end, credits, this.closetEl]) s.addEventListener('pointerdown', (e) => e.stopPropagation());
+    this.closetEl.addEventListener('click', (e) => {
+      const t = e.target as HTMLElement;
+      if (t.closest('[data-close]')) { this.onCloset?.(false); return; }
+      const b = t.closest<HTMLElement>('[data-pick]');
+      if (b) this.onPick?.(b.dataset.pick!);
+    });
     credits.addEventListener('click', (e) => { if ((e.target as HTMLElement).tagName !== 'A') credits.classList.remove('on'); });
     const menu = el.querySelector('.menu') as HTMLElement;
     menu.addEventListener('pointerdown', (e) => e.stopPropagation());
     menu.addEventListener('click', (e) => { e.stopPropagation(); this.onMenu?.(); });
     this.title.addEventListener('click', (e) => {
       if ((e.target as HTMLElement).closest('[data-credits]')) { this.credits(credits); return; }
+      if ((e.target as HTMLElement).closest('[data-closet]')) { this.onCloset?.(true); return; }
       const b = (e.target as HTMLElement).closest<HTMLElement>('[data-lv]');
       if (b && !b.classList.contains('lock')) this.onPlay?.(+b.dataset.lv!);
     });
@@ -159,13 +189,15 @@ export class NyangUi {
   showTitle(save: Save) {
     this.el.classList.remove('playing');
     this.end.classList.remove('on');
+    this.closetEl.classList.remove('on');
     const cards = LEVELS.map((L, i) => {
       const open = unlocked(save, i), st = save.stars[L.id] ?? 0;
       return `<button class="lv ${open ? '' : 'lock'}" data-lv="${i}"><b>${i + 1}. ${L.name}</b><span>${open ? L.blurb : '앞 방에서 별을 하나 따면 열려요'}</span>
         <div class="st">${open ? `${'★'.repeat(st)}<span style="color:#5a4458">${'★'.repeat(3 - st)}</span><br><small style="color:#bdb2c0">${save.best[L.id] ? `최고 ${save.best[L.id].toLocaleString('ko-KR')}` : ''}</small>` : ICONS.lock(18)}</div></button>`;
     }).join('');
     this.title.innerHTML = `<div class="logo">${PAW(40)}<h1>냥아치</h1><p>집사 오기 전에 다 엎어라!</p></div>
-      <div class="levels">${cards}</div><div class="coins">${ICONS.coin(18)}${save.coins.toLocaleString('ko-KR')}냥</div>
+      <div class="levels">${cards}</div>
+      <div class="titlebar"><div class="coins">${ICONS.coin(18)}${save.coins.toLocaleString('ko-KR')}냥</div><button class="btn alt" data-closet>옷장</button></div>
       <button class="link" data-credits>만든 것들</button>`;
     this.title.classList.add('on');
   }
@@ -183,6 +215,35 @@ export class NyangUi {
       <a href="./fonts/OFL.txt" target="_blank" rel="noopener">SIL 오픈 폰트 라이선스 1.1</a>로 공유된 글꼴에서 이 앱이 쓰는 글자만 추려 이름을 바꿔(Window Pixel) 썼어요.</p>
       <p style="color:#bdb2c0">방, 물건, 그림, 소리는 이 앱을 위해 만들었어요. 아무 곳이나 누르면 닫혀요.</p></div>`;
     el.classList.add('on');
+  }
+
+  /** the wardrobe: the coats and the things to wear, what each costs, what is owned and on */
+  showCloset(save: Save) {
+    this.title.classList.remove('on');
+    const row = (id: string, name: string, price: number, on: boolean) => {
+      const owned = price === 0 || save.owned.includes(id);
+      const what = on ? '입는 중' : owned ? '갖고 있음' : `${ICONS.coin(12)}${price}`;
+      return `<button class="item ${on ? 'on' : ''} ${owned ? 'own' : ''}" data-pick="${id}"><span>${name}</span><em>${what}</em></button>`;
+    };
+    const coats = COATS.map((c) => row(c.id, c.name, c.price, save.coat === c.id)).join('');
+    const of = (slot: 'neck' | 'head') => WEAR.filter((w) => w.slot === slot).map((w) => row(w.id, w.name, w.price, save[slot] === w.id)).join('');
+    const top = this.closetEl.querySelector('.sheet')?.scrollTop ?? 0;
+    this.closetEl.innerHTML = `<div class="sheet"><div class="top"><b>옷장</b><span class="coins">${ICONS.coin(16)}${save.coins.toLocaleString('ko-KR')}냥</span></div>
+      <h3>털색</h3><div class="grid">${coats}</div>
+      <h3>목에</h3><div class="grid">${of('neck')}</div>
+      <h3>머리에</h3><div class="grid">${of('head')}</div>
+      <div class="row"><button class="btn" data-close>다 골랐어요</button></div></div>`;
+    (this.closetEl.querySelector('.sheet') as HTMLElement).scrollTop = top;
+    this.closetEl.classList.add('on');
+  }
+
+  /** a thing in the wardrobe that cannot be had (yet): a shake of it */
+  deny(id: string) {
+    const b = this.closetEl.querySelector<HTMLElement>(`[data-pick="${id}"]`);
+    if (!b) return;
+    b.classList.remove('no');
+    void b.offsetWidth;
+    b.classList.add('no');
   }
 
   /** a round begun: the bar shown, the title put away */
@@ -283,5 +344,6 @@ export class NyangUi {
   hideAll() {
     this.title.classList.remove('on');
     this.end.classList.remove('on');
+    this.closetEl.classList.remove('on');
   }
 }

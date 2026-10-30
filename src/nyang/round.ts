@@ -1,4 +1,5 @@
 import type { Kind } from './props';
+import type { Wardrobe } from './closet';
 
 /** a room to wreck: its name, the hour (its light), how long till they are home, the points for each
  *  star, and what is where (on which top, where on it) */
@@ -108,15 +109,21 @@ export class Round {
   }
 }
 
-/** what is kept between rounds: the best score and stars for each room, and the coins (냥) */
-export interface Save { best: Record<string, number>; stars: Record<string, number>; coins: number }
+/** what is kept between rounds: the best score and stars for each room, the coins (냥), and the
+ *  cat's wardrobe */
+export interface Save extends Wardrobe { best: Record<string, number>; stars: Record<string, number>; coins: number }
 const KEY = 'nyang.save';
 export function loadSave(): Save {
   try {
     const s = JSON.parse(localStorage.getItem(KEY) ?? 'null');
-    if (s && typeof s === 'object') return { best: s.best ?? {}, stars: s.stars ?? {}, coins: s.coins ?? 0 };
+    if (s && typeof s === 'object') {
+      return {
+        best: s.best ?? {}, stars: s.stars ?? {}, coins: s.coins ?? 0,
+        owned: Array.isArray(s.owned) ? s.owned : [], coat: s.coat ?? 'coat-ginger', neck: s.neck ?? null, head: s.head ?? null,
+      };
+    }
   } catch { /* none */ }
-  return { best: {}, stars: {}, coins: 0 };
+  return { best: {}, stars: {}, coins: 0, owned: [], coat: 'coat-ginger', neck: null, head: null };
 }
 export function saveSave(s: Save) {
   try { localStorage.setItem(KEY, JSON.stringify(s)); } catch { /* kept this visit only */ }

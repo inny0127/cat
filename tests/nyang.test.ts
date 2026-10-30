@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { COMBO_GAP, LEVELS, Round, comboMul, unlocked } from '../src/nyang/round';
 import { KINDS, Props } from '../src/nyang/props';
+import { choose } from '../src/nyang/closet';
 import type { Top } from '../src/nyang/set';
 
 const table: Top = { id: 'table', x0: 0, x1: 0.6, z0: -0.3, z1: 0.3, h: 0.66 };
@@ -42,7 +43,7 @@ describe('냥아치: a round', () => {
     const r = new Round(LEVELS[0]);
     r.score = LEVELS[0].stars[1];
     expect(r.stars).toBe(2);
-    const save = { best: {}, stars: {} as Record<string, number>, coins: 0 };
+    const save = { best: {}, stars: {} as Record<string, number>, coins: 0, owned: [], coat: 'coat-ginger', neck: null, head: null };
     expect(unlocked(save, 0)).toBe(true);
     expect(unlocked(save, 1)).toBe(false);
     save.stars[LEVELS[0].id] = 1;
@@ -99,5 +100,23 @@ describe('냥아치: things knocked off', () => {
     run(P, 2);
     expect(jar.on).toBe(stool);
     expect(downs.length).toBe(1);
+  });
+});
+
+describe('냥아치: the wardrobe', () => {
+  it('buys what the coins run to, puts it on, and takes an accessory off again', () => {
+    const w = { coins: 400, owned: [] as string[], coat: 'coat-ginger', neck: null as string | null, head: null as string | null };
+    expect(choose(w, 'coat-silver')).toBe('poor');
+    expect(w.coins).toBe(400);
+    expect(choose(w, 'collar-red')).toBe('bought');
+    expect(w.neck).toBe('collar-red');
+    expect(w.coins).toBe(280);
+    expect(choose(w, 'collar-red')).toBe('off');
+    expect(w.neck).toBe(null);
+    expect(choose(w, 'collar-red')).toBe('wear');
+    expect(w.coins).toBe(280);
+    expect(choose(w, 'coat-cream')).toBe('poor');
+    expect(choose(w, 'coat-ginger')).toBe('wear');
+    expect(choose(w, 'nothing')).toBe('poor');
   });
 });
