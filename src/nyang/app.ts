@@ -453,6 +453,15 @@ export class NyangApp {
     this.audio.play('coin', { gain: 0.22, delay: 0.06, rate: 1 + 0.06 * Math.min(6, r.combo - 1) });
     this.haptic.tapSoon(broke ? 'medium' : 'light');
     if (r.combo === 5 || r.combo === 8) this.ui.big(`${r.combo}연속!`);
+    // (into the book: the first of a kind brings a few coins)
+    const b = this.save.book[p.kind] ??= [0, 0];
+    if (b[0] === 0) {
+      this.save.coins += 30;
+      this.ui.tip(`도감에 새로 올랐어요: ${KINDS[p.kind].name} (+30냥)`, 2600);
+      this.audio.play('heart', { gain: 0.4, delay: 0.15 });
+    }
+    b[0]++;
+    if (broke) b[1]++;
   }
 
   /** catnip: a sprig of it put down somewhere now and then in a round (when, still to come), where

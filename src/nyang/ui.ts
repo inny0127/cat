@@ -1,6 +1,7 @@
 import { ICONS, pix } from '../ui/hud';
 import { LEVELS, dailyLevel, unlocked, type Level, type Round, type Save } from './round';
 import { COATS, WEAR } from './closet';
+import { KINDS, type Kind } from './props';
 import { UPGRADES, upLevel } from './upgrades';
 
 const CSS = `
@@ -159,7 +160,7 @@ export class NyangUi {
   onCloset: ((open: boolean) => void) | null = null;
   onPick: ((id: string) => void) | null = null;
   onUp: ((id: string) => void) | null = null;
-  private tab: 'wear' | 'up' = 'wear';
+  private tab: 'wear' | 'up' | 'book' = 'wear';
   private shown: Save | null = null;
   private closetEl: HTMLElement;
 
@@ -203,7 +204,7 @@ export class NyangUi {
       const t = e.target as HTMLElement;
       if (t.closest('[data-close]')) { this.onCloset?.(false); return; }
       const tab = t.closest<HTMLElement>('[data-tab]');
-      if (tab && this.shown) { this.tab = tab.dataset.tab as 'wear' | 'up'; this.showCloset(this.shown); return; }
+      if (tab && this.shown) { this.tab = tab.dataset.tab as 'wear' | 'up' | 'book'; this.showCloset(this.shown); return; }
       const up = t.closest<HTMLElement>('[data-up]');
       if (up) { this.onUp?.(up.dataset.up!); return; }
       const b = t.closest<HTMLElement>('[data-pick]');
@@ -240,7 +241,7 @@ export class NyangUi {
     const cards = card(dailyLevel(new Date()), LEVELS.length, true, 'today') + LEVELS.map((L, i) => card(L, i, unlocked(save, i))).join('');
     this.title.innerHTML = `<div class="logo">${PAW(40)}<h1>냥아치</h1><p>집사 오기 전에 다 엎어라!</p></div>
       <div class="levels">${cards}</div>
-      <div class="titlebar"><div class="coins">${ICONS.coin(18)}${save.coins.toLocaleString('ko-KR')}냥</div><button class="btn alt" data-closet>옷장 · 강화</button></div>
+      <div class="titlebar"><div class="coins">${ICONS.coin(18)}${save.coins.toLocaleString('ko-KR')}냥</div><button class="btn alt" data-closet>옷장 · 강화 · 도감</button></div>
       <button class="link" data-credits>만든 것들</button>`;
     this.title.classList.add('on');
   }
@@ -278,12 +279,20 @@ export class NyangUi {
         <span>${u.what(lv)}${max ? '' : ` → ${u.what(lv + 1)}`}</span>
         <button class="btn ${max ? 'alt' : ''}" data-up="${u.id}" ${max ? 'disabled' : ''}>${max ? '최고' : `${ICONS.coin(12)}${u.costs[lv]}`}</button></div>`;
     }).join('');
-    const body = this.tab === 'wear'
+    const kinds = Object.keys(KINDS) as Kind[];
+    const had = kinds.filter((k) => save.book[k]?.[0]).length;
+    const book = `<p style="margin:8px 0 4px;color:#bdb2c0">${had} / ${kinds.length} 종류를 엎었어요</p><div class="grid">${kinds.map((k) => {
+      const b = save.book[k];
+      return b?.[0]
+        ? `<div class="item own"><span>${KINDS[k].name}</span><em>엎음 ${b[0]}${KINDS[k].fragile ? ` · 깸 ${b[1]}` : ''}</em></div>`
+        : `<div class="item" style="opacity:.5"><span>???</span><em style="color:#bdb2c0">${KINDS[k].pts}점짜리</em></div>`;
+    }).join('')}</div>`;
+    const body = this.tab === 'book' ? book : this.tab === 'wear'
       ? `<h3>털색</h3><div class="grid">${coats}</div>
       <h3>목에</h3><div class="grid">${of('neck')}</div>
       <h3>머리에</h3><div class="grid">${of('head')}</div>`
       : `<div class="ups">${ups}</div>`;
-    this.closetEl.innerHTML = `<div class="sheet"><div class="top"><div class="tabs"><button data-tab="wear" class="${this.tab === 'wear' ? 'on' : ''}">옷장</button><button data-tab="up" class="${this.tab === 'up' ? 'on' : ''}">강화</button></div><span class="coins">${ICONS.coin(16)}${save.coins.toLocaleString('ko-KR')}냥</span></div>
+    this.closetEl.innerHTML = `<div class="sheet"><div class="top"><div class="tabs"><button data-tab="wear" class="${this.tab === 'wear' ? 'on' : ''}">옷장</button><button data-tab="up" class="${this.tab === 'up' ? 'on' : ''}">강화</button><button data-tab="book" class="${this.tab === 'book' ? 'on' : ''}">도감</button></div><span class="coins">${ICONS.coin(16)}${save.coins.toLocaleString('ko-KR')}냥</span></div>
       ${body}
       <div class="row"><button class="btn" data-close>다 골랐어요</button></div></div>`;
     (this.closetEl.querySelector('.sheet') as HTMLElement).scrollTop = top;

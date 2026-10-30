@@ -45,7 +45,7 @@ describe('냥아치: a round', () => {
     const r = new Round(LEVELS[0]);
     r.score = LEVELS[0].stars[1];
     expect(r.stars).toBe(2);
-    const save = { best: {}, stars: {} as Record<string, number>, coins: 0, owned: [], coat: 'coat-ginger', neck: null, head: null, up: {} };
+    const save = { best: {}, stars: {} as Record<string, number>, coins: 0, owned: [], coat: 'coat-ginger', neck: null, head: null, up: {}, book: {} };
     expect(unlocked(save, 0)).toBe(true);
     expect(unlocked(save, 1)).toBe(false);
     save.stars[LEVELS[0].id] = 1;

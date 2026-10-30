@@ -192,7 +192,11 @@ export class Round {
 
 /** what is kept between rounds: the best score and stars for each room, the coins (냥), and the
  *  cat's wardrobe */
-export interface Save extends Wardrobe { best: Record<string, number>; stars: Record<string, number>; coins: number; up: Record<string, number> }
+export interface Save extends Wardrobe {
+  best: Record<string, number>; stars: Record<string, number>; coins: number; up: Record<string, number>;
+  /** the book: of each kind of thing, how many have been knocked down, and how many broken */
+  book: Record<string, [number, number]>;
+}
 const KEY = 'nyang.save';
 export function loadSave(): Save {
   try {
@@ -200,11 +204,11 @@ export function loadSave(): Save {
     if (s && typeof s === 'object') {
       return {
         best: s.best ?? {}, stars: s.stars ?? {}, coins: s.coins ?? 0,
-        owned: Array.isArray(s.owned) ? s.owned : [], coat: s.coat ?? 'coat-ginger', neck: s.neck ?? null, head: s.head ?? null, up: s.up ?? {},
+        owned: Array.isArray(s.owned) ? s.owned : [], coat: s.coat ?? 'coat-ginger', neck: s.neck ?? null, head: s.head ?? null, up: s.up ?? {}, book: s.book ?? {},
       };
     }
   } catch { /* none */ }
-  return { best: {}, stars: {}, coins: 0, owned: [], coat: 'coat-ginger', neck: null, head: null, up: {} };
+  return { best: {}, stars: {}, coins: 0, owned: [], coat: 'coat-ginger', neck: null, head: null, up: {}, book: {} };
 }
 export function saveSave(s: Save) {
   try { localStorage.setItem(KEY, JSON.stringify(s)); } catch { /* kept this visit only */ }
