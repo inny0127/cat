@@ -110,6 +110,15 @@ export const ICONS = {
     '.YYYYYY',
     '..YYY.Y',
   ], { Y: '#e8b54a', K: '#3d2a2e' }, s),
+  fly: (s: number) => pix([
+    'KK.....KK',
+    'KWK...KWK',
+    'KWWK.KWWK',
+    '.KWWKWWK.',
+    '..KWKWK..',
+    '.KWWKWWK.',
+    '.KK.K.KK.',
+  ], { K: '#5a2232', W: '#f3b0b0' }, s),
   check: (s: number) => pix([
     '......K',
     '.....KK',
@@ -248,6 +257,7 @@ export class Hud {
       <div class="btns">
         <button class="btn" data-k="missions" aria-label="오늘의 할 일">${ICONS.list(24)}<span class="badge"></span></button>
         <button class="btn" data-k="shop" aria-label="상점">${ICONS.bag(24)}<span class="badge"></span></button>
+        <button class="btn" data-k="hunt" aria-label="사냥 타임">${ICONS.fly(26)}<span class="badge"></span></button>
         <button class="btn hide" data-k="album" aria-label="사진첩">${ICONS.camera(24)}<span class="badge"></span></button>
       </div>
       <div class="wish"><i></i></div>

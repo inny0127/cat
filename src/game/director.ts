@@ -15,6 +15,8 @@ export interface Stagehands {
   /** what the cat wears (item ids, null: nothing) */
   dress(neck: string | null, head: string | null): void;
   album(): void;
+  /** the hunt begun (false: the cat cannot play now) */
+  hunt(): boolean;
   hasPhotos(): boolean;
   now(): number;
 }
@@ -117,6 +119,10 @@ export class Director {
     if (k === 'missions') this.openMissions();
     else if (k === 'shop') this.openShop();
     else if (k === 'album') this.io.album();
+    else if (k === 'hunt') {
+      if (!this.io.hunt()) this.hud.toast('고양이가 지금은 놀 수 없대요. 조금 있다가 다시 해 봐요', 2600);
+      else this.hud.toast('화면을 누른 채 빨간 점으로 고양이를 나비에게 데려가세요!', 3600);
+    }
     else if (k === 'love') {
       const L = levelOf(this.game.love);
       this.hud.toast(`애정 Lv ${L.level} · 다음 레벨까지 ♥${L.need - Math.floor(L.into)}`, 2600);
@@ -136,6 +142,23 @@ export class Director {
     this.sheetIs = 'shop';
     this.render();
     this.hud.sheet.show('상점');
+  }
+
+  /** a hunt over: what was caught, its coins and affection, and the best so far */
+  hunted(score: number, combo: number) {
+    const g = this.game, record = score > g.best;
+    if (record) g.best = score;
+    const coins = score * 6 + Math.max(0, combo - 1) * 4;
+    g.coins += coins;
+    this.did('hunt', score);
+    this.did('play', 30);
+    this.io.sound('fanfare', { gain: 0.4 });
+    this.hud.card(`<div class="beat">${ICONS.fly(44)}</div><h3>사냥 끝!</h3><p style="font-size:calc(18 * var(--fpx))">나비 ${score}마리</p>
+      ${combo > 1 ? `<p>최고 콤보 x${combo}</p>` : ''}<p class="gold">+${coins}냥</p><p>${record && score > 0 ? '새 최고 기록!' : `최고 기록 ${g.best}마리`}</p>`, '한 번 더');
+    this.hud.onCard = () => { this.press('hunt'); };
+    this.changed();
+    this.refresh(true);
+    if (score > 0) this.love(Math.min(10, score));
   }
 
   get busy() {

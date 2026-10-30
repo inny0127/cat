@@ -23,10 +23,12 @@ export interface Game {
   worn: Record<Slot, string | null>;
   /** how much of each thing has been done, ever */
   totals: Partial<Record<Kind, number>>;
+  /** the most butterflies caught in one hunt */
+  best: number;
 }
 
 /** the things done with the cat that count */
-export type Kind = 'pet' | 'purr' | 'treat' | 'play' | 'feed' | 'water' | 'litter' | 'blink' | 'bubble' | 'nip' | 'wish';
+export type Kind = 'pet' | 'purr' | 'treat' | 'play' | 'feed' | 'water' | 'litter' | 'blink' | 'bubble' | 'nip' | 'wish' | 'hunt';
 
 export interface Mission {
   kind: Kind;
@@ -50,6 +52,7 @@ export const MISSIONS: Record<Kind, { say: (n: number) => string; need: [number,
   bubble: { say: (n) => `비눗방울 ${n}개 잡게 하기`, need: [3, 6], step: 1, reward: [30, 45] },
   nip: { say: () => '캣닢 주기', need: [1, 1], step: 1, reward: [25, 25] },
   wish: { say: (n) => `고양이 소원 ${n}번 들어주기`, need: [1, 3], step: 1, reward: [35, 70] },
+  hunt: { say: (n) => `사냥 타임에서 나비 ${n}마리 잡기`, need: [4, 10], step: 2, reward: [40, 80] },
 };
 
 /** how much affection the next level asks, from this one */
@@ -81,7 +84,7 @@ export const dayKey = (t: number) => {
 export function newGame(): Game {
   return {
     v: 1, coins: 0, love: 0, day: '', streak: 0, missions: [],
-    owned: CATALOG.filter((i) => i.price === 0).map((i) => i.id), worn: { ...DEFAULT_WORN }, totals: {},
+    owned: CATALOG.filter((i) => i.price === 0).map((i) => i.id), worn: { ...DEFAULT_WORN }, totals: {}, best: 0,
   };
 }
 

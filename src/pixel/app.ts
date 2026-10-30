@@ -13,6 +13,7 @@ import { Hint } from '../ui/hint';
 import { Firsts, FIRSTS } from '../ui/firsts';
 import { Album, loadPhotos, savePhotos, toPng, type Photo } from '../ui/photos';
 import { Director } from '../game/director';
+import { Hunt } from '../game/hunt';
 import { item } from '../game/shop';
 import { makeWear } from '../cat3d/wear';
 import { SlowWatch } from './pace';
@@ -160,8 +161,31 @@ export class PixelApp {
       album: () => { if (this.photos.length) this.album?.show(this.photos, this.photos.length - 1, this.state.born); },
       hasPhotos: () => this.photos.length > 0,
       now: () => this.clock().getTime(),
+      hunt: () => this.hunt.start(),
     });
     this.director.hud.onWish = () => this.wishHelp();
+    this.hunt = new Hunt(this.director.hud.el, {
+      toScreen: (p) => {
+        const v = p.clone().project(this.stage.camera);
+        const x = (v.x * 0.5 + 0.5) * innerWidth, y = (-v.y * 0.5 + 0.5) * innerHeight;
+        return { x, y, on: v.z < 1 && x > 0 && x < innerWidth && y > 0 && y < innerHeight };
+      },
+      spot: () => this.huntSpot(),
+      catches: (p) => this.catOn(p),
+      laser: (on) => { if (on !== this.laser.held) this.takeLaser(on); },
+      ready: () => {
+        const b = this.brain;
+        if (!this.state.alive || this.avatar.hidden || b.mode === 'away' || b.mode === 'dead' || b.mode === 'gone' || this.director.busy) return false;
+        if (b.mode === 'sleep' || b.mode === 'doze') {
+          if (!b.rouse()) return false;
+          this.avatar.wakeStretch();
+        }
+        return true;
+      },
+      sound: (name, o) => this.audio.play(name, o ?? {}),
+      tap: () => this.haptic.tap?.(),
+    });
+    this.hunt.onEnd = (score, combo) => this.director.hunted(score, combo);
     this.avatar.ground = {
       keepClear: (p, r) => this.room.keepClear(p, r),
       detour: (from, to, r) => this.room.detour(from, to, r),
@@ -1563,6 +1587,40 @@ export class PixelApp {
   /** is the little print on the sill under a screen point */
   /** the game round the cat */
   private readonly director: Director;
+  /** the hunt: thirty seconds of butterflies with the laser */
+  private readonly hunt: Hunt;
+
+  /** a place on the floor for a butterfly: in the open, on the screen clear of the bars at its
+   *  top and foot, a little way from the cat (and from where the last ones were) */
+  private huntSpot() {
+    const R = this.room, B = R.yarnBounds, m = this.cat.motor, cam = this.stage.camera;
+    let best = new THREE.Vector3(m.pos.x + 0.3, 0, m.pos.z), score = -1;
+    for (let i = 0; i < 40; i++) {
+      const p = new THREE.Vector3(B.minX + 0.1 + Math.random() * (B.maxX - B.minX - 0.2), 0, B.minZ + 0.2 + Math.random() * (B.maxZ - B.minZ - 0.3));
+      R.keepClear(p, 0.08);
+      const v = p.clone().setY(0.05).project(cam);
+      if (Math.abs(v.x) > 0.82 || v.y > 0.55 || v.y < -0.85) continue;
+      const d = Math.hypot(p.x - m.pos.x, p.z - m.pos.z);
+      const sc = Math.min(d, 0.6) + Math.random() * 0.2;
+      if (d > 0.22 && sc > score) { score = sc; best = p; }
+    }
+    best.y = R.groundAt(best.x, best.z);
+    return best;
+  }
+
+  /** is the cat on a point of the floor: a forepaw come down at it, or its nose to it */
+  private catOn(p: THREE.Vector3) {
+    if (this.avatar.hidden) return false;
+    const v = this.tmpPaw;
+    for (const name of ['handL', 'handR', 'head']) {
+      const b = this.cat.byName.get(name);
+      if (!b) continue;
+      b.getWorldPosition(v);
+      const near = name === 'head' ? 0.075 : 0.07;
+      if (Math.hypot(v.x - p.x, v.z - p.z) < near && v.y - p.y < (name === 'head' ? 0.16 : 0.1)) return true;
+    }
+    return false;
+  }
   private wasBlink = false;
   private blinkSaid = false;
 
@@ -1571,6 +1629,7 @@ export class PixelApp {
   private gameStep(dt: number, touched: boolean) {
     const D = this.director, b = this.brain, a = this.avatar;
     D.step(dt);
+    this.hunt.step(dt);
     if (!this.state.alive || !this.visible) return;
     if (touched && b.mode === 'enjoy') {
       D.trickle('pet', dt, 1.6);
