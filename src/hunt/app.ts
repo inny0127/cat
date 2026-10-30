@@ -9,6 +9,7 @@ import { Hunt, NIGHTS, loadSave, nightOpen, saveSave, type Save } from './game';
 import { PREY, type Prey } from './prey';
 import { moveBody, type Body } from './physics';
 import { Cat } from './cat';
+import { Haptic } from '../platform/haptics';
 
 type Mode = 'title' | 'play' | 'pause' | 'end';
 
@@ -46,6 +47,14 @@ export class HuntApp {
   private readonly lamps: { light: THREE.PointLight; base: number; flicker: boolean }[] = [];
   private flash = 0;
   private red = 0;
+  /** felt: a buzz (Android, the app), a tick (an iPhone's) */
+  private readonly feel = new Haptic();
+  /** the catch's moment held still (s left); the leap's rush (the view opening out, 0..1); the
+   *  jolt of a landing (0..1) */
+  private stop = 0;
+  private kick = 0;
+  private dip = 0;
+  private baseFov = 75;
   private tipStep = 0;
   /** driven by a test (?still): stepped by hand */
   private readonly manual = new URLSearchParams(location.search).has('still');
@@ -107,7 +116,7 @@ export class HuntApp {
     this.view.resize();
     const a = this.view.aspect;
     const hfov = 78 * Math.PI / 180;
-    this.cam.fov = THREE.MathUtils.clamp(2 * Math.atan(Math.tan(hfov / 2) / a) * 180 / Math.PI, 62, 100);
+    this.cam.fov = this.baseFov = THREE.MathUtils.clamp(2 * Math.atan(Math.tan(hfov / 2) / a) * 180 / Math.PI, 62, 100);
     this.cam.aspect = a;
     this.cam.updateProjectionMatrix();
   }
@@ -133,11 +142,12 @@ export class HuntApp {
         this.hud.toast(`+${pts}`, '집사에게 선물!');
         this.sound.play('gift', null, 0.6);
         this.flash = 0.6;
+        this.feel.tap('heavy');
       },
       missed: () => this.sound.play('miss', null, 0.3),
       stirred: (woke) => {
         this.sound.play('grumble', this.world.sleeper.position, 0.9);
-        if (woke) { this.hud.toast('-300', '집사가 깼어요! 쉿…'); this.red = 1; }
+        if (woke) { this.hud.toast('-300', '집사가 깼어요! 쉿…'); this.red = 1; this.feel.tap('heavy'); }
         else this.hud.tip('으음… 집사가 뒤척여요. 침실에선 살금살금!', 2500);
       },
       sound: (name, at, gain) => this.heard(name, at, gain ?? 1),
@@ -197,6 +207,9 @@ export class HuntApp {
   private caught(p: Prey, pts: number, chain: number) {
     this.sound.play('catch', null, 0.6, 1 + 0.05 * Math.min(6, chain - 1));
     this.flash = 0.35;
+    this.stop = 0.09;
+    this.feel.tap('heavy');
+    if (p.kind !== 'mouse') this.paws.pin(p.mesh, this.time);
     this.hud.toast(`+${pts}`, `${PREY[p.kind].name} 잡았다!${chain > 1 ? ` ${chain}연속!` : ''}`);
     if (p.kind === 'mouse' && this.nightI <= 1 && !this.save.best[NIGHTS[1].id]) this.hud.tip('생쥐를 물었어요! 침실의 집사 침대 위로 가져가면 선물 보너스', 5000);
   }
@@ -204,6 +217,10 @@ export class HuntApp {
   /** a sound made: played where it was made; and, a thing's, written there on the screen */
   private heard(name: string, at: THREE.Vector3 | null, gain: number) {
     this.sound.play(name, at, gain);
+    // (the cat's own: felt, and seen in the view)
+    if (name === 'whoosh') { this.kick = 1; this.feel.tap('medium'); }
+    else if (name === 'thud') { this.dip = Math.max(this.dip, Math.min(1, gain * 1.6)); if (gain > 0.3) this.feel.tap('light'); }
+    else if (name === 'swish') this.feel.tap('light');
     const word = WORDS[name];
     if (!word || !at || this.mode !== 'play') return;
     const eye = this.hunt!.cat.eye;
@@ -237,7 +254,9 @@ export class HuntApp {
     const I = this.controls.read();
     const h = this.hunt;
     if (this.mode === 'play' && h) {
-      h.step(dt, I);
+      // (a catch: a beat held nearly still)
+      h.step(this.stop > 0 ? dt * 0.15 : dt, I);
+      this.stop -= dt;
       if (h.over) this.finish();
       this.tips();
     } else if (!h || this.mode === 'title') {
@@ -257,6 +276,8 @@ export class HuntApp {
     if (Math.random() < dt * 0.15 && h && this.mode === 'play') this.sound.play('snore', this.world.sleeper.position, 0.35);
     this.flash = Math.max(0, this.flash - dt * 2.5);
     this.red = Math.max(0, this.red - dt * 1.2);
+    this.kick = Math.max(0, this.kick - dt * 1.8);
+    this.dip = Math.max(0, this.dip - dt * 4);
   }
   /** the cat on the title (no night under way): only its eyes, looking round */
   private readonly idle = new Cat();
@@ -265,12 +286,16 @@ export class HuntApp {
     const h = this.hunt;
     const cat = h ? h.cat : this.idle;
     cat.aim(this.cam);
+    // (the leap: the view opens out as it flies; a landing: a jolt down and back)
+    const fov = this.baseFov + 10 * Math.sin(Math.min(1, this.kick) * Math.PI * 0.5) ** 2;
+    if (Math.abs(this.cam.fov - fov) > 0.01) { this.cam.fov = fov; this.cam.updateProjectionMatrix(); }
+    this.cam.position.y -= 0.03 * Math.sin(this.dip * Math.PI);
     this.cam.updateMatrixWorld();
     this.sound.listen(cat.eye, cat.fwd);
     // the paws, lit as the room is where the cat is
     let lit = 0.25;
     for (const L of this.world.lamps) lit += (L.power * 0.12) / (1 + cat.eye.distanceToSquared(L.at) * 1.5);
-    this.paws.update(cat, this.view.aspect, Math.min(1, lit));
+    this.paws.update(cat, this.view.aspect, Math.min(1, lit), this.time);
     this.paws.mouth.visible = !!h?.held;
     this.hud.held(!!h?.held && this.mode === 'play');
     // listening: the world grey, the things heard glowing through it

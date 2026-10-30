@@ -1,6 +1,9 @@
 import * as THREE from 'three';
 import type { Cat } from './cat';
 
+/** how long a catch is held under the paws (s) */
+const PIN = 0.75;
+
 /**
  * Your own front paws, at the bottom of the view: ginger forelegs, white socks, pink beans. They
  * step as you walk (one, then the other), tread as the haunches wiggle, reach out together in a
@@ -17,6 +20,9 @@ export class Paws {
   private readonly key = new THREE.DirectionalLight(0xffe0c0, 1.4);
   /** what is held in the mouth (a mouse), shown under the nose */
   readonly mouth = new THREE.Group();
+  /** a moth or a cricket just caught, pinned under both paws a moment (then gone in a gulp) */
+  private readonly pinned = new THREE.Group();
+  private pinAt = -1e9;
 
   constructor() {
     this.scene.add(this.light, this.key);
@@ -87,11 +93,28 @@ export class Paws {
     this.mouth.add(mb, head, ear1, ear2, nose, tail);
     this.mouth.position.set(0, -0.042, -0.1);
     this.mouth.visible = false;
-    this.scene.add(this.mouth);
+    this.scene.add(this.mouth, this.pinned);
+  }
+
+  /** a thing caught: a copy of it, a few centimetres across, under the paws; now: the app's clock */
+  pin(thing: THREE.Object3D, now: number) {
+    this.pinned.clear();
+    const m = thing.clone();
+    m.visible = true;
+    m.position.set(0, 0, 0);
+    m.rotation.set(0, Math.PI / 2, 0);
+    m.scale.setScalar(1);
+    m.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(m), size = box.getSize(new THREE.Vector3());
+    const k = 0.05 / Math.max(size.x, size.z, 1e-4);
+    m.scale.setScalar(k);
+    m.position.copy(box.getCenter(new THREE.Vector3())).multiplyScalar(-k);
+    this.pinned.add(m);
+    this.pinAt = now;
   }
 
   /** the paws for this frame, by what the cat is doing; light: how lit the room is where it is */
-  update(cat: Cat, aspect: number, light: number) {
+  update(cat: Cat, aspect: number, light: number, now: number) {
     // (on a narrow screen the view opens up and down, and the paws go smaller, lower and nearer in,
     // so both still show whole; the poses below are for a wide one)
     this.cam.fov = THREE.MathUtils.clamp(2 * Math.atan(Math.tan(35 * Math.PI / 180) / aspect) * 180 / Math.PI, 62, 95);
@@ -99,18 +122,18 @@ export class Paws {
     this.cam.updateProjectionMatrix();
     this.light.intensity = 0.6 + 1.6 * light;
     this.key.intensity = 0.4 + 1.4 * light;
-    this.pose(cat);
+    this.pose(cat, now - this.pinAt);
     const halfH = Math.tan(this.cam.fov * Math.PI / 360) * 0.11, halfW = halfH * aspect;
     const ax = Math.min(1, halfW / 0.1), drop = halfH - 0.066;
     const f = THREE.MathUtils.clamp(halfW / 0.12 * 1.2, 0.5, 1);
-    for (const g of [this.L, this.R, this.mouth]) {
+    for (const g of [this.L, this.R, this.mouth, this.pinned]) {
       g.position.x *= ax;
       g.position.y -= drop * 0.6;
-      g.scale.setScalar((g === this.mouth ? 1 : 0.85) * f);
+      g.scale.multiplyScalar(f);
     }
   }
 
-  private pose(cat: Cat) {
+  private pose(cat: Cat, pinned: number) {
     const t = cat.t, ph = cat.stride * Math.PI, run = Math.min(1, cat.speed / 2.5);
     const pose = (g: THREE.Group, x: number, y: number, z: number, rx: number, ry = 0, rz = 0) => {
       g.position.set(x, y, z);
@@ -119,7 +142,21 @@ export class Paws {
     // (where they rest: low at either side, reaching a little ahead)
     const sx = 0.05;
     for (const c of this.claws) c.visible = false;
+    for (const g of [this.L, this.R]) g.scale.setScalar(0.85);
     this.mouth.position.set(0, -0.042, -0.1);
+    this.mouth.scale.setScalar(1);
+    // a catch: both paws come down on it together, claws in it; it kicks a little, and is gone
+    this.pinned.visible = pinned < PIN;
+    if (pinned < PIN) {
+      const u = Math.min(1, pinned / 0.07), gone = Math.max(0, (pinned - (PIN - 0.18)) / 0.18);
+      this.pinned.position.set(0, -0.056, -0.2);
+      this.pinned.rotation.set(0, Math.sin(pinned * 40) * 0.25 * (1 - gone), Math.sin(pinned * 31) * 0.15 * (1 - gone));
+      this.pinned.scale.setScalar(1 - gone);
+      pose(this.L, -0.03 + 0.008 * u, -0.046 - 0.008 * u, -0.15, 0.3 + 0.25 * u, 0, 0.2 * u);
+      pose(this.R, 0.03 - 0.008 * u, -0.046 - 0.008 * u, -0.15, 0.3 + 0.25 * u, 0, -0.2 * u);
+      for (const c of this.claws) c.visible = u > 0.5;
+      return;
+    }
     this.mouth.rotation.z = Math.sin(cat.stride * Math.PI) * 0.25 * Math.min(1, cat.speed);
     this.mouth.rotation.x = Math.sin(t * 2) * 0.1;
     if (cat.doing === 'pounce') {

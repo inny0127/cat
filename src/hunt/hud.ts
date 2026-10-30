@@ -28,7 +28,9 @@ const CSS = `
 #hud .stick i { position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; margin: -22px 0 0 -22px; border-radius: 50%; background: rgba(200, 210, 255, 0.28); }
 #hud .btns { position: absolute; right: calc(14px + env(safe-area-inset-right)); bottom: calc(16px + env(safe-area-inset-bottom)); display: none; width: 180px; height: 170px; }
 #hud.playing.touch .btns { display: block; }
-#hud .b { position: absolute; pointer-events: auto; border-radius: 50%; border: 0; background: rgba(30, 26, 56, 0.55); box-shadow: 0 0 0 2px rgba(190, 200, 255, 0.45); color: #f2ecff; font: inherit; touch-action: none; display: flex; align-items: center; justify-content: center; text-align: center; line-height: 1.1; }
+#hud .b { position: absolute; pointer-events: auto; border-radius: 50%; border: 0; background: rgba(30, 26, 56, 0.55); box-shadow: 0 0 0 2px rgba(190, 200, 255, 0.45); color: #f2ecff; font: inherit; touch-action: none; display: flex; align-items: center; justify-content: center; text-align: center; line-height: 1.1; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+/* (each button a label round a switch no one sees: on an iPhone a tap on it ticks, felt) */
+#hud .b input { visibility: hidden; position: absolute; left: 0; top: 0; margin: 0; pointer-events: none; }
 #hud .b.on { background: rgba(255, 170, 190, 0.45); box-shadow: 0 0 0 3px #ffb8c6; }
 #hud .b.pounce { right: 0; bottom: 0; width: 92px; height: 92px; font-size: calc(13 * var(--fpx)); }
 #hud .b.jump { right: 104px; bottom: 6px; width: 62px; height: 62px; }
@@ -105,7 +107,7 @@ export class Hud {
       <div class="held">생쥐를 물고 있어요 → 집사 침대로!</div>
       <div class="charge"><i></i></div>
       <div class="stick"><i></i></div>
-      <div class="btns"><button class="b listen" aria-label="귀 기울이기">귀</button><button class="b jump" aria-label="점프">점프</button><button class="b pounce" aria-label="덮치기">꾹<br>덮치기</button></div>
+      <div class="btns"><label class="b listen" role="button" aria-label="귀 기울이기"><input type="checkbox" switch tabindex="-1" aria-hidden="true">귀</label><label class="b jump" role="button" aria-label="점프"><input type="checkbox" switch tabindex="-1" aria-hidden="true">점프</label><label class="b pounce" role="button" aria-label="덮치기"><input type="checkbox" switch tabindex="-1" aria-hidden="true">꾹<br>덮치기</label></div>
       <div class="tip"></div>
       <div class="screen"></div>`;
     document.body.appendChild(el);
@@ -118,6 +120,7 @@ export class Hud {
     this.chargeEl = q('.charge');
     this.screen = q('.screen');
     this.btn = { pounce: q('.b.pounce'), jump: q('.b.jump'), listen: q('.b.listen') };
+    for (const i of this.el.querySelectorAll<HTMLInputElement>('.b input')) i.addEventListener('focus', () => i.blur());
     q('.pause').addEventListener('pointerdown', (e) => e.stopPropagation());
     q('.pause').addEventListener('click', () => this.onPause?.());
     this.screen.addEventListener('pointerdown', (e) => e.stopPropagation());
