@@ -294,6 +294,7 @@ export class Sound {
     this.rainGain.gain.value = this.raining ? 0.5 : 0;
     rs.connect(this.rainGain).connect(this.out);
     rs.start();
+    if (this.playing) this.music(true);
   }
 
   private rainGain: GainNode | null = null;
@@ -315,10 +316,128 @@ export class Sound {
     if (this.ctx) this.out.gain.setTargetAtTime(m ? 0 : 0.9, this.ctx.currentTime, 0.05);
   }
 
+  // ----- the night's music: slow chords low under everything, a note now and then echoing, and
+  // when the cat means business, a heartbeat and the chords drawn darker -----
+
+  private musicGain: GainNode | null = null;
+  private padFilter: BiquadFilterNode | null = null;
+  private echo: DelayNode | null = null;
+  private beatGain: GainNode | null = null;
+  private playing = false;
+  private nextChord = 0;
+  private nextNote = 0;
+  private nextBeat = 0;
+  private chordI = 0;
+  private tense = 0;
+
+  /** the music on (a night under way) or off */
+  music(on: boolean) {
+    this.playing = on;
+    const ctx = this.ctx;
+    if (!ctx) return;
+    if (on && !this.musicGain) {
+      this.musicGain = ctx.createGain();
+      this.musicGain.gain.value = 0;
+      this.musicGain.connect(this.out);
+      this.padFilter = ctx.createBiquadFilter();
+      this.padFilter.type = 'lowpass';
+      this.padFilter.frequency.value = 900;
+      this.padFilter.connect(this.musicGain);
+      // (the echo for the notes: a delay fed back on itself, softened)
+      this.echo = ctx.createDelay(1);
+      this.echo.delayTime.value = 0.42;
+      const fb = ctx.createGain(), soft = ctx.createBiquadFilter();
+      fb.gain.value = 0.38;
+      soft.type = 'lowpass';
+      soft.frequency.value = 2200;
+      this.echo.connect(soft).connect(fb).connect(this.echo);
+      soft.connect(this.musicGain);
+      this.beatGain = ctx.createGain();
+      this.beatGain.gain.value = 0;
+      this.beatGain.connect(this.musicGain);
+      this.nextChord = this.nextNote = this.nextBeat = ctx.currentTime + 0.1;
+    }
+    if (this.musicGain) this.musicGain.gain.setTargetAtTime(on ? 1 : 0, ctx.currentTime, on ? 1.5 : 0.4);
+  }
+
+  /** how tense it is (0..1): a wiggle, a thing near and wary */
+  tension(k: number) {
+    this.tense += (k - this.tense) * 0.05;
+  }
+
+  /** the music's next few notes put in, ahead of time (called every frame) */
+  private compose() {
+    const ctx = this.ctx;
+    if (!ctx || !this.playing || !this.padFilter || !this.echo || !this.beatGain) return;
+    const now = ctx.currentTime, ahead = now + 0.3;
+    this.padFilter.frequency.setTargetAtTime(900 - 600 * this.tense, now, 0.3);
+    this.beatGain.gain.setTargetAtTime(this.tense, now, 0.3);
+    // (A minor, slowly round: Am9, Fmaj7, Cmaj7, G6, eight seconds each)
+    const CHORDS = [[45, 52, 55, 59, 60], [41, 48, 52, 55, 57], [36, 48, 52, 55, 59], [43, 50, 55, 59, 64]];
+    const hz = (m: number) => 440 * Math.pow(2, (m - 69) / 12);
+    while (this.nextChord < ahead) {
+      const t0 = this.nextChord, len = 8;
+      for (const m of CHORDS[this.chordI % CHORDS.length]) {
+        for (const det of [-6, 6]) {
+          const o = ctx.createOscillator(), g = ctx.createGain();
+          o.type = 'triangle';
+          o.frequency.value = hz(m);
+          o.detune.value = det;
+          g.gain.setValueAtTime(0, t0);
+          g.gain.linearRampToValueAtTime(0.022, t0 + 2.5);
+          g.gain.setValueAtTime(0.022, t0 + len - 2);
+          g.gain.linearRampToValueAtTime(0, t0 + len + 1.5);
+          o.connect(g).connect(this.padFilter);
+          o.start(t0);
+          o.stop(t0 + len + 1.6);
+        }
+      }
+      this.chordI++;
+      this.nextChord += len;
+    }
+    // (a note now and then from the chord's scale, high, echoing: fewer when tense)
+    while (this.nextNote < ahead) {
+      const t0 = this.nextNote;
+      if (Math.random() > this.tense * 0.8) {
+        const scale = [69, 72, 74, 76, 79, 81, 84];
+        const o = ctx.createOscillator(), g = ctx.createGain();
+        o.type = 'sine';
+        o.frequency.value = hz(scale[Math.floor(Math.random() * scale.length)]);
+        g.gain.setValueAtTime(0, t0);
+        g.gain.linearRampToValueAtTime(0.035, t0 + 0.01);
+        g.gain.exponentialRampToValueAtTime(0.0005, t0 + 1.2);
+        o.connect(g);
+        g.connect(this.musicGain!);
+        g.connect(this.echo);
+        o.start(t0);
+        o.stop(t0 + 1.3);
+      }
+      this.nextNote += 1.2 + Math.random() * 2.6;
+    }
+    // (the heartbeat: lub-dub, low, under it all as the cat winds up)
+    while (this.nextBeat < ahead) {
+      const t0 = this.nextBeat;
+      for (const [dt, a] of [[0, 1], [0.22, 0.6]] as const) {
+        const o = ctx.createOscillator(), g = ctx.createGain();
+        o.type = 'sine';
+        o.frequency.setValueAtTime(70, t0 + dt);
+        o.frequency.exponentialRampToValueAtTime(38, t0 + dt + 0.15);
+        g.gain.setValueAtTime(0, t0 + dt);
+        g.gain.linearRampToValueAtTime(0.3 * a, t0 + dt + 0.01);
+        g.gain.exponentialRampToValueAtTime(0.001, t0 + dt + 0.2);
+        o.connect(g).connect(this.beatGain);
+        o.start(t0 + dt);
+        o.stop(t0 + dt + 0.22);
+      }
+      this.nextBeat += 60 / (70 + 40 * this.tense);
+    }
+  }
+
   /** where the ears are, and the way the face is turned */
   listen(eye: THREE.Vector3, fwd: THREE.Vector3) {
     const ctx = this.ctx;
     if (!ctx) return;
+    this.compose();
     const L = ctx.listener;
     if (L.positionX) {
       const t = ctx.currentTime;

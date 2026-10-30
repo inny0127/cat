@@ -151,6 +151,7 @@ export class HuntApp {
     this.hunt = null;
     this.world.rain.visible = false;
     this.sound.rain(false);
+    this.sound.music(false);
     this.moonBase = 2.4;
     this.hud.title(this.save);
     this.ring.visible = false;
@@ -221,6 +222,7 @@ export class HuntApp {
     this.tipStep = 0;
     this.hud.playing(this.controls.touchy || matchMedia('(pointer: coarse)').matches);
     this.sound.start();
+    this.sound.music(true);
   }
 
   private showGoals() {
@@ -278,6 +280,7 @@ export class HuntApp {
     const after = allStars(this.save);
     const coats = COATS.filter((c) => before < c.stars && after >= c.stars).map((c) => c.name);
     this.mode = 'end';
+    this.sound.music(false);
     this.sound.play('alarm', null, 0.4);
     this.hud.end({ name: N.name, score: h.score, stars: h.stars, record, caught: h.caught, gifts: h.gifts, best: h.best, wakes: h.wakes, i: this.nightI, next: nightOpen(this.save, this.nightI + 1), goals: N.goals.map((g, k) => ({ text: g.text, done: h.goals[k] })), knocked: h.knocked, coats });
     this.hud.stick(null);
@@ -433,6 +436,13 @@ export class HuntApp {
     this.cam.position.y -= 0.03 * Math.sin(this.dip * Math.PI);
     this.cam.updateMatrixWorld();
     this.sound.listen(cat.eye, cat.fwd);
+    // (the music's tension: a wiggle, or a thing near that is wary of the cat)
+    let tense = 0;
+    if (h && this.mode === 'play') {
+      if (cat.doing === 'wiggle') tense = 0.6 + 0.4 * Math.min(1, cat.charge);
+      for (const p of h.prey) if (p.state === 'wary' && p.pos.distanceTo(cat.eye) < 2) tense = Math.max(tense, 0.5);
+    }
+    this.sound.tension(tense);
     // the paws, lit as the room is where the cat is
     let lit = 0.25;
     for (const L of this.world.lamps) lit += (L.power * 0.12) / (1 + cat.eye.distanceToSquared(L.at) * 1.5);
