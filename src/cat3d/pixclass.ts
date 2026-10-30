@@ -92,9 +92,10 @@ export const COATS: Record<string, { ginger: string[]; stripe: string[]; cream: 
 };
 
 /** write the ramps into texture data (a coat other than ginger recolours the cat's own) */
-function fillRamps(data: Uint8Array, coat = 'ginger') {
+function fillRamps(data: Uint8Array, coat = 'ginger', theme: Partial<Record<Material, string[]>> = {}) {
   const C = COATS[coat];
-  const ramps = RAMPS.map((r, m) => (C && m === PIX.ginger ? C.ginger : C && m === PIX.stripe ? C.stripe : C && m === PIX.cream ? C.cream : r));
+  const own = new Map<number, string[]>(Object.entries(theme).map(([k, r]) => [PIX[k as Material], r as string[]]));
+  const ramps = RAMPS.map((r, m) => own.get(m) ?? (C && m === PIX.ginger ? C.ginger : C && m === PIX.stripe ? C.stripe : C && m === PIX.cream ? C.cream : r));
   ramps.forEach((ramp, m) => ramp.forEach((hex, i) => {
     const c = parseInt(hex.slice(1), 16);
     const o = (m * 5 + i) * 4;
@@ -105,9 +106,10 @@ function fillRamps(data: Uint8Array, coat = 'ginger') {
   }));
 }
 
-/** recolour a ramp texture for a coat */
-export function setCoatRamps(tex: THREE.DataTexture, coat: string) {
-  fillRamps(tex.image.data as Uint8Array, coat);
+/** recolour a ramp texture for a coat (and the room's colours as you have them: a material's
+ *  ramp put in for its own) */
+export function setCoatRamps(tex: THREE.DataTexture, coat: string, theme: Partial<Record<Material, string[]>> = {}) {
+  fillRamps(tex.image.data as Uint8Array, coat, theme);
   tex.needsUpdate = true;
 }
 

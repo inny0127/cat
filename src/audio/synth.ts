@@ -534,6 +534,42 @@ export function bell(sr: number) {
   return fade(normalize(out, 0.6), sr, 0.0005, 0.06);
 }
 
+/** a coin won: two bright little notes, the second a fourth up */
+export function coin(sr: number) {
+  const out = new Float32Array(Math.floor(0.28 * sr));
+  const f = rnd(1480, 1580);
+  ping(out, sr, 0, f, 0.5, 0.035);
+  ping(out, sr, 0, f * 2, 0.12, 0.02);
+  ping(out, sr, 0.055, f * 1.335, 0.6, 0.06);
+  ping(out, sr, 0.055, f * 2.67, 0.14, 0.03);
+  return fade(normalize(out, 0.5), sr, 0.001, 0.05);
+}
+
+/** a heart won: a soft round note, a little lift at its start */
+export function heart(sr: number) {
+  const out = new Float32Array(Math.floor(0.22 * sr));
+  const f = rnd(880, 990);
+  for (let k = 0; k < out.length; k++) {
+    const t = k / sr;
+    out[k] = Math.sin(2 * Math.PI * f * t * (1 + 0.06 * Math.min(1, t / 0.03))) * Math.exp(-t / 0.06) * Math.min(1, t / 0.004);
+  }
+  return fade(normalize(out, 0.4), sr, 0.002, 0.05);
+}
+
+/** a level won: an arpeggio up a major chord, glockenspiel-bright, and a sparkle over it */
+export function fanfare(sr: number) {
+  const out = new Float32Array(Math.floor(1.3 * sr));
+  const notes = [523.25, 659.25, 783.99, 1046.5, 1318.5];
+  notes.forEach((f, i) => {
+    const at = i * 0.085, last = i === notes.length - 1;
+    ping(out, sr, at, f, last ? 0.7 : 0.5, last ? 0.32 : 0.12);
+    ping(out, sr, at, f * 2, 0.12, last ? 0.12 : 0.05);
+    ping(out, sr, at, f * 3.01, 0.05, 0.03);
+  });
+  for (let i = 0; i < 6; i++) ping(out, sr, 0.42 + i * 0.05 + rnd(0, 0.02), rnd(2600, 4200), 0.08, 0.05);
+  return fade(normalize(out, 0.55), sr, 0.001, 0.2);
+}
+
 /** a padded step on the floor */
 export function step(sr: number) {
   const out = new Float32Array(Math.floor(0.09 * sr));

@@ -12,6 +12,9 @@ import { Notifier, forecast } from '../platform/notify';
 import { Hint } from '../ui/hint';
 import { Firsts, FIRSTS } from '../ui/firsts';
 import { Album, loadPhotos, savePhotos, toPng, type Photo } from '../ui/photos';
+import { Director } from '../game/director';
+import { item } from '../game/shop';
+import { makeWear } from '../cat3d/wear';
 import { SlowWatch } from './pace';
 import { Brain } from '../sim/brain';
 import { loadState, newCat, ofTheDay, saveState, type CatState } from '../sim/state';
@@ -131,6 +134,21 @@ export class PixelApp {
     this.avatar.windowAt = this.room.windowMiddle;
     // (the photographs taken so far, on the fairy lights)
     this.hangPrints(false);
+    // the game round it: affection, coins, the day's missions, the shop
+    this.director = new Director({
+      sound: (name, o) => this.audio.play(name, o ?? {}),
+      tap: () => this.haptic.tap?.(),
+      head: () => {
+        if (this.avatar.hidden) return null;
+        const h = this.senses.headScreen();
+        return h.x > 0 && h.x < innerWidth && h.y > 40 && h.y < innerHeight ? h : null;
+      },
+      theme: (ramps) => this.stage.setTheme(ramps),
+      dress: (neck, head) => this.dress(neck, head),
+      album: () => { if (this.photos.length) this.album?.show(this.photos, this.photos.length - 1, this.state.born); },
+      hasPhotos: () => this.photos.length > 0,
+      now: () => this.clock().getTime(),
+    });
     this.avatar.ground = {
       keepClear: (p, r) => this.room.keepClear(p, r),
       detour: (from, to, r) => this.room.detour(from, to, r),
@@ -337,11 +355,11 @@ export class PixelApp {
         this.brain.glassTap(x, y);
       },
       glassKnock: (x, y) => { this.gestureEnd(); if (!this.avatar.caught()) this.brain.knock(x, y); },
-      pourStart: () => this.brain.pourStart(),
+      pourStart: () => this.pour(),
       pourEnd: () => { this.gestureEnd(); this.brain.pourEnd(); },
       // (a finger scrubbing the glass to shake the kibble is not one to play with)
-      shake: (k) => { this.glassQuiet = 2; this.brain.kibble(k); },
-      scoop: () => { this.gestureEnd(); this.brain.scoop(); },
+      shake: (k) => { this.glassQuiet = 2; this.feed(k); },
+      scoop: () => { this.gestureEnd(); this.scoop(); },
       longHold: (_x, _y, onCat) => this.longHold(onCat),
       hover: (x, y) => {
         this.haptic.flush();
@@ -546,7 +564,7 @@ export class PixelApp {
     for (const ev of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(ev, (e) => e.preventDefault(), { passive: false });
     this.audio.unlockOn(window);
     this.native();
-    this.motion.onShake = (k) => this.brain.kibble(k);
+    this.motion.onShake = (k) => this.feed(k);
 
     window.addEventListener('resize', () => { this.stage.resize(); this.frame3d(); });
     document.addEventListener('visibilitychange', () => this.onVisibility(!document.hidden));
@@ -568,6 +586,8 @@ export class PixelApp {
       document.getElementById('loading')?.remove();
       show();
     } else requestAnimationFrame(() => requestAnimationFrame(show));
+    // (the day's first visit: its coins and its missions)
+    this.director.arrive();
   }
 
   /** art pixels across the screen: about two css px each on a phone */
@@ -1528,6 +1548,88 @@ export class PixelApp {
   }
 
   /** is the little print on the sill under a screen point */
+  /** the game round the cat */
+  private readonly director: Director;
+  private wasBlink = false;
+  private blinkSaid = false;
+
+  /** the game's part of a frame: affection for what is being done with the cat (stroked where it
+   *  likes it, a game with you, a slow blink at you), and the missions it moves on */
+  private gameStep(dt: number, touched: boolean) {
+    const D = this.director, b = this.brain, a = this.avatar;
+    D.step(dt);
+    if (!this.state.alive || !this.visible) return;
+    if (touched && b.mode === 'enjoy') {
+      D.trickle('pet', dt, 1.6);
+      D.did('pet', dt);
+    }
+    const asleep = b.mode === 'sleep' || b.mode === 'doze';
+    if (b.purr > 0.45 && !asleep) D.did('purr', dt);
+    const playing = (a.doing === 'chase' || a.doing === 'tease' || a.doing === 'play' || a.doing === 'bubbles') && this.tickNow - this.inputAt < 8;
+    if (playing) {
+      D.trickle('play', dt, 2.5);
+      D.did('play', dt);
+    }
+    const blink = this.cat.motor.slowBlinking && !asleep;
+    if (blink && !this.wasBlink) {
+      D.love(3, this.blinkSaid ? undefined : '천천히 깜빡였어요. 고양이식 뽀뽀예요');
+      this.blinkSaid = true;
+      D.did('blink');
+    }
+    this.wasBlink = blink;
+  }
+
+  /** kibble shaken into the bowl: filled up from low, a mission done and a little affection */
+  private feed(k: number) {
+    const before = this.state.food;
+    this.brain.kibble(k);
+    if (before < 0.9 && this.state.food >= 0.9 && this.state.alive) {
+      this.director.did('feed');
+      if (before < 0.4) this.director.love(2);
+    }
+  }
+  private pour() {
+    const before = this.state.water;
+    this.brain.pourStart();
+    if (before < 0.8 && this.state.alive) {
+      this.director.did('water');
+      if (this.state.thirst > 0.35) this.director.love(2);
+    }
+  }
+  private scoop() {
+    const before = this.state.litter;
+    this.brain.scoop();
+    if (before > 0.15 && this.state.alive) {
+      this.director.did('litter');
+      this.director.love(2);
+    }
+  }
+
+  /** what the cat wears (cat3d/wear.ts): made and hung on its bones, or taken off */
+  private dress(neck: string | null, head: string | null) {
+    for (const o of this.wearing) {
+      o.removeFromParent();
+      o.traverse((m) => { if (m instanceof THREE.Mesh) m.geometry.dispose(); });
+    }
+    this.wearing.length = 0;
+    const sk = this.cat.meshes[0]?.skeleton;
+    for (const id of [neck, head]) {
+      const it = item(id);
+      if (!it?.look || !sk) continue;
+      const w = makeWear(it.look, it.color ?? 'bookRed', (m, t) => this.room.paint(m, t));
+      const bone = this.cat.byName.get(w.bone), i = sk.bones.findIndex((b) => b.name === w.bone);
+      if (!bone || i < 0) continue;
+      // (made where it goes on the cat at rest: less where the bone is at rest)
+      const rest = new THREE.Vector3().setFromMatrixPosition(sk.boneInverses[i].clone().invert());
+      const holder = new THREE.Group();
+      holder.position.copy(rest).negate();
+      holder.add(w.obj);
+      bone.add(holder);
+      this.wearing.push(holder);
+    }
+  }
+  private readonly wearing: THREE.Object3D[] = [];
+
   /** the photographs: one taken the first time it does each of the things in FIRSTS, kept */
   private readonly photos: Photo[] = loadPhotos();
   private readonly album: Album | null = (() => {
@@ -1579,13 +1681,14 @@ export class PixelApp {
   /** a cat long known: no photograph yet today, and it does one of the sweet things (you there
    *  to see it, the app open a couple of minutes): a photograph of that, the day's */
   private dayPhoto(dt: number, seen: Set<string>) {
-    if ((this.photoWait -= dt) > 0 || !seen.size || !this.visible || this.avatar.hidden || !this.state.alive) return;
+    if ((this.photoWait -= dt) > 0 || !seen.size || !this.visible || this.avatar.hidden || !this.state.alive) return false;
     const last = this.photos.at(-1), today = new Date(this.clock().getTime()).toDateString();
-    if (last && new Date(last.at).toDateString() === today) return;
+    if (last && new Date(last.at).toDateString() === today) return false;
     const k = PixelApp.SWEET.find((k) => seen.has(k));
-    if (!k) return;
+    if (!k) return false;
     this.snapPhoto(k);
     this.photoWait = 60;
+    return true;
   }
 
   /** a tap on a photograph on the fairy lights: the album, open at that one */
@@ -1665,11 +1768,13 @@ export class PixelApp {
     this.visibleOnce = true;
     this.visible = visible;
     if (!this.visible) {
+      this.director.save();
       this.persist(true);
       this.audio.suspend();
       return;
     }
     void this.notifier.cancel();
+    this.director.arrive();
     // (back to the room: its time with you counts from now, not from the last touch before you
     // went, or the first thing on coming back would be the cat asking for you over its welcome)
     this.nudgedAt = performance.now() / 1000;
@@ -1710,9 +1815,9 @@ export class PixelApp {
       return;
     }
     if (k === 'm') { this.mind.toggle(); return; }
-    if (k === 'f') this.brain.kibble(0.9);
-    else if (k === 'w') this.brain.pourStart();
-    else if (k === 'l' || k === 's') this.brain.scoop();
+    if (k === 'f') this.feed(0.9);
+    else if (k === 'w') this.pour();
+    else if (k === 'l' || k === 's') this.scoop();
   }
 
   /** ?still: the page only draws; whoever drives it (tests, reels) calls tick() */
@@ -1775,6 +1880,7 @@ export class PixelApp {
     this.input.settle(now * 1000);
     const contacts: Contact[] = this.avatar.hidden ? [] : this.input.onCat();
     this.brain.update(dt, now, contacts);
+    this.gameStep(dt, contacts.length > 0);
     // what it feels shows in its eyes, ears, tail, fur and breath
     const s = this.state;
     const sick = s.alive ? clamp((THRESH.sick - s.health) / THRESH.sick * 1.6) : 1;
@@ -2165,6 +2271,7 @@ export class PixelApp {
         const pan = Math.max(-0.8, Math.min(0.8, b.p.x * 0.9));
         this.audio.play('pop', { gain: why === 'floor' ? 0.035 : why === 'nose' || why === 'paw' ? 0.1 : 0.06, pan, rate: 0.9 + Math.random() * 0.3 });
         if (why === 'nose') this.avatar.bubbleNose();
+        if (why === 'paw') { this.director.did('bubble'); this.director.love(1); }
       };
       this.avatar.popBubble = () => { if (this.bubbleAimed) Bb.pop(this.bubbleAimed, 'paw'); };
     }
@@ -2232,6 +2339,7 @@ export class PixelApp {
       this.nipLaid = { at, t: 0, had: false };
     }
     R.sprinkleNip(at);
+    this.director.did('nip');
     this.state.hints.nip = 1;
     this.audio.play('rustle', { gain: 0.12, rate: 1.4, pan: -0.45 });
     this.haptic.tap?.();
@@ -2253,7 +2361,7 @@ export class PixelApp {
     const how = !has ? 'meh' : lately ? 'done' : 'high';
     if (this.avatar.nipNow(N.at, how)) {
       N.had = true;
-      if (how === 'high') s.nipAt = Date.now();
+      if (how === 'high') { s.nipAt = Date.now(); this.director.love(5); }
     }
   }
 
@@ -2328,6 +2436,8 @@ export class PixelApp {
         s.treats!.push(now);
         s.hunger = clamp(s.hunger - 0.03);
         s.trust = clamp(s.trust + 0.006 * (1 - s.trust), -1, 1);
+        this.director.love(3);
+        this.director.did('treat');
       };
     }
     if (!T) return;
@@ -2409,8 +2519,10 @@ export class PixelApp {
     this.loafFor = m.posture === 'loaf' && !asleep && !doing && m.speed < 0.02 ? this.loafFor + dt : 0;
     if (this.loafFor > 20) now.add('loaf');
     const said = this.firstWords.update(dt, now, this.state.alive && !a.hidden && this.visible);
-    if (said) this.snapPhoto(said);
-    else this.dayPhoto(dt, now);
+    if (said) {
+      this.snapPhoto(said);
+      this.director.love(10, '<span>새로운 모습 발견!</span><span style="color:#ffd6dc">사진첩에 담았어요</span>');
+    } else if (this.dayPhoto(dt, now)) this.director.love(3, '오늘의 사진을 찍었어요');
     now.clear();
   }
 }

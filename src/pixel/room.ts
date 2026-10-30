@@ -3093,6 +3093,12 @@ export class Room {
     }
   }
 
+  /** one of the room's own materials (for things not of the room, painted as it is: what the cat
+   *  wears) */
+  paint(m: Material, tone = 0) {
+    return this.mat(m, { tone });
+  }
+
   /** the jar of treats on the sill */
   treatJar!: THREE.Object3D;
   /** a treat tossed into the room: in the air (from, to, how far through), lying on the floor, or

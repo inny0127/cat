@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { Cat3D } from './cat';
 import type { Retina } from './retina';
-import { NMAT, PIX, PIX_GLSL, PIX_STEPS, rampTexture, setCoatRamps } from './pixclass';
+import { NMAT, PIX, PIX_GLSL, PIX_STEPS, rampTexture, setCoatRamps, type Material } from './pixclass';
 import { ROOM_LIGHT_GLSL, roomLightUniforms, type DayLight } from './roomlight';
 
 const FLOOR_VERT = /* glsl */ `
@@ -1049,7 +1049,15 @@ export class Stage {
 
   /** the cat's coat (ginger, cream, silver, smoke): its colours in the pixel ramps */
   setCoat(coat: string) {
-    if (this.pixel) setCoatRamps(this.pixel.mat.uniforms.uRampTex.value as THREE.DataTexture, coat);
+    this.coat = coat;
+    if (this.pixel) setCoatRamps(this.pixel.mat.uniforms.uRampTex.value as THREE.DataTexture, coat, this.theme);
+  }
+  private coat = 'ginger';
+  private theme: Partial<Record<Material, string[]>> = {};
+  /** the room's colours as you have chosen them: a material's ramp for its own (the rest as made) */
+  setTheme(theme: Partial<Record<Material, string[]>>) {
+    this.theme = theme;
+    if (this.pixel) setCoatRamps(this.pixel.mat.uniforms.uRampTex.value as THREE.DataTexture, this.coat, theme);
   }
 
   /** a moth or a fly at a world point (null: none), its wings up or down, in a light of a colour */
