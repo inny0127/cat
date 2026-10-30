@@ -223,6 +223,8 @@ export class HuntApp {
     this.glows = this.hunt.prey.map((p) => this.glow(p.kind));
     this.mode = 'play';
     this.tipStep = 0;
+    this.tipShown = -1;
+    this.listenT = 0;
     this.hud.playing(this.controls.touchy || matchMedia('(pointer: coarse)').matches);
     this.sound.start();
     this.sound.music(true);
@@ -505,7 +507,7 @@ export class HuntApp {
       h.step(this.stop > 0 ? dt * 0.15 : dt, I);
       this.stop -= dt;
       if (h.over) this.finish();
-      this.tips();
+      this.tips(dt);
       this.chattering(dt, h);
     } else if (!h || this.mode === 'title') {
       // (the title: the room looked round slowly, from the rug)
@@ -642,19 +644,37 @@ export class HuntApp {
   }
 
   /** the first night's lessons, one after another */
-  private tips() {
+  private tips(dt: number) {
     const h = this.hunt!;
     if (this.nightI !== 0 || this.save.best[NIGHTS[0].id]) return;
     const touch = this.controls.touchy || matchMedia('(pointer: coarse)').matches;
     const lines = touch
-      ? ['왼쪽을 끌어 걸어요. 살짝 밀면 살금살금, 소리가 안 나요', '오른쪽을 끌어 둘러봐요. 귀뚤귀뚤 소리 나는 쪽으로!', '덮치기를 꾹 누르면 씰룩씰룩, 놓으면 분홍 고리까지 덮쳐요', '귀를 누르고 있으면 사냥감이 벽 너머로도 보여요', '높은 곳의 나방은 점프로 올라가서 덮쳐요']
-      : ['WASD로 걸어요 (C: 살금살금, Shift: 달리기). 클릭하면 마우스로 둘러봐요', '귀뚤귀뚤 소리 나는 쪽으로 가 봐요', '마우스를 꾹 누르면 씰룩씰룩, 놓으면 분홍 고리까지 덮쳐요', 'E를 누르고 있으면 사냥감이 벽 너머로도 보여요', '스페이스로 점프해서 높은 곳의 나방도 노려요'];
-    const at = [0.5, 9, 18, 30, 44];
-    if (this.tipStep < at.length && h.t >= at[this.tipStep]) {
-      this.hud.tip(lines[this.tipStep], 7000);
+      ? ['왼쪽을 끌어 걸어요. 살짝 밀면 살금살금, 소리가 안 나요', '오른쪽을 끌어 둘러봐요. 귀뚤귀뚤 소리 나는 쪽으로!', '덮치기를 꾹 누르면 씰룩씰룩, 놓으면 분홍 발자국까지 덮쳐요', '귀를 누르고 있으면 사냥감이 벽 너머로도 보여요', '좋아요! 높은 곳의 나방은 점프로 올라가서 덮쳐요']
+      : ['WASD로 걸어요 (C: 살금살금, Shift: 달리기). 클릭하면 마우스로 둘러봐요', '마우스로 둘러봐요. 귀뚤귀뚤 소리 나는 쪽으로!', '마우스를 꾹 누르면 씰룩씰룩, 놓으면 분홍 발자국까지 덮쳐요', 'E를 누르고 있으면 사냥감이 벽 너머로도 보여요', '좋아요! 스페이스로 점프해서 높은 곳의 나방도 노려요'];
+    // (each shown until it has been done: walked a metre, looked round, pounced, listened)
+    const c = h.cat, b = c.body;
+    const done = [
+      () => Math.hypot(b.x - 1.5, b.z - 1.0) > 1,
+      () => Math.abs(c.yaw + Math.PI * 0.75) > 1,
+      () => c.doing === 'pounce',
+      () => c.doing === 'listen' && (this.listenT += dt) > 0.5,
+      () => h.t > this.tipAt + 7,
+    ];
+    if (this.tipStep >= lines.length || h.t < 0.5) return;
+    if (this.tipShown !== this.tipStep) {
+      this.tipShown = this.tipStep;
+      this.tipAt = h.t;
+      this.hud.tip(lines[this.tipStep], this.tipStep === lines.length - 1 ? 7000 : 600000);
+    }
+    if (done[this.tipStep]()) {
       this.tipStep++;
+      if (this.tipStep < lines.length) this.sound.play('pat', null, 0.4, 1.5);
+      else this.hud.tip('', 1);
     }
   }
+  private tipShown = -1;
+  private tipAt = 0;
+  private listenT = 0;
 
   private clearGlows() {
     for (const g of this.glows) this.over.remove(g);
