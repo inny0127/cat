@@ -10,6 +10,8 @@ import { PREY, type Prey } from './prey';
 import { THINGS } from './things';
 import { COATS, allStars, coatOf, coatOpen } from './coats';
 import { reckon } from './journal';
+import { nightPicture, type NightShot } from './picture';
+import { Dust } from './dust';
 import { lineClear, moveBody, type Body } from './physics';
 import { Cat } from './cat';
 import { Haptic } from '../platform/haptics';
@@ -54,6 +56,8 @@ export class HuntApp {
   private readonly lamps: { light: THREE.PointLight; base: number; flicker: boolean }[] = [];
   private flash = 0;
   private red = 0;
+  /** dust in the lamps' light */
+  private readonly dust = new Dust(this.scene);
   /** felt: a buzz (Android, the app), a tick (an iPhone's) */
   private readonly feel = new Haptic();
   /** the catch's moment held still (s left); the leap's rush (the view opening out, 0..1); the
@@ -101,7 +105,7 @@ export class HuntApp {
       p.position.copy(L.at);
       S.add(p);
       this.lamps.push({ light: p, base: L.power * 1.8, flicker: !!L.flicker });
-      if (L.power >= 0.9 && !L.flicker) this.motes(L.at, L.color, L.power);
+      if (L.power >= 0.9 && !L.flicker) this.dust.add(L.at, L.color, L.power);
     }
     this.ring = new THREE.Sprite(new THREE.SpriteMaterial({ map: HuntApp.pawTex(), color: 0xffb8c8, transparent: true, depthWrite: false, fog: false }));
     this.ring.scale.setScalar(0.11);
@@ -235,37 +239,6 @@ export class HuntApp {
     if (h) this.hud.goals(h.night.goals.map((g, k) => ({ text: g.text, done: h.goals[k] })));
   }
 
-  /** dust in a lamp's light: a few dozen motes drifting slowly in the air round it, each a pixel */
-  private readonly dust: { pts: THREE.Points; home: Float32Array; seed: Float32Array }[] = [];
-  private motes(at: THREE.Vector3, color: number, power: number) {
-    const n = Math.round(18 + 10 * power), home = new Float32Array(n * 3), seed = new Float32Array(n);
-    for (let i = 0; i < n; i++) {
-      // (below the lamp, in the cone of its light, thinning out as they go)
-      const r = Math.sqrt(Math.random()) * 0.7, a = Math.random() * Math.PI * 2, y = -Math.random() * Math.min(1.2, at.y - 0.1);
-      home.set([at.x + Math.cos(a) * r * (0.4 - y * 0.5), at.y + y - 0.1, at.z + Math.sin(a) * r * (0.4 - y * 0.5)], i * 3);
-      seed[i] = Math.random() * 100;
-    }
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(home.slice(), 3));
-    const pts = new THREE.Points(geo, new THREE.PointsMaterial({ color: new THREE.Color(color).lerp(new THREE.Color(0xffffff), 0.5), size: 1, sizeAttenuation: false, transparent: true, opacity: 0.8, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
-    pts.frustumCulled = false;
-    this.scene.add(pts);
-    this.dust.push({ pts, home, seed });
-  }
-  private drift() {
-    const t = this.time;
-    for (const D of this.dust) {
-      const pos = D.pts.geometry.getAttribute('position') as THREE.BufferAttribute, a = pos.array as Float32Array;
-      for (let i = 0; i < D.seed.length; i++) {
-        const s = D.seed[i];
-        a[i * 3] = D.home[i * 3] + Math.sin(t * 0.21 + s) * 0.06;
-        a[i * 3 + 1] = D.home[i * 3 + 1] + Math.sin(t * 0.13 + s * 1.7) * 0.08;
-        a[i * 3 + 2] = D.home[i * 3 + 2] + Math.cos(t * 0.17 + s * 0.6) * 0.06;
-      }
-      pos.needsUpdate = true;
-    }
-  }
-
   /** a thing's glow, seen through the walls while listening */
   private glow(kind: string) {
     const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: HuntApp.dot(), color: GLOW[kind], depthTest: false, depthWrite: false, transparent: true }));
@@ -358,41 +331,14 @@ export class HuntApp {
   }
 
   /** the night just done, for its picture */
-  private night: { shot: HTMLCanvasElement; name: string; when: string; score: number; stars: number; record: boolean; caught: Record<string, number> } | null = null;
+  private night: NightShot | null = null;
 
   /** a picture of the night to show off with: its last view in big pixels, its name, stars, points
    *  and catches; handed to the phone's share sheet where there is one, else shown to be saved */
   private async share() {
     const L = this.night;
     if (!L) return;
-    const S = 1080, c = document.createElement('canvas');
-    c.width = c.height = S;
-    const g = c.getContext('2d')!;
-    g.imageSmoothingEnabled = false;
-    const sw = L.shot.width, sh = L.shot.height, side = Math.min(sw, sh);
-    g.drawImage(L.shot, (sw - side) / 2, (sh - side) / 2, side, side, 0, 0, S, S);
-    const fade = g.createLinearGradient(0, S * 0.45, 0, S);
-    fade.addColorStop(0, 'rgba(10, 8, 24, 0)');
-    fade.addColorStop(1, 'rgba(10, 8, 24, 0.92)');
-    g.fillStyle = fade;
-    g.fillRect(0, 0, S, S);
-    const font = getComputedStyle(document.documentElement).getPropertyValue('--pixel-font') || 'sans-serif';
-    const text = (s: string, x: number, y: number, size: number, color: string, align: CanvasTextAlign = 'left') => {
-      g.font = `${size}px ${font}`;
-      g.textAlign = align;
-      g.fillStyle = 'rgba(20, 10, 40, 0.9)';
-      g.fillText(s, x, y + size * 0.08);
-      g.fillStyle = color;
-      g.fillText(s, x, y);
-    };
-    text('밤사냥', 48, 96, 64, '#ffd27a');
-    text(`${L.name} · ${L.when}`, S / 2, S - 380, 44, '#c8d4ff', 'center');
-    g.font = `84px ${font}`;
-    const stars = [0, 1, 2].map((k) => k < L.stars);
-    stars.forEach((on, k) => text('★', S / 2 + (k - 1) * 96, S - 270, 84, on ? '#ffd27a' : '#3e3a66', 'center'));
-    text(`${L.score.toLocaleString('ko-KR')}점${L.record ? ' · 최고 기록!' : ''}`, S / 2, S - 160, 72, '#f2ecff', 'center');
-    const k = L.caught;
-    text(`나방 ${k.moth} · 귀뚜라미 ${k.cricket} · 생쥐 ${k.mouse}${k.spider ? ` · 거미 ${k.spider}` : ''}`, S / 2, S - 80, 38, '#a9b0d8', 'center');
+    const c = nightPicture(L);
     const url = c.toDataURL('image/png');
     try {
       const blob = await new Promise<Blob | null>((ok) => c.toBlob(ok, 'image/png'));
@@ -524,7 +470,7 @@ export class HuntApp {
     // their breathing, under the blanket
     this.world.sleeper.scale.y = 1 + 0.03 * Math.sin(this.time * 1.3);
     this.waking();
-    this.drift();
+    this.dust.drift(this.time);
     if (Math.random() < dt * 0.15 && h && this.mode === 'play') this.sound.play('snore', this.world.sleeper.position, 0.35);
     this.flash = Math.max(0, this.flash - dt * 2.5);
     this.red = Math.max(0, this.red - dt * 1.2);
