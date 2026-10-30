@@ -56,7 +56,7 @@ const CSS = `
 #hud .charge { position: absolute; left: 50%; bottom: 22%; transform: translateX(-50%); width: 120px; height: 8px; box-shadow: 0 0 0 2px rgba(200, 210, 255, 0.5); display: none; }
 #hud .charge i { display: block; height: 100%; width: 0; background: #ffb8c6; }
 #hud .charge.on { display: block; }
-#hud .screen { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 12px; pointer-events: auto; padding: 16px;
+#hud .screen { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: flex-start; gap: 12px; pointer-events: auto; padding: 16px;
   background: radial-gradient(ellipse at center, rgba(8, 8, 20, 0.35), rgba(8, 8, 20, 0.85)); overflow-y: auto; }
 #hud .screen.on { display: flex; }
 #hud .screen > :first-child { margin-top: auto; }
@@ -73,6 +73,7 @@ const CSS = `
 #hud .nt.day { box-shadow: 0 0 0 2px #ffd27a; background: rgba(48, 36, 60, 0.92); }
 #hud .how { width: min(340px, 92vw); color: #a9b0d8; text-align: left; line-height: 1.6; }
 #hud .how b { color: #e6f0ff; font-weight: 400; }
+#hud .screen.old .how { display: none; }
 #hud .card { width: min(320px, 90vw); padding: 16px; text-align: center; background: rgba(28, 24, 52, 0.94); box-shadow: 0 0 0 2px #7f86c8, 4px 5px 0 rgba(0, 0, 0, 0.35); }
 #hud .card h2 { margin: 0 0 6px; font-weight: 400; color: #ffd27a; font-size: calc(18 * var(--fpx)); }
 #hud .card .stars { font-size: calc(30 * var(--fpx)); letter-spacing: 6px; color: #3e3a66; }
@@ -122,7 +123,7 @@ const CSS = `
   #hud .coats { width: min(760px, 96vw); }
   #hud .coats > span { width: auto; margin-right: 6px; }
   #hud .coat { width: 28px; height: 28px; }
-  #hud .screen.old .how, #hud .screen.old .sub { display: none; }
+  #hud .screen.old .sub { display: none; }
   #hud .card.jr { width: min(720px, 96vw); }
   #hud .card { width: min(560px, 92vw); }
   #hud .card p { margin: 2px 0; }
