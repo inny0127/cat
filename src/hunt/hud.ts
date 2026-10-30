@@ -82,6 +82,9 @@ const CSS = `
 #hud .btn:active { transform: translateY(2px); }
 #hud .rot { color: #8f9ac8; }
 #hud .card.jr { width: min(520px, 94vw); }
+#hud .shot { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; background: rgba(8, 8, 20, 0.92); padding: 16px; }
+#hud .shot img { max-width: min(92vw, 520px); max-height: 70vh; image-rendering: pixelated; box-shadow: 0 0 0 2px #7f86c8; -webkit-touch-callout: default; -webkit-user-select: auto; user-select: auto; pointer-events: auto; }
+#hud .shot p { color: #c8d4ff; margin: 0; }
 #hud .tot { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
 #hud .tot div { background: rgba(255, 255, 255, 0.04); padding: 5px 4px; }
 #hud .tot span { display: block; color: #8f9ac8; font-size: calc(10 * var(--fpx)); }
@@ -112,6 +115,12 @@ const CSS = `
   #hud .coat { width: 28px; height: 28px; }
   #hud .screen.old .how, #hud .screen.old .sub { display: none; }
   #hud .card.jr { width: min(720px, 96vw); }
+  #hud .card { width: min(560px, 92vw); }
+  #hud .card p { margin: 2px 0; }
+  #hud .card h2 { margin-bottom: 2px; }
+  #hud .card .stars { font-size: calc(24 * var(--fpx)); }
+  #hud .card .gl { margin: 2px 0; }
+  #hud .card .row { margin-top: 6px; }
   #hud .tot { grid-template-columns: repeat(8, 1fr); }
   #hud .bds { grid-template-columns: repeat(4, 1fr); }
   #hud .nt.day { grid-column: 1 / -1; grid-template-columns: auto 1fr auto; align-items: center; gap: 2px 12px; }
@@ -258,7 +267,7 @@ export class Hud {
       <div class="gl">${Hud.goalList(o.goals)}</div>
       ${o.coats.map((n) => `<p style="color:#ffd27a">새 털색: ${n}! (밤 고르기에서 바꿔 입어요)</p>`).join('')}
       ${o.badges.map((n) => `<p style="color:#ffd27a">새 배지: ${n}!</p>`).join('')}
-      <div class="row"><button class="btn alt" data-c="menu">밤 고르기</button><button class="btn" data-n="${o.i}">다시 하기</button>${o.i >= 0 && o.i + 1 < NIGHTS.length ? `<button class="btn ${o.next ? '' : 'lock'}" data-n="${o.i + 1}" ${o.next ? '' : 'style="opacity:.5"'}>다음 밤</button>` : ''}</div></div>`);
+      <div class="row"><button class="btn alt" data-c="share">자랑하기</button><button class="btn alt" data-c="menu">밤 고르기</button><button class="btn" data-n="${o.i}">다시 하기</button>${o.i >= 0 && o.i + 1 < NIGHTS.length ? `<button class="btn ${o.next ? '' : 'lock'}" data-n="${o.i + 1}" ${o.next ? '' : 'style="opacity:.5"'}>다음 밤</button>` : ''}</div></div>`);
   }
 
   /** the hunting journal: counts across every night, and the badges, won and to win */
@@ -274,7 +283,19 @@ export class Hud {
       <div class="row"><button class="btn" data-c="menu">돌아가기</button></div></div>`);
   }
 
+  /** the night's picture, big, to be kept (null: away) */
+  shot(url: string | null) {
+    this.screen.querySelector('.shot')?.remove();
+    if (!url) return;
+    const d = document.createElement('div');
+    d.className = 'shot';
+    d.innerHTML = `<img alt="밤사냥" src="${url}"><p>길게 누르거나 오른쪽 클릭으로 저장해요</p><button class="btn" data-c="unshot">닫기</button>`;
+    this.screen.appendChild(d);
+  }
+
   private show(html: string) {
+    // (what was floating over the play goes: the night's card, points, words)
+    for (const d of this.el.querySelectorAll('.ncard, .toast, .say')) d.remove();
     this.screen.innerHTML = html;
     this.screen.classList.add('on');
   }
