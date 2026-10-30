@@ -8,6 +8,7 @@ import { Sound } from './sound';
 import { Hunt, NIGHTS, loadSave, nightOpen, saveSave, type Save } from './game';
 import { PREY, type Prey } from './prey';
 import { THINGS } from './things';
+import { COATS, allStars, coatOf, coatOpen } from './coats';
 import { moveBody, type Body } from './physics';
 import { Cat } from './cat';
 import { Haptic } from '../platform/haptics';
@@ -105,6 +106,7 @@ export class HuntApp {
     this.hud.onPause = () => this.pause();
     this.hud.onChoice = (c) => this.choice(c);
     this.sound.muted = !!this.save.mute;
+    this.paws.setCoat(coatOf(this.save));
     this.sound.unlockOn(window);
     addEventListener('resize', () => this.resize());
     document.addEventListener('visibilitychange', () => { if (document.hidden) { this.pause(); this.sound.suspend(); } else this.sound.resume(); });
@@ -232,6 +234,15 @@ export class HuntApp {
     if (c === 'resume') { this.mode = 'play'; this.hud.playing(this.controls.touchy || matchMedia('(pointer: coarse)').matches); }
     else if (c === 'retry') this.start(this.nightI);
     else if (c === 'menu') this.menu();
+    else if (c.startsWith('coat:')) {
+      const k = COATS.find((x) => `coat:${x.id}` === c);
+      if (!k) return;
+      if (!coatOpen(this.save, k)) { this.hud.tip(`별 ${k.stars}개를 모으면 ${k.name} 털색이 열려요`, 3000); return; }
+      this.save.coat = k.id;
+      saveSave(this.save);
+      this.paws.setCoat(k);
+      this.hud.title(this.save);
+    }
     else if (c === 'sound') {
       this.save.mute = !this.save.mute;
       saveSave(this.save);
@@ -244,14 +255,17 @@ export class HuntApp {
   private finish() {
     const h = this.hunt!, N = h.night;
     const record = h.score > (this.save.best[N.id] ?? 0);
+    const before = allStars(this.save);
     if (record) this.save.best[N.id] = h.score;
     this.save.stars[N.id] = Math.max(this.save.stars[N.id] ?? 0, h.stars);
     const goals = (this.save.goals ??= {});
     h.goals.forEach((d, k) => { if (d) goals[N.id] = (goals[N.id] ?? 0) | (1 << k); });
     saveSave(this.save);
+    const after = allStars(this.save);
+    const coats = COATS.filter((c) => before < c.stars && after >= c.stars).map((c) => c.name);
     this.mode = 'end';
     this.sound.play('alarm', null, 0.4);
-    this.hud.end({ name: N.name, score: h.score, stars: h.stars, record, caught: h.caught, gifts: h.gifts, best: h.best, wakes: h.wakes, i: this.nightI, next: nightOpen(this.save, this.nightI + 1), goals: N.goals.map((g, k) => ({ text: g.text, done: h.goals[k] })), knocked: h.knocked });
+    this.hud.end({ name: N.name, score: h.score, stars: h.stars, record, caught: h.caught, gifts: h.gifts, best: h.best, wakes: h.wakes, i: this.nightI, next: nightOpen(this.save, this.nightI + 1), goals: N.goals.map((g, k) => ({ text: g.text, done: h.goals[k] })), knocked: h.knocked, coats });
     this.hud.stick(null);
     this.hud.charge(null);
     this.ring.visible = false;

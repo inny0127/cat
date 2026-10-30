@@ -1,4 +1,7 @@
 import { NIGHTS, nightOpen, type Save } from './game';
+import { COATS, allStars, coatOf, coatOpen } from './coats';
+
+const hex = (n: number) => `#${n.toString(16).padStart(6, '0')}`;
 
 const CSS = `
 #hud { position: fixed; inset: 0; pointer-events: none; z-index: 3; font: 400 calc(12 * var(--fpx)) / 1.4 var(--pixel-font); color: #f2ecff; letter-spacing: 0; word-break: keep-all;
@@ -71,6 +74,13 @@ const CSS = `
 #hud .btn.alt { background: #b8c0f0; box-shadow: 0 0 0 2px #1c1830, 0 3px 0 2px #5a64a8; }
 #hud .btn:active { transform: translateY(2px); }
 #hud .rot { color: #8f9ac8; }
+#hud .coats { display: flex; gap: 6px; align-items: center; justify-content: center; flex-wrap: wrap; width: min(340px, 92vw); }
+#hud .coats > span { width: 100%; text-align: center; color: #a9b0d8; }
+#hud .coat { pointer-events: auto; width: 34px; height: 34px; padding: 0; border: 0; cursor: pointer; position: relative; box-shadow: 0 0 0 2px #3e3a66; background: none; }
+#hud .coat i { position: absolute; inset: 3px; }
+#hud .coat.on { box-shadow: 0 0 0 3px #ffd27a; }
+#hud .coat.lock i { opacity: 0.18; }
+#hud .coat em { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-style: normal; font-size: calc(10 * var(--fpx)); color: #c8d4ff; }
 @media (max-height: 520px) {
   #hud h1 { font-size: calc(30 * var(--fpx)); }
   #hud .screen { gap: 8px; }
@@ -80,6 +90,10 @@ const CSS = `
   #hud .nt em { grid-row: auto; grid-column: 1; text-align: left; }
   #hud .how { width: min(760px, 96vw); columns: 2; font-size: calc(11 * var(--fpx)); }
   #hud .goals { font-size: calc(10 * var(--fpx)); line-height: 1.45; }
+  #hud .coats { width: min(760px, 96vw); }
+  #hud .coats > span { width: auto; margin-right: 6px; }
+  #hud .coat { width: 28px; height: 28px; }
+  #hud .screen.old .how { display: none; }
   #hud .card { padding: 10px 16px; }
 }
 `;
@@ -155,11 +169,25 @@ export class Hud {
         <em>${'★'.repeat(st)}<span style="color:#3e3a66">${'★'.repeat(3 - st)}</span><br><small>${best}${best && done ? ' · ' : ''}${done ? `도전 ${done}/${N.goals.length}` : ''}</small></em></button>`;
     }).join('');
     const wide = innerWidth > innerHeight;
+    // (once a night has been played, the how-to is let go on a short screen)
+    this.screen.classList.toggle('old', Object.keys(save.best).length > 0);
     this.show(`<h1>밤사냥</h1><div class="sub">집사가 잠든 밤, 고양이의 눈으로 사냥을</div>
       <div class="nights">${cards}</div>
       <div class="how"><b>왼쪽</b> 끌어서 걷기 (살짝: 살금살금 · 끝까지: 달리기)<br><b>오른쪽</b> 끌어서 둘러보기<br><b>덮치기</b> 꾹 눌러 씰룩씰룩, 놓으면 덮쳐요 (톡: 냥펀치)<br><b>귀</b> 누르고 있으면 소리가 보여요</div>
-      ${wide ? '' : '<div class="rot">가로로 돌리면 더 넓게 보여요</div>'}
-      <div class="row"><button class="btn alt" data-c="sound">${save.mute ? '소리 끔' : '소리 켬'}</button></div>`);
+      ${this.coats(save)}
+      ${wide ? '' : '<div class="rot">가로로 돌리면 더 넓게 보여요</div>'}`);
+  }
+
+  /** the coats to wear: a swatch each (fur over sock; a calico both sides), the locked ones with
+   *  the stars they want */
+  private coats(save: Save) {
+    const on = coatOf(save), have = allStars(save);
+    const sw = COATS.map((c) => {
+      const open = coatOpen(save, c), L = c.left, R = c.right ?? c.left;
+      const bg = `linear-gradient(90deg, ${hex(L.fur)} 0 50%, ${hex(R.fur)} 50%) top / 100% 58% no-repeat, linear-gradient(90deg, ${hex(L.sock)} 0 50%, ${hex(R.sock)} 50%)`;
+      return `<button class="coat ${c === on ? 'on' : ''} ${open ? '' : 'lock'}" data-c="coat:${c.id}" aria-label="${c.name}"><i style="background:${bg}"></i>${open ? '' : `<em>★${c.stars}</em>`}</button>`;
+    }).join('');
+    return `<div class="coats"><span>내 고양이: ${on.name} · 별 ${have}개</span>${sw}<button class="btn alt" data-c="sound" style="margin-left:10px">${save.mute ? '소리 끔' : '소리 켬'}</button></div>`;
   }
 
   playing(touch: boolean) {
@@ -183,7 +211,7 @@ export class Hud {
   }
 
   /** dawn: the night's reckoning */
-  end(o: { name: string; score: number; stars: number; record: boolean; caught: Record<string, number>; gifts: number; best: number; wakes: number; i: number; next: boolean; goals: { text: string; done: boolean }[]; knocked: number }) {
+  end(o: { name: string; score: number; stars: number; record: boolean; caught: Record<string, number>; gifts: number; best: number; wakes: number; i: number; next: boolean; goals: { text: string; done: boolean }[]; knocked: number; coats: string[] }) {
     this.el.classList.remove('playing');
     const stars = [0, 1, 2].map((k) => `<i class="${k < o.stars ? 'on' : ''}">★</i>`).join('');
     const say = o.stars === 3 ? '전설의 사냥꾼!' : o.stars === 2 ? '훌륭한 사냥이었어요' : o.stars === 1 ? '나쁘지 않은 밤' : '내일 밤엔 더 잘할 거예요';
@@ -192,6 +220,7 @@ export class Hud {
       <p>나방 ${o.caught.moth} · 귀뚜라미 ${o.caught.cricket} · 생쥐 ${o.caught.mouse}</p>
       <p>선물 ${o.gifts} · 최고 연속 ${o.best}${o.knocked ? ` · 떨어뜨림 ${o.knocked}` : ''}${o.wakes ? ` · 집사 깨움 ${o.wakes}` : ''}</p>
       <div class="gl">${Hud.goalList(o.goals)}</div>
+      ${o.coats.map((n) => `<p style="color:#ffd27a">새 털색: ${n}! (밤 고르기에서 바꿔 입어요)</p>`).join('')}
       <div class="row"><button class="btn alt" data-c="menu">밤 고르기</button><button class="btn" data-n="${o.i}">다시 하기</button>${o.i + 1 < NIGHTS.length ? `<button class="btn ${o.next ? '' : 'lock'}" data-n="${o.i + 1}" ${o.next ? '' : 'style="opacity:.5"'}>다음 밤</button>` : ''}</div></div>`);
   }
 

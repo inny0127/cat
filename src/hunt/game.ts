@@ -314,12 +314,14 @@ export class Hunt {
 /** what is kept between nights: the best of each, its stars */
 export interface Save { best: Record<string, number>; stars: Record<string, number>; mute?: boolean; knocked?: boolean;
   /** each night's challenges ever done (a bit each) */
-  goals?: Record<string, number> }
+  goals?: Record<string, number>;
+  /** the coat worn */
+  coat?: string }
 const KEY = 'bamsanyang.save';
 export function loadSave(): Save {
   try {
     const s = JSON.parse(localStorage.getItem(KEY) ?? 'null');
-    if (s && typeof s === 'object') return { best: s.best ?? {}, stars: s.stars ?? {}, mute: !!s.mute, knocked: !!s.knocked, goals: s.goals ?? {} };
+    if (s && typeof s === 'object') return { best: s.best ?? {}, stars: s.stars ?? {}, mute: !!s.mute, knocked: !!s.knocked, goals: s.goals ?? {}, coat: typeof s.coat === 'string' ? s.coat : undefined };
   } catch { /* none kept */ }
   return { best: {}, stars: {} };
 }

@@ -5,6 +5,7 @@ import { Cat, type Intent } from '../src/hunt/cat';
 import { Prey } from '../src/hunt/prey';
 import { CHAIN, GIFT, GOAL, Hunt, NIGHTS, chainMul, nightOpen } from '../src/hunt/game';
 import { THINGS } from '../src/hunt/things';
+import { COATS, allStars, coatOf } from '../src/hunt/coats';
 
 const body = (x: number, y: number, z: number): Body => ({ x, y, z, vx: 0, vy: 0, vz: 0, r: 0.12, h: 0.26, grounded: false, landed: 0 });
 const run = (b: Body, boxes: Box[], s: number) => { for (let i = 0; i < s * 60; i++) moveBody(b, boxes, 1 / 60); };
@@ -267,5 +268,14 @@ describe('밤사냥: the night', () => {
     };
     expect(pounceAt(0.45, 1.5)).toBe(1);
     expect(pounceAt(1.4, 1.0)).toBe(0);
+  });
+  it('coats are earned with stars, all nights together; one not yet earned is not worn', () => {
+    expect(COATS[0].stars).toBe(0);
+    for (let i = 1; i < COATS.length; i++) expect(COATS[i].stars).toBeGreaterThan(COATS[i - 1].stars);
+    expect(COATS[COATS.length - 1].stars).toBeLessThanOrEqual(NIGHTS.length * 3);
+    const save = { best: {}, stars: { first: 3, mice: 2 }, coat: 'tuxedo' };
+    expect(allStars(save)).toBe(5);
+    expect(coatOf(save).id).toBe('ginger');
+    expect(coatOf({ ...save, coat: 'black' }).id).toBe('black');
   });
 });

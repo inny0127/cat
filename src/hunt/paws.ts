@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { Cat } from './cat';
+import type { Coat } from './coats';
 
 /** how long a catch is held under the paws (s) */
 const PIN = 0.75;
@@ -23,17 +24,22 @@ export class Paws {
   /** a moth or a cricket just caught, pinned under both paws a moment (then gone in a gulp) */
   private readonly pinned = new THREE.Group();
   private pinAt = -1e9;
+  /** each leg's own materials (a calico's differ side to side), the beans' */
+  private readonly mats: { fur: THREE.MeshLambertMaterial; stripe: THREE.MeshLambertMaterial; sock: THREE.MeshLambertMaterial; rings: THREE.Object3D[] }[] = [];
+  private readonly bean = new THREE.MeshLambertMaterial({ color: 0xf2a0aa, flatShading: true });
 
   constructor() {
     this.scene.add(this.light, this.key);
     this.key.position.set(0.3, 1, 0.4);
-    const fur = new THREE.MeshLambertMaterial({ color: 0xe0913f, flatShading: true });
-    const stripe = new THREE.MeshLambertMaterial({ color: 0xb8662a, flatShading: true });
-    const sock = new THREE.MeshLambertMaterial({ color: 0xfaf3ea, flatShading: true });
-    const bean = new THREE.MeshLambertMaterial({ color: 0xf2a0aa, flatShading: true });
+    const bean = this.bean;
     const claw = new THREE.MeshLambertMaterial({ color: 0xffffff });
     const leg = (side: number) => {
       const g = new THREE.Group();
+      const fur = new THREE.MeshLambertMaterial({ color: 0xe0913f, flatShading: true });
+      const stripe = new THREE.MeshLambertMaterial({ color: 0xb8662a, flatShading: true });
+      const sock = new THREE.MeshLambertMaterial({ color: 0xfaf3ea, flatShading: true });
+      const rings: THREE.Object3D[] = [];
+      this.mats.push({ fur, stripe, sock, rings });
       const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.019, 0.12, 8), fur);
       arm.rotation.x = Math.PI / 2;
       arm.position.z = 0.065;
@@ -43,6 +49,7 @@ export class Paws {
         s.position.z = 0.03 + i * 0.03;
         s.rotation.z = Math.PI;
         g.add(s);
+        rings.push(s);
       }
       const paw = new THREE.Mesh(new THREE.SphereGeometry(1, 9, 7), sock);
       paw.scale.set(0.026, 0.017, 0.03);
@@ -94,6 +101,18 @@ export class Paws {
     this.mouth.position.set(0, -0.042, -0.1);
     this.mouth.visible = false;
     this.scene.add(this.mouth, this.pinned);
+  }
+
+  /** the coat the paws are in */
+  setCoat(c: Coat) {
+    this.mats.forEach((m, i) => {
+      const p = (i === 1 && c.right) || c.left;
+      m.fur.color.setHex(p.fur);
+      m.sock.color.setHex(p.sock);
+      if (p.stripe !== null) m.stripe.color.setHex(p.stripe);
+      for (const r of m.rings) r.visible = p.stripe !== null;
+    });
+    this.bean.color.setHex(c.bean);
   }
 
   /** a thing caught: a copy of it, a few centimetres across, under the paws; now: the app's clock */
